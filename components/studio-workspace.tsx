@@ -90,6 +90,13 @@ function canonicalPreviousUploadName(fileName: string, path: string) {
   return base.replace(/^\d{10,}-/, "");
 }
 
+function normalizeModelName(value: string) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
 export default function StudioWorkspace() {
   const [shop, setShop] = useState("");
   const [handle, setHandle] = useState("");
@@ -572,8 +579,16 @@ export default function StudioWorkspace() {
     setError(null);
     setStatus("Uploading model...");
     try {
-      if (!modelName.trim()) {
+      const cleanedModelName = modelName.trim();
+      if (!cleanedModelName) {
         throw new Error("Please enter a model name.");
+      }
+      const normalizedModelName = normalizeModelName(cleanedModelName);
+      const duplicateNameExists = models.some(
+        (m) => normalizeModelName(String(m.name || "")) === normalizedModelName
+      );
+      if (duplicateNameExists) {
+        throw new Error("A model with this name already exists. Please choose a different name.");
       }
       if (modelGender !== "male" && modelGender !== "female") {
         throw new Error("Please select a model gender.");
@@ -600,7 +615,7 @@ export default function StudioWorkspace() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: modelName.trim(),
+          name: cleanedModelName,
           gender: modelGender,
           urls: finalUrls,
         }),
@@ -610,7 +625,7 @@ export default function StudioWorkspace() {
         throw new Error(json?.error || "Failed to save model.");
       }
 
-      setStatus(`Model created: ${modelName.trim() || "OK"}`);
+      setStatus(`Model created: ${cleanedModelName || "OK"}`);
       setModelName("");
       setModelGender("");
       setModelFiles([]);

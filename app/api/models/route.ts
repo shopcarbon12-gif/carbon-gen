@@ -2,6 +2,28 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
+function normalizeModelName(value: string) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+async function modelNameExistsForUser(userId: string, candidateName: string) {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("models")
+    .select("name")
+    .eq("user_id", userId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const normalizedCandidate = normalizeModelName(candidateName);
+  return (data || []).some((row: any) => normalizeModelName(row?.name || "") === normalizedCandidate);
+}
+
 export async function POST(req: NextRequest) {
   try {
     const isAuthed = req.cookies.get("carbon_gen_auth_v1")?.value === "true";
@@ -14,11 +36,12 @@ export async function POST(req: NextRequest) {
     }
 
     const contentType = req.headers.get("content-type") || "";
+    const isJson = contentType.includes("application/json");
     let name = "";
     let gender = "";
     let urls: string[] = [];
 
-    if (contentType.includes("application/json")) {
+    if (isJson) {
       const body = await req.json();
       name = String(body?.name || "").trim();
       gender = String(body?.gender || "").trim().toLowerCase();
@@ -42,6 +65,14 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(
           { error: "At least 3 model reference images are required." },
           { status: 400 }
+        );
+      }
+
+      const duplicateExists = await modelNameExistsForUser(userId, name);
+      if (duplicateExists) {
+        return NextResponse.json(
+          { error: "A model with this name already exists. Please choose a different name." },
+          { status: 409 }
         );
       }
 
@@ -88,6 +119,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: "At least 3 model reference images are required." },
         { status: 400 }
+      );
+    }
+
+    const duplicateExists = await modelNameExistsForUser(userId, name);
+    if (duplicateExists) {
+      return NextResponse.json(
+        { error: "A model with this name already exists. Please choose a different name." },
+        { status: 409 }
       );
     }
 
