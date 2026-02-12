@@ -2365,7 +2365,7 @@ export default function StudioWorkspace() {
                           ({product.handle}) | Barcode: {formatProductBarcodes(product)}
                         </span>
                       </div>
-                      <div className="preview-grid">
+                      <div className="preview-grid item-catalog-grid">
                         {product.images.map((img) => {
                           const selectedEntry = selectedCatalogImages.find((i) => i.id === img.id);
                           const selected = Boolean(selectedEntry);
@@ -3020,6 +3020,16 @@ export default function StudioWorkspace() {
           width: 100%;
           max-width: 900px;
         }
+        .item-catalog-grid {
+          display: grid;
+          grid-template-columns: repeat(6, minmax(0, 1fr));
+          max-width: 100%;
+          justify-content: stretch;
+          align-items: stretch;
+        }
+        .item-catalog-grid .catalog-image {
+          width: 100%;
+        }
         .preview-card {
           border: 1px solid #e2e8f0;
           border-radius: 10px;
@@ -3388,13 +3398,29 @@ export default function StudioWorkspace() {
           .hero {
             grid-template-columns: 1fr;
           }
+          .item-catalog-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+          }
           .previous-upload-grid {
             grid-template-columns: repeat(3, minmax(0, 1fr));
           }
         }
         @media (max-width: 640px) {
+          .item-catalog-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
           .previous-upload-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+        }
+        @media (min-width: 901px) and (max-width: 1280px) {
+          .item-catalog-grid {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+          }
+        }
+        @media (min-width: 1281px) and (max-width: 1600px) {
+          .item-catalog-grid {
+            grid-template-columns: repeat(5, minmax(0, 1fr));
           }
         }
         @media (min-width: 901px) and (max-width: 1280px) {
