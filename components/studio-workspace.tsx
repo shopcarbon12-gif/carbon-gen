@@ -3606,14 +3606,16 @@ export default function StudioWorkspace() {
           object-position: center;
         }
         .item-selected-grid {
-          display: grid;
-          grid-template-columns: repeat(6, minmax(0, 1fr));
-          max-width: 100%;
-          justify-content: stretch;
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: center;
           align-items: stretch;
+          gap: 10px;
+          max-width: 1260px;
+          margin: 0 auto;
         }
         .item-selected-grid .preview-card {
-          width: 100%;
+          width: 200px;
         }
         .split-results-grid {
           display: grid;
