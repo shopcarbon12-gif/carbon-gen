@@ -1,0 +1,42 @@
+{
+  "name": "carbon-gen",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "dev:3001": "next dev -p 3001",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "hash-password": "node scripts/hash-password.mjs",
+    "e2e": "node scripts/run-e2e.mjs",
+    "check:upstash": "node scripts/check-upstash.mjs",
+    "check:sync": "node scripts/check-sync.mjs",
+    "start:tunnel": "powershell -ExecutionPolicy Bypass -File scripts/start-tunnel.ps1",
+    "start:local": "powershell -ExecutionPolicy Bypass -File scripts/start-local-stack.ps1",
+    "stop:local": "powershell -ExecutionPolicy Bypass -File scripts/stop-local-stack.ps1"
+  },
+  "dependencies": {
+    "@supabase/auth-helpers-nextjs": "^0.15.0",
+    "@supabase/auth-helpers-react": "^0.15.0",
+    "@supabase/ssr": "^0.8.0",
+    "@supabase/supabase-js": "^2.95.3",
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.36.2",
+    "bcryptjs": "^3.0.3",
+    "next": "16.1.6",
+    "openai": "^6.18.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.6",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
