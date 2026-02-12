@@ -2,14 +2,6 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
-type StorageEntry = {
-  name: string;
-  id: string | null;
-  metadata?: { size?: number } | null;
-  created_at?: string | null;
-  updated_at?: string | null;
-};
-
 function extractPathFromStorageUrl(url: string) {
   try {
     const u = new URL(url);
@@ -31,6 +23,15 @@ function fileNameFromPath(path: string) {
   return path.split("/").pop() || path;
 }
 
+function fileNameFromUrl(rawUrl: string) {
+  try {
+    const u = new URL(rawUrl);
+    return fileNameFromPath(decodeURIComponent(u.pathname));
+  } catch {
+    return fileNameFromPath(rawUrl);
+  }
+}
+
 function canonicalNameFromFileName(name: string) {
   return name.replace(/^\d{10,}-/, "").toLowerCase();
 }
@@ -50,36 +51,33 @@ function normalizeGender(value: unknown) {
   return "";
 }
 
-async function listModelFilesRecursive(bucket: string) {
+async function loadModelRowsForSession(userId: string | null) {
   const supabase = getSupabaseAdmin();
-  const files: Array<{ path: string; created_at?: string | null }> = [];
-  const queue: string[] = ["models"];
-
-  while (queue.length) {
-    const current = queue.shift() as string;
-    const { data, error } = await supabase.storage.from(bucket).list(current, {
-      limit: 1000,
-      sortBy: { column: "name", order: "asc" },
-    });
+  if (userId) {
+    const { data, error } = await supabase
+      .from("models")
+      .select("name,gender,created_at,ref_image_urls")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: true });
     if (error) {
       throw new Error(error.message);
     }
-
-    for (const entry of (data || []) as StorageEntry[]) {
-      const childPath = `${current}/${entry.name}`.replace(/^\/+/, "");
-      const isFolder = !entry.id;
-      if (isFolder) {
-        queue.push(childPath);
-      } else {
-        files.push({
-          path: childPath,
-          created_at: entry.created_at || entry.updated_at || null,
-        });
-      }
+    if ((data || []).length) {
+      return data || [];
     }
   }
 
-  return files;
+  // Fallback for legacy/cross-domain sessions that do not map to the current cookie user_id.
+  const { data, error } = await supabase
+    .from("models")
+    .select("name,gender,created_at,ref_image_urls")
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data || [];
 }
 
 export async function GET(req: NextRequest) {
@@ -89,40 +87,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const supabase = getSupabaseAdmin();
     const bucket = (process.env.SUPABASE_STORAGE_BUCKET_ITEMS || "").trim();
-    if (!bucket) {
-      return NextResponse.json({ error: "Missing SUPABASE_STORAGE_BUCKET_ITEMS" }, { status: 500 });
-    }
-
-    // Metadata map from saved models table (name + gender), unscoped by cookie user id.
-    const { data: modelRows, error } = await supabase
-      .from("models")
-      .select("name,gender,created_at,ref_image_urls")
-      .order("created_at", { ascending: true });
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    const metadataByPath = new Map<
-      string,
-      { modelName: string; gender: string; createdAt: string | null }
-    >();
-    for (const row of modelRows || []) {
-      const urls = Array.isArray((row as any).ref_image_urls) ? (row as any).ref_image_urls : [];
-      for (const rawUrl of urls) {
-        const parsed = extractPathFromStorageUrl(String(rawUrl || ""));
-        if (!parsed) continue;
-        metadataByPath.set(parsed.objectPath, {
-          modelName: String((row as any).name || ""),
-          gender: normalizeGender((row as any).gender),
-          createdAt: String((row as any).created_at || "") || null,
-        });
-      }
-    }
-
-    const storageFiles = await listModelFilesRecursive(bucket);
+    const userId = req.cookies.get("carbon_gen_user_id")?.value?.trim() || null;
+    const modelRows = await loadModelRowsForSession(userId);
 
     const entries: Array<{
       id: string;
@@ -133,19 +100,34 @@ export async function GET(req: NextRequest) {
       uploadedAt: string | null;
       url: string | null;
     }> = [];
-    for (const file of storageFiles) {
-      const fileName = fileNameFromPath(file.path);
-      const meta = metadataByPath.get(file.path);
-      const signed = await supabase.storage.from(bucket).createSignedUrl(file.path, 60 * 60);
-      entries.push({
-        id: `${bucket}/${file.path}`,
-        path: file.path,
-        fileName,
-        modelName: meta?.modelName || "",
-        gender: meta?.gender || "",
-        uploadedAt: timestampFromFileName(fileName) || meta?.createdAt || file.created_at || null,
-        url: signed.data?.signedUrl || null,
-      });
+
+    for (const row of modelRows || []) {
+      const urls = Array.isArray((row as any).ref_image_urls) ? (row as any).ref_image_urls : [];
+      const modelName = String((row as any).name || "");
+      const gender = normalizeGender((row as any).gender);
+      const createdAt = String((row as any).created_at || "") || null;
+
+      for (const raw of urls) {
+        const rawUrl = String(raw || "").trim();
+        if (!rawUrl) continue;
+
+        const parsed = extractPathFromStorageUrl(rawUrl);
+        // Keep only the configured bucket when parseable; otherwise keep legacy URL entries.
+        if (parsed && bucket && parsed.bucket !== bucket) continue;
+
+        const path = parsed?.objectPath || rawUrl;
+        const fileName = parsed ? fileNameFromPath(parsed.objectPath) : fileNameFromUrl(rawUrl);
+
+        entries.push({
+          id: parsed ? `${parsed.bucket}/${parsed.objectPath}` : `url:${rawUrl}`,
+          path,
+          fileName,
+          modelName,
+          gender,
+          uploadedAt: timestampFromFileName(fileName) || createdAt || null,
+          url: rawUrl,
+        });
+      }
     }
 
     // Deduplicate repeated uploads of the same source image name.
