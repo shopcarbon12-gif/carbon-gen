@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
       await supabase
         .from("models")
         .update({ user_id: userScope.stableUserId })
-        .eq("user_id", userScope.legacyUserId);
+        .neq("user_id", userScope.stableUserId);
     }
     const { error } = await supabase
       .from("models")
