@@ -8,6 +8,13 @@ type DialogMessage = {
   content: string;
 };
 
+function isOpenAiAuthError(err: unknown) {
+  const status = Number((err as any)?.status || (err as any)?.statusCode || 0);
+  const message = String((err as any)?.message || "");
+  if (status === 401) return true;
+  return /incorrect api key|invalid api key|api key provided/i.test(message);
+}
+
 function normalizeMessages(value: unknown): DialogMessage[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -69,6 +76,15 @@ export async function POST(req: NextRequest) {
     const reply = completion.choices?.[0]?.message?.content?.trim() || "(No response text)";
     return NextResponse.json({ reply });
   } catch (e: any) {
+    if (isOpenAiAuthError(e)) {
+      return NextResponse.json(
+        {
+          error:
+            "OpenAI authentication failed on server. Update OPENAI_API_KEY in production env and redeploy.",
+        },
+        { status: 500 }
+      );
+    }
     const details = e?.message || "OpenAI dialog failed";
     return NextResponse.json(
       { error: "OpenAI dialog failed", details, openaiRaw: details },

@@ -81,6 +81,13 @@ function fallbackGenerateResponse(reason: string) {
   });
 }
 
+function isOpenAiAuthError(err: unknown) {
+  const status = Number((err as any)?.status || (err as any)?.statusCode || 0);
+  const message = String((err as any)?.message || "");
+  if (status === 401) return true;
+  return /incorrect api key|invalid api key|api key provided/i.test(message);
+}
+
 async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | null = null;
   try {
@@ -607,6 +614,15 @@ export async function POST(req: NextRequest) {
       const code = String(err?.code || "");
       const type = String(err?.type || "");
       const message = String(err?.message || "");
+      if (isOpenAiAuthError(err)) {
+        return NextResponse.json(
+          {
+            error:
+              "OpenAI authentication failed on server. Update OPENAI_API_KEY in production env and redeploy.",
+          },
+          { status: 500 }
+        );
+      }
       const looksLikeSexualBlock =
         code === "moderation_blocked" ||
         type === "image_generation_user_error" ||
@@ -707,6 +723,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ imageBase64: b64 });
   } catch (err: unknown) {
     console.error("Generate failed:", err);
+    if (isOpenAiAuthError(err)) {
+      return NextResponse.json(
+        {
+          error:
+            "OpenAI authentication failed on server. Update OPENAI_API_KEY in production env and redeploy.",
+        },
+        { status: 500 }
+      );
+    }
     const reason = err instanceof Error ? err.message : "Generate failed";
     return fallbackGenerateResponse(reason);
   }
