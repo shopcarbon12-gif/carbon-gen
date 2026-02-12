@@ -139,18 +139,22 @@ export async function POST(req: NextRequest) {
     const existingUserId = req.cookies.get("carbon_gen_user_id")?.value?.trim() || "";
     const userId = resolveStableUserId();
 
-    // One-time migration: if older sessions used random per-domain IDs,
-    // move those model rows into the stable user id so local + hosted app stay synced.
-    if (existingUserId && existingUserId !== userId) {
-      try {
-        const supabase = getSupabaseAdmin();
+    // One-time migration for single-password mode:
+    // collapse any legacy/random IDs into one stable user id so local + hosted app stay synced.
+    try {
+      const supabase = getSupabaseAdmin();
+      if (existingUserId && existingUserId !== userId) {
         await supabase
           .from("models")
           .update({ user_id: userId })
           .eq("user_id", existingUserId);
-      } catch {
-        // Non-blocking: login should not fail if migration fails.
       }
+      await supabase
+        .from("models")
+        .update({ user_id: userId })
+        .neq("user_id", userId);
+    } catch {
+      // Non-blocking: login should not fail if migration fails.
     }
 
     res.cookies.set({
