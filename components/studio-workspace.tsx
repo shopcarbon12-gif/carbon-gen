@@ -218,7 +218,6 @@ export default function StudioWorkspace() {
   const [pushingImages, setPushingImages] = useState(false);
   const [draggingPushImageId, setDraggingPushImageId] = useState<string | null>(null);
   const [pushVariants, setPushVariants] = useState<PushVariant[]>([]);
-  const [pullingVariants, setPullingVariants] = useState(false);
   const [draggingVariantId, setDraggingVariantId] = useState<string | null>(null);
   const [selectedCatalogImages, setSelectedCatalogImages] = useState<SelectedCatalogImage[]>([]);
   const [itemUploadCount, setItemUploadCount] = useState<number | null>(null);
@@ -922,8 +921,12 @@ export default function StudioWorkspace() {
           )
         );
         if (exact) {
-          upsertPushQueueFromProduct(exact);
+          upsertPushQueueFromProduct(exact, { includeGenerated: true });
+          return;
         }
+      }
+      if (products.length === 1) {
+        upsertPushQueueFromProduct(products[0], { includeGenerated: true });
       }
     } catch (e: any) {
       setError(e?.message || "Failed to load Shopify catalog");
@@ -939,25 +942,81 @@ export default function StudioWorkspace() {
     loadPushCatalogProducts();
   }
 
-  function upsertPushQueueFromProduct(product: ShopifyCatalogProduct) {
+  function buildGeneratedPushImages() {
+    const selectedBarcode = itemBarcodeSaved.trim();
+    if (!selectedBarcode) return [] as PushQueueImage[];
+    const panelNumbers = Object.keys(generatedPanels)
+      .map((key) => Number(key))
+      .filter((n) => Number.isFinite(n))
+      .sort((a, b) => a - b);
+    return panelNumbers
+      .map((panelNumber) => {
+        const b64 = generatedPanels[panelNumber];
+        if (!b64) return null;
+        const id = `generated:panel-${panelNumber}`;
+        return {
+          id,
+          sourceImageId: id,
+          mediaId: null,
+          url: `data:image/png;base64,${b64}`,
+          title: `Generated Panel ${panelNumber}`,
+          altText: "",
+          generatingAlt: false,
+          deleting: false,
+        } as PushQueueImage;
+      })
+      .filter((row): row is PushQueueImage => Boolean(row));
+  }
+
+  async function loadCurrentShopifyImages(productIdValue: string, includeGenerated: boolean) {
+    const shopValue = shop.trim();
+    if (!shopValue || !productIdValue.trim()) return;
+    const resp = await fetch("/api/shopify-push", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "get-product-media",
+        shop: shopValue,
+        productId: productIdValue,
+      }),
+    });
+    const json = await parseJsonResponse(resp, "/api/shopify-push");
+    if (!resp.ok) {
+      throw new Error(json?.error || "Failed to load current Shopify images.");
+    }
+    const mediaRows = Array.isArray(json?.media) ? json.media : [];
+    const currentRows = mediaRows.map((row: any) => ({
+      id: `push:${productIdValue}:${String(row?.id || "")}`,
+      sourceImageId: String(row?.id || ""),
+      mediaId: String(row?.id || ""),
+      url: String(row?.url || "").trim(),
+      title: "Current Shopify image",
+      altText: String(row?.altText || "").trim(),
+      generatingAlt: false,
+      deleting: false,
+    })) as PushQueueImage[];
+    const generatedRows = includeGenerated ? buildGeneratedPushImages() : [];
+    const merged = [...currentRows, ...generatedRows];
+    setPushImages(merged);
+    return merged;
+  }
+
+  function upsertPushQueueFromProduct(product: ShopifyCatalogProduct, options?: { includeGenerated?: boolean }) {
     const productIdValue = String(product.id || "").trim();
     if (!productIdValue) return;
     setPushProductId(productIdValue);
     setPushProductHandle(String(product.handle || "").trim());
     setPushVariants([]);
-    setPushImages(
-      (product.images || []).map((img) => ({
-        id: `push:${productIdValue}:${img.id}`,
-        sourceImageId: String(img.id || ""),
-        mediaId: String(img.id || ""),
-        url: String(img.url || "").trim(),
-        title: String(img.altText || product.title || "Product image"),
-        altText: String(img.altText || "").trim(),
-        generatingAlt: false,
-        deleting: false,
-      }))
-    );
-    setStatus(`Loaded ${product.images.length} Shopify image(s) for ${product.title}.`);
+    const includeGenerated = Boolean(options?.includeGenerated);
+    void (async () => {
+      try {
+        const freshImages = await loadCurrentShopifyImages(productIdValue, includeGenerated);
+        await pullPushVariants(productIdValue, freshImages);
+        setStatus(`Loaded current Shopify images and color variants for ${product.title}.`);
+      } catch (e: any) {
+        setError(e?.message || "Failed to load current Shopify images.");
+      }
+    })();
   }
 
   function togglePushCatalogImage(
@@ -998,13 +1057,9 @@ export default function StudioWorkspace() {
 
   async function removePushImageFromShopify(image: PushQueueImage) {
     if (!pushProductId.trim()) return;
-    if (!image.mediaId) {
-      setPushImages((prev) => prev.filter((img) => img.id !== image.id));
-      return;
-    }
-    setPushImages((prev) =>
-      prev.map((img) => (img.id === image.id ? { ...img, deleting: true } : img))
-    );
+    // Always remove from preview immediately; keep Shopify delete best-effort in background.
+    setPushImages((prev) => prev.filter((img) => img.id !== image.id));
+    if (!image.mediaId) return;
     setError(null);
     try {
       const resp = await fetch("/api/shopify-push", {
@@ -1021,13 +1076,9 @@ export default function StudioWorkspace() {
       if (!resp.ok) {
         throw new Error(json?.error || "Failed to remove Shopify image.");
       }
-      setPushImages((prev) => prev.filter((img) => img.id !== image.id));
       setStatus("Removed image from Shopify.");
     } catch (e: any) {
-      setPushImages((prev) =>
-        prev.map((img) => (img.id === image.id ? { ...img, deleting: false } : img))
-      );
-      setError(e?.message || "Failed to remove Shopify image.");
+      setStatus(`Image removed from preview. Shopify delete warning: ${e?.message || "failed"}`);
     }
   }
 
@@ -1084,12 +1135,17 @@ export default function StudioWorkspace() {
     }
   }
 
-  async function generateAltForAllPushImages() {
-    for (const image of pushImages) {
+  async function generateAltForMissingPushImages() {
+    const targets = pushImages.filter((image) => !image.altText.trim());
+    if (!targets.length) {
+      setStatus("No missing alt text to generate.");
+      return;
+    }
+    for (const image of targets) {
       // Sequential to keep OpenAI usage predictable and avoid burst failures.
       await generateAltForPushImage(image.id);
     }
-    setStatus("Alt text generation completed for queued Shopify images.");
+    setStatus("Generated missing alt text.");
   }
 
   function movePushVariant(fromIndex: number, toIndex: number) {
@@ -1126,11 +1182,22 @@ export default function StudioWorkspace() {
     );
   }
 
-  async function pullPushVariants() {
+  function autoAssignPushImageForColor(color: string, candidates?: PushQueueImage[]) {
+    const pool = candidates && candidates.length ? candidates : pushImages;
+    const key = String(color || "").trim().toLowerCase();
+    if (!key) return pool[0]?.id || null;
+    const matched = pool.find((img) => {
+      const hay = `${img.title} ${img.altText} ${img.url}`.toLowerCase();
+      return hay.includes(key);
+    });
+    return matched?.id || pool[0]?.id || null;
+  }
+
+  async function pullPushVariants(productIdOverride?: string, imagesForAuto?: PushQueueImage[]) {
     setError(null);
-    setStatus("Pulling variants...");
+    setStatus("Pulling color variants...");
     const shopValue = shop.trim();
-    const productIdValue = pushProductId.trim();
+    const productIdValue = (productIdOverride || pushProductId || "").trim();
     if (!shopValue) {
       setError("Please enter your shop domain first.");
       setStatus(null);
@@ -1141,7 +1208,6 @@ export default function StudioWorkspace() {
       setStatus(null);
       return;
     }
-    setPullingVariants(true);
     try {
       const resp = await fetch("/api/shopify-push", {
         method: "POST",
@@ -1167,7 +1233,7 @@ export default function StudioWorkspace() {
           color: String(row?.color || ""),
           position: Number(row?.position || idx + 1),
           imageUrl: row?.imageUrl ? String(row.imageUrl) : null,
-          assignedPushImageId: null,
+          assignedPushImageId: autoAssignPushImageForColor(String(row?.color || ""), imagesForAuto),
           variantCount: Number(row?.variantCount || 1),
         }))
       );
@@ -1175,8 +1241,6 @@ export default function StudioWorkspace() {
     } catch (e: any) {
       setError(e?.message || "Failed to pull variants.");
       setStatus(null);
-    } finally {
-      setPullingVariants(false);
     }
   }
 
@@ -3536,7 +3600,7 @@ export default function StudioWorkspace() {
                 placeholder="Search by barcode, product name, handle, or SKU"
               />
               <button className="btn ghost" type="button" onClick={loadPushCatalogProducts}>
-                {pushCatalogLoading ? "Loading..." : "Search Catalog"}
+                {pushCatalogLoading ? "Loading..." : "Search Catalog + Load Current Images"}
               </button>
               <button
                 className="btn ghost"
@@ -3676,16 +3740,6 @@ export default function StudioWorkspace() {
           ) : (
             <div className="muted centered">No images selected yet.</div>
           )}
-          <div className="row">
-            <button
-              className="btn ghost"
-              type="button"
-              onClick={pullPushVariants}
-              disabled={!pushProductId.trim() || pullingVariants}
-            >
-              {pullingVariants ? "Pulling Color Mains..." : "Pull Color Main Variants"}
-            </button>
-          </div>
           {pushVariants.length ? (
             <div className="push-variant-row">
               {pushVariants.map((variant) => {
@@ -3743,10 +3797,10 @@ export default function StudioWorkspace() {
             <button
               className="btn ghost"
               type="button"
-              onClick={generateAltForAllPushImages}
+              onClick={generateAltForMissingPushImages}
               disabled={!pushImages.length || pushingImages}
             >
-              Generate Alt for All
+              Fill Missing Alt
             </button>
             <button className="btn" onClick={pushImageToShopify} disabled={!pushImages.length || pushingImages}>
               {pushingImages ? "Pushing..." : "Push Images (Replace Product Media)"}
@@ -4002,6 +4056,7 @@ export default function StudioWorkspace() {
           overflow-x: auto;
           padding-bottom: 4px;
           align-items: stretch;
+          justify-content: center;
         }
         .push-variant-card {
           flex: 0 0 180px;

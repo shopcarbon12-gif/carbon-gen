@@ -16,10 +16,25 @@ type ProductMediaNode = {
   mediaContentType: string;
 };
 
+type ProductMediaImageNode = {
+  id: string;
+  mediaContentType: string;
+  alt: string | null;
+  image: { url: string | null } | null;
+};
+
 type ProductMediaQuery = {
   product: {
     media: {
       nodes: ProductMediaNode[];
+    };
+  } | null;
+};
+
+type ProductMediaImagesQuery = {
+  product: {
+    media: {
+      nodes: ProductMediaImageNode[];
     };
   } | null;
 };
@@ -86,6 +101,28 @@ function norm(value: unknown) {
 
 function normalizeAlt(value: unknown) {
   return norm(value).slice(0, 120);
+}
+
+function isDataImageUrl(value: string) {
+  return /^data:image\/[a-zA-Z0-9.+-]+;base64,/i.test(String(value || "").trim());
+}
+
+function parseDataImage(value: string) {
+  const raw = String(value || "").trim();
+  const match = raw.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/i);
+  if (!match) return null;
+  const contentType = String(match[1] || "image/png").toLowerCase();
+  const base64 = String(match[2] || "");
+  const bytes = Buffer.from(base64, "base64");
+  const ext =
+    contentType.includes("png")
+      ? "png"
+      : contentType.includes("jpeg") || contentType.includes("jpg")
+        ? "jpg"
+        : contentType.includes("webp")
+          ? "webp"
+          : "png";
+  return { contentType, bytes, ext };
 }
 
 function toNumericId(value: string) {
@@ -197,11 +234,85 @@ async function listProductImageMediaIds(shop: string, productGid: string) {
     .filter(Boolean);
 }
 
+async function listProductImageMedia(shop: string, productGid: string) {
+  const query = `
+    query ProductMediaImages($productId: ID!) {
+      product(id: $productId) {
+        media(first: 250) {
+          nodes {
+            ... on MediaImage {
+              id
+              mediaContentType
+              alt
+              image {
+                url
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+  const result = await runWithAnyToken<ProductMediaImagesQuery>(shop, async (token) =>
+    runShopifyGraphql<ProductMediaImagesQuery>({
+      shop,
+      token,
+      query,
+      variables: { productId: productGid },
+      apiVersion: API_VERSION,
+    })
+  );
+  if (!result.ok) {
+    throw new Error(`Failed to read product media images: ${JSON.stringify(result.errors)}`);
+  }
+  const nodes = result.data?.product?.media?.nodes || [];
+  return nodes
+    .filter(
+      (node: ProductMediaImageNode) =>
+        String(node.mediaContentType || "").toUpperCase() === "IMAGE" && Boolean(node.image?.url)
+    )
+    .map((node: ProductMediaImageNode) => ({
+      id: norm(node.id),
+      url: norm(node.image?.url || ""),
+      altText: norm(node.alt || ""),
+    }))
+    .filter((row: { id: string; url: string }) => row.id && row.url);
+}
+
 async function createProductImages(
   shop: string,
   productGid: string,
   images: Array<{ url: string; altText?: string }>
 ) {
+  const supabase = getSupabaseAdmin();
+  const bucket = norm(process.env.SUPABASE_STORAGE_BUCKET_ITEMS);
+  const preparedImages: Array<{ url: string; altText?: string }> = [];
+  for (const image of images) {
+    const sourceUrl = norm(image.url);
+    if (!sourceUrl) continue;
+    if (!isDataImageUrl(sourceUrl)) {
+      preparedImages.push({ url: sourceUrl, altText: image.altText });
+      continue;
+    }
+    if (!bucket) {
+      throw new Error("Missing SUPABASE_STORAGE_BUCKET_ITEMS for generated image upload.");
+    }
+    const parsed = parseDataImage(sourceUrl);
+    if (!parsed) continue;
+    const path = `items/generated/${Date.now()}-${crypto.randomUUID()}.${parsed.ext}`;
+    const { error: uploadError } = await supabase.storage
+      .from(bucket)
+      .upload(path, parsed.bytes, { contentType: parsed.contentType });
+    if (uploadError) {
+      throw new Error(uploadError.message || "Failed to upload generated image.");
+    }
+    const publicUrl = supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
+    preparedImages.push({ url: norm(publicUrl), altText: image.altText });
+  }
+  if (!preparedImages.length) {
+    throw new Error("No valid images to push.");
+  }
+
   const mutation = `
     mutation ProductCreateMedia($productId: ID!, $media: [CreateMediaInput!]!) {
       productCreateMedia(productId: $productId, media: $media) {
@@ -217,7 +328,7 @@ async function createProductImages(
       }
     }
   `;
-  const mediaPayload = images.map((image) => ({
+  const mediaPayload = preparedImages.map((image) => ({
     mediaContentType: "IMAGE",
     originalSource: image.url,
     alt: normalizeAlt(image.altText || ""),
@@ -464,6 +575,11 @@ export async function POST(req: NextRequest) {
       const variants = await getProductVariants(shop, productGid);
       const colors = groupVariantRowsByColor(variants);
       return NextResponse.json({ success: true, colors });
+    }
+
+    if (action === "get-product-media") {
+      const media = await listProductImageMedia(shop, productGid);
+      return NextResponse.json({ success: true, media });
     }
 
     if (action === "delete-media") {
