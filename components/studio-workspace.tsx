@@ -2358,7 +2358,7 @@ export default function StudioWorkspace() {
           </div>
           <div className="panel-selection-summary">
             Selected panels: {[...selectedPanels].sort((a, b) => a - b).join(", ")}.
-            Single-generate uses Panel {lowestSelectedPanel} (lowest selected).
+            Generate runs exactly the selected panel(s).
           </div>
           <div className="row">
             <button className="btn ghost" type="button" onClick={() => setSelectedPanels([1, 2, 3, 4])}>
@@ -2414,15 +2414,6 @@ export default function StudioWorkspace() {
           <div className="row">
             <button
               className="btn"
-              onClick={() => generatePanels("generate")}
-              disabled={panelGenerating}
-            >
-              {panelGenerating
-                ? "Generating..."
-                : `Generate Panel ${lowestSelectedPanel}`}
-            </button>
-            <button
-              className="btn ghost"
               onClick={() => generatePanels("generate_selected")}
               disabled={panelGenerating}
             >
