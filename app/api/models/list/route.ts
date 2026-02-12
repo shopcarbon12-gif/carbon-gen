@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
     const userScope = resolveModelUserScope(req.cookies.get("carbon_gen_user_id")?.value);
 
     const supabase = getSupabaseAdmin();
-    if (userScope.legacyUserId) {
+    if (userScope.needsMigration) {
       await supabase
         .from("models")
         .update({ user_id: userScope.stableUserId })

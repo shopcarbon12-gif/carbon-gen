@@ -118,7 +118,7 @@ APP_PASSWORD=<plain password>
 
 Cross-domain model sync (local + hosted):
 ```env
-APP_USER_ID=carbon_single_user
+APP_USER_ID=00000000-0000-4000-8000-000000000001
 ```
 Use the same `APP_USER_ID` value in local `.env.local` and Vercel env vars.
 

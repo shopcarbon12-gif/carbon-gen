@@ -14,7 +14,7 @@ export async function POST() {
     const userScope = resolveModelUserScope(store.get("carbon_gen_user_id")?.value);
 
     const supabase = getSupabaseAdmin();
-    if (userScope.legacyUserId) {
+    if (userScope.needsMigration) {
       await supabase
         .from("models")
         .update({ user_id: userScope.stableUserId })
