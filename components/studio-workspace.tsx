@@ -85,6 +85,17 @@ type DropboxFolderResult = {
   images: DropboxImageResult[];
 };
 
+type PushQueueImage = {
+  id: string;
+  sourceImageId: string;
+  mediaId: string | null;
+  url: string;
+  title: string;
+  altText: string;
+  generatingAlt: boolean;
+  deleting: boolean;
+};
+
 const IMAGE_FILE_EXT_RE = /\.(avif|bmp|gif|heic|heif|jpeg|jpg|png|tif|tiff|webp)$/i;
 
 function isImageLikeFile(file: File) {
@@ -189,14 +200,15 @@ export default function StudioWorkspace() {
     null,
   ]);
   const [itemCatalogCollapsed, setItemCatalogCollapsed] = useState(false);
-  const [pushCatalogQuery, setPushCatalogQuery] = useState("");
+  const [pushSearchQuery, setPushSearchQuery] = useState("");
   const [pushCatalogLoading, setPushCatalogLoading] = useState(false);
   const [pushCatalogSearched, setPushCatalogSearched] = useState(false);
   const [pushCatalogProducts, setPushCatalogProducts] = useState<ShopifyCatalogProduct[]>([]);
   const [pushProductId, setPushProductId] = useState("");
-  const [pushVariantId, setPushVariantId] = useState("");
-  const [pushImageUrl, setPushImageUrl] = useState("");
-  const [pushImageAlt, setPushImageAlt] = useState("");
+  const [pushProductHandle, setPushProductHandle] = useState("");
+  const [pushImages, setPushImages] = useState<PushQueueImage[]>([]);
+  const [pushingImages, setPushingImages] = useState(false);
+  const [draggingPushImageId, setDraggingPushImageId] = useState<string | null>(null);
   const [selectedCatalogImages, setSelectedCatalogImages] = useState<SelectedCatalogImage[]>([]);
   const [itemUploadCount, setItemUploadCount] = useState<number | null>(null);
   const [modelUploadTotal, setModelUploadTotal] = useState(0);
@@ -436,6 +448,12 @@ export default function StudioWorkspace() {
   }, [itemBarcode, itemBarcodeSaved]);
 
   useEffect(() => {
+    const saved = itemBarcodeSaved.trim();
+    if (!saved || !isValidBarcode(saved)) return;
+    setPushSearchQuery((prev) => (prev.trim() ? prev : saved));
+  }, [itemBarcodeSaved]);
+
+  useEffect(() => {
     setGeneratedPanels({});
     setApprovedPanels([]);
     setSplitCrops([]);
@@ -644,53 +662,6 @@ export default function StudioWorkspace() {
         ? `Unexpected response${where}: ${snippet}`
         : `Unexpected non-JSON response${where}`
     );
-  }
-
-  async function pushImageToShopify() {
-    setError(null);
-    setStatus("Pushing image to Shopify...");
-    try {
-      const shopValue = shop.trim();
-      if (!shopValue) {
-        throw new Error("Please enter your shop domain first.");
-      }
-      if (!pushProductId.trim()) {
-        throw new Error("Please select a product (or paste Product ID) for Shopify Push.");
-      }
-      if (!pushImageUrl.trim()) {
-        throw new Error("Please select a catalog image (or paste Image URL) for Shopify Push.");
-      }
-
-      const resp = await fetch("/api/shopify-push", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          shop: shopValue,
-          productId: pushProductId.trim(),
-          variantId: pushVariantId.trim() || null,
-          mediaUrl: pushImageUrl.trim(),
-          mediaType: "IMAGE",
-          altText: pushImageAlt.trim(),
-        }),
-      });
-      const json = await parseJsonResponse(resp, "/api/shopify-push");
-      if (!resp.ok) {
-        const details =
-          typeof json?.details === "string"
-            ? json.details
-            : json?.details
-              ? JSON.stringify(json.details)
-              : "";
-        throw new Error(
-          `${json?.error || "Shopify image push failed"}${details ? `: ${details}` : ""}`
-        );
-      }
-
-      setStatus("Shopify image push queued.");
-    } catch (e: any) {
-      setError(e?.message || "Shopify image push failed");
-      setStatus(null);
-    }
   }
 
   async function pushSeo() {
@@ -972,19 +943,31 @@ export default function StudioWorkspace() {
       setPushCatalogSearched(false);
       return;
     }
-    const query = pushCatalogQuery.trim();
+    const query = pushSearchQuery.trim();
     setPushCatalogLoading(true);
     setPushCatalogSearched(true);
     setError(null);
     try {
-      const params = new URLSearchParams({ shop: shopValue });
+      const params = new URLSearchParams({ shop: shopValue, first: "40" });
       if (query) params.set("q", query);
       const resp = await fetch(`/api/shopify/catalog?${params.toString()}`, {
         cache: "no-store",
       });
       const json = await parseJsonResponse(resp);
       if (!resp.ok) throw new Error(json.error || "Failed to load Shopify catalog");
-      setPushCatalogProducts(Array.isArray(json.products) ? json.products : []);
+      const products = Array.isArray(json.products) ? json.products : [];
+      setPushCatalogProducts(products);
+      const savedBarcode = itemBarcodeSaved.trim().toLowerCase();
+      if (savedBarcode) {
+        const exact = products.find((product: ShopifyCatalogProduct) =>
+          (product.barcodes || []).some(
+            (barcode) => String(barcode || "").trim().toLowerCase() === savedBarcode
+          )
+        );
+        if (exact) {
+          upsertPushQueueFromProduct(exact);
+        }
+      }
     } catch (e: any) {
       setError(e?.message || "Failed to load Shopify catalog");
       setPushCatalogProducts([]);
@@ -997,6 +980,158 @@ export default function StudioWorkspace() {
     if (e.key !== "Enter") return;
     e.preventDefault();
     loadPushCatalogProducts();
+  }
+
+  function upsertPushQueueFromProduct(product: ShopifyCatalogProduct) {
+    const productIdValue = String(product.id || "").trim();
+    if (!productIdValue) return;
+    setPushProductId(productIdValue);
+    setPushProductHandle(String(product.handle || "").trim());
+    setPushImages(
+      (product.images || []).map((img) => ({
+        id: `push:${productIdValue}:${img.id}`,
+        sourceImageId: String(img.id || ""),
+        mediaId: String(img.id || ""),
+        url: String(img.url || "").trim(),
+        title: String(img.altText || product.title || "Product image"),
+        altText: String(img.altText || "").trim(),
+        generatingAlt: false,
+        deleting: false,
+      }))
+    );
+    setStatus(`Loaded ${product.images.length} Shopify image(s) for ${product.title}.`);
+  }
+
+  function togglePushCatalogImage(
+    product: ShopifyCatalogProduct,
+    image: { id: string; url: string; altText: string }
+  ) {
+    const productIdValue = String(product.id || "").trim();
+    if (!productIdValue) return;
+    if (pushProductId && pushProductId !== productIdValue) {
+      setError("You can only edit one product at a time in section 3.");
+      return;
+    }
+    if (!pushProductId) {
+      setPushProductId(productIdValue);
+      setPushProductHandle(String(product.handle || "").trim());
+    }
+    const imageId = `push:${productIdValue}:${image.id}`;
+    setPushImages((prev) => {
+      const exists = prev.some((img) => img.id === imageId);
+      if (exists) {
+        return prev.filter((img) => img.id !== imageId);
+      }
+      return [
+        ...prev,
+        {
+          id: imageId,
+          sourceImageId: String(image.id || ""),
+          mediaId: String(image.id || ""),
+          url: String(image.url || "").trim(),
+          title: String(image.altText || product.title || "Product image"),
+          altText: String(image.altText || "").trim(),
+          generatingAlt: false,
+          deleting: false,
+        },
+      ];
+    });
+  }
+
+  async function removePushImageFromShopify(image: PushQueueImage) {
+    if (!pushProductId.trim()) return;
+    if (!image.mediaId) {
+      setPushImages((prev) => prev.filter((img) => img.id !== image.id));
+      return;
+    }
+    setPushImages((prev) =>
+      prev.map((img) => (img.id === image.id ? { ...img, deleting: true } : img))
+    );
+    setError(null);
+    try {
+      const resp = await fetch("/api/shopify-push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "delete-media",
+          shop: shop.trim(),
+          productId: pushProductId.trim(),
+          mediaIds: [image.mediaId],
+        }),
+      });
+      const json = await parseJsonResponse(resp, "/api/shopify-push");
+      if (!resp.ok) {
+        throw new Error(json?.error || "Failed to remove Shopify image.");
+      }
+      setPushImages((prev) => prev.filter((img) => img.id !== image.id));
+      setStatus("Removed image from Shopify.");
+    } catch (e: any) {
+      setPushImages((prev) =>
+        prev.map((img) => (img.id === image.id ? { ...img, deleting: false } : img))
+      );
+      setError(e?.message || "Failed to remove Shopify image.");
+    }
+  }
+
+  function movePushImage(fromIndex: number, toIndex: number) {
+    setPushImages((prev) => {
+      if (
+        fromIndex < 0 ||
+        fromIndex >= prev.length ||
+        toIndex < 0 ||
+        toIndex >= prev.length ||
+        fromIndex === toIndex
+      ) {
+        return prev;
+      }
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
+  }
+
+  async function generateAltForPushImage(imageId: string) {
+    const target = pushImages.find((img) => img.id === imageId);
+    if (!target) return;
+    setPushImages((prev) =>
+      prev.map((img) => (img.id === imageId ? { ...img, generatingAlt: true } : img))
+    );
+    setError(null);
+    try {
+      const resp = await fetch("/api/openai/image-alt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageUrl: target.url,
+          itemType: resolvedItemType || "apparel item",
+        }),
+      });
+      const json = await parseJsonResponse(resp, "/api/openai/image-alt");
+      if (!resp.ok) {
+        throw new Error(json?.error || "Failed to generate alt text.");
+      }
+      const nextAlt = String(json?.altText || "").trim();
+      if (!nextAlt) throw new Error("Alt text generation returned empty result.");
+      setPushImages((prev) =>
+        prev.map((img) =>
+          img.id === imageId ? { ...img, altText: nextAlt, generatingAlt: false } : img
+        )
+      );
+    } catch (e: any) {
+      setPushImages((prev) =>
+        prev.map((img) => (img.id === imageId ? { ...img, generatingAlt: false } : img))
+      );
+      setError(e?.message || "Failed to generate alt text.");
+    }
+  }
+
+  async function generateAltForAllPushImages() {
+    for (const image of pushImages) {
+      // Sequential to keep OpenAI usage predictable and avoid burst failures.
+      await generateAltForPushImage(image.id);
+    }
+    setStatus("Alt text generation completed for queued Shopify images.");
   }
 
   function saveItemBarcode() {
@@ -1092,17 +1227,6 @@ export default function StudioWorkspace() {
       "Press OK to choose a folder, or Cancel to choose files."
     );
     openInputPicker(chooseFolder ? itemFolderRef.current : itemPickerRef.current);
-  }
-
-  function selectPushCatalogImage(
-    product: ShopifyCatalogProduct,
-    image: { id: string; url: string; altText: string }
-  ) {
-    setPushProductId(String(product.id || ""));
-    setPushImageUrl(String(image.url || ""));
-    setPushImageAlt(String(image.altText || product.title || ""));
-    setStatus(`Selected catalog image from ${product.title} for Shopify Push.`);
-    setError(null);
   }
 
   function getPrimaryBarcode(product: ShopifyCatalogProduct) {
@@ -1201,6 +1325,61 @@ export default function StudioWorkspace() {
     if (!values.length) return "N/A";
     if (values.length <= 3) return values.join(", ");
     return `${values.slice(0, 3).join(", ")} +${values.length - 3} more`;
+  }
+
+  async function pushImageToShopify() {
+    setError(null);
+    setStatus("Updating Shopify images...");
+    setPushingImages(true);
+    try {
+      const shopValue = shop.trim();
+      if (!shopValue) {
+        throw new Error("Please enter your shop domain first.");
+      }
+      if (!pushProductId.trim()) {
+        throw new Error("Select a product first.");
+      }
+      if (!pushImages.length) {
+        throw new Error("No images selected for Shopify push.");
+      }
+
+      const payloadImages = pushImages.map((img) => ({
+        url: img.url,
+        altText: img.altText.trim(),
+      }));
+
+      const resp = await fetch("/api/shopify-push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "replace-product-images",
+          shop: shopValue,
+          productId: pushProductId.trim(),
+          images: payloadImages,
+          removeExisting: true,
+        }),
+      });
+      const json = await parseJsonResponse(resp, "/api/shopify-push");
+      if (!resp.ok) {
+        const details =
+          typeof json?.details === "string"
+            ? json.details
+            : json?.details
+              ? JSON.stringify(json.details)
+              : "";
+        throw new Error(
+          `${json?.error || "Shopify image push failed"}${details ? `: ${details}` : ""}`
+        );
+      }
+
+      setStatus("Shopify product images updated (old removed, new ordered list uploaded).");
+      await loadPushCatalogProducts();
+    } catch (e: any) {
+      setError(e?.message || "Shopify image push failed");
+      setStatus(null);
+    } finally {
+      setPushingImages(false);
+    }
   }
 
   function filterImages(files: FileList | File[]) {
@@ -3228,42 +3407,36 @@ export default function StudioWorkspace() {
         <section className="card">
           <div className="card-title">3) Shopify Push (Images)</div>
           <p className="muted">
-            Sync a generated image to Shopify with alt text and optional variant attach.
+            Search product once, manage all images (remove/reorder), edit or regenerate alt text, then push.
           </p>
-          <div className="row">
-            <input
-              value={pushProductId ?? ""}
-              onChange={(e) => setPushProductId(e.target.value)}
-              placeholder="Product ID (gid://shopify/Product/...)"
-            />
-            <input
-              value={pushVariantId ?? ""}
-              onChange={(e) => setPushVariantId(e.target.value)}
-              placeholder="Variant ID (optional)"
-            />
-          </div>
-          <div className="row">
-            <input
-              value={pushImageUrl ?? ""}
-              onChange={(e) => setPushImageUrl(e.target.value)}
-              placeholder="Image URL (from renders bucket or catalog)"
-            />
-            <input
-              value={pushImageAlt ?? ""}
-              onChange={(e) => setPushImageAlt(e.target.value)}
-              placeholder="Alt text"
-            />
-          </div>
           <div className="catalog-wrap">
             <div className="row">
               <input
-                value={pushCatalogQuery ?? ""}
-                onChange={(e) => setPushCatalogQuery(e.target.value)}
+                value={pushSearchQuery ?? ""}
+                onChange={(e) => setPushSearchQuery(e.target.value)}
                 onKeyDown={onPushCatalogSearchKeyDown}
-                placeholder="Search products (title, handle, SKU)"
+                placeholder="Search by barcode, product name, handle, or SKU"
               />
               <button className="btn ghost" type="button" onClick={loadPushCatalogProducts}>
                 {pushCatalogLoading ? "Loading..." : "Search Catalog"}
+              </button>
+              <button
+                className="btn ghost"
+                type="button"
+                onClick={() => {
+                  const saved = itemBarcodeSaved.trim();
+                  if (!saved) {
+                    setError("Save barcode in section 0.5 first.");
+                    return;
+                  }
+                  setPushSearchQuery(saved);
+                  setTimeout(() => {
+                    loadPushCatalogProducts();
+                  }, 0);
+                }}
+                disabled={!itemBarcodeSaved.trim() || pushCatalogLoading}
+              >
+                Use 0.5 Barcode
               </button>
             </div>
             {!shop.trim() && (
@@ -3290,16 +3463,28 @@ export default function StudioWorkspace() {
                         ({product.handle}) | Barcode: {formatProductBarcodes(product)}
                       </span>
                     </div>
+                    <div className="row">
+                      <button
+                        className="btn ghost"
+                        type="button"
+                        onClick={() => upsertPushQueueFromProduct(product)}
+                      >
+                        Load Current Shopify Images
+                      </button>
+                    </div>
                     <div className="preview-grid">
                       {product.images.map((img) => {
-                        const selected =
-                          pushProductId === product.id && pushImageUrl === img.url;
+                        const selected = pushImages.some(
+                          (row) =>
+                            row.sourceImageId === img.id &&
+                            pushProductId === String(product.id || "")
+                        );
                         return (
                           <button
                             key={img.id}
                             type="button"
                             className={`catalog-image ${selected ? "selected" : ""}`}
-                            onClick={() => selectPushCatalogImage(product, img)}
+                            onClick={() => togglePushCatalogImage(product, img)}
                           >
                             <img src={img.url} alt={img.altText || product.title} />
                             <span>{selected ? "Selected" : "Select"}</span>
@@ -3312,14 +3497,77 @@ export default function StudioWorkspace() {
               </div>
             ) : null}
           </div>
-          <div className="muted centered">
-            {pushImageUrl
-              ? `Selected catalog image ready for push.`
-              : "No catalog image selected yet."}
+          <div className="muted">
+            Product: {pushProductId || "none"}{pushProductHandle ? ` (${pushProductHandle})` : ""}
           </div>
-          <button className="btn" onClick={pushImageToShopify}>
-            Push Image
-          </button>
+          {pushImages.length ? (
+            <div className="push-queue-grid">
+              {pushImages.map((img, index) => (
+                <div
+                  key={img.id}
+                  className="push-queue-card"
+                  draggable
+                  onDragStart={() => setDraggingPushImageId(img.id)}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                  }}
+                  onDrop={() => {
+                    if (!draggingPushImageId) return;
+                    const from = pushImages.findIndex((row) => row.id === draggingPushImageId);
+                    const to = pushImages.findIndex((row) => row.id === img.id);
+                    movePushImage(from, to);
+                    setDraggingPushImageId(null);
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="preview-remove-corner"
+                    onClick={() => removePushImageFromShopify(img)}
+                    disabled={img.deleting}
+                    aria-label={`Remove image ${index + 1} from Shopify`}
+                  >
+                    {img.deleting ? "..." : "X"}
+                  </button>
+                  <img src={img.url} alt={img.title || `Shopify image ${index + 1}`} />
+                  <div className="preview-name">Position {index + 1}</div>
+                  <textarea
+                    value={img.altText}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setPushImages((prev) =>
+                        prev.map((row) => (row.id === img.id ? { ...row, altText: value } : row))
+                      );
+                    }}
+                    rows={3}
+                    placeholder="Alt text (80-120 chars)"
+                  />
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    onClick={() => generateAltForPushImage(img.id)}
+                    disabled={img.generatingAlt}
+                  >
+                    {img.generatingAlt ? "Generating..." : "Regenerate Alt"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="muted centered">No images selected yet.</div>
+          )}
+          <div className="row">
+            <button
+              className="btn ghost"
+              type="button"
+              onClick={generateAltForAllPushImages}
+              disabled={!pushImages.length || pushingImages}
+            >
+              Generate Alt for All
+            </button>
+            <button className="btn" onClick={pushImageToShopify} disabled={!pushImages.length || pushingImages}>
+              {pushingImages ? "Pushing..." : "Push Images (Replace Product Media)"}
+            </button>
+          </div>
         </section>
 
         <section className="card">
@@ -3533,6 +3781,36 @@ export default function StudioWorkspace() {
           display: grid;
           gap: 8px;
           background: #fff;
+        }
+        .push-queue-grid {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 12px;
+          justify-content: center;
+        }
+        .push-queue-card {
+          border: 1px solid #e2e8f0;
+          border-radius: 10px;
+          background: #fff;
+          padding: 8px;
+          width: 220px;
+          display: grid;
+          gap: 6px;
+          position: relative;
+          cursor: grab;
+        }
+        .push-queue-card img {
+          width: 100%;
+          height: 180px;
+          display: block;
+          object-fit: contain;
+          object-position: center;
+          border-radius: 8px;
+          background: #f8fafc;
+        }
+        .push-queue-card textarea {
+          min-height: 68px;
+          resize: vertical;
         }
         .pull-product {
           width: 100%;
