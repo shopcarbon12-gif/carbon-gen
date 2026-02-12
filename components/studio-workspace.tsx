@@ -1587,6 +1587,32 @@ export default function StudioWorkspace() {
   );
 
   const visibleCatalogProducts = useMemo(() => catalogProducts, [catalogProducts]);
+  const selectedModelForGeneration = useMemo(
+    () => models.find((m) => m.model_id === selectedModelId),
+    [models, selectedModelId]
+  );
+
+  function isDressItemType(value: string) {
+    return String(value || "").trim().toLowerCase().includes("dress");
+  }
+
+  function isFemaleDressPanelBlocked(modelGender: string, itemTypeValue: string, panelNumber: number) {
+    return (
+      String(modelGender || "").trim().toLowerCase() === "female" &&
+      isDressItemType(itemTypeValue) &&
+      panelNumber === 3
+    );
+  }
+
+  useEffect(() => {
+    const modelGender = String(selectedModelForGeneration?.gender || "").trim().toLowerCase();
+    const shouldBlockPanel3 = isFemaleDressPanelBlocked(modelGender, resolvedItemType, 3);
+    if (!shouldBlockPanel3) return;
+    setSelectedPanels((prev) => {
+      const next = prev.filter((panel) => panel !== 3);
+      return next.length ? next : [1];
+    });
+  }, [selectedModelForGeneration?.gender, resolvedItemType]);
 
   function getPanelPosePair(gender: string, panelNumber: number): [number, number] {
     const g = String(gender || "").toLowerCase();
@@ -1972,7 +1998,14 @@ export default function StudioWorkspace() {
   ) {
     setError(null);
     setGenerateOpenAiResponse(null);
-    const requestedPanels = uniqueSortedPanels(selectedPanels);
+    const requestedPanels = uniqueSortedPanels(selectedPanels).filter(
+      (panelNumber) =>
+        !isFemaleDressPanelBlocked(
+          String(selectedModelForGeneration?.gender || ""),
+          resolvedItemType,
+          panelNumber
+        )
+    );
     if (!requestedPanels.length) {
       setError("Please select at least one panel.");
       return;
@@ -3131,14 +3164,23 @@ export default function StudioWorkspace() {
           <div className="panel-row">
             {panels.map((panel) => {
               const selected = selectedPanels.includes(panel.id);
-              const selectedModel = models.find((m) => m.model_id === selectedModelId);
-              const panelLabel = getPanelButtonLabel(selectedModel?.gender || "female", panel.id);
+              const panelLabel = getPanelButtonLabel(
+                selectedModelForGeneration?.gender || "female",
+                panel.id
+              );
+              const unavailableForDress = isFemaleDressPanelBlocked(
+                String(selectedModelForGeneration?.gender || ""),
+                resolvedItemType,
+                panel.id
+              );
               return (
                 <button
                   key={panel.id}
-                  className={`pill ${selected ? "active" : ""}`}
+                  className={`pill ${selected ? "active" : ""} ${unavailableForDress ? "unavailable" : ""}`}
+                  disabled={unavailableForDress}
                   onClick={() => {
                     setSelectedPanels((prev) => {
+                      if (unavailableForDress) return prev;
                       const has = prev.includes(panel.id);
                       if (has) {
                         const next = prev.filter((id) => id !== panel.id);
@@ -3148,7 +3190,7 @@ export default function StudioWorkspace() {
                     });
                   }}
                 >
-                  {panelLabel}
+                  {unavailableForDress ? `Panel ${panel.id} (Not available for dress)` : panelLabel}
                 </button>
               );
             })}
@@ -3158,7 +3200,22 @@ export default function StudioWorkspace() {
             Generate runs exactly the selected panel(s).
           </div>
           <div className="row">
-            <button className="btn ghost" type="button" onClick={() => setSelectedPanels([1, 2, 3, 4])}>
+            <button
+              className="btn ghost"
+              type="button"
+              onClick={() =>
+                setSelectedPanels(
+                  [1, 2, 3, 4].filter(
+                    (panelNumber) =>
+                      !isFemaleDressPanelBlocked(
+                        String(selectedModelForGeneration?.gender || ""),
+                        resolvedItemType,
+                        panelNumber
+                      )
+                  )
+                )
+              }
+            >
               Select All Panels
             </button>
             <button className="btn ghost" type="button" onClick={() => setSelectedPanels([1])}>
@@ -4045,6 +4102,13 @@ export default function StudioWorkspace() {
           border-color: #0b6b58;
           color: #0b6b58;
           background: #e7f4f1;
+        }
+        .pill.unavailable {
+          opacity: 0.55;
+          cursor: not-allowed;
+          border-color: #e2e8f0;
+          color: #64748b;
+          background: #f1f5f9;
         }
         .panel-preview {
           border: 1px solid #e2e8f0;
