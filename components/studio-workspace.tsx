@@ -75,6 +75,12 @@ function openInputPicker(input: HTMLInputElement | null) {
   input.click();
 }
 
+function canonicalPreviousUploadName(fileName: string, path: string) {
+  const fallback = path.split("/").pop() || path;
+  const base = String(fileName || fallback || "").trim().toLowerCase();
+  return base.replace(/^\d{10,}-/, "");
+}
+
 export default function StudioWorkspace() {
   const [shop, setShop] = useState("");
   const [handle, setHandle] = useState("");
@@ -864,7 +870,22 @@ export default function StudioWorkspace() {
           url: file?.url ? String(file.url) : null,
         };
       });
-      setPreviousModelUploads(normalized.filter((file) => Boolean(file.id && file.path)));
+      const dedupedByName = new Map<string, PreviousModelUpload>();
+      for (const file of normalized.filter((row) => Boolean(row.id && row.path))) {
+        const key = canonicalPreviousUploadName(file.fileName, file.path);
+        const prev = dedupedByName.get(key);
+        if (!prev) {
+          dedupedByName.set(key, file);
+          continue;
+        }
+        const prevTs = prev.uploadedAt ? new Date(prev.uploadedAt).getTime() : 0;
+        const nextTs = file.uploadedAt ? new Date(file.uploadedAt).getTime() : 0;
+        if (nextTs >= prevTs) {
+          dedupedByName.set(key, file);
+        }
+      }
+
+      setPreviousModelUploads(Array.from(dedupedByName.values()));
       setSelectedPreviousUploads([]);
     } catch (e: any) {
       setError(e?.message || "Failed to load previous model uploads");
@@ -883,6 +904,18 @@ export default function StudioWorkspace() {
       await loadPreviousModelUploads();
     }
     setPreviousUploadsVisible(true);
+  }
+
+  async function onPreviousUploadsPrimaryAction() {
+    if (!previousUploadsVisible) {
+      await togglePreviousUploads();
+      return;
+    }
+    if (!selectedPreviousUploads.length) {
+      setPreviousUploadsVisible(false);
+      return;
+    }
+    addSelectedPreviousToRegistry(true);
   }
 
   async function emptyBucket() {
@@ -914,7 +947,7 @@ export default function StudioWorkspace() {
     );
   }
 
-  function addSelectedPreviousToRegistry() {
+  function addSelectedPreviousToRegistry(closeAfterAdd = false) {
     const selected = previousModelUploads.filter((f) => selectedPreviousUploads.includes(f.id));
     if (!selected.length) {
       setError("Select previous uploads first.");
@@ -946,6 +979,10 @@ export default function StudioWorkspace() {
     });
 
     setStatus(`Added ${selected.length} previous upload(s) to Model Registry.`);
+    if (closeAfterAdd) {
+      setPreviousUploadsVisible(false);
+      setSelectedPreviousUploads([]);
+    }
   }
 
   useEffect(() => {
@@ -1971,8 +2008,10 @@ export default function StudioWorkspace() {
             </div>
           ) : null}
           <div className="row">
-            <button className="btn ghost" type="button" onClick={togglePreviousUploads}>
-              {previousUploadsVisible ? "Hide Previous Uploads" : "Load Previous Uploads"}
+            <button className="btn ghost" type="button" onClick={onPreviousUploadsPrimaryAction}>
+              {previousUploadsVisible
+                ? `Add Selected Uploads (${selectedPreviousUploads.length})`
+                : "Load Previous Uploads"}
             </button>
             <button
               className="btn ghost"
@@ -2026,17 +2065,6 @@ export default function StudioWorkspace() {
                   <option value="female">Female only</option>
                   <option value="male">Male only</option>
                 </select>
-                <button className="btn ghost" type="button" onClick={loadPreviousModelUploads}>
-                  Reload Previous Uploads
-                </button>
-                <button
-                  className="btn"
-                  type="button"
-                  onClick={addSelectedPreviousToRegistry}
-                  disabled={!selectedPreviousUploads.length}
-                >
-                  Add Selected to Model Registry ({selectedPreviousUploads.length})
-                </button>
               </div>
               {previousModelUploadsLoading ? (
                 <div className="muted centered">Loading previous uploads...</div>
@@ -2047,29 +2075,17 @@ export default function StudioWorkspace() {
                     return (
                       <div
                         key={file.id}
-                        className={`preview-card selectable ${selected ? "selected" : ""}`}
+                        className={`preview-card previous-upload-card selectable ${
+                          selected ? "selected" : ""
+                        }`}
                         onClick={() => togglePreviousUpload(file.id)}
                       >
                         {file.url ? (
-                          <img src={file.url} alt={file.fileName} />
+                          <img className="previous-upload-image" src={file.url} alt={file.fileName} />
                         ) : (
                           <div className="muted centered">Preview unavailable</div>
                         )}
-                        <div className="preview-name">{file.fileName}</div>
-                        <div className="preview-name">
-                          Gender:{" "}
-                          {file.gender === "female"
-                            ? "Female"
-                            : file.gender === "male"
-                            ? "Male"
-                            : "Unknown"}
-                        </div>
-                        <div className="preview-name">
-                          {file.uploadedAt
-                            ? new Date(file.uploadedAt).toLocaleString()
-                            : "No date"}
-                        </div>
-                        <div className="preview-name">{selected ? "Selected" : "Click to select"}</div>
+                        <div className="preview-name">Click to select</div>
                       </div>
                     );
                   })}
@@ -2912,6 +2928,17 @@ export default function StudioWorkspace() {
           height: 90px;
           object-fit: cover;
           border-radius: 8px;
+        }
+        .previous-upload-card {
+          width: 200px;
+        }
+        .previous-upload-card img.previous-upload-image {
+          width: 100%;
+          height: auto;
+          max-height: 280px;
+          object-fit: contain;
+          border-radius: 8px;
+          background: #f8fafc;
         }
         .preview-name {
           font-size: 0.75rem;
