@@ -9,7 +9,8 @@ type DropboxFile = {
   path_lower: string;
 };
 
-const DROPBOX_SEARCH_ROOT = "/elior perez/carbon";
+const DROPBOX_SEARCH_ROOT = process.env.DROPBOX_SEARCH_ROOT || "/elior perez/carbon";
+const MAX_FALLBACK_SCAN_ENTRIES = 4000;
 
 function normalizePath(path: string) {
   let v = String(path || "").trim().toLowerCase();
@@ -59,6 +60,31 @@ async function dropboxRpc(accessToken: string, endpoint: string, body: any) {
 async function getTemporaryLink(accessToken: string, path: string) {
   const data = await dropboxRpc(accessToken, "files/get_temporary_link", { path });
   return String(data?.link || "");
+}
+
+async function listFolderRecursive(accessToken: string, rootPath: string) {
+  const collected: any[] = [];
+  let page = await dropboxRpc(accessToken, "files/list_folder", {
+    path: rootPath,
+    recursive: true,
+    include_media_info: false,
+    include_deleted: false,
+    limit: 2000,
+  });
+
+  const pushEntries = (entries: any[]) => {
+    for (const entry of entries) {
+      collected.push(entry);
+      if (collected.length >= MAX_FALLBACK_SCAN_ENTRIES) break;
+    }
+  };
+
+  pushEntries(Array.isArray(page?.entries) ? page.entries : []);
+  while (page?.has_more && page?.cursor && collected.length < MAX_FALLBACK_SCAN_ENTRIES) {
+    page = await dropboxRpc(accessToken, "files/list_folder/continue", { cursor: page.cursor });
+    pushEntries(Array.isArray(page?.entries) ? page.entries : []);
+  }
+  return collected;
 }
 
 export async function POST(req: NextRequest) {
@@ -118,6 +144,26 @@ export async function POST(req: NextRequest) {
         }
       } else if (tag === "folder") {
         matchedFolders.push(p);
+      }
+    }
+
+    if (!matchedFiles.length && !matchedFolders.length) {
+      const scanned = await listFolderRecursive(accessToken, rootPath);
+      for (const entry of scanned) {
+        const tag = String(entry?.[".tag"] || "");
+        const p = normalizePath(String(entry?.path_lower || ""));
+        if (!p || !p.startsWith(rootPath) || !p.includes(barcode)) continue;
+        if (tag === "folder") {
+          matchedFolders.push(p);
+          continue;
+        }
+        if (tag === "file" && isImageName(String(entry?.name || ""))) {
+          matchedFiles.push({
+            id: String(entry?.id || ""),
+            name: String(entry?.name || ""),
+            path_lower: p,
+          });
+        }
       }
     }
 
