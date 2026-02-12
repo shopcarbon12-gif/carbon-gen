@@ -22,6 +22,13 @@ function isValidBarcode(value: string) {
   return /^(?:[cC]\d{6,8}|\d{7,9})$/.test(v);
 }
 
+function normalizeBarcode(value: string) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^c0-9]/g, "")
+    .trim();
+}
+
 function isImageName(name: string) {
   return /\.(avif|bmp|gif|heic|heif|jpeg|jpg|png|tif|tiff|webp)$/i.test(name);
 }
@@ -65,7 +72,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => ({}));
-  const barcode = String(body?.barcode || "").trim();
+  const barcode = normalizeBarcode(String(body?.barcode || ""));
   if (!barcode) {
     return NextResponse.json({ error: "Barcode is required." }, { status: 400 });
   }
@@ -93,22 +100,52 @@ export async function POST(req: NextRequest) {
     });
 
     const matches = Array.isArray(search?.matches) ? search.matches : [];
-    const files: DropboxFile[] = matches
-      .map((m: any) => m?.metadata?.metadata)
-      .filter((m: any) => m?.[".tag"] === "file")
-      .map((m: any) => ({
-        id: String(m.id || ""),
-        name: String(m.name || ""),
-        path_lower: String(m.path_lower || ""),
-      }))
-      .filter((f: DropboxFile) => {
-        const p = normalizePath(f.path_lower);
-        return Boolean(p) && p.startsWith(rootPath) && isImageName(f.name);
+    const matchedFiles: DropboxFile[] = [];
+    const matchedFolders: string[] = [];
+    for (const match of matches) {
+      const m = match?.metadata?.metadata;
+      const tag = String(m?.[".tag"] || "");
+      const p = normalizePath(String(m?.path_lower || ""));
+      if (!p || !p.startsWith(rootPath)) continue;
+      if (tag === "file") {
+        const name = String(m?.name || "");
+        if (isImageName(name)) {
+          matchedFiles.push({
+            id: String(m?.id || ""),
+            name,
+            path_lower: p,
+          });
+        }
+      } else if (tag === "folder") {
+        matchedFolders.push(p);
+      }
+    }
+
+    const folderPaths = Array.from(
+      new Set([...matchedFolders, ...matchedFiles.map((f) => dirName(f.path_lower)).filter(Boolean)])
+    ).slice(0, 20);
+
+    const folderImages: Array<{
+      folderPath: string;
+      webUrl: string;
+      images: Array<{ id: string; title: string; pathLower: string; temporaryLink: string }>;
+    }> = [];
+    const imageByPath = new Map<
+      string,
+      { id: string; title: string; pathLower: string; temporaryLink: string }
+    >();
+
+    for (const file of matchedFiles) {
+      const link = await getTemporaryLink(accessToken, file.path_lower);
+      if (!link) continue;
+      imageByPath.set(file.path_lower, {
+        id: file.id,
+        title: file.name,
+        pathLower: file.path_lower,
+        temporaryLink: link,
       });
+    }
 
-    const folderPaths = Array.from(new Set(files.map((f) => dirName(f.path_lower)).filter(Boolean))).slice(0, 8);
-
-    const folderImages: Array<{ folderPath: string; images: Array<{ id: string; title: string; pathLower: string; temporaryLink: string }> }> = [];
     for (const folderPath of folderPaths) {
       const list = await dropboxRpc(accessToken, "files/list_folder", {
         path: folderPath,
@@ -135,17 +172,26 @@ export async function POST(req: NextRequest) {
       for (const entry of imageEntries) {
         const link = await getTemporaryLink(accessToken, entry.pathLower);
         if (!link) continue;
-        withLinks.push({ ...entry, temporaryLink: link });
+        const row = { ...entry, temporaryLink: link };
+        withLinks.push(row);
+        imageByPath.set(entry.pathLower, row);
       }
       if (withLinks.length) {
-        folderImages.push({ folderPath, images: withLinks });
+        folderImages.push({
+          folderPath,
+          webUrl: `https://www.dropbox.com/home${folderPath}`,
+          images: withLinks,
+        });
       }
     }
+
+    const images = Array.from(imageByPath.values());
 
     return NextResponse.json({
       barcode,
       folders: folderImages,
-      images: folderImages.flatMap((f) => f.images),
+      images,
+      rootPath: DROPBOX_SEARCH_ROOT,
     });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Dropbox search failed." }, { status: 500 });

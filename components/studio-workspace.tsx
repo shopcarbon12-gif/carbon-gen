@@ -79,6 +79,12 @@ type DropboxImageResult = {
   temporaryLink: string;
 };
 
+type DropboxFolderResult = {
+  folderPath: string;
+  webUrl: string;
+  images: DropboxImageResult[];
+};
+
 const IMAGE_FILE_EXT_RE = /\.(avif|bmp|gif|heic|heif|jpeg|jpg|png|tif|tiff|webp)$/i;
 
 function isImageLikeFile(file: File) {
@@ -167,8 +173,10 @@ export default function StudioWorkspace() {
   const [itemType, setItemType] = useState("");
   const [itemTypeCustom, setItemTypeCustom] = useState("");
   const [itemBarcode, setItemBarcode] = useState("");
+  const [itemBarcodeSaved, setItemBarcodeSaved] = useState("");
   const [dropboxSearching, setDropboxSearching] = useState(false);
   const [dropboxResults, setDropboxResults] = useState<DropboxImageResult[]>([]);
+  const [dropboxFolderResults, setDropboxFolderResults] = useState<DropboxFolderResult[]>([]);
   const [dropboxSearched, setDropboxSearched] = useState(false);
   const [catalogQuery, setCatalogQuery] = useState("");
   const [catalogLoading, setCatalogLoading] = useState(false);
@@ -406,18 +414,26 @@ export default function StudioWorkspace() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!itemBarcode) {
-      const storedBarcode = (window.localStorage.getItem("item_barcode") || "").trim();
-      if (storedBarcode) setItemBarcode(storedBarcode);
+      const storedDraft = (window.localStorage.getItem("item_barcode_draft") || "").trim();
+      if (storedDraft) setItemBarcode(sanitizeBarcodeInput(storedDraft));
     }
-  }, [itemBarcode]);
+    if (!itemBarcodeSaved) {
+      const storedSaved = (window.localStorage.getItem("item_barcode_saved") || "").trim();
+      if (storedSaved) setItemBarcodeSaved(sanitizeBarcodeInput(storedSaved));
+    }
+  }, [itemBarcode, itemBarcodeSaved]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const barcode = itemBarcode.trim();
-    if (barcode) {
-      window.localStorage.setItem("item_barcode", barcode);
+    const draft = itemBarcode.trim();
+    const saved = itemBarcodeSaved.trim();
+    window.localStorage.setItem("item_barcode_draft", draft);
+    if (saved) {
+      window.localStorage.setItem("item_barcode_saved", saved);
+    } else {
+      window.localStorage.removeItem("item_barcode_saved");
     }
-  }, [itemBarcode]);
+  }, [itemBarcode, itemBarcodeSaved]);
 
   useEffect(() => {
     setGeneratedPanels({});
@@ -776,10 +792,11 @@ export default function StudioWorkspace() {
     if (itemType === "other apparel item" && !itemTypeCustom.trim()) {
       throw new Error("Please type the apparel item for 'Other Apparel Item'.");
     }
-    if (!itemBarcode.trim()) {
-      throw new Error("Please enter item barcode in section 0.5.");
+    const activeBarcode = itemBarcodeSaved.trim();
+    if (!activeBarcode) {
+      throw new Error("Please save item barcode in section 0.5.");
     }
-    if (!isValidBarcode(itemBarcode)) {
+    if (!isValidBarcode(activeBarcode)) {
       throw new Error("Barcode must be 7-9 chars: digits only, or C + 6-8 digits.");
     }
 
@@ -820,7 +837,7 @@ export default function StudioWorkspace() {
 
     if (!silentSuccess) {
       setStatus(
-        `Saved item barcode "${itemBarcode.trim()}" with type "${effectiveItemType}" and ${merged.length} item reference image${
+        `Saved item barcode "${activeBarcode}" with type "${effectiveItemType}" and ${merged.length} item reference image${
           merged.length === 1 ? "" : "s"
         } (${uploadedUrls.length} device + ${shopifyUrls.length} Shopify).`
       );
@@ -982,14 +999,31 @@ export default function StudioWorkspace() {
     loadPushCatalogProducts();
   }
 
-  async function searchDropboxByBarcode() {
-    const barcode = sanitizeBarcodeInput(itemBarcode).trim();
-    if (!barcode) {
-      setError("Enter barcode first, then search Dropbox.");
+  function saveItemBarcode() {
+    const normalized = sanitizeBarcodeInput(itemBarcode).trim();
+    if (!normalized) {
+      setError("Type barcode first, then click Save Barcode.");
       return;
     }
-    if (!isValidBarcode(barcode)) {
+    if (!isValidBarcode(normalized)) {
       setError("Barcode must be 7-9 chars: digits only, or C + 6-8 digits.");
+      return;
+    }
+    setItemBarcodeSaved(normalized);
+    setError(null);
+    setStatus(`Saved barcode: ${normalized}`);
+  }
+
+  function clearSavedItemBarcode() {
+    setItemBarcodeSaved("");
+    setStatus("Saved barcode removed.");
+    setError(null);
+  }
+
+  async function searchDropboxByBarcode() {
+    const barcode = itemBarcodeSaved.trim();
+    if (!barcode) {
+      setError("Save a barcode first, then search Dropbox.");
       return;
     }
     setDropboxSearching(true);
@@ -1006,6 +1040,21 @@ export default function StudioWorkspace() {
         throw new Error(json?.error || "Dropbox search failed.");
       }
       const images = Array.isArray(json?.images) ? json.images : [];
+      const folders = Array.isArray(json?.folders) ? json.folders : [];
+      setDropboxFolderResults(
+        folders.map((folder: any) => ({
+          folderPath: String(folder?.folderPath || ""),
+          webUrl: String(folder?.webUrl || ""),
+          images: Array.isArray(folder?.images)
+            ? folder.images.map((img: any) => ({
+                id: String(img?.id || ""),
+                title: String(img?.title || "Dropbox image"),
+                pathLower: String(img?.pathLower || ""),
+                temporaryLink: String(img?.temporaryLink || ""),
+              }))
+            : [],
+        }))
+      );
       setDropboxResults(
         images.map((img: any) => ({
           id: String(img?.id || ""),
@@ -1020,6 +1069,7 @@ export default function StudioWorkspace() {
           : `No Dropbox images found for barcode ${barcode}.`
       );
     } catch (e: any) {
+      setDropboxFolderResults([]);
       setDropboxResults([]);
       setError(e?.message || "Dropbox search failed.");
       setStatus(null);
@@ -1033,7 +1083,7 @@ export default function StudioWorkspace() {
       id: `dropbox:${img.id}`,
       url: img.temporaryLink,
       title: img.title || "Dropbox image",
-      barcode: itemBarcode.trim(),
+      barcode: itemBarcodeSaved.trim(),
     });
   }
 
@@ -2201,7 +2251,7 @@ export default function StudioWorkspace() {
 
       const selectedModel = models.find((m) => m.model_id === selectedModelId);
       const gender = selectedModel?.gender || "female";
-      const barcode = itemBarcode.trim();
+      const barcode = itemBarcodeSaved.trim();
       const allCrops: SplitCrop[] = [];
       for (const panel of targetPanels.sort((a, b) => a - b)) {
         const b64 = generatedPanels[panel];
@@ -2605,12 +2655,28 @@ export default function StudioWorkspace() {
             <button
               className="btn ghost"
               type="button"
+              onClick={saveItemBarcode}
+              disabled={!isValidBarcode(itemBarcode)}
+            >
+              Save Barcode
+            </button>
+            <button
+              className="btn ghost"
+              type="button"
               onClick={searchDropboxByBarcode}
-              disabled={dropboxSearching || !isValidBarcode(itemBarcode)}
+              disabled={dropboxSearching || !isValidBarcode(itemBarcodeSaved)}
             >
               {dropboxSearching ? "Searching Dropbox..." : "Search Dropbox by Barcode"}
             </button>
           </div>
+          {itemBarcodeSaved ? (
+            <div className="barcode-chip-row">
+              <span className="barcode-chip">Saved barcode: {itemBarcodeSaved}</span>
+              <button className="barcode-chip-remove" type="button" onClick={clearSavedItemBarcode}>
+                X
+              </button>
+            </div>
+          ) : null}
           <div className="muted centered">
             Dropbox: {dropboxConnected ? "Connected" : "Not connected"}
             {dropboxEmail ? ` (${dropboxEmail})` : ""}
@@ -2618,6 +2684,21 @@ export default function StudioWorkspace() {
           </div>
           {dropboxSearched && !dropboxSearching && !dropboxResults.length ? (
             <div className="muted centered">No Dropbox images found for this barcode.</div>
+          ) : null}
+          {dropboxFolderResults.length ? (
+            <div className="card">
+              <div className="card-title">Dropbox Matched Folders</div>
+              <div className="dropbox-folder-list">
+                {dropboxFolderResults.map((folder) => (
+                  <div className="dropbox-folder-row" key={folder.folderPath}>
+                    <span className="muted">{folder.folderPath}</span>
+                    <a className="ghost-btn" href={folder.webUrl} target="_blank" rel="noreferrer">
+                      Open In Dropbox
+                    </a>
+                  </div>
+                ))}
+              </div>
+            </div>
           ) : null}
           {dropboxResults.length ? (
             <div className="preview-grid item-catalog-grid">
@@ -3391,9 +3472,48 @@ export default function StudioWorkspace() {
         .source-note {
           margin-top: 2px;
         }
+        .barcode-chip-row {
+          display: flex;
+          gap: 8px;
+          align-items: center;
+          justify-content: center;
+        }
+        .barcode-chip {
+          border: 1px solid #cbd5e1;
+          background: #f8fafc;
+          border-radius: 999px;
+          padding: 6px 10px;
+          font-size: 0.85rem;
+          color: #0f172a;
+        }
+        .barcode-chip-remove {
+          border: 1px solid #fecaca;
+          background: #fff;
+          color: #b91c1c;
+          border-radius: 999px;
+          width: 26px;
+          height: 26px;
+          line-height: 1;
+          cursor: pointer;
+          font-weight: 700;
+        }
         .catalog-wrap {
           display: grid;
           gap: 10px;
+        }
+        .dropbox-folder-list {
+          display: grid;
+          gap: 8px;
+        }
+        .dropbox-folder-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 8px;
+          border: 1px solid #e2e8f0;
+          border-radius: 10px;
+          padding: 8px 10px;
+          background: #fff;
         }
         .catalog-products {
           display: grid;
