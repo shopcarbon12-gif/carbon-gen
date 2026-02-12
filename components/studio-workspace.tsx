@@ -2249,29 +2249,7 @@ export default function StudioWorkspace() {
         </section>
 
         <section className="card">
-          <div className="card-title">1) Shopify Pull</div>
-          <p className="muted">
-            Pull product data by handle or product ID. This loads media, SEO, and variants.
-          </p>
-          <div className="row">
-            <input
-              value={handle}
-              onChange={(e) => setHandle(e.target.value)}
-              placeholder="Handle (vintage-wash-hoodie)"
-            />
-            <input
-              value={productId}
-              onChange={(e) => setProductId(e.target.value)}
-              placeholder="Product ID (gid://shopify/Product/...)"
-            />
-          </div>
-          <button className="btn" onClick={pullProduct}>
-            Pull Product
-          </button>
-        </section>
-
-        <section className="card">
-          <div className="card-title">2) Image Generation</div>
+          <div className="card-title">1) Image Generation</div>
           <p className="muted">
             Select a panel and generate. Approve or regenerate. Split into 2:3 crops after approval.
           </p>
@@ -2415,7 +2393,7 @@ export default function StudioWorkspace() {
             </button>
           </div>
           <div className="card">
-            <div className="card-title">2.1) OpenAI Raw Response</div>
+            <div className="card-title">1.1) OpenAI Raw Response</div>
             <p className="muted">
               Exact OpenAI/provider response for generation failures (including policy blocks).
             </p>
@@ -2436,7 +2414,7 @@ export default function StudioWorkspace() {
             </div>
           </div>
           <div className="card">
-            <div className="card-title">2.2) OpenAI Troubleshooting Chat</div>
+            <div className="card-title">1.2) OpenAI Troubleshooting Chat</div>
             <p className="muted">
               Ask follow-up questions directly and keep a continuous troubleshooting dialog.
             </p>
@@ -2483,7 +2461,7 @@ export default function StudioWorkspace() {
           </div>
           {splitCrops.length ? (
             <div className="card">
-              <div className="card-title">2.5) 2:3 Split Results</div>
+              <div className="card-title">1.5) 2:3 Split Results</div>
               <div className="row">
                 <button className="btn ghost" onClick={downloadAllSplitCrops}>
                   Download All Splits
@@ -2511,6 +2489,28 @@ export default function StudioWorkspace() {
               </div>
             </div>
           ) : null}
+        </section>
+
+        <section className="card">
+          <div className="card-title">2) Shopify Pull</div>
+          <p className="muted">
+            Pull product data by handle or product ID. This loads media, SEO, and variants.
+          </p>
+          <div className="row">
+            <input
+              value={handle}
+              onChange={(e) => setHandle(e.target.value)}
+              placeholder="Handle (vintage-wash-hoodie)"
+            />
+            <input
+              value={productId}
+              onChange={(e) => setProductId(e.target.value)}
+              placeholder="Product ID (gid://shopify/Product/...)"
+            />
+          </div>
+          <button className="btn" onClick={pullProduct}>
+            Pull Product
+          </button>
         </section>
 
         <section className="card">
