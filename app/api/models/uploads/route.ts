@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
-import { resolveModelUserScope } from "@/lib/userScope";
 
 function extractPathFromStorageUrl(url: string) {
   try {
@@ -49,19 +48,16 @@ export async function GET(req: NextRequest) {
     if (!isAuthed) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const userScope = resolveModelUserScope(req.cookies.get("carbon_gen_user_id")?.value);
+    const userId = req.cookies.get("carbon_gen_user_id")?.value?.trim();
+    if (!userId) {
+      return NextResponse.json({ error: "Missing user session" }, { status: 401 });
+    }
 
     const supabase = getSupabaseAdmin();
-    if (userScope.legacyUserId) {
-      await supabase
-        .from("models")
-        .update({ user_id: userScope.stableUserId })
-        .eq("user_id", userScope.legacyUserId);
-    }
     const { data, error } = await supabase
       .from("models")
       .select("name,gender,created_at,ref_image_urls")
-      .in("user_id", userScope.userIds)
+      .eq("user_id", userId)
       .order("created_at", { ascending: true });
 
     if (error) {

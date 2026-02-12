@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
-import { resolveModelUserScope } from "@/lib/userScope";
 
 export async function POST() {
   try {
@@ -10,18 +10,13 @@ export async function POST() {
     if (!isAuthed) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    const userScope = resolveModelUserScope(store.get("carbon_gen_user_id")?.value);
-
-    const supabase = getSupabaseAdmin();
-    if (userScope.legacyUserId) {
-      await supabase
-        .from("models")
-        .update({ user_id: userScope.stableUserId })
-        .eq("user_id", userScope.legacyUserId);
+    const userId = store.get("carbon_gen_user_id")?.value?.trim();
+    if (!userId) {
+      return NextResponse.json({ error: "Missing user session" }, { status: 401 });
     }
 
-    const { error } = await supabase.from("models").delete().in("user_id", userScope.userIds);
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase.from("models").delete().eq("user_id", userId);
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
@@ -31,3 +26,4 @@ export async function POST() {
     return NextResponse.json({ error: e?.message || "Reset failed" }, { status: 500 });
   }
 }
+
