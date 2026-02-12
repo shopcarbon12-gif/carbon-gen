@@ -21,6 +21,18 @@ function extFromContentType(contentType: string) {
   return "png";
 }
 
+function sanitizeReferenceUrl(value: unknown) {
+  if (typeof value !== "string") return "";
+  let v = value.trim();
+  if (!v) return "";
+  // Strip hidden line-break characters that sometimes leak into stored URLs.
+  v = v.replace(/%0d%0a/gi, "");
+  v = v.replace(/%0d/gi, "");
+  v = v.replace(/%0a/gi, "");
+  v = v.replace(/[\r\n]+/g, "");
+  return v.trim();
+}
+
 async function fetchReference(url: string) {
   return fetch(url, {
     headers: {
@@ -70,7 +82,45 @@ async function downloadReferenceAsFile(url: string, index: number) {
     // Keep original error below.
   }
 
-  throw new Error(`Reference image fetch failed (${lastStatus}) at index ${index + 1}: ${url}`);
+  throw new Error(`Reference image fetch failed (${lastStatus || 0}) at index ${index + 1}`);
+}
+
+function buildReferenceDownloadErrorDetails(params: {
+  allRefs: string[];
+  downloaded: PromiseSettledResult<Awaited<ReturnType<typeof downloadReferenceAsFile>>>[];
+  modelFilesCount: number;
+  itemFilesCount: number;
+  modelAnchorCount: number;
+  itemAnchorCount: number;
+}) {
+  const { allRefs, downloaded, modelFilesCount, itemFilesCount, modelAnchorCount, itemAnchorCount } =
+    params;
+  const failedIndexes = downloaded
+    .map((result, idx) => ({ result, idx }))
+    .filter(({ result }) => result.status === "rejected")
+    .map(({ idx }) => idx + 1);
+  const malformedCount = allRefs.filter((url) => /%0d|%0a|\r|\n/i.test(String(url || ""))).length;
+  const total = allRefs.length;
+  const failed = failedIndexes.length;
+
+  const notes: string[] = [];
+  if (modelAnchorCount > 0 && modelFilesCount === 0) {
+    notes.push("No model reference image could be downloaded.");
+  }
+  if (itemAnchorCount > 0 && itemFilesCount === 0) {
+    notes.push("No item reference image could be downloaded.");
+  }
+  if (malformedCount > 0) {
+    notes.push("Some reference links are malformed (line-break characters detected).");
+  }
+  if (!notes.length) {
+    notes.push("Please re-upload the reference images and try again.");
+  }
+
+  return {
+    details: `Failed to download ${failed}/${total} reference image(s). ${notes.join(" ")}`,
+    failedIndexes,
+  };
 }
 
 function fallbackGenerateResponse(reason: string) {
@@ -285,6 +335,11 @@ function buildServerIdentityLockPrompt(panelQa: PanelQaInput) {
     "- Never lighten, darken, recolor, tan, bleach, or stylize skin tone away from model refs.",
     "- Never blend identity traits from item-reference humans or any unrelated person.",
     "- If identity fidelity conflicts with style, prioritize identity fidelity.",
+    "SERVER-ENFORCED BACKGROUND LOCK (NON-NEGOTIABLE):",
+    "- Use seamless pure white studio background only (#FFFFFF).",
+    "- No pink tint, warm tint, cream cast, gray cast, gradient, vignette, texture, or wrinkles.",
+    "- Keep the exact same white background tone and lighting across all generated panels.",
+    "- Keep only a very faint neutral contact shadow on floor; no colored bounce light.",
   ].join("\n");
 }
 
@@ -381,6 +436,7 @@ async function runPanelComplianceCheck(args: {
             ]
           : []),
         "- Identity fidelity lock active: generated person must match MODEL refs for facial geometry and skin tone/undertone.",
+        "- Background lock active: seamless pure white studio background only (#FFFFFF), no tint.",
         "- 2:3 center-crop lock active: each left/right pose should be centered in its half so a center 2:3 crop keeps key subject details intact.",
       ].join("\n"),
     },
@@ -402,6 +458,7 @@ async function runPanelComplianceCheck(args: {
         "If close-up subject lock is active and the right close-up clearly focuses on a different item type/category than the locked section 0.5 item type, set pass=false.",
         "If either side appears significantly off-center such that a center 2:3 crop would cut key model/item content, set pass=false.",
         "If facial geometry or skin tone/undertone clearly drifts from MODEL refs, set pass=false.",
+        "If background is not seamless pure white (any pink/warm/cream/gray tint, gradient, vignette, texture, or colored cast), set pass=false.",
         "Set pass=false only when you are clearly confident this output violates model/item/pose lock.",
         "If uncertain, set pass=true and include reason that result is inconclusive.",
       ].join("\n"),
@@ -422,7 +479,8 @@ async function runPanelComplianceCheck(args: {
               text:
                 "You are a strict pass/fail QA gate for fashion ecommerce panel outputs. " +
                 "Fail the audit if model identity is not clearly from model refs, item/outfit is not clearly from item refs, " +
-                "or expected pose pairing is not respected. Treat face-geometry drift and skin-tone drift from model refs as identity failures. No prose. Return JSON only.",
+                "or expected pose pairing is not respected. Treat face-geometry drift and skin-tone drift from model refs as identity failures. " +
+                "Also fail any non-pure-white/tinted background. No prose. Return JSON only.",
             },
           ],
         },
@@ -498,10 +556,14 @@ export async function POST(req: NextRequest) {
     }
 
     const normalizedModelRefs = Array.isArray(modelRefs)
-      ? modelRefs.filter((v): v is string => typeof v === "string" && v.trim().length > 0)
+      ? modelRefs
+          .map((v) => sanitizeReferenceUrl(v))
+          .filter((v): v is string => v.length > 0)
       : [];
     const normalizedItemRefs = Array.isArray(itemRefs)
-      ? itemRefs.filter((v): v is string => typeof v === "string" && v.trim().length > 0)
+      ? itemRefs
+          .map((v) => sanitizeReferenceUrl(v))
+          .filter((v): v is string => v.length > 0)
       : [];
 
     if (!normalizedModelRefs.length) {
@@ -581,15 +643,19 @@ export async function POST(req: NextRequest) {
       .filter((r) => r.status === "fulfilled").length;
 
     if (!referenceFiles.length || modelFilesCount === 0 || itemFilesCount === 0) {
-      const failed = downloaded
-        .map((r, i) => ({ r, i }))
-        .filter(({ r }) => r.status === "rejected")
-        .map(({ r, i }) => `#${i + 1}: ${(r as PromiseRejectedResult).reason?.message || "download failed"}`)
-        .join(" | ");
+      const summary = buildReferenceDownloadErrorDetails({
+        allRefs,
+        downloaded,
+        modelFilesCount,
+        itemFilesCount,
+        modelAnchorCount: modelAnchors.length,
+        itemAnchorCount: itemAnchors.length,
+      });
       return NextResponse.json(
         {
           error: "Unable to download required reference images.",
-          details: failed || "No downloadable model/item references found.",
+          details: summary.details,
+          failedIndexes: summary.failedIndexes,
         },
         { status: 400 }
       );
@@ -640,6 +706,7 @@ export async function POST(req: NextRequest) {
         "Safety clarification: professional ecommerce apparel photos only.",
         "No nudity, no underwear-only framing, no sexual context, fully clothed styling.",
         "Neutral studio product-photography presentation.",
+        "Background lock: seamless pure white studio background only (#FFFFFF), no tint.",
       ].join("\n");
 
       try {

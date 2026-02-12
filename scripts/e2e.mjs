@@ -26,6 +26,15 @@ function readEnvFile() {
 
 const fileEnv = readEnvFile();
 const password = (process.env.APP_PASSWORD || fileEnv.APP_PASSWORD || "").trim();
+const username = (
+  process.env.APP_DEFAULT_LOGIN_USERNAME ||
+  process.env.APP_ADMIN_USERNAME ||
+  fileEnv.APP_DEFAULT_LOGIN_USERNAME ||
+  fileEnv.APP_ADMIN_USERNAME ||
+  "admin"
+)
+  .trim()
+  .toLowerCase();
 const shop = (process.env.SHOPIFY_SHOP_DOMAIN || fileEnv.SHOPIFY_SHOP_DOMAIN || "")
   .trim()
   .toLowerCase();
@@ -96,7 +105,7 @@ async function main() {
     const res = await c.request("/api/login", {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json" },
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ username, password }),
     });
     expectStatus(res, [200], "login response");
     assert.equal(c.cookies.get("carbon_gen_auth_v1"), "true", "auth cookie missing");

@@ -2,11 +2,24 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
+const DEFAULT_SESSION_USER_ID = "00000000-0000-0000-0000-000000000001";
+
 function normalizeModelName(value: string) {
   return String(value || "")
     .trim()
     .replace(/\s+/g, " ")
     .toLowerCase();
+}
+
+function sanitizeReferenceUrl(value: unknown) {
+  if (typeof value !== "string") return "";
+  let v = value.trim();
+  if (!v) return "";
+  v = v.replace(/%0d%0a/gi, "");
+  v = v.replace(/%0d/gi, "");
+  v = v.replace(/%0a/gi, "");
+  v = v.replace(/[\r\n]+/g, "");
+  return v.trim();
 }
 
 async function modelNameExistsForUser(userId: string, candidateName: string) {
@@ -30,10 +43,10 @@ export async function POST(req: NextRequest) {
     if (!isAuthed) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const userId = req.cookies.get("carbon_gen_user_id")?.value?.trim();
-    if (!userId) {
-      return NextResponse.json({ error: "Missing user session" }, { status: 401 });
-    }
+    const userId =
+      req.cookies.get("carbon_gen_user_id")?.value?.trim() ||
+      req.cookies.get("carbon_gen_username")?.value?.trim() ||
+      DEFAULT_SESSION_USER_ID;
 
     const contentType = req.headers.get("content-type") || "";
     const isJson = contentType.includes("application/json");
@@ -45,7 +58,11 @@ export async function POST(req: NextRequest) {
       const body = await req.json();
       name = String(body?.name || "").trim();
       gender = String(body?.gender || "").trim().toLowerCase();
-      urls = Array.isArray(body?.urls) ? body.urls : [];
+      urls = Array.isArray(body?.urls)
+        ? body.urls
+            .map((v: unknown) => sanitizeReferenceUrl(v))
+            .filter((v: string) => v.length > 0)
+        : [];
     } else {
       const form = await req.formData();
       name = String(form.get("name") || "").trim();
@@ -103,7 +120,9 @@ export async function POST(req: NextRequest) {
         return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
       });
 
-      urls = await Promise.all(uploadJobs);
+      urls = (await Promise.all(uploadJobs))
+        .map((v) => sanitizeReferenceUrl(v))
+        .filter((v) => v.length > 0);
     }
 
     if (!name || !gender || !urls.length) {

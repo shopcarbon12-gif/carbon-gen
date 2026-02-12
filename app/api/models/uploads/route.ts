@@ -5,18 +5,38 @@ import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 function extractPathFromStorageUrl(url: string) {
   try {
     const u = new URL(url);
-    const marker = "/storage/v1/object/public/";
-    const idx = u.pathname.indexOf(marker);
-    if (idx < 0) return null;
-    const rest = u.pathname.slice(idx + marker.length);
-    const slash = rest.indexOf("/");
-    if (slash < 0) return null;
-    const bucket = rest.slice(0, slash);
-    const objectPath = decodeURIComponent(rest.slice(slash + 1));
-    return { bucket, objectPath };
+    const markers = [
+      "/storage/v1/object/public/",
+      "/storage/v1/object/sign/",
+      "/storage/v1/object/authenticated/",
+    ];
+
+    for (const marker of markers) {
+      const idx = u.pathname.indexOf(marker);
+      if (idx < 0) continue;
+      const rest = u.pathname.slice(idx + marker.length);
+      const slash = rest.indexOf("/");
+      if (slash < 0) continue;
+      const bucket = rest.slice(0, slash);
+      const objectPath = decodeURIComponent(rest.slice(slash + 1));
+      return { bucket, objectPath };
+    }
+
+    return null;
   } catch {
     return null;
   }
+}
+
+function sanitizeReferenceUrl(value: unknown) {
+  if (typeof value !== "string") return "";
+  let v = value.trim();
+  if (!v) return "";
+  v = v.replace(/%0d%0a/gi, "");
+  v = v.replace(/%0d/gi, "");
+  v = v.replace(/%0a/gi, "");
+  v = v.replace(/[\r\n]+/g, "");
+  return v.trim();
 }
 
 function fileNameFromPath(path: string) {
@@ -127,6 +147,9 @@ export async function GET(req: NextRequest) {
       gender: string;
       uploadedAt: string | null;
       url: string | null;
+      previewUrl: string | null;
+      __bucket?: string | null;
+      __objectPath?: string | null;
     }> = [];
 
     for (const row of modelRows || []) {
@@ -136,7 +159,7 @@ export async function GET(req: NextRequest) {
       const createdAt = String((row as any).created_at || "") || null;
 
       for (const raw of urls) {
-        const rawUrl = String(raw || "").trim();
+        const rawUrl = sanitizeReferenceUrl(raw);
         if (!rawUrl) continue;
 
         const parsed = extractPathFromStorageUrl(rawUrl);
@@ -154,6 +177,9 @@ export async function GET(req: NextRequest) {
           gender,
           uploadedAt: timestampFromFileName(fileName) || createdAt || null,
           url: rawUrl,
+          previewUrl: rawUrl,
+          __bucket: parsed?.bucket || null,
+          __objectPath: parsed?.objectPath || null,
         });
       }
     }
@@ -175,7 +201,49 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ files: Array.from(byCanonical.values()) });
+    const deduped = Array.from(byCanonical.values());
+
+    // Generate signed preview URLs for private buckets while preserving original stored URLs.
+    if (bucket) {
+      const supabase = getSupabaseAdmin();
+      const signTargets = deduped.filter(
+        (entry) => entry.__bucket === bucket && entry.__objectPath
+      );
+
+      if (signTargets.length) {
+        const paths = signTargets.map((entry) => String(entry.__objectPath));
+        const { data: signedData } = await supabase.storage
+          .from(bucket)
+          .createSignedUrls(paths, 60 * 60 * 24 * 7);
+
+        const signedByPath = new Map<string, string>();
+        for (const row of signedData || []) {
+          if (row?.path && row?.signedUrl) {
+            signedByPath.set(String(row.path), String(row.signedUrl));
+          }
+        }
+
+        for (const entry of deduped) {
+          const objectPath = entry.__objectPath || "";
+          if (objectPath && signedByPath.has(objectPath)) {
+            entry.previewUrl = signedByPath.get(objectPath) || entry.previewUrl;
+          }
+        }
+      }
+    }
+
+    return NextResponse.json({
+      files: deduped.map((entry) => ({
+        id: entry.id,
+        path: entry.path,
+        fileName: entry.fileName,
+        modelName: entry.modelName,
+        gender: entry.gender,
+        uploadedAt: entry.uploadedAt,
+        url: entry.url,
+        previewUrl: entry.previewUrl,
+      })),
+    });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Failed to load model uploads" }, { status: 500 });
   }

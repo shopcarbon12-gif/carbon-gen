@@ -1,165 +1,137 @@
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+﻿import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { checkLoginRateLimit } from "@/lib/ratelimit";
+import { authenticateUser, normalizeUsername } from "@/lib/userAuth";
 
-function getClientKey(req: NextRequest) {
-  const forwarded = req.headers.get("x-forwarded-for");
-  const ip = forwarded?.split(",")[0]?.trim();
-  return ip || "unknown";
-}
+const DEFAULT_SESSION_USER_ID = "00000000-0000-0000-0000-000000000001";
 
-function wantsHtml(req: NextRequest) {
-  const accept = req.headers.get("accept") || "";
-  return accept.includes("text/html");
-}
+function setSessionCookies(
+  res: NextResponse,
+  user: { id: string; username: string; role: string }
+) {
+  const username = normalizeUsername(user.username);
+  const role = String(user.role || "user").trim().toLowerCase();
 
-function redirectToLogin(error?: string) {
-  const location = error ? `/login?error=${encodeURIComponent(error)}` : "/login";
-  return new NextResponse(null, {
-    status: 303,
-    headers: { Location: location },
+  res.cookies.set({
+    name: "carbon_gen_auth_v1",
+    value: "true",
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 7,
+  });
+
+  res.cookies.set({
+    name: "carbon_gen_username",
+    value: username || "admin",
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 7,
+  });
+
+  res.cookies.set({
+    name: "carbon_gen_user_role",
+    value: role || "user",
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 7,
+  });
+
+  res.cookies.set({
+    name: "carbon_gen_user_id",
+    value: String(user.id || DEFAULT_SESSION_USER_ID),
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 7,
   });
 }
 
-function redirectToDashboard() {
-  return new NextResponse(null, {
-    status: 303,
-    headers: { Location: "/dashboard" },
-  });
-}
-
-function jsonError(message: string, status: number) {
-  return NextResponse.json({ error: message }, { status });
-}
-
-function buildErrorResponse(req: NextRequest, message: string, status: number) {
-  if (wantsHtml(req)) {
-    return redirectToLogin(message);
-  }
-  return jsonError(message, status);
-}
-
-async function readPassword(req: NextRequest) {
-  const contentType = req.headers.get("content-type") || "";
-
-  if (contentType.includes("application/json")) {
-    const body = await req.json().catch(() => ({}));
-    return typeof body?.password === "string" ? body.password : "";
-  }
-
-  if (
-    contentType.includes("application/x-www-form-urlencoded") ||
-    contentType.includes("multipart/form-data")
-  ) {
-    const form = await req.formData().catch(() => null);
-    const raw = form?.get("password");
-    return typeof raw === "string" ? raw : "";
-  }
-
-  return "";
-}
-
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   try {
-    const key = getClientKey(req);
-    const rate = await checkLoginRateLimit(key);
-    if (!rate.success) {
-      const reset = "reset" in rate ? rate.reset : undefined;
-      if ("error" in rate && rate.error) {
-        return buildErrorResponse(req, rate.error, 500);
-      }
+    const body = await req.json().catch(() => ({}));
+    const username = normalizeUsername(String(body?.username || ""));
+    const password = body?.password;
 
-      if (wantsHtml(req)) {
-        return redirectToLogin("Too many login attempts. Please try again later.");
-      }
+    if (!username) {
+      return NextResponse.json({ error: "Username required" }, { status: 400 });
+    }
+    if (!password || typeof password !== "string") {
+      return NextResponse.json({ error: "Password required" }, { status: 400 });
+    }
 
+    const adminUsername =
+      normalizeUsername(String(process.env.APP_ADMIN_USERNAME || "admin")) || "admin";
+
+    // Preferred mode: table-backed username + password auth.
+    try {
+      const appUser = await authenticateUser(username, password);
+      if (appUser) {
+        const res = NextResponse.json({ success: true });
+        setSessionCookies(res, {
+          id: appUser.id,
+          username: appUser.username,
+          role: appUser.role,
+        });
+        return res;
+      }
+    } catch (e: any) {
+      const message = String(e?.message || "").toLowerCase();
+      const missingUsersTable =
+        message.includes("app_users") && message.includes("does not exist");
+      if (!missingUsersTable) {
+        throw e;
+      }
+    }
+
+    // Controlled fallback mode: admin username + master password.
+    if (username !== adminUsername) {
+      return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
+    }
+
+    const hash = process.env.APP_PASSWORD_HASH;
+    const plainPassword = process.env.APP_PASSWORD;
+
+    if (!hash && !plainPassword) {
       return NextResponse.json(
-        { error: "Too many login attempts. Please try again later." },
-        {
-          status: 429,
-          headers:
-            typeof reset === "number"
-              ? { "RateLimit-Reset": String(reset) }
-              : undefined,
-        }
+        { error: "Server misconfigured (missing APP_PASSWORD_HASH/APP_PASSWORD)" },
+        { status: 500 }
       );
     }
 
-    const password = await readPassword(req);
-
-    const plainPassword = (process.env.APP_PASSWORD || "").trim();
-    const hashRaw = process.env.APP_PASSWORD_HASH ?? "";
-    const hashPrevRaw = process.env.APP_PASSWORD_HASH_PREV ?? "";
-    const hashesRaw = process.env.APP_PASSWORD_HASHES ?? "";
-
-    const hash = hashRaw.trim();
-    const hashPrev = hashPrevRaw.trim();
-    const extraHashes = hashesRaw
-      .split(",")
-      .map((h) => h.trim())
-      .filter(Boolean);
-
-    const hashes = [hash, hashPrev, ...extraHashes].filter(Boolean);
-
-    if (!password.trim()) {
-      return buildErrorResponse(req, "Password required", 400);
-    }
-
-    if (!plainPassword && hashes.length === 0) {
-      return buildErrorResponse(
-        req,
-        "Server misconfigured (missing APP_PASSWORD / APP_PASSWORD_HASH / APP_PASSWORD_HASH_PREV / APP_PASSWORD_HASHES)",
-        500
-      );
-    }
-
-    const pw = password.trim();
     let isValid = false;
-
-    if (plainPassword && pw === plainPassword) {
-      isValid = true;
-    }
-
-    for (const h of hashes) {
-      if (isValid) break;
-      if (await bcrypt.compare(pw, h)) {
-        isValid = true;
-        break;
-      }
+    if (hash && hash.length >= 50) {
+      isValid = await bcrypt.compare(password, hash);
+    } else if (plainPassword) {
+      isValid = password === plainPassword;
+    } else {
+      return NextResponse.json(
+        {
+          error:
+            "APP_PASSWORD_HASH looks truncated. In .env.local, escape $ like \\$ and restart dev server.",
+        },
+        { status: 500 }
+      );
     }
 
     if (!isValid) {
-      return buildErrorResponse(req, "Invalid password", 401);
+      return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
     }
 
-    const res = wantsHtml(req) ? redirectToDashboard() : NextResponse.json({ success: true });
-    const existingUserId = req.cookies.get("carbon_gen_user_id")?.value;
-    const userId = existingUserId && existingUserId.trim() ? existingUserId : crypto.randomUUID();
-
-    res.cookies.set({
-      name: "carbon_gen_auth_v1",
-      value: "true",
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 7,
+    const res = NextResponse.json({ success: true });
+    setSessionCookies(res, {
+      id: DEFAULT_SESSION_USER_ID,
+      username: adminUsername,
+      role: "admin",
     });
-
-    res.cookies.set({
-      name: "carbon_gen_user_id",
-      value: userId,
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 7,
-    });
-
     return res;
   } catch (err) {
     console.error("LOGIN ERROR:", err);
-    return buildErrorResponse(req, "Login failed", 500);
+    return NextResponse.json({ error: "Login failed" }, { status: 500 });
   }
 }

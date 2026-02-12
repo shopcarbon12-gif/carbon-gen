@@ -6,6 +6,45 @@ create table if not exists shopify_tokens (
   installed_at timestamptz default now()
 );
 
+-- App users (local auth + roles)
+create table if not exists app_users (
+  id uuid primary key default gen_random_uuid(),
+  username text not null unique,
+  password_hash text not null,
+  role text not null default 'user' check (role in ('admin', 'manager', 'user')),
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- Role definitions (admin-managed)
+create table if not exists app_roles (
+  name text primary key,
+  is_system boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- Role -> permission matrix
+create table if not exists app_role_permissions (
+  role_name text not null references app_roles(name) on delete cascade,
+  permission_key text not null,
+  allowed boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (role_name, permission_key)
+);
+
+-- Dropbox OAuth tokens (per app user/session user id)
+create table if not exists dropbox_tokens (
+  user_id text primary key,
+  refresh_token text not null,
+  account_id text,
+  email text,
+  connected_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 -- Models
 create table if not exists models (
   id uuid primary key default gen_random_uuid(),

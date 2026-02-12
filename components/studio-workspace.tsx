@@ -52,6 +52,7 @@ type PreviousModelUpload = {
   gender: "male" | "female" | "";
   uploadedAt: string | null;
   url: string | null;
+  previewUrl: string | null;
 };
 
 type SelectedCatalogImage = {
@@ -61,6 +62,21 @@ type SelectedCatalogImage = {
   uploadedUrl: string | null;
   uploading: boolean;
   uploadError: string | null;
+};
+
+type SplitCrop = {
+  panel: number;
+  side: "left" | "right";
+  poseNumber: number;
+  fileName: string;
+  imageBase64: string;
+};
+
+type DropboxImageResult = {
+  id: string;
+  title: string;
+  pathLower: string;
+  temporaryLink: string;
 };
 
 const IMAGE_FILE_EXT_RE = /\.(avif|bmp|gif|heic|heif|jpeg|jpg|png|tif|tiff|webp)$/i;
@@ -138,6 +154,10 @@ export default function StudioWorkspace() {
   const [itemFiles, setItemFiles] = useState<File[]>([]);
   const [itemType, setItemType] = useState("");
   const [itemTypeCustom, setItemTypeCustom] = useState("");
+  const [itemBarcode, setItemBarcode] = useState("");
+  const [dropboxSearching, setDropboxSearching] = useState(false);
+  const [dropboxResults, setDropboxResults] = useState<DropboxImageResult[]>([]);
+  const [dropboxSearched, setDropboxSearched] = useState(false);
   const [catalogQuery, setCatalogQuery] = useState("");
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogSearched, setCatalogSearched] = useState(false);
@@ -219,9 +239,7 @@ export default function StudioWorkspace() {
     Record<string, number[]>
   >({});
   const [approvedPanels, setApprovedPanels] = useState<number[]>([]);
-  const [splitCrops, setSplitCrops] = useState<
-    Array<{ panel: number; side: "left" | "right"; imageBase64: string }>
-  >([]);
+  const [splitCrops, setSplitCrops] = useState<SplitCrop[]>([]);
   const [previewModal, setPreviewModal] = useState<{
     imageBase64: string;
     title: string;
@@ -243,6 +261,8 @@ export default function StudioWorkspace() {
   const [emptyingBucket, setEmptyingBucket] = useState(false);
   const [connected, setConnected] = useState<boolean | null>(null);
   const [installedAt, setInstalledAt] = useState<string | null>(null);
+  const [dropboxConnected, setDropboxConnected] = useState<boolean | null>(null);
+  const [dropboxEmail, setDropboxEmail] = useState<string | null>(null);
 
   const lowestSelectedPanel = useMemo(() => {
     const sorted = [...selectedPanels].sort((a, b) => a - b);
@@ -287,6 +307,30 @@ export default function StudioWorkspace() {
         // Ignore startup status probe errors; normal shop-specific checks still run.
       });
 
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/dropbox/status", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((json) => {
+        if (cancelled) return;
+        if (typeof json?.connected === "boolean") {
+          setDropboxConnected(Boolean(json.connected));
+          setDropboxEmail(json?.connected ? String(json?.email || "") || null : null);
+        } else {
+          setDropboxConnected(false);
+          setDropboxEmail(null);
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDropboxConnected(false);
+        setDropboxEmail(null);
+      });
     return () => {
       cancelled = true;
     };
@@ -346,6 +390,22 @@ export default function StudioWorkspace() {
     window.localStorage.removeItem("item_type_custom");
     window.localStorage.setItem("item_type", selected);
   }, [itemType, itemTypeCustom]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!itemBarcode) {
+      const storedBarcode = (window.localStorage.getItem("item_barcode") || "").trim();
+      if (storedBarcode) setItemBarcode(storedBarcode);
+    }
+  }, [itemBarcode]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const barcode = itemBarcode.trim();
+    if (barcode) {
+      window.localStorage.setItem("item_barcode", barcode);
+    }
+  }, [itemBarcode]);
 
   useEffect(() => {
     setGeneratedPanels({});
@@ -483,6 +543,25 @@ export default function StudioWorkspace() {
         }
       }, 300);
     });
+  }
+
+  function shortErrorDetails(value: unknown, maxLen = 220) {
+    const text =
+      typeof value === "string"
+        ? value.trim()
+        : value
+          ? JSON.stringify(value)
+          : "";
+    if (!text) return "";
+    return text.length > maxLen ? `${text.slice(0, maxLen)}...` : text;
+  }
+
+  function formatGenerateDebugPayload(json: any, panelNumber: number) {
+    const source = json?.openaiRaw ?? json?.error ?? json;
+    const text = typeof source === "string" ? source.trim() : JSON.stringify(source, null, 2);
+    if (!text) return `Panel ${panelNumber}: generation failed`;
+    const compact = text.length > 2000 ? `${text.slice(0, 2000)}...` : text;
+    return `Panel ${panelNumber}:\n${compact}`;
   }
 
   async function pullProduct() {
@@ -685,6 +764,9 @@ export default function StudioWorkspace() {
     if (itemType === "other apparel item" && !itemTypeCustom.trim()) {
       throw new Error("Please type the apparel item for 'Other Apparel Item'.");
     }
+    if (!itemBarcode.trim()) {
+      throw new Error("Please enter item barcode in section 0.5.");
+    }
 
     if (selectedCatalogImagesRef.current.some((img) => img.uploading)) {
       setStatus("Finishing catalog image imports...");
@@ -723,7 +805,7 @@ export default function StudioWorkspace() {
 
     if (!silentSuccess) {
       setStatus(
-        `Saved item type "${effectiveItemType}" with ${merged.length} item reference image${
+        `Saved item barcode "${itemBarcode.trim()}" with type "${effectiveItemType}" and ${merged.length} item reference image${
           merged.length === 1 ? "" : "s"
         } (${uploadedUrls.length} device + ${shopifyUrls.length} Shopify).`
       );
@@ -885,6 +967,57 @@ export default function StudioWorkspace() {
     loadPushCatalogProducts();
   }
 
+  async function searchDropboxByBarcode() {
+    const barcode = itemBarcode.trim();
+    if (!barcode) {
+      setError("Enter barcode first, then search Dropbox.");
+      return;
+    }
+    setDropboxSearching(true);
+    setDropboxSearched(true);
+    setError(null);
+    try {
+      const resp = await fetch("/api/dropbox/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ barcode }),
+      });
+      const json = await parseJsonResponse(resp, "/api/dropbox/search");
+      if (!resp.ok) {
+        throw new Error(json?.error || "Dropbox search failed.");
+      }
+      const images = Array.isArray(json?.images) ? json.images : [];
+      setDropboxResults(
+        images.map((img: any) => ({
+          id: String(img?.id || ""),
+          title: String(img?.title || "Dropbox image"),
+          pathLower: String(img?.pathLower || ""),
+          temporaryLink: String(img?.temporaryLink || ""),
+        }))
+      );
+      setStatus(
+        images.length
+          ? `Dropbox search found ${images.length} image(s) for barcode ${barcode}.`
+          : `No Dropbox images found for barcode ${barcode}.`
+      );
+    } catch (e: any) {
+      setDropboxResults([]);
+      setError(e?.message || "Dropbox search failed.");
+      setStatus(null);
+    } finally {
+      setDropboxSearching(false);
+    }
+  }
+
+  function selectDropboxImage(img: DropboxImageResult) {
+    toggleCatalogImage({
+      id: `dropbox:${img.id}`,
+      url: img.temporaryLink,
+      title: img.title || "Dropbox image",
+      barcode: itemBarcode.trim(),
+    });
+  }
+
   function selectPushCatalogImage(
     product: ShopifyCatalogProduct,
     image: { id: string; url: string; altText: string }
@@ -896,9 +1029,21 @@ export default function StudioWorkspace() {
     setError(null);
   }
 
-  function toggleCatalogImage(image: { id: string; url: string; title: string }) {
+  function getPrimaryBarcode(product: ShopifyCatalogProduct) {
+    const values = (product.barcodes || []).map((v) => String(v || "").trim()).filter(Boolean);
+    return values[0] || "";
+  }
+
+  function toggleCatalogImage(image: {
+    id: string;
+    url: string;
+    title: string;
+    barcode?: string;
+  }) {
     const existing = selectedCatalogImages.find((img) => img.id === image.id);
     if (existing?.uploading) return;
+
+    if (image.barcode?.trim()) setItemBarcode(image.barcode.trim());
 
     if (existing?.uploadError) {
       void importCatalogImageToBucket(image);
@@ -1095,6 +1240,7 @@ export default function StudioWorkspace() {
           gender,
           uploadedAt: file?.uploadedAt ? String(file.uploadedAt) : null,
           url: file?.url ? String(file.url) : null,
+          previewUrl: file?.previewUrl ? String(file.previewUrl) : file?.url ? String(file.url) : null,
         };
       });
       const dedupedByName = new Map<string, PreviousModelUpload>();
@@ -1180,7 +1326,7 @@ export default function StudioWorkspace() {
             {
               id: `prev-${file.id}`,
               name: file.fileName,
-              localUrl: file.url || "",
+              localUrl: file.previewUrl || file.url || "",
               uploadedUrl: file.url || undefined,
               path: file.path,
             },
@@ -1687,13 +1833,7 @@ export default function StudioWorkspace() {
       }
 
       const lockKey = buildPanelLockKey(selectedModel.model_id, effectiveItemType, effectiveItemRefs);
-      const modelHistorySet = new Set(generatedPanelHistoryByModel[selectedModel.model_id] || []);
       const lockHistorySet = new Set(panelRequestHistoryByLock[lockKey] || []);
-      const hasPanel1InHistory = modelHistorySet.has(1);
-      const hasPanel1InQueue = queue.includes(1);
-      if (queue.some((panelNumber) => panelNumber > 1) && !hasPanel1InHistory && !hasPanel1InQueue) {
-        throw new Error("NEEDS CLARIFICATION: Do you want me to generate Panel 1 first?");
-      }
 
       if (isRegenerate) {
         const missing = queue.filter((panelNumber) => !lockHistorySet.has(panelNumber));
@@ -1749,13 +1889,12 @@ export default function StudioWorkspace() {
 
           const json = await parseJsonResponse(resp, "/api/generate");
           if (!resp.ok) {
-            const exact = json?.openaiRaw ?? json?.details ?? json;
-            const exactText = typeof exact === "string" ? exact : JSON.stringify(exact, null, 2);
             setGenerateOpenAiResponse((prev) =>
-              prev ? `${prev}\n\n---\nPanel ${panelNumber}:\n${exactText}` : `Panel ${panelNumber}:\n${exactText}`
+              prev
+                ? `${prev}\n\n---\n${formatGenerateDebugPayload(json, panelNumber)}`
+                : formatGenerateDebugPayload(json, panelNumber)
             );
-            const details =
-              typeof json?.details === "string" && json.details.trim() ? json.details.trim() : "";
+            const details = shortErrorDetails(json?.details);
             const baseMsg = json?.error || `Panel ${panelNumber} generation failed`;
             throw new Error(details ? `${baseMsg}: ${details}` : baseMsg);
           }
@@ -1807,6 +1946,7 @@ export default function StudioWorkspace() {
         }
 
         if (failed.length) {
+          const uniqueFailed = Array.from(new Set(failed));
           if (succeededPanels.length) {
             setStatus(
               `${actionWord} partial success. Completed panel(s): ${succeededPanels.join(", ")}.`
@@ -1814,7 +1954,7 @@ export default function StudioWorkspace() {
           } else {
             setStatus(null);
           }
-          throw new Error(failed.join(" | "));
+          throw new Error(uniqueFailed.join(" | "));
         }
 
         setStatus(`${actionWord} completed: panel(s) ${queue.join(", ")}.`);
@@ -1990,10 +2130,30 @@ export default function StudioWorkspace() {
       return dataUrl.replace(/^data:image\/png;base64,/, "");
     }
 
-    return [
-      { panel, side: "left" as const, imageBase64: cropForSide("left") },
-      { panel, side: "right" as const, imageBase64: cropForSide("right") },
-    ];
+    return {
+      left: cropForSide("left"),
+      right: cropForSide("right"),
+    };
+  }
+
+  function normalizeBarcodeForFileName(value: string) {
+    const cleaned = String(value || "").trim().replace(/[^a-zA-Z0-9_-]/g, "");
+    return cleaned || "no-barcode";
+  }
+
+  function buildSplitFileName(
+    panel: number,
+    side: "left" | "right",
+    gender: string,
+    barcode: string
+  ) {
+    const [poseA, poseB] = getPanelPosePair(gender, panel);
+    const poseNumber = side === "left" ? poseA : poseB;
+    const safeBarcode = normalizeBarcodeForFileName(barcode);
+    return {
+      poseNumber,
+      fileName: `pose${poseNumber}-${safeBarcode}.png`,
+    };
   }
 
   function downloadBase64Png(filename: string, b64: string) {
@@ -2013,12 +2173,32 @@ export default function StudioWorkspace() {
         throw new Error("No existing generated panels available to split (split never regenerates).");
       }
 
-      const allCrops: Array<{ panel: number; side: "left" | "right"; imageBase64: string }> = [];
+      const selectedModel = models.find((m) => m.model_id === selectedModelId);
+      const gender = selectedModel?.gender || "female";
+      const barcode = itemBarcode.trim();
+      const allCrops: SplitCrop[] = [];
       for (const panel of targetPanels.sort((a, b) => a - b)) {
         const b64 = generatedPanels[panel];
         if (!b64) continue;
         const crops = await splitPanelToTwoByThree(panel, b64);
-        allCrops.push(...crops);
+        const leftMeta = buildSplitFileName(panel, "left", gender, barcode);
+        const rightMeta = buildSplitFileName(panel, "right", gender, barcode);
+        allCrops.push(
+          {
+            panel,
+            side: "left",
+            poseNumber: leftMeta.poseNumber,
+            fileName: leftMeta.fileName,
+            imageBase64: crops.left,
+          },
+          {
+            panel,
+            side: "right",
+            poseNumber: rightMeta.poseNumber,
+            fileName: rightMeta.fileName,
+            imageBase64: crops.right,
+          }
+        );
       }
       setSplitCrops(allCrops);
       setStatus(`Split complete (local crop only). ${allCrops.length} crop image(s) ready to download.`);
@@ -2028,8 +2208,8 @@ export default function StudioWorkspace() {
     }
   }
 
-  function downloadSplitCrop(crop: { panel: number; side: "left" | "right"; imageBase64: string }) {
-    downloadBase64Png(`panel-${crop.panel}-${crop.side}-2x3.png`, crop.imageBase64);
+  function downloadSplitCrop(crop: SplitCrop) {
+    downloadBase64Png(crop.fileName, crop.imageBase64);
   }
 
   function downloadAllSplitCrops() {
@@ -2321,10 +2501,10 @@ export default function StudioWorkspace() {
                         }`}
                         onClick={() => addPreviousUploadToRegistry(file)}
                       >
-                        {file.url && !brokenPreviousUploadIds.includes(file.id) ? (
+                        {file.previewUrl && !brokenPreviousUploadIds.includes(file.id) ? (
                           <img
                             className="previous-upload-image"
-                            src={file.url}
+                            src={file.previewUrl}
                             alt="Previous upload preview"
                             onError={() =>
                               setBrokenPreviousUploadIds((prev) =>
@@ -2390,6 +2570,42 @@ export default function StudioWorkspace() {
               ))}
             </select>
           </div>
+          <div className="row">
+            <input
+              value={itemBarcode}
+              onChange={(e) => setItemBarcode(e.target.value)}
+              placeholder="Item barcode (required)"
+            />
+            <button className="btn ghost" type="button" onClick={searchDropboxByBarcode} disabled={dropboxSearching}>
+              {dropboxSearching ? "Searching Dropbox..." : "Search Dropbox by Barcode"}
+            </button>
+          </div>
+          <div className="muted centered">
+            Dropbox: {dropboxConnected ? "Connected" : "Not connected"}
+            {dropboxEmail ? ` (${dropboxEmail})` : ""}
+            {!dropboxConnected ? " - connect from Settings." : ""}
+          </div>
+          {dropboxSearched && !dropboxSearching && !dropboxResults.length ? (
+            <div className="muted centered">No Dropbox images found for this barcode.</div>
+          ) : null}
+          {dropboxResults.length ? (
+            <div className="preview-grid item-catalog-grid">
+              {dropboxResults.map((img) => {
+                const selected = selectedCatalogImages.some((i) => i.id === `dropbox:${img.id}`);
+                return (
+                  <button
+                    key={`dropbox-${img.id}`}
+                    type="button"
+                    className={`catalog-image ${selected ? "selected" : ""}`}
+                    onClick={() => selectDropboxImage(img)}
+                  >
+                    <img src={img.temporaryLink} alt={img.title || "Dropbox image"} />
+                    <span>{selected ? "Selected" : "Select from Dropbox"}</span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
           {itemType === "other apparel item" ? (
             <div className="row">
               <input
@@ -2544,6 +2760,7 @@ export default function StudioWorkspace() {
                                   id: img.id,
                                   url: img.url,
                                   title: product.title,
+                                  barcode: getPrimaryBarcode(product),
                                 })
                               }
                             >
@@ -2596,6 +2813,15 @@ export default function StudioWorkspace() {
                   </button>
                 </div>
               ) : null}
+              <div className="row">
+                <button
+                  className="btn ghost"
+                  type="button"
+                  onClick={() => setItemCatalogCollapsed(true)}
+                >
+                  Hide Catalog
+                </button>
+              </div>
             </div>
           ) : (
             <div className="muted centered">
@@ -2613,7 +2839,7 @@ export default function StudioWorkspace() {
             {itemUploadCount ? ` | Last upload: ${itemUploadCount} files` : ""}
           </div>
           {itemPreviews.length ? (
-            <div className="preview-grid">
+            <div className="preview-grid item-selected-grid">
               {itemPreviews.map((file, idx) => (
                 <div className="preview-card" key={file.url}>
                   <button
@@ -2631,7 +2857,7 @@ export default function StudioWorkspace() {
             </div>
           ) : null}
           {selectedCatalogImages.length ? (
-            <div className="preview-grid">
+            <div className="preview-grid item-selected-grid">
               {selectedCatalogImages.map((img) => (
                 <div className="preview-card item-catalog-selected-card" key={img.id}>
                   <button
@@ -2863,21 +3089,22 @@ export default function StudioWorkspace() {
           </div>
           {splitCrops.length ? (
             <div className="card">
-              <div className="card-title">1.5) 2:3 Split Results</div>
+              <div className="card-title">1.5) 2:3 Results</div>
               <div className="row">
                 <button className="btn ghost" onClick={downloadAllSplitCrops}>
                   Download All Splits
                 </button>
               </div>
-              <div className="preview-grid">
+              <div className="preview-grid split-results-grid">
                 {splitCrops.map((crop) => (
-                  <div className="preview-card" key={`${crop.panel}-${crop.side}`}>
+                  <div className="preview-card split-result-card" key={`${crop.panel}-${crop.side}`}>
                     <img
+                      className="split-result-image"
                       src={`data:image/png;base64,${crop.imageBase64}`}
-                      alt={`Panel ${crop.panel} ${crop.side} 2:3`}
+                      alt={`Pose ${crop.poseNumber} 2:3`}
                     />
                     <div className="preview-name">
-                      Panel {crop.panel} - {crop.side}
+                      {crop.fileName}
                     </div>
                     <button
                       className="ghost-btn"
@@ -2891,28 +3118,6 @@ export default function StudioWorkspace() {
               </div>
             </div>
           ) : null}
-        </section>
-
-        <section className="card">
-          <div className="card-title">2) Shopify Pull</div>
-          <p className="muted">
-            Pull product data by handle or product ID. This loads media, SEO, and variants.
-          </p>
-          <div className="row">
-            <input
-              value={handle}
-              onChange={(e) => setHandle(e.target.value)}
-              placeholder="Handle (vintage-wash-hoodie)"
-            />
-            <input
-              value={productId}
-              onChange={(e) => setProductId(e.target.value)}
-              placeholder="Product ID (gid://shopify/Product/...)"
-            />
-          </div>
-          <button className="btn" onClick={pullProduct}>
-            Pull Product
-          </button>
         </section>
 
         <section className="card">
@@ -3013,7 +3218,25 @@ export default function StudioWorkspace() {
         </section>
 
         <section className="card">
-          <div className="card-title">4) SEO Studio</div>
+          <div className="card-title">2) Shopify Pull + SEO Studio</div>
+          <p className="muted">
+            Pull product data by handle or product ID, then edit SEO title/description and alt text.
+          </p>
+          <div className="row">
+            <input
+              value={handle}
+              onChange={(e) => setHandle(e.target.value)}
+              placeholder="Handle (vintage-wash-hoodie)"
+            />
+            <input
+              value={productId}
+              onChange={(e) => setProductId(e.target.value)}
+              placeholder="Product ID (gid://shopify/Product/...)"
+            />
+          </div>
+          <button className="btn ghost" onClick={pullProduct}>
+            Pull Product
+          </button>
           <p className="muted">
             Generate or edit SEO title/description and accessibility alt text.
           </p>
@@ -3179,11 +3402,13 @@ export default function StudioWorkspace() {
         .catalog-image {
           border: 1px solid #e2e8f0;
           border-radius: 10px;
-          padding: 6px;
+          padding: 8px;
           background: #fff;
           display: grid;
           gap: 6px;
-          width: 180px;
+          width: 150px;
+          justify-items: center;
+          align-content: start;
           text-align: center;
           cursor: pointer;
           color: #64748b;
@@ -3196,9 +3421,10 @@ export default function StudioWorkspace() {
         }
         .catalog-image img {
           width: 100%;
-          height: auto;
-          aspect-ratio: 3 / 4;
+          height: 140px;
+          display: block;
           object-fit: contain;
+          object-position: center;
           border-radius: 8px;
           background: #f8fafc;
         }
@@ -3229,6 +3455,39 @@ export default function StudioWorkspace() {
         }
         .item-catalog-grid .catalog-image {
           width: 100%;
+        }
+        .item-catalog-grid .catalog-image img {
+          height: 120px;
+          object-fit: contain;
+          object-position: center;
+        }
+        .item-selected-grid {
+          display: grid;
+          grid-template-columns: repeat(6, minmax(0, 1fr));
+          max-width: 100%;
+          justify-content: stretch;
+          align-items: stretch;
+        }
+        .item-selected-grid .preview-card {
+          width: 100%;
+        }
+        .split-results-grid {
+          display: grid;
+          grid-template-columns: repeat(6, minmax(0, 1fr));
+          max-width: 100%;
+          justify-content: stretch;
+          align-items: stretch;
+        }
+        .split-results-grid .split-result-card {
+          width: 100%;
+        }
+        .split-result-image {
+          width: 100%;
+          height: auto;
+          aspect-ratio: 3 / 4;
+          object-fit: contain;
+          border-radius: 8px;
+          background: #f8fafc;
         }
         .preview-card {
           border: 1px solid #e2e8f0;
@@ -3430,32 +3689,34 @@ export default function StudioWorkspace() {
           border-radius: 12px;
           display: grid;
           grid-template-columns: 1fr auto 1fr;
-          min-height: 140px;
+          height: clamp(150px, 18vw, 190px);
           overflow: hidden;
         }
         .panel-preview-grid {
           display: grid;
-          gap: 12px;
-          grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+          gap: 10px;
+          grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
         }
         .panel-preview-card {
           border: 1px solid #e2e8f0;
           border-radius: 12px;
-          padding: 10px;
+          padding: 8px;
           background: #fff;
           display: grid;
-          gap: 8px;
+          gap: 6px;
         }
         .panel-preview-label {
-          font-size: 0.85rem;
+          font-size: 0.8rem;
           font-weight: 700;
           color: #0f172a;
         }
         .panel-image {
+          grid-column: 1 / -1;
           width: 100%;
           height: 100%;
-          min-height: 220px;
+          min-height: 0;
           object-fit: contain;
+          object-position: center;
           background: #f8fafc;
           cursor: zoom-in;
         }
@@ -3601,12 +3862,24 @@ export default function StudioWorkspace() {
           .item-catalog-grid {
             grid-template-columns: repeat(3, minmax(0, 1fr));
           }
+          .item-selected-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+          }
+          .split-results-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+          }
           .previous-upload-grid {
             grid-template-columns: repeat(3, minmax(0, 1fr));
           }
         }
         @media (max-width: 640px) {
           .item-catalog-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+          .item-selected-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+          .split-results-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
           }
           .previous-upload-grid {
@@ -3617,9 +3890,21 @@ export default function StudioWorkspace() {
           .item-catalog-grid {
             grid-template-columns: repeat(4, minmax(0, 1fr));
           }
+          .item-selected-grid {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+          }
+          .split-results-grid {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+          }
         }
         @media (min-width: 1281px) and (max-width: 1600px) {
           .item-catalog-grid {
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+          }
+          .item-selected-grid {
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+          }
+          .split-results-grid {
             grid-template-columns: repeat(5, minmax(0, 1fr));
           }
         }

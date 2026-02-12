@@ -24,9 +24,9 @@ export function proxy(req: NextRequest) {
   }
 
   if (pathname === "/login" && isAuthed) {
-    const dashboardUrl = req.nextUrl.clone();
-    dashboardUrl.pathname = "/dashboard";
-    return NextResponse.redirect(dashboardUrl);
+    const studioUrl = req.nextUrl.clone();
+    studioUrl.pathname = "/studio";
+    return NextResponse.redirect(studioUrl);
   }
 
   return NextResponse.next();

@@ -23,6 +23,26 @@ function clearCookies(res: NextResponse) {
     path: "/",
     maxAge: 0,
   });
+
+  res.cookies.set({
+    name: "carbon_gen_username",
+    value: "",
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 0,
+  });
+
+  res.cookies.set({
+    name: "carbon_gen_user_role",
+    value: "",
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 0,
+  });
 }
 
 function wantsHtml(req: NextRequest) {

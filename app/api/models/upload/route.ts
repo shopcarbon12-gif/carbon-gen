@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing file." }, { status: 400 });
     }
 
-    const bucket = process.env.SUPABASE_STORAGE_BUCKET_ITEMS;
+    const bucket = (process.env.SUPABASE_STORAGE_BUCKET_ITEMS || "").trim();
     if (!bucket) {
       return NextResponse.json(
         { error: "Missing SUPABASE_STORAGE_BUCKET_ITEMS" },

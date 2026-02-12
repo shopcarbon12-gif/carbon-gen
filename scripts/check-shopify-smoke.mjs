@@ -93,10 +93,10 @@ function logStep(text) {
 async function main() {
   const fileEnv = readEnvFile();
   const baseUrl = String(
-    process.env.SHOPIFY_SMOKE_BASE_URL ||
+      process.env.SHOPIFY_SMOKE_BASE_URL ||
       process.env.E2E_BASE_URL ||
       fileEnv.SHOPIFY_SMOKE_BASE_URL ||
-      "http://localhost:3001"
+      "http://localhost:3000"
   )
     .trim()
     .replace(/\/+$/, "");
@@ -108,6 +108,15 @@ async function main() {
   ).trim();
   const runDisconnect = toBool(process.env.SHOPIFY_SMOKE_DISCONNECT);
   const password = String(process.env.APP_PASSWORD || fileEnv.APP_PASSWORD || "").trim();
+  const username = String(
+    process.env.APP_DEFAULT_LOGIN_USERNAME ||
+      process.env.APP_ADMIN_USERNAME ||
+      fileEnv.APP_DEFAULT_LOGIN_USERNAME ||
+      fileEnv.APP_ADMIN_USERNAME ||
+      "admin"
+  )
+    .trim()
+    .toLowerCase();
   const c = new Client();
 
   if (!shop) {
@@ -190,7 +199,7 @@ async function main() {
     const loginRes = await c.request(baseUrl, "/api/login", {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json" },
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ username, password }),
     });
     expectStatus(loginRes, [200], "login");
 

@@ -49,6 +49,11 @@ Carbon-branded Next.js app for:
 copy .env.example .env.local
 ```
 2. Fill `.env.local` values.
+   - For multi-user auth, set:
+```env
+APP_ADMIN_USERNAME=admin
+APP_ADMIN_PASSWORD_HASH=<bcrypt hash>
+```
 3. Install dependencies:
 ```bash
 npm install
@@ -59,12 +64,17 @@ npm run dev
 ```
 5. Open the URL printed in terminal (usually `http://localhost:3000` or `http://localhost:3001`).
 
+Optional: pin the local stack port in `.env.local` (recommended):
+```env
+LOCAL_APP_PORT=3000
+```
+
 ## Cloudflared + Upstash (Run Both)
 Use two terminals.
 
 Terminal 1 (app):
 ```bash
-npm run dev:3001
+npm run dev -- -p 3000
 ```
 
 Terminal 2 (public tunnel):
@@ -77,6 +87,7 @@ One-command launcher (opens two terminals automatically):
 npm run start:local
 ```
 It now runs both processes in the background (no terminal clutter).
+`start:local` always syncs cloudflared ingress to `LOCAL_APP_PORT` (default `3000`).
 
 One-command stop:
 ```bash
@@ -115,6 +126,23 @@ Optional fallback:
 ```env
 APP_PASSWORD=<plain password>
 ```
+
+For account-based login bootstrap, also set:
+```env
+APP_ADMIN_USERNAME=admin
+APP_ADMIN_PASSWORD_HASH=<paste same hash or another bcrypt hash>
+```
+On first login, if `app_users` is empty, this admin account is auto-created.
+
+## Multi-User + Roles Setup
+1. Run `scripts/supabase_schema.sql` in Supabase SQL editor (includes `app_users` table).
+2. Restart app.
+3. Login at `/login` with admin credentials.
+4. Go to `/settings` and use **User & Role Management (Admin)**:
+   - Create users
+   - Assign roles (`admin`, `manager`, `user`)
+   - Change passwords
+   - Disable or delete users
 
 ## Shopify OAuth Setup
 In Shopify app settings, whitelist callback URL exactly:
@@ -163,4 +191,4 @@ npm run check:shopify
 - OAuth `redirect_uri is not whitelisted`:
   - callback URL in Shopify must exactly match `SHOPIFY_REDIRECT_URI`
 - `localhost refused to connect`:
-  - check terminal for the actual port (`3000` vs `3001`)
+  - verify `LOCAL_APP_PORT` in `.env.local` and run `npm run start:local` again
