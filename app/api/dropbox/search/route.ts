@@ -9,7 +9,8 @@ type DropboxFile = {
   path_lower: string;
 };
 
-const DROPBOX_SEARCH_ROOT = process.env.DROPBOX_SEARCH_ROOT || "/elior perez/carbon";
+const DEFAULT_DROPBOX_SEARCH_ROOT = "/carbon";
+const DROPBOX_SEARCH_ROOT = process.env.DROPBOX_SEARCH_ROOT || DEFAULT_DROPBOX_SEARCH_ROOT;
 const MAX_FALLBACK_SCAN_ENTRIES = 4000;
 
 function normalizePath(path: string) {
@@ -60,6 +61,39 @@ async function dropboxRpc(accessToken: string, endpoint: string, body: any) {
 async function getTemporaryLink(accessToken: string, path: string) {
   const data = await dropboxRpc(accessToken, "files/get_temporary_link", { path });
   return String(data?.link || "");
+}
+
+function isDropboxPathNotFoundError(error: unknown) {
+  const msg = String((error as any)?.message || "");
+  return msg.includes("path/not_found");
+}
+
+async function validateDropboxFolderPath(accessToken: string, path: string) {
+  await dropboxRpc(accessToken, "files/get_metadata", {
+    path,
+    include_deleted: false,
+  });
+}
+
+async function resolveSearchRoot(accessToken: string, configuredRoot: string) {
+  const candidates = Array.from(
+    new Set(
+      [configuredRoot, DEFAULT_DROPBOX_SEARCH_ROOT]
+        .map((p) => normalizePath(p))
+        .filter((p) => p && p !== "/")
+    )
+  );
+  for (const candidate of candidates) {
+    try {
+      await validateDropboxFolderPath(accessToken, candidate);
+      return candidate;
+    } catch (error) {
+      if (!isDropboxPathNotFoundError(error)) throw error;
+    }
+  }
+  throw new Error(
+    `Dropbox search root not found. Checked: ${candidates.join(", ")}. Set DROPBOX_SEARCH_ROOT to a valid folder.`
+  );
 }
 
 async function listFolderRecursive(accessToken: string, rootPath: string) {
@@ -115,7 +149,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Dropbox is not connected for this user." }, { status: 400 });
     }
 
-    const rootPath = normalizePath(DROPBOX_SEARCH_ROOT);
+    const rootPath = await resolveSearchRoot(accessToken, DROPBOX_SEARCH_ROOT);
     const search = await dropboxRpc(accessToken, "files/search_v2", {
       query: barcode,
       options: {
@@ -237,7 +271,7 @@ export async function POST(req: NextRequest) {
       barcode,
       folders: folderImages,
       images,
-      rootPath: DROPBOX_SEARCH_ROOT,
+      rootPath,
     });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Dropbox search failed." }, { status: 500 });
