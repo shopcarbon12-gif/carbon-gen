@@ -2,6 +2,14 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
+type StorageEntry = {
+  name: string;
+  id: string | null;
+  metadata?: { size?: number } | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
 function extractPathFromStorageUrl(url: string) {
   try {
     const u = new URL(url);
@@ -42,27 +50,79 @@ function normalizeGender(value: unknown) {
   return "";
 }
 
+async function listModelFilesRecursive(bucket: string) {
+  const supabase = getSupabaseAdmin();
+  const files: Array<{ path: string; created_at?: string | null }> = [];
+  const queue: string[] = ["models"];
+
+  while (queue.length) {
+    const current = queue.shift() as string;
+    const { data, error } = await supabase.storage.from(bucket).list(current, {
+      limit: 1000,
+      sortBy: { column: "name", order: "asc" },
+    });
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    for (const entry of (data || []) as StorageEntry[]) {
+      const childPath = `${current}/${entry.name}`.replace(/^\/+/, "");
+      const isFolder = !entry.id;
+      if (isFolder) {
+        queue.push(childPath);
+      } else {
+        files.push({
+          path: childPath,
+          created_at: entry.created_at || entry.updated_at || null,
+        });
+      }
+    }
+  }
+
+  return files;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const isAuthed = req.cookies.get("carbon_gen_auth_v1")?.value === "true";
     if (!isAuthed) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const userId = req.cookies.get("carbon_gen_user_id")?.value?.trim();
-    if (!userId) {
-      return NextResponse.json({ error: "Missing user session" }, { status: 401 });
-    }
 
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
+    const bucket = (process.env.SUPABASE_STORAGE_BUCKET_ITEMS || "").trim();
+    if (!bucket) {
+      return NextResponse.json({ error: "Missing SUPABASE_STORAGE_BUCKET_ITEMS" }, { status: 500 });
+    }
+
+    // Metadata map from saved models table (name + gender), unscoped by cookie user id.
+    const { data: modelRows, error } = await supabase
       .from("models")
       .select("name,gender,created_at,ref_image_urls")
-      .eq("user_id", userId)
       .order("created_at", { ascending: true });
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
+    const metadataByPath = new Map<
+      string,
+      { modelName: string; gender: string; createdAt: string | null }
+    >();
+    for (const row of modelRows || []) {
+      const urls = Array.isArray((row as any).ref_image_urls) ? (row as any).ref_image_urls : [];
+      for (const rawUrl of urls) {
+        const parsed = extractPathFromStorageUrl(String(rawUrl || ""));
+        if (!parsed) continue;
+        metadataByPath.set(parsed.objectPath, {
+          modelName: String((row as any).name || ""),
+          gender: normalizeGender((row as any).gender),
+          createdAt: String((row as any).created_at || "") || null,
+        });
+      }
+    }
+
+    const storageFiles = await listModelFilesRecursive(bucket);
 
     const entries: Array<{
       id: string;
@@ -73,29 +133,19 @@ export async function GET(req: NextRequest) {
       uploadedAt: string | null;
       url: string | null;
     }> = [];
-    const seen = new Set<string>();
-
-    for (const row of data || []) {
-      const urls = Array.isArray((row as any).ref_image_urls) ? (row as any).ref_image_urls : [];
-      for (const rawUrl of urls) {
-        const parsed = extractPathFromStorageUrl(String(rawUrl || ""));
-        if (!parsed) continue;
-        const key = `${parsed.bucket}/${parsed.objectPath}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-
-        const fileName = fileNameFromPath(parsed.objectPath);
-        const signed = await supabase.storage.from(parsed.bucket).createSignedUrl(parsed.objectPath, 60 * 60);
-        entries.push({
-          id: key,
-          path: parsed.objectPath,
-          fileName,
-          modelName: String((row as any).name || ""),
-          gender: normalizeGender((row as any).gender),
-          uploadedAt: timestampFromFileName(fileName) || String((row as any).created_at || ""),
-          url: signed.data?.signedUrl || String(rawUrl || null),
-        });
-      }
+    for (const file of storageFiles) {
+      const fileName = fileNameFromPath(file.path);
+      const meta = metadataByPath.get(file.path);
+      const signed = await supabase.storage.from(bucket).createSignedUrl(file.path, 60 * 60);
+      entries.push({
+        id: `${bucket}/${file.path}`,
+        path: file.path,
+        fileName,
+        modelName: meta?.modelName || "",
+        gender: meta?.gender || "",
+        uploadedAt: timestampFromFileName(fileName) || meta?.createdAt || file.created_at || null,
+        url: signed.data?.signedUrl || null,
+      });
     }
 
     // Deduplicate repeated uploads of the same source image name.
