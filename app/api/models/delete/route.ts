@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = getSupabaseAdmin();
-    if (userScope.needsMigration) {
+    if (userScope.legacyUserId) {
       await supabase
         .from("models")
         .update({ user_id: userScope.stableUserId })
