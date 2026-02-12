@@ -18,7 +18,7 @@ export async function POST() {
       await supabase
         .from("models")
         .update({ user_id: userScope.stableUserId })
-        .neq("user_id", userScope.stableUserId);
+        .eq("user_id", userScope.legacyUserId);
     }
 
     const { error } = await supabase.from("models").delete().in("user_id", userScope.userIds);
