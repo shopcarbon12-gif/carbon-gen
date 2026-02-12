@@ -594,46 +594,59 @@ export default function StudioWorkspace() {
     }
   }
 
+  async function persistItemReferences(options?: { silentSuccess?: boolean }) {
+    const silentSuccess = Boolean(options?.silentSuccess);
+    if (!itemType.trim()) {
+      throw new Error("Please select an item type from the list.");
+    }
+    if (itemType === "other apparel item" && !itemTypeCustom.trim()) {
+      throw new Error("Please type the apparel item for 'Other Apparel Item'.");
+    }
+
+    const files = itemFiles || [];
+    const shopifyUrls = selectedCatalogImages.map((img) => img.url);
+    if (!files.length && !shopifyUrls.length && !itemReferenceUrls.length) {
+      throw new Error("Please add item references from device, Shopify catalog, or both.");
+    }
+
+    let uploadedUrls: string[] = [];
+    if (files.length) {
+      const form = new FormData();
+      files.forEach((file) => form.append("files", file));
+
+      const resp = await fetch("/api/items", {
+        method: "POST",
+        body: form,
+      });
+      const json = await parseJsonResponse(resp);
+      if (!resp.ok) throw new Error(json.error || "Item upload failed");
+      uploadedUrls = Array.isArray(json.urls) ? json.urls : [];
+    }
+
+    const merged = Array.from(new Set([...itemReferenceUrls, ...uploadedUrls, ...shopifyUrls]));
+    const effectiveItemType = resolvedItemType;
+
+    setItemReferenceUrls(merged);
+    setItemUploadCount(merged.length);
+    setItemCatalogCollapsed(true);
+    setItemFiles([]);
+
+    if (!silentSuccess) {
+      setStatus(
+        `Saved item type "${effectiveItemType}" with ${merged.length} item reference image${
+          merged.length === 1 ? "" : "s"
+        } (${uploadedUrls.length} device + ${shopifyUrls.length} Shopify).`
+      );
+    }
+
+    return { merged, effectiveItemType };
+  }
+
   async function uploadItems() {
     setError(null);
     setStatus("Uploading item references...");
     try {
-      if (!itemType.trim()) {
-        throw new Error("Please select an item type from the list.");
-      }
-      if (itemType === "other apparel item" && !itemTypeCustom.trim()) {
-        throw new Error("Please type the apparel item for 'Other Apparel Item'.");
-      }
-      const files = itemFiles || [];
-      const shopifyUrls = selectedCatalogImages.map((img) => img.url);
-      if (!files.length && !shopifyUrls.length) {
-        throw new Error("Please add item references from device, Shopify catalog, or both.");
-      }
-
-      let uploadedUrls: string[] = [];
-      if (files.length) {
-        const form = new FormData();
-        files.forEach((file) => form.append("files", file));
-
-        const resp = await fetch("/api/items", {
-          method: "POST",
-          body: form,
-        });
-        const json = await parseJsonResponse(resp);
-        if (!resp.ok) throw new Error(json.error || "Item upload failed");
-        uploadedUrls = Array.isArray(json.urls) ? json.urls : [];
-      }
-
-      const merged = Array.from(new Set([...uploadedUrls, ...shopifyUrls]));
-      setItemReferenceUrls(merged);
-      setItemUploadCount(merged.length);
-      setStatus(
-        `Saved item type "${resolvedItemType}" with ${merged.length} item reference image${
-          merged.length === 1 ? "" : "s"
-        } (${uploadedUrls.length} device + ${shopifyUrls.length} Shopify).`
-      );
-      setItemCatalogCollapsed(true);
-      setItemFiles([]);
+      await persistItemReferences();
     } catch (e: any) {
       setError(e?.message || "Item upload failed");
       setStatus(null);
@@ -1371,18 +1384,37 @@ export default function StudioWorkspace() {
           "Locked model is missing enough references. Upload/select at least 3 model images before generating."
         );
       }
-      if (!itemReferenceUrls.length) {
-        throw new Error(
-          "Please upload/import item references first in section 0.5 before generating."
-        );
-      }
-      if (!resolvedItemType) {
+      let effectiveItemRefs = itemReferenceUrls;
+      let effectiveItemType = resolvedItemType;
+
+      if (!effectiveItemType) {
         throw new Error(
           "Please set the item type in section 0.5 before generating."
         );
       }
 
-      const lockKey = buildPanelLockKey(selectedModel.model_id, resolvedItemType, itemReferenceUrls);
+      if (!effectiveItemRefs.length) {
+        const hasPendingItemInputs =
+          Boolean(itemFiles.length) || Boolean(selectedCatalogImages.length);
+        if (hasPendingItemInputs) {
+          setStatus("Saving section 0.5 item references before generation...");
+          const saved = await persistItemReferences({ silentSuccess: true });
+          effectiveItemRefs = saved.merged;
+          // Capture current resolved custom value (especially for "Other Apparel Item").
+          effectiveItemType = saved.effectiveItemType || effectiveItemType;
+          setStatus(
+            `${actionWord} ${useAllSelected ? `selected panel(s): ${queue.join(", ")}` : `panel ${queue[0]}`}...`
+          );
+        }
+      }
+
+      if (!effectiveItemRefs.length) {
+        throw new Error(
+          "Please upload/import item references first in section 0.5 before generating."
+        );
+      }
+
+      const lockKey = buildPanelLockKey(selectedModel.model_id, effectiveItemType, effectiveItemRefs);
       const modelHistorySet = new Set(generatedPanelHistoryByModel[selectedModel.model_id] || []);
       const lockHistorySet = new Set(panelRequestHistoryByLock[lockKey] || []);
       const hasPanel1InHistory = modelHistorySet.has(1);
@@ -1418,8 +1450,8 @@ export default function StudioWorkspace() {
             modelName: selectedModel.name,
             modelGender: selectedModel.gender,
             modelRefs: selectedModel.ref_image_urls,
-            itemRefs: itemReferenceUrls,
-            itemType: resolvedItemType,
+            itemRefs: effectiveItemRefs,
+            itemType: effectiveItemType,
           });
 
           const resp = await fetch("/api/generate", {
@@ -1430,7 +1462,7 @@ export default function StudioWorkspace() {
               // Keep requested panel ratio; quality is controlled by the API route.
               size: "1536x1024",
               modelRefs: selectedModel.ref_image_urls,
-              itemRefs: itemReferenceUrls,
+              itemRefs: effectiveItemRefs,
               panelQa: {
                 panelNumber,
                 panelLabel: panelButtonLabel,
@@ -1438,7 +1470,7 @@ export default function StudioWorkspace() {
                 poseB,
                 modelName: selectedModel.name,
                 modelGender: selectedModel.gender,
-                itemType: resolvedItemType,
+                itemType: effectiveItemType,
               },
             }),
           });
