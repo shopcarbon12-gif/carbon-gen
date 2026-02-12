@@ -197,7 +197,6 @@ export default function StudioWorkspace() {
   const [previousGenderFilter, setPreviousGenderFilter] = useState<"all" | "female" | "male">(
     "all"
   );
-  const [selectedPreviousUploads, setSelectedPreviousUploads] = useState<string[]>([]);
   const [previousUploadsVisible, setPreviousUploadsVisible] = useState(false);
   const [emptyingBucket, setEmptyingBucket] = useState(false);
   const [connected, setConnected] = useState<boolean | null>(null);
@@ -990,7 +989,6 @@ export default function StudioWorkspace() {
       }
 
       setPreviousModelUploads(Array.from(dedupedByName.values()));
-      setSelectedPreviousUploads([]);
     } catch (e: any) {
       setError(e?.message || "Failed to load previous model uploads");
       setPreviousModelUploads([]);
@@ -1015,11 +1013,7 @@ export default function StudioWorkspace() {
       await togglePreviousUploads();
       return;
     }
-    if (!selectedPreviousUploads.length) {
-      setPreviousUploadsVisible(false);
-      return;
-    }
-    addSelectedPreviousToRegistry(true);
+    setPreviousUploadsVisible(false);
   }
 
   async function emptyBucket() {
@@ -1036,7 +1030,6 @@ export default function StudioWorkspace() {
       if (!resp.ok) throw new Error(json?.error || "Failed to empty bucket");
       setStatus(`Bucket emptied. Deleted ${json?.deleted ?? 0} file(s).`);
       setPreviousModelUploads([]);
-      setSelectedPreviousUploads([]);
       refreshModels();
     } catch (e: any) {
       setError(e?.message || "Failed to empty bucket");
@@ -1045,53 +1038,52 @@ export default function StudioWorkspace() {
     }
   }
 
-  function togglePreviousUpload(id: string) {
-    setSelectedPreviousUploads((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
-  }
-
-  function addSelectedPreviousToRegistry(closeAfterAdd = false) {
-    const selected = previousModelUploads.filter((f) => selectedPreviousUploads.includes(f.id));
-    if (!selected.length) {
-      setError("Select previous uploads first.");
+  function addPreviousUploadToRegistry(file: PreviousModelUpload) {
+    if (!file.path || !file.url) {
+      setError("Selected upload is missing file path or URL.");
       return;
     }
     setError(null);
 
+    let addedCount = 0;
+
     setModelPreviewItems((prev) => {
       const existingByPath = new Set(prev.map((p) => p.path).filter(Boolean));
-      const toAdd = selected
-        .filter((f) => !existingByPath.has(f.path))
-        .map((f) => ({
-          id: `prev-${f.id}`,
-          name: f.fileName,
-          localUrl: f.url || "",
-          uploadedUrl: f.url || undefined,
-          path: f.path,
-        }))
-        .filter((x) => Boolean(x.localUrl));
+      const toAdd = existingByPath.has(file.path)
+        ? []
+        : [
+            {
+              id: `prev-${file.id}`,
+              name: file.fileName,
+              localUrl: file.url || "",
+              uploadedUrl: file.url || undefined,
+              path: file.path,
+            },
+          ].filter((x) => Boolean(x.localUrl));
+      if (toAdd.length) addedCount += toAdd.length;
       return [...prev, ...toAdd];
     });
 
     setModelUploads((prev) => {
       const existing = new Set(prev.map((p) => p.path));
-      const toAdd = selected
-        .filter((f) => !existing.has(f.path) && Boolean(f.url))
-        .map((f) => ({ name: f.fileName, url: f.url as string, path: f.path }));
+      const toAdd =
+        existing.has(file.path) || !file.url
+          ? []
+          : [{ name: file.fileName, url: file.url as string, path: file.path }];
       return [...prev, ...toAdd];
     });
 
-    setStatus(`Added ${selected.length} previous upload(s) to Model Registry.`);
-    if (closeAfterAdd) {
-      setPreviousUploadsVisible(false);
-      setSelectedPreviousUploads([]);
+    if (addedCount > 0) {
+      setStatus(`Added ${addedCount} previous upload(s) to Model Registry.`);
+    } else {
+      setStatus("This upload is already added to Model Registry.");
     }
   }
 
-  useEffect(() => {
-    setSelectedPreviousUploads([]);
-  }, [previousGenderFilter]);
+  const addedPreviousPaths = useMemo(
+    () => new Set(modelUploads.map((file) => file.path).filter(Boolean)),
+    [modelUploads]
+  );
 
   const sortedPreviousModelUploads = useMemo(() => {
     const rows =
@@ -2120,7 +2112,7 @@ export default function StudioWorkspace() {
           <div className="row">
             <button className="btn ghost" type="button" onClick={onPreviousUploadsPrimaryAction}>
               {previousUploadsVisible
-                ? `Add Selected Uploads (${selectedPreviousUploads.length})`
+                ? "Hide Previous Uploads"
                 : "Load Previous Uploads"}
             </button>
             <button
@@ -2150,7 +2142,8 @@ export default function StudioWorkspace() {
               <div className="card-title">Previous Uploads (Model Registry)</div>
               <p className="muted">
                 Shows model images uploaded from this section only. Duplicate files are merged and
-                only the latest upload is shown once.
+                only the latest upload is shown once. Click any image to add it directly to Model
+                Registry.
               </p>
               <div className="row">
                 <select
@@ -2181,21 +2174,21 @@ export default function StudioWorkspace() {
               ) : sortedPreviousModelUploads.length ? (
                 <div className="preview-grid previous-upload-grid">
                   {sortedPreviousModelUploads.map((file) => {
-                    const selected = selectedPreviousUploads.includes(file.id);
+                    const selected = addedPreviousPaths.has(file.path);
                     return (
                       <div
                         key={file.id}
                         className={`preview-card previous-upload-card selectable ${
                           selected ? "selected" : ""
                         }`}
-                        onClick={() => togglePreviousUpload(file.id)}
+                        onClick={() => addPreviousUploadToRegistry(file)}
                       >
                         {file.url ? (
                           <img className="previous-upload-image" src={file.url} alt={file.fileName} />
                         ) : (
                           <div className="muted centered">Preview unavailable</div>
                         )}
-                        <div className="preview-name">Click to select</div>
+                        <div className="preview-name">{selected ? "Added" : "Click to add"}</div>
                       </div>
                     );
                   })}
