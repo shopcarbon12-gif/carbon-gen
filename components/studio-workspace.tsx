@@ -2179,7 +2179,7 @@ export default function StudioWorkspace() {
               {previousModelUploadsLoading ? (
                 <div className="muted centered">Loading previous uploads...</div>
               ) : sortedPreviousModelUploads.length ? (
-                <div className="preview-grid">
+                <div className="preview-grid previous-upload-grid">
                   {sortedPreviousModelUploads.map((file) => {
                     const selected = selectedPreviousUploads.includes(file.id);
                     return (
@@ -3076,6 +3076,16 @@ export default function StudioWorkspace() {
         .previous-upload-card {
           width: 200px;
         }
+        .previous-upload-grid {
+          display: grid;
+          grid-template-columns: repeat(6, minmax(0, 1fr));
+          max-width: 100%;
+          justify-content: stretch;
+          align-items: stretch;
+        }
+        .previous-upload-grid .previous-upload-card {
+          width: 100%;
+        }
         .previous-upload-card img.previous-upload-image {
           width: 100%;
           height: auto;
@@ -3357,6 +3367,24 @@ export default function StudioWorkspace() {
         @media (max-width: 900px) {
           .hero {
             grid-template-columns: 1fr;
+          }
+          .previous-upload-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+          }
+        }
+        @media (max-width: 640px) {
+          .previous-upload-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+        }
+        @media (min-width: 901px) and (max-width: 1280px) {
+          .previous-upload-grid {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+          }
+        }
+        @media (min-width: 1281px) and (max-width: 1600px) {
+          .previous-upload-grid {
+            grid-template-columns: repeat(5, minmax(0, 1fr));
           }
         }
       `}</style>
