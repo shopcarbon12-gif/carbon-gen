@@ -53,6 +53,15 @@ type PreviousModelUpload = {
   url: string | null;
 };
 
+type SelectedCatalogImage = {
+  id: string;
+  url: string;
+  title: string;
+  uploadedUrl: string | null;
+  uploading: boolean;
+  uploadError: string | null;
+};
+
 const IMAGE_FILE_EXT_RE = /\.(avif|bmp|gif|heic|heif|jpeg|jpg|png|tif|tiff|webp)$/i;
 
 function isImageLikeFile(file: File) {
@@ -107,9 +116,7 @@ export default function StudioWorkspace() {
   const [pushVariantId, setPushVariantId] = useState("");
   const [pushImageUrl, setPushImageUrl] = useState("");
   const [pushImageAlt, setPushImageAlt] = useState("");
-  const [selectedCatalogImages, setSelectedCatalogImages] = useState<
-    Array<{ id: string; url: string; title: string }>
-  >([]);
+  const [selectedCatalogImages, setSelectedCatalogImages] = useState<SelectedCatalogImage[]>([]);
   const [itemUploadCount, setItemUploadCount] = useState<number | null>(null);
   const [modelUploadTotal, setModelUploadTotal] = useState(0);
   const [modelUploadDone, setModelUploadDone] = useState(0);
@@ -137,6 +144,7 @@ export default function StudioWorkspace() {
       path?: string;
     }>
   >([]);
+  const selectedCatalogImagesRef = useRef<SelectedCatalogImage[]>([]);
   const modelUploadingRef = useRef(false);
   const modelUploadPendingRef = useRef(0);
   const [models, setModels] = useState<
@@ -387,6 +395,10 @@ export default function StudioWorkspace() {
   }, [modelPreviewItems]);
 
   useEffect(() => {
+    selectedCatalogImagesRef.current = selectedCatalogImages;
+  }, [selectedCatalogImages]);
+
+  useEffect(() => {
     modelUploadingRef.current = modelUploading;
   }, [modelUploading]);
 
@@ -411,6 +423,22 @@ export default function StudioWorkspace() {
         } else if (Date.now() - start > 120000) {
           clearInterval(timer);
           reject(new Error("Uploads are taking too long. Please try again."));
+        }
+      }, 300);
+    });
+  }
+
+  async function waitForCatalogImports() {
+    const start = Date.now();
+    return new Promise<void>((resolve, reject) => {
+      const timer = setInterval(() => {
+        const hasPending = selectedCatalogImagesRef.current.some((img) => img.uploading);
+        if (!hasPending) {
+          clearInterval(timer);
+          resolve();
+        } else if (Date.now() - start > 120000) {
+          clearInterval(timer);
+          reject(new Error("Catalog image import is taking too long. Please try again."));
         }
       }, 300);
     });
@@ -609,8 +637,15 @@ export default function StudioWorkspace() {
       throw new Error("Please type the apparel item for 'Other Apparel Item'.");
     }
 
+    if (selectedCatalogImagesRef.current.some((img) => img.uploading)) {
+      setStatus("Finishing catalog image imports...");
+      await waitForCatalogImports();
+    }
+
     const files = itemFiles || [];
-    const shopifyUrls = selectedCatalogImages.map((img) => img.url);
+    const shopifyUrls = selectedCatalogImagesRef.current
+      .map((img) => (img.uploadedUrl ? img.uploadedUrl : ""))
+      .filter(Boolean);
     if (!files.length && !shopifyUrls.length && !itemReferenceUrls.length) {
       throw new Error("Please add item references from device, Shopify catalog, or both.");
     }
@@ -739,13 +774,82 @@ export default function StudioWorkspace() {
   }
 
   function toggleCatalogImage(image: { id: string; url: string; title: string }) {
-    setSelectedCatalogImages((prev) => {
-      const exists = prev.some((img) => img.id === image.id);
-      if (exists) {
-        return prev.filter((img) => img.id !== image.id);
+    const existing = selectedCatalogImages.find((img) => img.id === image.id);
+    if (existing?.uploading) return;
+
+    if (existing?.uploadError) {
+      void importCatalogImageToBucket(image);
+      return;
+    }
+
+    if (existing) {
+      setSelectedCatalogImages((prev) => prev.filter((img) => img.id !== image.id));
+      if (existing.uploadedUrl) {
+        setItemReferenceUrls((prev) => prev.filter((url) => url !== existing.uploadedUrl));
       }
-      return [...prev, image];
-    });
+      return;
+    }
+
+    setSelectedCatalogImages((prev) => [
+      ...prev,
+      {
+        ...image,
+        uploadedUrl: null,
+        uploading: true,
+        uploadError: null,
+      },
+    ]);
+    void importCatalogImageToBucket(image);
+  }
+
+  async function importCatalogImageToBucket(image: { id: string; url: string; title: string }) {
+    setError(null);
+    setSelectedCatalogImages((prev) =>
+      prev.map((img) =>
+        img.id === image.id
+          ? { ...img, uploading: true, uploadError: null }
+          : img
+      )
+    );
+
+    try {
+      const resp = await fetch("/api/items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ urls: [image.url] }),
+      });
+      const json = await parseJsonResponse(resp, "/api/items");
+      if (!resp.ok) {
+        throw new Error(json?.error || "Failed to import selected catalog image.");
+      }
+      const uploaded = Array.isArray(json?.urls) ? String(json.urls[0] || "").trim() : "";
+      if (!uploaded) {
+        throw new Error("Catalog image import returned no uploaded URL.");
+      }
+
+      setSelectedCatalogImages((prev) =>
+        prev.map((img) =>
+          img.id === image.id
+            ? { ...img, uploadedUrl: uploaded, uploading: false, uploadError: null }
+            : img
+        )
+      );
+      setItemReferenceUrls((prev) => Array.from(new Set([...prev, uploaded])));
+      setItemUploadCount((prev) => {
+        const next = prev ? prev + 1 : 1;
+        return next;
+      });
+    } catch (e: any) {
+      const message = e?.message || "Failed to import selected catalog image.";
+      setSelectedCatalogImages((prev) =>
+        prev.map((img) =>
+          img.id === image.id
+            ? { ...img, uploading: false, uploadError: message }
+            : img
+        )
+      );
+      setError(message);
+    }
   }
 
   function formatProductBarcodes(product: ShopifyCatalogProduct) {
@@ -1668,7 +1772,13 @@ export default function StudioWorkspace() {
   }
 
   function removeCatalogSelection(id: string) {
-    setSelectedCatalogImages((prev) => prev.filter((img) => img.id !== id));
+    setSelectedCatalogImages((prev) => {
+      const target = prev.find((img) => img.id === id);
+      if (target?.uploadedUrl) {
+        setItemReferenceUrls((urls) => urls.filter((url) => url !== target.uploadedUrl));
+      }
+      return prev.filter((img) => img.id !== id);
+    });
   }
 
   useEffect(() => {
@@ -2243,17 +2353,21 @@ export default function StudioWorkspace() {
                         {product.title}
                         <span className="muted">
                           {" "}
-                          ({product.handle}) Â· Barcode: {formatProductBarcodes(product)}
+                          ({product.handle}) | Barcode: {formatProductBarcodes(product)}
                         </span>
                       </div>
                       <div className="preview-grid">
                         {product.images.map((img) => {
-                          const selected = selectedCatalogImages.some((i) => i.id === img.id);
+                          const selectedEntry = selectedCatalogImages.find((i) => i.id === img.id);
+                          const selected = Boolean(selectedEntry);
+                          const loading = Boolean(selectedEntry?.uploading);
+                          const failed = Boolean(selectedEntry?.uploadError);
                           return (
                             <button
                               key={img.id}
                               type="button"
                               className={`catalog-image ${selected ? "selected" : ""}`}
+                              disabled={loading}
                               onClick={() =>
                                 toggleCatalogImage({
                                   id: img.id,
@@ -2263,7 +2377,15 @@ export default function StudioWorkspace() {
                               }
                             >
                               <img src={img.url} alt={img.altText || product.title} />
-                              <span>{selected ? "Selected" : "Select"}</span>
+                              <span>
+                                {loading
+                                  ? "Uploading..."
+                                  : failed
+                                    ? "Retry upload"
+                                    : selected
+                                      ? "Selected"
+                                      : "Select"}
+                              </span>
                             </button>
                           );
                         })}
@@ -2279,11 +2401,14 @@ export default function StudioWorkspace() {
             </div>
           )}
           <div className="muted centered">
-            {itemFiles.length ? `${itemFiles.length} device files ready` : "No device files selected"} Â·{" "}
+            {itemFiles.length ? `${itemFiles.length} device files ready` : "No device files selected"} |{" "}
             {selectedCatalogImages.length
               ? `${selectedCatalogImages.length} Shopify images selected`
               : "No Shopify images selected"}
-            {itemUploadCount ? ` Â· Last upload: ${itemUploadCount} files` : ""}
+            {selectedCatalogImages.some((img) => img.uploading)
+              ? ` | ${selectedCatalogImages.filter((img) => img.uploading).length} uploading`
+              : ""}
+            {itemUploadCount ? ` | Last upload: ${itemUploadCount} files` : ""}
           </div>
           {itemPreviews.length ? (
             <div className="preview-grid">
@@ -2306,7 +2431,7 @@ export default function StudioWorkspace() {
           {selectedCatalogImages.length ? (
             <div className="preview-grid">
               {selectedCatalogImages.map((img) => (
-                <div className="preview-card" key={img.id}>
+                <div className="preview-card item-catalog-selected-card" key={img.id}>
                   <button
                     type="button"
                     className="preview-remove-corner"
@@ -2315,8 +2440,14 @@ export default function StudioWorkspace() {
                   >
                     X
                   </button>
-                  <img src={img.url} alt={img.title} />
-                  <div className="preview-name">{img.title}</div>
+                  <img className="item-catalog-selected-image" src={img.url} alt={img.title} />
+                  <div className="preview-name">
+                    {img.uploading
+                      ? "Uploading..."
+                      : img.uploadError
+                        ? "Upload failed (click product image to retry)"
+                        : "Ready"}
+                  </div>
                 </div>
               ))}
             </div>
@@ -2644,7 +2775,7 @@ export default function StudioWorkspace() {
                       {product.title}
                       <span className="muted">
                         {" "}
-                        ({product.handle}) · Barcode: {formatProductBarcodes(product)}
+                        ({product.handle}) | Barcode: {formatProductBarcodes(product)}
                       </span>
                     </div>
                     <div className="preview-grid">
@@ -2843,7 +2974,7 @@ export default function StudioWorkspace() {
           background: #fff;
           display: grid;
           gap: 6px;
-          width: 160px;
+          width: 180px;
           text-align: center;
           cursor: pointer;
           color: #64748b;
@@ -2856,9 +2987,11 @@ export default function StudioWorkspace() {
         }
         .catalog-image img {
           width: 100%;
-          height: 90px;
-          object-fit: cover;
+          height: auto;
+          aspect-ratio: 3 / 4;
+          object-fit: contain;
           border-radius: 8px;
+          background: #f8fafc;
         }
         .ghost-btn {
           border: 1px solid #e2e8f0;
@@ -2928,6 +3061,17 @@ export default function StudioWorkspace() {
           height: 90px;
           object-fit: cover;
           border-radius: 8px;
+        }
+        .item-catalog-selected-card {
+          width: 200px;
+        }
+        .item-catalog-selected-card img.item-catalog-selected-image {
+          width: 100%;
+          height: auto;
+          aspect-ratio: 3 / 4;
+          object-fit: contain;
+          border-radius: 8px;
+          background: #f8fafc;
         }
         .previous-upload-card {
           width: 200px;
