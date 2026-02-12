@@ -9,6 +9,19 @@ type DropboxFile = {
   path_lower: string;
 };
 
+const DROPBOX_SEARCH_ROOT = "/elior perez/carbon";
+
+function normalizePath(path: string) {
+  let v = String(path || "").trim().toLowerCase();
+  if (!v.startsWith("/")) v = `/${v}`;
+  return v.replace(/\/+$/, "");
+}
+
+function isValidBarcode(value: string) {
+  const v = String(value || "").trim();
+  return /^(?:[cC]\d{6,8}|\d{7,9})$/.test(v);
+}
+
 function isImageName(name: string) {
   return /\.(avif|bmp|gif|heic|heif|jpeg|jpg|png|tif|tiff|webp)$/i.test(name);
 }
@@ -56,6 +69,12 @@ export async function POST(req: NextRequest) {
   if (!barcode) {
     return NextResponse.json({ error: "Barcode is required." }, { status: 400 });
   }
+  if (!isValidBarcode(barcode)) {
+    return NextResponse.json(
+      { error: "Barcode must be 7-9 chars: digits only, or C + 6-8 digits." },
+      { status: 400 }
+    );
+  }
 
   try {
     const accessToken = await getDropboxAccessTokenForUser(userId);
@@ -63,10 +82,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Dropbox is not connected for this user." }, { status: 400 });
     }
 
+    const rootPath = normalizePath(DROPBOX_SEARCH_ROOT);
     const search = await dropboxRpc(accessToken, "files/search_v2", {
       query: barcode,
       options: {
-        path: "",
+        path: rootPath,
         max_results: 50,
         filename_only: false,
       },
@@ -81,7 +101,10 @@ export async function POST(req: NextRequest) {
         name: String(m.name || ""),
         path_lower: String(m.path_lower || ""),
       }))
-      .filter((f: DropboxFile) => f.path_lower && isImageName(f.name));
+      .filter((f: DropboxFile) => {
+        const p = normalizePath(f.path_lower);
+        return Boolean(p) && p.startsWith(rootPath) && isImageName(f.name);
+      });
 
     const folderPaths = Array.from(new Set(files.map((f) => dirName(f.path_lower)).filter(Boolean))).slice(0, 8);
 
@@ -96,7 +119,11 @@ export async function POST(req: NextRequest) {
       });
       const entries = Array.isArray(list?.entries) ? list.entries : [];
       const imageEntries = entries
-        .filter((e: any) => e?.[".tag"] === "file" && isImageName(String(e?.name || "")))
+        .filter((e: any) => {
+          if (e?.[".tag"] !== "file") return false;
+          const p = normalizePath(String(e?.path_lower || ""));
+          return p.startsWith(rootPath) && isImageName(String(e?.name || ""));
+        })
         .map((e: any) => ({
           id: String(e.id || ""),
           title: String(e.name || ""),
@@ -124,4 +151,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: e?.message || "Dropbox search failed." }, { status: 500 });
   }
 }
-

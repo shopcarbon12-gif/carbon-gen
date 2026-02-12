@@ -101,6 +101,18 @@ function openInputPicker(input: HTMLInputElement | null) {
   input.click();
 }
 
+function sanitizeBarcodeInput(value: string) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^c0-9]/g, "")
+    .slice(0, 9);
+}
+
+function isValidBarcode(value: string) {
+  const v = String(value || "").trim();
+  return /^(?:c\d{6,8}|\d{7,9})$/.test(v);
+}
+
 function canonicalPreviousUploadName(fileName: string, path: string) {
   const fallback = path.split("/").pop() || path;
   let v = String(fileName || fallback || "").trim().toLowerCase();
@@ -767,6 +779,9 @@ export default function StudioWorkspace() {
     if (!itemBarcode.trim()) {
       throw new Error("Please enter item barcode in section 0.5.");
     }
+    if (!isValidBarcode(itemBarcode)) {
+      throw new Error("Barcode must be 7-9 chars: digits only, or C + 6-8 digits.");
+    }
 
     if (selectedCatalogImagesRef.current.some((img) => img.uploading)) {
       setStatus("Finishing catalog image imports...");
@@ -968,9 +983,13 @@ export default function StudioWorkspace() {
   }
 
   async function searchDropboxByBarcode() {
-    const barcode = itemBarcode.trim();
+    const barcode = sanitizeBarcodeInput(itemBarcode).trim();
     if (!barcode) {
       setError("Enter barcode first, then search Dropbox.");
+      return;
+    }
+    if (!isValidBarcode(barcode)) {
+      setError("Barcode must be 7-9 chars: digits only, or C + 6-8 digits.");
       return;
     }
     setDropboxSearching(true);
@@ -1016,6 +1035,13 @@ export default function StudioWorkspace() {
       title: img.title || "Dropbox image",
       barcode: itemBarcode.trim(),
     });
+  }
+
+  function openItemFilesOrFolderPicker() {
+    const chooseFolder = window.confirm(
+      "Press OK to choose a folder, or Cancel to choose files."
+    );
+    openInputPicker(chooseFolder ? itemFolderRef.current : itemPickerRef.current);
   }
 
   function selectPushCatalogImage(
@@ -2573,10 +2599,15 @@ export default function StudioWorkspace() {
           <div className="row">
             <input
               value={itemBarcode}
-              onChange={(e) => setItemBarcode(e.target.value)}
-              placeholder="Item barcode (required)"
+              onChange={(e) => setItemBarcode(sanitizeBarcodeInput(e.target.value))}
+              placeholder="Item barcode (required: 7-9 digits, or C + 6-8 digits)"
             />
-            <button className="btn ghost" type="button" onClick={searchDropboxByBarcode} disabled={dropboxSearching}>
+            <button
+              className="btn ghost"
+              type="button"
+              onClick={searchDropboxByBarcode}
+              disabled={dropboxSearching || !isValidBarcode(itemBarcode)}
+            >
               {dropboxSearching ? "Searching Dropbox..." : "Search Dropbox by Barcode"}
             </button>
           </div>
@@ -2622,7 +2653,7 @@ export default function StudioWorkspace() {
             className="dropzone"
             role="button"
             tabIndex={0}
-            onClick={() => openInputPicker(itemPickerRef.current)}
+            onClick={openItemFilesOrFolderPicker}
             onDragOver={(e) => e.preventDefault()}
             onDrop={async (e) => {
               e.preventDefault();
@@ -2654,16 +2685,9 @@ export default function StudioWorkspace() {
             <button
               className="ghost-btn"
               type="button"
-              onClick={() => openInputPicker(itemPickerRef.current)}
+              onClick={openItemFilesOrFolderPicker}
             >
-              Choose files
-            </button>
-            <button
-              className="ghost-btn"
-              type="button"
-              onClick={() => openInputPicker(itemFolderRef.current)}
-            >
-              Choose folder
+              Choose files/folder
             </button>
           </div>
           <div className="row">
