@@ -144,6 +144,10 @@ export default function StudioWorkspace() {
   const [catalogProducts, setCatalogProducts] = useState<ShopifyCatalogProduct[]>([]);
   const [catalogPage, setCatalogPage] = useState(1);
   const [catalogQueryForResults, setCatalogQueryForResults] = useState("");
+  const [catalogHasNextPage, setCatalogHasNextPage] = useState(false);
+  const [catalogAfterCursorsByPage, setCatalogAfterCursorsByPage] = useState<Array<string | null>>([
+    null,
+  ]);
   const [itemCatalogCollapsed, setItemCatalogCollapsed] = useState(false);
   const [pushCatalogQuery, setPushCatalogQuery] = useState("");
   const [pushCatalogLoading, setPushCatalogLoading] = useState(false);
@@ -739,35 +743,106 @@ export default function StudioWorkspace() {
     }
   }
 
-  async function loadCatalogImages() {
+  async function loadCatalogImages(options?: {
+    after?: string | null;
+    page?: number;
+    queryOverride?: string;
+  }) {
     const shopValue = shop.trim();
     if (!shopValue) {
       setCatalogProducts([]);
       setCatalogSearched(false);
+      setCatalogPage(1);
+      setCatalogHasNextPage(false);
+      setCatalogAfterCursorsByPage([null]);
       return;
     }
-    const query = catalogQuery.trim();
+    const query = String(options?.queryOverride ?? catalogQuery).trim();
+    const isEmptyQuery = query.length === 0;
+    const page = Number(options?.page || 1);
+    let after = options?.after ?? null;
     setCatalogLoading(true);
     setCatalogSearched(true);
     setError(null);
     try {
-      const params = new URLSearchParams({ shop: shopValue });
-      if (query) params.set("q", query);
-      const resp = await fetch(`/api/shopify/catalog?${params.toString()}`, {
-        cache: "no-store",
-      });
-      const json = await parseJsonResponse(resp);
-      if (!resp.ok) throw new Error(json.error || "Failed to load Shopify catalog");
-      setCatalogProducts(Array.isArray(json.products) ? json.products : []);
+      let products: ShopifyCatalogProduct[] = [];
+      let hasNextPage = false;
+      let endCursor: string | null = null;
+
+      // Empty-query mode is cursor-paginated at 10 products per page.
+      // Skip empty pages that may occur after status filtering.
+      for (let guard = 0; guard < 25; guard += 1) {
+        const params = new URLSearchParams({ shop: shopValue });
+        if (query) params.set("q", query);
+        if (isEmptyQuery) {
+          params.set("first", String(CATALOG_PAGE_SIZE));
+          if (after) params.set("after", after);
+        }
+
+        const resp = await fetch(`/api/shopify/catalog?${params.toString()}`, {
+          cache: "no-store",
+        });
+        const json = await parseJsonResponse(resp);
+        if (!resp.ok) throw new Error(json.error || "Failed to load Shopify catalog");
+
+        products = Array.isArray(json.products) ? json.products : [];
+        const pageInfo = json?.pageInfo || {};
+        hasNextPage = Boolean(pageInfo?.hasNextPage);
+        endCursor = pageInfo?.endCursor ? String(pageInfo.endCursor) : null;
+
+        if (!isEmptyQuery) break;
+        if (products.length > 0) break;
+        if (!hasNextPage || !endCursor) break;
+        after = endCursor;
+      }
+
+      setCatalogProducts(products);
       setCatalogQueryForResults(query);
-      setCatalogPage(1);
+      if (isEmptyQuery) {
+        setCatalogPage(page);
+        setCatalogHasNextPage(hasNextPage);
+        setCatalogAfterCursorsByPage((prev) => {
+          const next = [...prev];
+          next[page - 1] = after;
+          next[page] = endCursor;
+          return next.slice(0, page + 2);
+        });
+      } else {
+        setCatalogPage(1);
+        setCatalogHasNextPage(false);
+        setCatalogAfterCursorsByPage([null]);
+      }
     } catch (e: any) {
       setError(e?.message || "Failed to load Shopify catalog");
       setCatalogProducts([]);
       setCatalogPage(1);
+      setCatalogHasNextPage(false);
+      setCatalogAfterCursorsByPage([null]);
     } finally {
       setCatalogLoading(false);
     }
+  }
+
+  async function loadCatalogNextPage() {
+    if (catalogLoading || !catalogHasNextPage) return;
+    if (catalogQueryForResults.trim()) return;
+    const nextPage = catalogPage + 1;
+    const nextAfter = catalogAfterCursorsByPage[catalogPage] || null;
+    await loadCatalogImages({ queryOverride: catalogQueryForResults, page: nextPage, after: nextAfter });
+  }
+
+  async function loadCatalogPreviousPage() {
+    if (catalogLoading || catalogPage <= 1) return;
+    if (catalogQueryForResults.trim()) return;
+    const prevPage = catalogPage - 1;
+    const prevAfter = catalogAfterCursorsByPage[prevPage - 1] || null;
+    await loadCatalogImages({ queryOverride: catalogQueryForResults, page: prevPage, after: prevAfter });
+  }
+
+  async function loadCatalogFirstPage() {
+    if (catalogLoading || catalogPage === 1) return;
+    if (catalogQueryForResults.trim()) return;
+    await loadCatalogImages({ queryOverride: catalogQueryForResults, page: 1, after: null });
   }
 
   function onCatalogSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -1164,25 +1239,15 @@ export default function StudioWorkspace() {
     () => catalogQueryForResults.trim().length === 0,
     [catalogQueryForResults]
   );
+  const showCatalogPagination = useMemo(
+    () =>
+      isCatalogEmptyQueryResults &&
+      catalogSearched &&
+      (catalogPage > 1 || catalogHasNextPage),
+    [isCatalogEmptyQueryResults, catalogSearched, catalogPage, catalogHasNextPage]
+  );
 
-  const catalogTotalPages = useMemo(() => {
-    if (!isCatalogEmptyQueryResults) return 1;
-    return Math.max(1, Math.ceil(catalogProducts.length / CATALOG_PAGE_SIZE));
-  }, [catalogProducts.length, isCatalogEmptyQueryResults]);
-
-  useEffect(() => {
-    setCatalogPage((prev) => {
-      if (prev < 1) return 1;
-      if (prev > catalogTotalPages) return catalogTotalPages;
-      return prev;
-    });
-  }, [catalogTotalPages]);
-
-  const visibleCatalogProducts = useMemo(() => {
-    if (!isCatalogEmptyQueryResults) return catalogProducts;
-    const start = (catalogPage - 1) * CATALOG_PAGE_SIZE;
-    return catalogProducts.slice(start, start + CATALOG_PAGE_SIZE);
-  }, [catalogProducts, catalogPage, isCatalogEmptyQueryResults]);
+  const visibleCatalogProducts = useMemo(() => catalogProducts, [catalogProducts]);
 
   function getPanelPosePair(gender: string, panelNumber: number): [number, number] {
     const g = String(gender || "").toLowerCase();
@@ -2403,7 +2468,7 @@ export default function StudioWorkspace() {
                   onKeyDown={onCatalogSearchKeyDown}
                   placeholder="Search products (title, handle, SKU)"
                 />
-                <button className="btn ghost" type="button" onClick={loadCatalogImages}>
+                <button className="btn ghost" type="button" onClick={() => loadCatalogImages()}>
                   {catalogLoading ? "Loading..." : "Search Catalog"}
                 </button>
               </div>
@@ -2414,42 +2479,38 @@ export default function StudioWorkspace() {
               )}
               {shop.trim() && !catalogSearched && (
                 <div className="muted centered">
-                  Search by product name/handle or leave search empty to load recent catalog items.
+                  Search by product name/handle, or leave search empty to browse 10 products per page.
                 </div>
               )}
               {shop.trim() && catalogSearched && !catalogLoading && !catalogProducts.length && (
                 <div className="muted centered">No matching catalog products with images found.</div>
               )}
-              {catalogProducts.length > 0 &&
-              isCatalogEmptyQueryResults &&
-              catalogTotalPages > 1 ? (
+              {showCatalogPagination ? (
                 <div className="catalog-pagination">
                   <button
                     className="ghost-btn"
                     type="button"
-                    onClick={() => setCatalogPage((prev) => Math.max(1, prev - 1))}
-                    disabled={catalogPage <= 1}
+                    onClick={loadCatalogPreviousPage}
+                    disabled={catalogLoading || catalogPage <= 1}
                   >
-                    ←
+                    {"<-"}
                   </button>
                   <div className="muted centered">
-                    Page {catalogPage} of {catalogTotalPages}
+                    Page {catalogPage}{catalogHasNextPage ? "" : " (last page)"}
                   </div>
                   <button
                     className="ghost-btn"
                     type="button"
-                    onClick={() =>
-                      setCatalogPage((prev) => Math.min(catalogTotalPages, prev + 1))
-                    }
-                    disabled={catalogPage >= catalogTotalPages}
+                    onClick={loadCatalogNextPage}
+                    disabled={catalogLoading || !catalogHasNextPage}
                   >
-                    →
+                    {"->"}
                   </button>
                   <button
                     className="ghost-btn"
                     type="button"
-                    onClick={() => setCatalogPage(1)}
-                    disabled={catalogPage === 1}
+                    onClick={loadCatalogFirstPage}
+                    disabled={catalogLoading || catalogPage === 1}
                   >
                     Back to page 1
                   </button>
@@ -2504,36 +2565,32 @@ export default function StudioWorkspace() {
                   ))}
                 </div>
               ) : null}
-              {catalogProducts.length > 0 &&
-              isCatalogEmptyQueryResults &&
-              catalogTotalPages > 1 ? (
+              {showCatalogPagination ? (
                 <div className="catalog-pagination">
                   <button
                     className="ghost-btn"
                     type="button"
-                    onClick={() => setCatalogPage((prev) => Math.max(1, prev - 1))}
-                    disabled={catalogPage <= 1}
+                    onClick={loadCatalogPreviousPage}
+                    disabled={catalogLoading || catalogPage <= 1}
                   >
-                    ←
+                    {"<-"}
                   </button>
                   <div className="muted centered">
-                    Page {catalogPage} of {catalogTotalPages}
+                    Page {catalogPage}{catalogHasNextPage ? "" : " (last page)"}
                   </div>
                   <button
                     className="ghost-btn"
                     type="button"
-                    onClick={() =>
-                      setCatalogPage((prev) => Math.min(catalogTotalPages, prev + 1))
-                    }
-                    disabled={catalogPage >= catalogTotalPages}
+                    onClick={loadCatalogNextPage}
+                    disabled={catalogLoading || !catalogHasNextPage}
                   >
-                    →
+                    {"->"}
                   </button>
                   <button
                     className="ghost-btn"
                     type="button"
-                    onClick={() => setCatalogPage(1)}
-                    disabled={catalogPage === 1}
+                    onClick={loadCatalogFirstPage}
+                    disabled={catalogLoading || catalogPage === 1}
                   >
                     Back to page 1
                   </button>

@@ -10,9 +10,22 @@ type CatalogProduct = {
   id: string;
   title: string;
   handle: string;
+  status: string;
   barcodes: string[];
   images: Array<{ id: string; url: string; altText: string }>;
 };
+
+type CatalogPageInfo = {
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+  endCursor: string | null;
+  startCursor: string | null;
+};
+
+function isAllowedProductStatus(value: string) {
+  const status = String(value || "").trim().toUpperCase();
+  return status === "ACTIVE" || status === "DRAFT";
+}
 
 function toCatalogProducts(json: any): CatalogProduct[] {
   return (
@@ -20,6 +33,7 @@ function toCatalogProducts(json: any): CatalogProduct[] {
       id: edge?.node?.id,
       title: edge?.node?.title,
       handle: edge?.node?.handle,
+      status: String(edge?.node?.status || "").trim().toUpperCase(),
       barcodes: Array.from(
         new Set(
           (edge?.node?.variants?.nodes || [])
@@ -34,8 +48,18 @@ function toCatalogProducts(json: any): CatalogProduct[] {
           altText: img?.altText || "",
         }))
         .filter((img: any) => img?.url),
-    })) || []
+    }))?.filter((p: CatalogProduct) => isAllowedProductStatus(p.status)) || []
   );
+}
+
+function toCatalogPageInfo(json: any): CatalogPageInfo {
+  const pageInfo = json?.data?.products?.pageInfo || {};
+  return {
+    hasNextPage: Boolean(pageInfo?.hasNextPage),
+    hasPreviousPage: Boolean(pageInfo?.hasPreviousPage),
+    endCursor: pageInfo?.endCursor ? String(pageInfo.endCursor) : null,
+    startCursor: pageInfo?.startCursor ? String(pageInfo.startCursor) : null,
+  };
 }
 
 function normalizeQuery(q: string) {
@@ -72,15 +96,22 @@ async function getTokenCandidates(shop: string) {
   return tokens;
 }
 
-async function fetchCatalogWithToken(shop: string, token: string, q: string | null) {
+async function fetchCatalogWithToken(
+  shop: string,
+  token: string,
+  q: string | null,
+  first: number,
+  after: string | null
+) {
   const query = `
-    query ProductCatalog($query: String) {
-      products(first: 100, query: $query, sortKey: UPDATED_AT, reverse: true) {
+    query ProductCatalog($query: String, $first: Int!, $after: String) {
+      products(first: $first, after: $after, query: $query, sortKey: UPDATED_AT, reverse: true) {
         edges {
           node {
             id
             title
             handle
+            status
             variants(first: 50) {
               nodes {
                 barcode
@@ -95,6 +126,12 @@ async function fetchCatalogWithToken(shop: string, token: string, q: string | nu
             }
           }
         }
+        pageInfo {
+          hasNextPage
+          hasPreviousPage
+          endCursor
+          startCursor
+        }
       }
     }
   `;
@@ -106,7 +143,7 @@ async function fetchCatalogWithToken(shop: string, token: string, q: string | nu
         "Content-Type": "application/json",
         "X-Shopify-Access-Token": token,
       },
-      body: JSON.stringify({ query, variables: { query: q || null } }),
+      body: JSON.stringify({ query, variables: { query: q || null, first, after } }),
       cache: "no-store",
     });
     const json = await resp.json().catch(() => ({}));
@@ -131,6 +168,7 @@ async function fetchCatalogWithToken(shop: string, token: string, q: string | nu
       ok: true as const,
       status: 200,
       products: toCatalogProducts(json),
+      pageInfo: toCatalogPageInfo(json),
     };
   } catch (e: any) {
     return {
@@ -147,6 +185,11 @@ export async function GET(req: NextRequest) {
     const rawShop = String(searchParams.get("shop") || "");
     const shop = normalizeShopDomain(rawShop) || "";
     const q = String(searchParams.get("q") || "").trim();
+    const after = String(searchParams.get("after") || "").trim() || null;
+    const firstRaw = Number(searchParams.get("first") || "100");
+    const first = Number.isFinite(firstRaw)
+      ? Math.max(1, Math.min(250, Math.trunc(firstRaw)))
+      : 100;
 
     if (!shop) {
       return NextResponse.json({ error: "Missing or invalid shop." }, { status: 400 });
@@ -159,22 +202,29 @@ export async function GET(req: NextRequest) {
 
     let lastFailure: any = null;
     for (const candidate of candidates) {
-      const attempt = await fetchCatalogWithToken(shop, candidate.token, q || null);
+      const attempt = await fetchCatalogWithToken(shop, candidate.token, q || null, first, after);
       if (!attempt.ok) {
         lastFailure = attempt;
         continue;
       }
 
       let products = attempt.products;
+      let pageInfo = attempt.pageInfo;
       // Shopify query syntax can be strict; fallback to broad fetch + local contains filter.
-      if (q && products.length === 0) {
-        const broad = await fetchCatalogWithToken(shop, candidate.token, null);
+      if (q && !after && products.length === 0) {
+        const broad = await fetchCatalogWithToken(shop, candidate.token, null, 250, null);
         if (broad.ok) {
           products = broad.products.filter((product) => matchesQuery(product, q));
+          pageInfo = {
+            hasNextPage: false,
+            hasPreviousPage: false,
+            endCursor: null,
+            startCursor: null,
+          };
         }
       }
 
-      return NextResponse.json({ products, source: candidate.source });
+      return NextResponse.json({ products, pageInfo, source: candidate.source });
     }
 
     return NextResponse.json(
