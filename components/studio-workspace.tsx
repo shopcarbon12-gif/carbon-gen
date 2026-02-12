@@ -34,6 +34,8 @@ const ITEM_TYPE_OPTIONS = [
 ];
 
 const CATALOG_PAGE_SIZE = 10;
+const SPLIT_TARGET_WIDTH = 770;
+const SPLIT_TARGET_HEIGHT = 1155;
 
 type ShopifyCatalogProduct = {
   id: string;
@@ -2530,22 +2532,37 @@ export default function StudioWorkspace() {
 
     function cropForSide(side: "left" | "right") {
       const sideOffsetX = side === "left" ? 0 : img.width - halfW;
-      // Exact integer 2:3 crop at native resolution (no resize).
-      const units = Math.max(1, Math.min(Math.floor(halfW / 2), Math.floor(halfH / 3)));
-      const cropW = units * 2;
-      const cropH = units * 3;
+      // Normalize every split to a strict 770x1155 output frame.
+      const targetAspect = SPLIT_TARGET_WIDTH / SPLIT_TARGET_HEIGHT; // 2:3
+      const sourceAspect = halfW / halfH;
+      let cropW = halfW;
+      let cropH = halfH;
+      if (sourceAspect > targetAspect) {
+        cropW = Math.round(halfH * targetAspect);
+      } else {
+        cropH = Math.round(halfW / targetAspect);
+      }
       const cropX = sideOffsetX + Math.floor((halfW - cropW) / 2);
       const cropY = Math.floor((halfH - cropH) / 2);
 
-      const outW = cropW;
-      const outH = cropH;
       const canvas = document.createElement("canvas");
-      canvas.width = outW;
-      canvas.height = outH;
+      canvas.width = SPLIT_TARGET_WIDTH;
+      canvas.height = SPLIT_TARGET_HEIGHT;
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("Unable to initialize crop canvas");
-      ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, outW, outH);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(
+        img,
+        cropX,
+        cropY,
+        cropW,
+        cropH,
+        0,
+        0,
+        SPLIT_TARGET_WIDTH,
+        SPLIT_TARGET_HEIGHT
+      );
       const dataUrl = canvas.toDataURL("image/png");
       return dataUrl.replace(/^data:image\/png;base64,/, "");
     }
@@ -4235,7 +4252,7 @@ export default function StudioWorkspace() {
         .split-result-image {
           width: 100%;
           height: auto;
-          aspect-ratio: 3 / 4;
+          aspect-ratio: 2 / 3;
           object-fit: contain;
           border-radius: 8px;
           background: #f8fafc;
