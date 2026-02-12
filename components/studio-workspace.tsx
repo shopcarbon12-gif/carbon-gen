@@ -1771,6 +1771,20 @@ export default function StudioWorkspace() {
     () => models.find((m) => m.model_id === selectedModelId),
     [models, selectedModelId]
   );
+  const pushColorMappingPreview = useMemo(
+    () =>
+      pushVariants.map((variant) => {
+        const imageIndex = pushImages.findIndex((img) => img.id === variant.assignedPushImageId);
+        const assignedImage = imageIndex >= 0 ? pushImages[imageIndex] : null;
+        return {
+          color: variant.color || "Color",
+          variantCount: variant.variantCount,
+          imagePosition: imageIndex >= 0 ? imageIndex + 1 : null,
+          imageTitle: assignedImage?.title || "",
+        };
+      }),
+    [pushVariants, pushImages]
+  );
 
   function isDressItemType(value: string) {
     return String(value || "").trim().toLowerCase().includes("dress");
@@ -3793,6 +3807,28 @@ export default function StudioWorkspace() {
               })}
             </div>
           ) : null}
+          {pushColorMappingPreview.length ? (
+            <div className="card">
+              <div className="card-title">Push Mapping Preview</div>
+              <div className="muted">
+                Color to image mapping that will be sent on push.
+              </div>
+              <div className="push-mapping-list">
+                {pushColorMappingPreview.map((row, idx) => (
+                  <div className="push-mapping-row" key={`${row.color}-${idx}`}>
+                    <strong>{row.color}</strong>
+                    <span className="muted">({row.variantCount} variants)</span>
+                    <span>
+                      {row.imagePosition
+                        ? `Image #${row.imagePosition}`
+                        : "No image assigned"}
+                    </span>
+                    <span className="muted">{row.imageTitle || ""}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <div className="row">
             <button
               className="btn ghost"
@@ -4087,6 +4123,21 @@ export default function StudioWorkspace() {
           height: 120px;
           object-fit: contain;
           object-position: center;
+        }
+        .push-mapping-list {
+          display: grid;
+          gap: 6px;
+        }
+        .push-mapping-row {
+          display: grid;
+          grid-template-columns: minmax(120px, 180px) minmax(90px, 130px) minmax(140px, 180px) 1fr;
+          align-items: center;
+          gap: 8px;
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+          background: #fff;
+          padding: 8px 10px;
+          font-size: 0.85rem;
         }
         .pull-product {
           width: 100%;
