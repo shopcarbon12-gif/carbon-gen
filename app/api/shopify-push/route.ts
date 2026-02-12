@@ -38,12 +38,51 @@ type ProductCreateMediaResult = {
   };
 };
 
+type ProductVariantsQuery = {
+  product: {
+    options: Array<{ name: string; position: number }>;
+    variants: {
+      nodes: ProductVariantNode[];
+    };
+  } | null;
+};
+
+type ProductVariantNode = {
+  id: string;
+  title: string;
+  position: number;
+  selectedOptions: Array<{ name: string; value: string }>;
+  image: { id: string; url: string } | null;
+};
+
+type VariantAppendMediaResult = {
+  productVariantAppendMedia: {
+    product: { id: string } | null;
+    productVariants: Array<{ id: string }>;
+    userErrors: Array<{ field?: string[]; message: string }>;
+  };
+};
+
+type VariantOrderUpdateResult = {
+  productVariantsBulkUpdate: {
+    product: { id: string } | null;
+    userErrors: Array<{ field?: string[]; message: string }>;
+  };
+};
+
 function norm(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
 function normalizeAlt(value: unknown) {
   return norm(value).slice(0, 120);
+}
+
+function toNumericId(value: string) {
+  const v = norm(value);
+  if (!v) return "";
+  const match = v.match(/(\d+)(?:\D*)$/);
+  return match ? match[1] : "";
 }
 
 async function getTokenCandidates(shop: string) {
@@ -199,6 +238,150 @@ async function createProductImages(
   return { createdIds };
 }
 
+async function getProductVariants(shop: string, productGid: string) {
+  const query = `
+    query ProductVariants($productId: ID!) {
+      product(id: $productId) {
+        options {
+          name
+          position
+        }
+        variants(first: 250) {
+          nodes {
+            id
+            title
+            position
+            selectedOptions {
+              name
+              value
+            }
+            image {
+              id
+              url
+            }
+          }
+        }
+      }
+    }
+  `;
+  const result = await runWithAnyToken<ProductVariantsQuery>(shop, async (token) =>
+    runShopifyGraphql<ProductVariantsQuery>({
+      shop,
+      token,
+      query,
+      variables: { productId: productGid },
+      apiVersion: API_VERSION,
+    })
+  );
+  if (!result.ok) {
+    throw new Error(`Failed to pull Shopify variants: ${JSON.stringify(result.errors)}`);
+  }
+  const product = result.data?.product;
+  if (!product) return [];
+  const colorOptionName =
+    product.options
+      .map((opt: { name: string; position: number }) => String(opt?.name || "").trim())
+      .find((name: string) => /^(color|colour)$/i.test(name)) || "";
+
+  return (product.variants?.nodes || [])
+    .map((variant: ProductVariantNode) => {
+      const selectedColor = variant.selectedOptions.find((opt: { name: string; value: string }) =>
+        colorOptionName
+          ? String(opt?.name || "").trim().toLowerCase() === colorOptionName.toLowerCase()
+          : /^(color|colour)$/i.test(String(opt?.name || "").trim())
+      );
+      const color = String(selectedColor?.value || "").trim();
+      return {
+        id: toNumericId(variant.id),
+        gid: norm(variant.id),
+        title: norm(variant.title),
+        color: color || norm(variant.title),
+        position: Number(variant.position || 0),
+        imageId: variant.image?.id ? toNumericId(variant.image.id) : "",
+        imageUrl: variant.image?.url ? norm(variant.image.url) : "",
+      };
+    })
+    .filter((v: { id: string }) => v.id)
+    .sort((a: { position: number }, b: { position: number }) => a.position - b.position);
+}
+
+async function assignVariantMedia(
+  shop: string,
+  productGid: string,
+  assignments: Array<{ variantGid: string; mediaId: string }>
+) {
+  if (!assignments.length) return;
+  const mutation = `
+    mutation ProductVariantAppendMedia($productId: ID!, $variantMedia: [ProductVariantAppendMediaInput!]!) {
+      productVariantAppendMedia(productId: $productId, variantMedia: $variantMedia) {
+        product { id }
+        productVariants { id }
+        userErrors { field message }
+      }
+    }
+  `;
+  const variantMedia = assignments.map((row) => ({
+    variantId: row.variantGid,
+    mediaIds: [row.mediaId],
+  }));
+
+  const result = await runWithAnyToken<VariantAppendMediaResult>(shop, async (token) =>
+    runShopifyGraphql<VariantAppendMediaResult>({
+      shop,
+      token,
+      query: mutation,
+      variables: { productId: productGid, variantMedia },
+      apiVersion: API_VERSION,
+    })
+  );
+  if (!result.ok) {
+    throw new Error(`Failed to assign variant media: ${JSON.stringify(result.errors)}`);
+  }
+  const errors = result.data?.productVariantAppendMedia?.userErrors || [];
+  if (errors.length) {
+    throw new Error(
+      `Failed to assign variant media: ${errors
+        .map((e: { message: string }) => e.message)
+        .join("; ")}`
+    );
+  }
+}
+
+async function reorderVariants(shop: string, productGid: string, orderedVariantGids: string[]) {
+  if (!orderedVariantGids.length) return null;
+  const mutation = `
+    mutation ProductVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+      productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+        product { id }
+        userErrors { field message }
+      }
+    }
+  `;
+  const variants = orderedVariantGids.map((variantId, idx) => ({
+    id: variantId,
+    position: idx + 1,
+  }));
+  const result = await runWithAnyToken<VariantOrderUpdateResult>(shop, async (token) =>
+    runShopifyGraphql<VariantOrderUpdateResult>({
+      shop,
+      token,
+      query: mutation,
+      variables: { productId: productGid, variants },
+      apiVersion: API_VERSION,
+    })
+  );
+  if (!result.ok) {
+    return `Variant reorder skipped: ${JSON.stringify(result.errors)}`;
+  }
+  const errors = result.data?.productVariantsBulkUpdate?.userErrors || [];
+  if (errors.length) {
+    return `Variant reorder skipped: ${errors
+      .map((e: { message: string }) => e.message)
+      .join("; ")}`;
+  }
+  return null;
+}
+
 export async function POST(req: NextRequest) {
   if (!isRequestAuthed(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -210,6 +393,20 @@ export async function POST(req: NextRequest) {
   const productGid = toProductGid(norm(body?.productId));
   const mediaIds = Array.isArray(body?.mediaIds) ? body.mediaIds.map((v: unknown) => norm(v)).filter(Boolean) : [];
   const removeExisting = Boolean(body?.removeExisting);
+  const variantAssignments = Array.isArray(body?.variantAssignments)
+    ? body.variantAssignments
+        .map((row: any) => ({
+          variantId: norm(row?.variantId),
+          imageIndex: Number(row?.imageIndex),
+        }))
+        .filter(
+          (row: { variantId: string; imageIndex: number }) =>
+            row.variantId && Number.isFinite(row.imageIndex) && row.imageIndex >= 0
+        )
+    : [];
+  const variantOrder = Array.isArray(body?.variantOrder)
+    ? body.variantOrder.map((v: unknown) => norm(v)).filter(Boolean)
+    : [];
   const images = Array.isArray(body?.images)
     ? body.images
         .map((row: any) => ({
@@ -227,6 +424,11 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    if (action === "get-variants") {
+      const variants = await getProductVariants(shop, productGid);
+      return NextResponse.json({ success: true, variants });
+    }
+
     if (action === "delete-media") {
       if (!mediaIds.length) {
         return NextResponse.json({ error: "mediaIds are required for delete-media action." }, { status: 400 });
@@ -253,12 +455,41 @@ export async function POST(req: NextRequest) {
     }
 
     const created = await createProductImages(shop, productGid, images);
+    const variantRows = await getProductVariants(shop, productGid);
+    const variantGidByNumericId = new Map(
+      variantRows
+        .map((row: { id: string; gid: string }) => [row.id, row.gid] as [string, string])
+        .filter((row: [string, string]) => row[0] && row[1])
+    );
+    const assignmentPayload = variantAssignments
+      .map((row: { variantId: string; imageIndex: number }) => {
+        const variantGid = variantGidByNumericId.get(toNumericId(row.variantId)) || "";
+        const mediaId = created.createdIds[row.imageIndex] || "";
+        return {
+          variantGid,
+          mediaId,
+        };
+      })
+      .filter((row: { variantGid: string; mediaId: string }) => row.variantGid && row.mediaId);
+    if (assignmentPayload.length) {
+      await assignVariantMedia(shop, productGid, assignmentPayload);
+    }
+
+    const orderedVariantGids = variantOrder
+      .map((id: string) => variantGidByNumericId.get(toNumericId(id)) || "")
+      .filter(Boolean);
+    const reorderWarning = orderedVariantGids.length
+      ? await reorderVariants(shop, productGid, orderedVariantGids)
+      : null;
+
     return NextResponse.json({
       success: true,
       action,
       removedExisting: removeExisting,
       deletedMediaIds,
       createdMediaIds: created.createdIds,
+      variantAssignedCount: assignmentPayload.length,
+      variantReorderWarning: reorderWarning,
       count: created.createdIds.length,
     });
   } catch (e: any) {

@@ -95,6 +95,17 @@ type PushQueueImage = {
   deleting: boolean;
 };
 
+type PushVariant = {
+  id: string;
+  gid: string;
+  title: string;
+  color: string;
+  position: number;
+  imageId: string | null;
+  imageUrl: string | null;
+  assignedPushImageId: string | null;
+};
+
 const IMAGE_FILE_EXT_RE = /\.(avif|bmp|gif|heic|heif|jpeg|jpg|png|tif|tiff|webp)$/i;
 
 function isImageLikeFile(file: File) {
@@ -208,6 +219,9 @@ export default function StudioWorkspace() {
   const [pushImages, setPushImages] = useState<PushQueueImage[]>([]);
   const [pushingImages, setPushingImages] = useState(false);
   const [draggingPushImageId, setDraggingPushImageId] = useState<string | null>(null);
+  const [pushVariants, setPushVariants] = useState<PushVariant[]>([]);
+  const [pullingVariants, setPullingVariants] = useState(false);
+  const [draggingVariantId, setDraggingVariantId] = useState<string | null>(null);
   const [selectedCatalogImages, setSelectedCatalogImages] = useState<SelectedCatalogImage[]>([]);
   const [itemUploadCount, setItemUploadCount] = useState<number | null>(null);
   const [modelUploadTotal, setModelUploadTotal] = useState(0);
@@ -390,6 +404,13 @@ export default function StudioWorkspace() {
     if (!saved || !isValidBarcode(saved)) return;
     setPushSearchQuery((prev) => (prev.trim() ? prev : saved));
   }, [itemBarcodeSaved]);
+
+  useEffect(() => {
+    if (!pushProductId.trim()) {
+      setPushVariants([]);
+      return;
+    }
+  }, [pushProductId]);
 
   useEffect(() => {
     setGeneratedPanels({});
@@ -925,6 +946,7 @@ export default function StudioWorkspace() {
     if (!productIdValue) return;
     setPushProductId(productIdValue);
     setPushProductHandle(String(product.handle || "").trim());
+    setPushVariants([]);
     setPushImages(
       (product.images || []).map((img) => ({
         id: `push:${productIdValue}:${img.id}`,
@@ -1070,6 +1092,92 @@ export default function StudioWorkspace() {
       await generateAltForPushImage(image.id);
     }
     setStatus("Alt text generation completed for queued Shopify images.");
+  }
+
+  function movePushVariant(fromIndex: number, toIndex: number) {
+    setPushVariants((prev) => {
+      if (
+        fromIndex < 0 ||
+        fromIndex >= prev.length ||
+        toIndex < 0 ||
+        toIndex >= prev.length ||
+        fromIndex === toIndex
+      ) {
+        return prev;
+      }
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next.map((row, idx) => ({ ...row, position: idx + 1 }));
+    });
+  }
+
+  function assignPushImageToVariant(variantId: string, pushImageId: string) {
+    setPushVariants((prev) =>
+      prev.map((variant) =>
+        variant.id === variantId ? { ...variant, assignedPushImageId: pushImageId } : variant
+      )
+    );
+  }
+
+  function clearPushVariantAssignment(variantId: string) {
+    setPushVariants((prev) =>
+      prev.map((variant) =>
+        variant.id === variantId ? { ...variant, assignedPushImageId: null } : variant
+      )
+    );
+  }
+
+  async function pullPushVariants() {
+    setError(null);
+    setStatus("Pulling variants...");
+    const shopValue = shop.trim();
+    const productIdValue = pushProductId.trim();
+    if (!shopValue) {
+      setError("Please enter your shop domain first.");
+      setStatus(null);
+      return;
+    }
+    if (!productIdValue) {
+      setError("Select a product first, then pull variants.");
+      setStatus(null);
+      return;
+    }
+    setPullingVariants(true);
+    try {
+      const resp = await fetch("/api/shopify-push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "get-variants",
+          shop: shopValue,
+          productId: productIdValue,
+        }),
+      });
+      const json = await parseJsonResponse(resp, "/api/shopify-push");
+      if (!resp.ok) {
+        throw new Error(json?.error || "Failed to pull variants.");
+      }
+      const rows = Array.isArray(json?.variants) ? json.variants : [];
+      setPushVariants(
+        rows.map((row: any, idx: number) => ({
+          id: String(row?.id || ""),
+          gid: String(row?.gid || ""),
+          title: String(row?.title || ""),
+          color: String(row?.color || ""),
+          position: Number(row?.position || idx + 1),
+          imageId: row?.imageId ? String(row.imageId) : null,
+          imageUrl: row?.imageUrl ? String(row.imageUrl) : null,
+          assignedPushImageId: null,
+        }))
+      );
+      setStatus(`Loaded ${rows.length} variant(s).`);
+    } catch (e: any) {
+      setError(e?.message || "Failed to pull variants.");
+      setStatus(null);
+    } finally {
+      setPullingVariants(false);
+    }
   }
 
   function saveItemBarcode() {
@@ -1285,6 +1393,14 @@ export default function StudioWorkspace() {
         url: img.url,
         altText: img.altText.trim(),
       }));
+      const imageIndexByPushId = new Map(pushImages.map((img, idx) => [img.id, idx]));
+      const variantAssignments = pushVariants
+        .filter((variant) => variant.assignedPushImageId && imageIndexByPushId.has(variant.assignedPushImageId))
+        .map((variant) => ({
+          variantId: variant.id,
+          imageIndex: imageIndexByPushId.get(String(variant.assignedPushImageId)) as number,
+        }));
+      const variantOrder = pushVariants.map((variant) => variant.id).filter(Boolean);
 
       const resp = await fetch("/api/shopify-push", {
         method: "POST",
@@ -1295,6 +1411,8 @@ export default function StudioWorkspace() {
           productId: pushProductId.trim(),
           images: payloadImages,
           removeExisting: true,
+          variantAssignments,
+          variantOrder,
         }),
       });
       const json = await parseJsonResponse(resp, "/api/shopify-push");
@@ -1310,7 +1428,12 @@ export default function StudioWorkspace() {
         );
       }
 
-      setStatus("Shopify product images updated (old removed, new ordered list uploaded).");
+      const reorderWarning = String(json?.variantReorderWarning || "").trim();
+      setStatus(
+        reorderWarning
+          ? `Shopify images updated. Variant order warning: ${reorderWarning}`
+          : "Shopify product images and variant assignments updated."
+      );
       await loadPushCatalogProducts();
     } catch (e: any) {
       setError(e?.message || "Shopify image push failed");
@@ -3502,7 +3625,10 @@ export default function StudioWorkspace() {
                   key={img.id}
                   className="push-queue-card"
                   draggable
-                  onDragStart={() => setDraggingPushImageId(img.id)}
+                  onDragStart={(e) => {
+                    setDraggingPushImageId(img.id);
+                    e.dataTransfer.setData("text/push-image-id", img.id);
+                  }}
                   onDragOver={(e) => {
                     e.preventDefault();
                   }}
@@ -3550,6 +3676,69 @@ export default function StudioWorkspace() {
           ) : (
             <div className="muted centered">No images selected yet.</div>
           )}
+          <div className="row">
+            <button
+              className="btn ghost"
+              type="button"
+              onClick={pullPushVariants}
+              disabled={!pushProductId.trim() || pullingVariants}
+            >
+              {pullingVariants ? "Pulling Variants..." : "Pull Color Variants"}
+            </button>
+          </div>
+          {pushVariants.length ? (
+            <div className="push-variant-row">
+              {pushVariants.map((variant) => {
+                const assigned = pushImages.find((img) => img.id === variant.assignedPushImageId) || null;
+                const previewUrl = assigned?.url || variant.imageUrl || "";
+                return (
+                  <div
+                    key={variant.id}
+                    className="push-variant-card"
+                    draggable
+                    onDragStart={() => setDraggingVariantId(variant.id)}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const droppedImageId =
+                        e.dataTransfer.getData("text/push-image-id") || draggingPushImageId || "";
+                      if (droppedImageId) {
+                        assignPushImageToVariant(variant.id, droppedImageId);
+                        setDraggingPushImageId(null);
+                        return;
+                      }
+                      if (!draggingVariantId || draggingVariantId === variant.id) return;
+                      const from = pushVariants.findIndex((row) => row.id === draggingVariantId);
+                      const to = pushVariants.findIndex((row) => row.id === variant.id);
+                      movePushVariant(from, to);
+                      setDraggingVariantId(null);
+                    }}
+                  >
+                    <div className="push-variant-title">
+                      #{variant.position} {variant.color || variant.title || "Variant"}
+                    </div>
+                    <div className="push-variant-preview">
+                      {previewUrl ? (
+                        <img src={previewUrl} alt={variant.color || variant.title || "Variant preview"} />
+                      ) : (
+                        <div className="muted centered">Drop image here</div>
+                      )}
+                    </div>
+                    <div className="row">
+                      <button
+                        type="button"
+                        className="ghost-btn"
+                        onClick={() => clearPushVariantAssignment(variant.id)}
+                        disabled={!variant.assignedPushImageId}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
           <div className="row">
             <button
               className="btn ghost"
@@ -3806,6 +3995,43 @@ export default function StudioWorkspace() {
         .push-queue-card textarea {
           min-height: 68px;
           resize: vertical;
+        }
+        .push-variant-row {
+          display: flex;
+          gap: 10px;
+          overflow-x: auto;
+          padding-bottom: 4px;
+          align-items: stretch;
+        }
+        .push-variant-card {
+          flex: 0 0 180px;
+          border: 1px solid #e2e8f0;
+          border-radius: 10px;
+          background: #fff;
+          padding: 8px;
+          display: grid;
+          gap: 6px;
+          cursor: grab;
+        }
+        .push-variant-title {
+          font-size: 0.8rem;
+          font-weight: 600;
+          color: #0f172a;
+        }
+        .push-variant-preview {
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+          background: #f8fafc;
+          min-height: 120px;
+          display: grid;
+          place-items: center;
+          overflow: hidden;
+        }
+        .push-variant-preview img {
+          width: 100%;
+          height: 120px;
+          object-fit: contain;
+          object-position: center;
         }
         .pull-product {
           width: 100%;
