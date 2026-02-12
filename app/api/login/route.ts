@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import bcrypt from "bcryptjs";
 import { checkLoginRateLimit } from "@/lib/ratelimit";
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { resolveStableUserId } from "@/lib/userScope";
 
 function getClientKey(req: NextRequest) {
   const forwarded = req.headers.get("x-forwarded-for");
@@ -134,8 +136,22 @@ export async function POST(req: NextRequest) {
     }
 
     const res = wantsHtml(req) ? redirectToDashboard() : NextResponse.json({ success: true });
-    const existingUserId = req.cookies.get("carbon_gen_user_id")?.value;
-    const userId = existingUserId && existingUserId.trim() ? existingUserId : crypto.randomUUID();
+    const existingUserId = req.cookies.get("carbon_gen_user_id")?.value?.trim() || "";
+    const userId = resolveStableUserId();
+
+    // One-time migration: if older sessions used random per-domain IDs,
+    // move those model rows into the stable user id so local + hosted app stay synced.
+    if (existingUserId && existingUserId !== userId) {
+      try {
+        const supabase = getSupabaseAdmin();
+        await supabase
+          .from("models")
+          .update({ user_id: userId })
+          .eq("user_id", existingUserId);
+      } catch {
+        // Non-blocking: login should not fail if migration fails.
+      }
+    }
 
     res.cookies.set({
       name: "carbon_gen_auth_v1",

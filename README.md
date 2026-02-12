@@ -116,6 +116,12 @@ Optional fallback:
 APP_PASSWORD=<plain password>
 ```
 
+Cross-domain model sync (local + hosted):
+```env
+APP_USER_ID=carbon_single_user
+```
+Use the same `APP_USER_ID` value in local `.env.local` and Vercel env vars.
+
 ## Shopify OAuth Setup
 In Shopify app settings, whitelist callback URL exactly:
 ```text
