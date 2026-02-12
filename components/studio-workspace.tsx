@@ -61,6 +61,20 @@ function isImageLikeFile(file: File) {
   return IMAGE_FILE_EXT_RE.test(file.name || "");
 }
 
+function openInputPicker(input: HTMLInputElement | null) {
+  if (!input) return;
+  const picker = input as HTMLInputElement & { showPicker?: () => void };
+  if (typeof picker.showPicker === "function") {
+    try {
+      picker.showPicker();
+      return;
+    } catch {
+      // Fallback to click when showPicker is blocked/unavailable.
+    }
+  }
+  input.click();
+}
+
 export default function StudioWorkspace() {
   const [shop, setShop] = useState("");
   const [handle, setHandle] = useState("");
@@ -1845,7 +1859,7 @@ export default function StudioWorkspace() {
             className="dropzone"
             role="button"
             tabIndex={0}
-            onClick={() => modelPickerRef.current?.click()}
+            onClick={() => openInputPicker(modelPickerRef.current)}
             onDragOver={(e) => e.preventDefault()}
             onDrop={async (e) => {
               e.preventDefault();
@@ -1885,10 +1899,18 @@ export default function StudioWorkspace() {
             }}
           />
           <div className="picker-row">
-            <button className="ghost-btn" type="button" onClick={() => modelPickerRef.current?.click()}>
+            <button
+              className="ghost-btn"
+              type="button"
+              onClick={() => openInputPicker(modelPickerRef.current)}
+            >
               Choose files
             </button>
-            <button className="ghost-btn" type="button" onClick={() => modelFolderRef.current?.click()}>
+            <button
+              className="ghost-btn"
+              type="button"
+              onClick={() => openInputPicker(modelFolderRef.current)}
+            >
               Choose folder
             </button>
           </div>
@@ -2086,7 +2108,7 @@ export default function StudioWorkspace() {
             className="dropzone"
             role="button"
             tabIndex={0}
-            onClick={() => itemPickerRef.current?.click()}
+            onClick={() => openInputPicker(itemPickerRef.current)}
             onDragOver={(e) => e.preventDefault()}
             onDrop={async (e) => {
               e.preventDefault();
@@ -2115,10 +2137,18 @@ export default function StudioWorkspace() {
             onChange={(e) => setItemFiles(filterImages(e.target.files || []))}
           />
           <div className="picker-row">
-            <button className="ghost-btn" type="button" onClick={() => itemPickerRef.current?.click()}>
+            <button
+              className="ghost-btn"
+              type="button"
+              onClick={() => openInputPicker(itemPickerRef.current)}
+            >
               Choose files
             </button>
-            <button className="ghost-btn" type="button" onClick={() => itemFolderRef.current?.click()}>
+            <button
+              className="ghost-btn"
+              type="button"
+              onClick={() => openInputPicker(itemFolderRef.current)}
+            >
               Choose folder
             </button>
           </div>
