@@ -130,11 +130,11 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Deduplicate repeated uploads of the same source image name.
-    // Keep only the latest uploaded copy.
+    // Deduplicate repeated uploads by source filename only.
+    // Keep only the latest uploaded copy for that filename.
     const byCanonical = new Map<string, (typeof entries)[number]>();
     for (const entry of entries) {
-      const key = `${entry.gender || "unknown"}::${canonicalNameFromFileName(entry.fileName)}`;
+      const key = canonicalNameFromFileName(entry.fileName);
       const prev = byCanonical.get(key);
       if (!prev) {
         byCanonical.set(key, entry);

@@ -86,8 +86,10 @@ function openInputPicker(input: HTMLInputElement | null) {
 
 function canonicalPreviousUploadName(fileName: string, path: string) {
   const fallback = path.split("/").pop() || path;
-  const base = String(fileName || fallback || "").trim().toLowerCase();
-  return base.replace(/^\d{10,}-/, "");
+  const raw = String(fileName || fallback || "").trim().toLowerCase();
+  const withoutQuery = raw.split("?")[0].split("#")[0];
+  const base = withoutQuery.split("/").pop() || withoutQuery;
+  return base.replace(/^\d{10,}-/, "").trim();
 }
 
 function normalizeModelName(value: string) {
