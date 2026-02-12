@@ -34,6 +34,7 @@ const ITEM_TYPE_OPTIONS = [
 ];
 
 const ITEM_TYPE_VALUE_SET = new Set(ITEM_TYPE_OPTIONS.map((opt) => opt.value));
+const CATALOG_PAGE_SIZE = 10;
 
 type ShopifyCatalogProduct = {
   id: string;
@@ -141,6 +142,8 @@ export default function StudioWorkspace() {
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogSearched, setCatalogSearched] = useState(false);
   const [catalogProducts, setCatalogProducts] = useState<ShopifyCatalogProduct[]>([]);
+  const [catalogPage, setCatalogPage] = useState(1);
+  const [catalogQueryForResults, setCatalogQueryForResults] = useState("");
   const [itemCatalogCollapsed, setItemCatalogCollapsed] = useState(false);
   const [pushCatalogQuery, setPushCatalogQuery] = useState("");
   const [pushCatalogLoading, setPushCatalogLoading] = useState(false);
@@ -756,9 +759,12 @@ export default function StudioWorkspace() {
       const json = await parseJsonResponse(resp);
       if (!resp.ok) throw new Error(json.error || "Failed to load Shopify catalog");
       setCatalogProducts(Array.isArray(json.products) ? json.products : []);
+      setCatalogQueryForResults(query);
+      setCatalogPage(1);
     } catch (e: any) {
       setError(e?.message || "Failed to load Shopify catalog");
       setCatalogProducts([]);
+      setCatalogPage(1);
     } finally {
       setCatalogLoading(false);
     }
@@ -1153,6 +1159,30 @@ export default function StudioWorkspace() {
     });
     return rows;
   }, [previousModelUploads, previousSort, previousGenderFilter]);
+
+  const isCatalogEmptyQueryResults = useMemo(
+    () => catalogQueryForResults.trim().length === 0,
+    [catalogQueryForResults]
+  );
+
+  const catalogTotalPages = useMemo(() => {
+    if (!isCatalogEmptyQueryResults) return 1;
+    return Math.max(1, Math.ceil(catalogProducts.length / CATALOG_PAGE_SIZE));
+  }, [catalogProducts.length, isCatalogEmptyQueryResults]);
+
+  useEffect(() => {
+    setCatalogPage((prev) => {
+      if (prev < 1) return 1;
+      if (prev > catalogTotalPages) return catalogTotalPages;
+      return prev;
+    });
+  }, [catalogTotalPages]);
+
+  const visibleCatalogProducts = useMemo(() => {
+    if (!isCatalogEmptyQueryResults) return catalogProducts;
+    const start = (catalogPage - 1) * CATALOG_PAGE_SIZE;
+    return catalogProducts.slice(start, start + CATALOG_PAGE_SIZE);
+  }, [catalogProducts, catalogPage, isCatalogEmptyQueryResults]);
 
   function getPanelPosePair(gender: string, panelNumber: number): [number, number] {
     const g = String(gender || "").toLowerCase();
@@ -2390,9 +2420,44 @@ export default function StudioWorkspace() {
               {shop.trim() && catalogSearched && !catalogLoading && !catalogProducts.length && (
                 <div className="muted centered">No matching catalog products with images found.</div>
               )}
+              {catalogProducts.length > 0 &&
+              isCatalogEmptyQueryResults &&
+              catalogTotalPages > 1 ? (
+                <div className="catalog-pagination">
+                  <button
+                    className="ghost-btn"
+                    type="button"
+                    onClick={() => setCatalogPage((prev) => Math.max(1, prev - 1))}
+                    disabled={catalogPage <= 1}
+                  >
+                    ←
+                  </button>
+                  <div className="muted centered">
+                    Page {catalogPage} of {catalogTotalPages}
+                  </div>
+                  <button
+                    className="ghost-btn"
+                    type="button"
+                    onClick={() =>
+                      setCatalogPage((prev) => Math.min(catalogTotalPages, prev + 1))
+                    }
+                    disabled={catalogPage >= catalogTotalPages}
+                  >
+                    →
+                  </button>
+                  <button
+                    className="ghost-btn"
+                    type="button"
+                    onClick={() => setCatalogPage(1)}
+                    disabled={catalogPage === 1}
+                  >
+                    Back to page 1
+                  </button>
+                </div>
+              ) : null}
               {catalogProducts.length ? (
                 <div className="catalog-products">
-                  {catalogProducts.map((product) => (
+                  {visibleCatalogProducts.map((product) => (
                     <div className="catalog-product" key={product.id}>
                       <div className="catalog-title">
                         {product.title}
@@ -2437,6 +2502,41 @@ export default function StudioWorkspace() {
                       </div>
                     </div>
                   ))}
+                </div>
+              ) : null}
+              {catalogProducts.length > 0 &&
+              isCatalogEmptyQueryResults &&
+              catalogTotalPages > 1 ? (
+                <div className="catalog-pagination">
+                  <button
+                    className="ghost-btn"
+                    type="button"
+                    onClick={() => setCatalogPage((prev) => Math.max(1, prev - 1))}
+                    disabled={catalogPage <= 1}
+                  >
+                    ←
+                  </button>
+                  <div className="muted centered">
+                    Page {catalogPage} of {catalogTotalPages}
+                  </div>
+                  <button
+                    className="ghost-btn"
+                    type="button"
+                    onClick={() =>
+                      setCatalogPage((prev) => Math.min(catalogTotalPages, prev + 1))
+                    }
+                    disabled={catalogPage >= catalogTotalPages}
+                  >
+                    →
+                  </button>
+                  <button
+                    className="ghost-btn"
+                    type="button"
+                    onClick={() => setCatalogPage(1)}
+                    disabled={catalogPage === 1}
+                  >
+                    Back to page 1
+                  </button>
                 </div>
               ) : null}
             </div>
@@ -2994,6 +3094,13 @@ export default function StudioWorkspace() {
         .catalog-products {
           display: grid;
           gap: 12px;
+        }
+        .catalog-pagination {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          align-items: center;
+          justify-content: center;
         }
         .catalog-product {
           border: 1px solid #e2e8f0;
