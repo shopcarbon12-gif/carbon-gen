@@ -33,7 +33,6 @@ const ITEM_TYPE_OPTIONS = [
   { value: "other apparel item", label: "Other Apparel Item" },
 ];
 
-const ITEM_TYPE_VALUE_SET = new Set(ITEM_TYPE_OPTIONS.map((opt) => opt.value));
 const CATALOG_PAGE_SIZE = 10;
 
 type ShopifyCatalogProduct = {
@@ -378,74 +377,13 @@ export default function StudioWorkspace() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (itemType) return;
-
-    const storedOption = (window.localStorage.getItem("item_type_option") || "")
-      .trim()
-      .toLowerCase();
-    const storedCustom = (window.localStorage.getItem("item_type_custom") || "").trim();
-    if (storedOption && ITEM_TYPE_VALUE_SET.has(storedOption)) {
-      setItemType(storedOption);
-      if (storedOption === "other apparel item" && storedCustom) {
-        setItemTypeCustom(storedCustom);
-      }
-      return;
-    }
-
-    // Backward compatibility with older single-value item_type storage.
-    const legacy = (window.localStorage.getItem("item_type") || "").trim();
-    if (!legacy) return;
-    const legacyLower = legacy.toLowerCase();
-    if (ITEM_TYPE_VALUE_SET.has(legacyLower)) {
-      setItemType(legacyLower);
-      return;
-    }
-    setItemType("other apparel item");
-    setItemTypeCustom(legacy);
-  }, [itemType]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const selected = itemType.trim().toLowerCase();
-    if (!selected) return;
-
-    window.localStorage.setItem("item_type_option", selected);
-    if (selected === "other apparel item") {
-      const custom = itemTypeCustom.trim();
-      if (custom) {
-        window.localStorage.setItem("item_type_custom", custom);
-        window.localStorage.setItem("item_type", custom);
-      }
-      return;
-    }
-
+    // Refresh should start with clean working inputs. Model registry remains server-backed.
+    window.localStorage.removeItem("item_type_option");
     window.localStorage.removeItem("item_type_custom");
-    window.localStorage.setItem("item_type", selected);
-  }, [itemType, itemTypeCustom]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!itemBarcode) {
-      const storedDraft = (window.localStorage.getItem("item_barcode_draft") || "").trim();
-      if (storedDraft) setItemBarcode(sanitizeBarcodeInput(storedDraft));
-    }
-    if (!itemBarcodeSaved) {
-      const storedSaved = (window.localStorage.getItem("item_barcode_saved") || "").trim();
-      if (storedSaved) setItemBarcodeSaved(sanitizeBarcodeInput(storedSaved));
-    }
-  }, [itemBarcode, itemBarcodeSaved]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const draft = itemBarcode.trim();
-    const saved = itemBarcodeSaved.trim();
-    window.localStorage.setItem("item_barcode_draft", draft);
-    if (saved) {
-      window.localStorage.setItem("item_barcode_saved", saved);
-    } else {
-      window.localStorage.removeItem("item_barcode_saved");
-    }
-  }, [itemBarcode, itemBarcodeSaved]);
+    window.localStorage.removeItem("item_type");
+    window.localStorage.removeItem("item_barcode_draft");
+    window.localStorage.removeItem("item_barcode_saved");
+  }, []);
 
   useEffect(() => {
     const saved = itemBarcodeSaved.trim();
