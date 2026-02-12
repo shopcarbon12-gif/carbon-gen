@@ -135,6 +135,25 @@ Then set all env vars in Vercel Project Settings and redeploy.
 For push-based automatic deploys (recommended), follow:
 `DEPLOY_VERCEL_AUTOMATION.md`
 
+## Quick Health Checks
+Runtime sync check (local vs public):
+```bash
+npm run check:sync
+```
+
+Shopify smoke check (status + auth redirect + catalog consistency):
+```powershell
+$env:SHOPIFY_SMOKE_BASE_URL="https://carbon-gen-iota.vercel.app"
+$env:SHOPIFY_SMOKE_SHOP="your-store.myshopify.com"
+npm run check:shopify
+```
+
+Optional disconnect test (requires `APP_PASSWORD` available):
+```powershell
+$env:SHOPIFY_SMOKE_DISCONNECT="1"
+npm run check:shopify
+```
+
 ## Troubleshooting
 - `Invalid password`:
   - verify `APP_PASSWORD_HASH` in `.env.local`
