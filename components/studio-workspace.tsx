@@ -1268,13 +1268,6 @@ export default function StudioWorkspace() {
     });
   }
 
-  function openItemFilesOrFolderPicker() {
-    const chooseFolder = window.confirm(
-      "Press OK to choose a folder, or Cancel to choose files."
-    );
-    openInputPicker(chooseFolder ? itemFolderRef.current : itemPickerRef.current);
-  }
-
   function getPrimaryBarcode(product: ShopifyCatalogProduct) {
     const values = (product.barcodes || []).map((v) => String(v || "").trim()).filter(Boolean);
     return values[0] || "";
@@ -3007,7 +3000,7 @@ export default function StudioWorkspace() {
             className="dropzone"
             role="button"
             tabIndex={0}
-            onClick={openItemFilesOrFolderPicker}
+            onClick={() => openInputPicker(itemPickerRef.current)}
             onDragOver={(e) => e.preventDefault()}
             onDrop={async (e) => {
               e.preventDefault();
@@ -3039,9 +3032,16 @@ export default function StudioWorkspace() {
             <button
               className="ghost-btn"
               type="button"
-              onClick={openItemFilesOrFolderPicker}
+              onClick={() => openInputPicker(itemPickerRef.current)}
             >
-              Choose files/folder
+              Choose files
+            </button>
+            <button
+              className="ghost-btn"
+              type="button"
+              onClick={() => openInputPicker(itemFolderRef.current)}
+            >
+              Choose folder
             </button>
           </div>
           <div className="row">
