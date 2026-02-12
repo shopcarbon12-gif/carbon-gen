@@ -33,7 +33,35 @@ function fileNameFromUrl(rawUrl: string) {
 }
 
 function canonicalNameFromFileName(name: string) {
-  return name.replace(/^\d{10,}-/, "").toLowerCase();
+  let v = String(name || "").trim().toLowerCase();
+  v = v.split("?")[0].split("#")[0];
+  v = v.split("/").pop() || v;
+  v = v.replace(/^\d{10,}-/, "");
+  v = v.replace(/\s+/g, "_");
+
+  const candidatePatterns = [
+    /^chatgpt_image_/,
+    /^image_/,
+    /^img_/,
+    /^dalle_/,
+    /^openai_/,
+    /^victor_?\d+\./,
+    /^\d+\.(png|jpe?g|webp|gif|avif|heic|heif|tiff?|bmp)$/,
+    /^(beige|black|white|gray|grey|blue|red|green|brown|tan|cream|navy)_/,
+  ];
+
+  for (let i = 0; i < 3; i += 1) {
+    const idx = v.indexOf("_");
+    if (idx <= 0) break;
+    const tail = v.slice(idx + 1);
+    if (candidatePatterns.some((re) => re.test(tail))) {
+      v = tail;
+      continue;
+    }
+    break;
+  }
+
+  return v;
 }
 
 function timestampFromFileName(name: string) {

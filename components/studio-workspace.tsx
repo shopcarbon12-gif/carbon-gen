@@ -86,10 +86,35 @@ function openInputPicker(input: HTMLInputElement | null) {
 
 function canonicalPreviousUploadName(fileName: string, path: string) {
   const fallback = path.split("/").pop() || path;
-  const raw = String(fileName || fallback || "").trim().toLowerCase();
-  const withoutQuery = raw.split("?")[0].split("#")[0];
-  const base = withoutQuery.split("/").pop() || withoutQuery;
-  return base.replace(/^\d{10,}-/, "").trim();
+  let v = String(fileName || fallback || "").trim().toLowerCase();
+  v = v.split("?")[0].split("#")[0];
+  v = v.split("/").pop() || v;
+  v = v.replace(/^\d{10,}-/, "");
+  v = v.replace(/\s+/g, "_");
+
+  const candidatePatterns = [
+    /^chatgpt_image_/,
+    /^image_/,
+    /^img_/,
+    /^dalle_/,
+    /^openai_/,
+    /^victor_?\d+\./,
+    /^\d+\.(png|jpe?g|webp|gif|avif|heic|heif|tiff?|bmp)$/,
+    /^(beige|black|white|gray|grey|blue|red|green|brown|tan|cream|navy)_/,
+  ];
+
+  for (let i = 0; i < 3; i += 1) {
+    const idx = v.indexOf("_");
+    if (idx <= 0) break;
+    const tail = v.slice(idx + 1);
+    if (candidatePatterns.some((re) => re.test(tail))) {
+      v = tail;
+      continue;
+    }
+    break;
+  }
+
+  return v.trim();
 }
 
 function normalizeModelName(value: string) {
@@ -206,6 +231,7 @@ export default function StudioWorkspace() {
   const [previousGenderFilter, setPreviousGenderFilter] = useState<"all" | "female" | "male">(
     "all"
   );
+  const [brokenPreviousUploadIds, setBrokenPreviousUploadIds] = useState<string[]>([]);
   const [previousUploadsVisible, setPreviousUploadsVisible] = useState(false);
   const [emptyingBucket, setEmptyingBucket] = useState(false);
   const [connected, setConnected] = useState<boolean | null>(null);
@@ -1006,6 +1032,7 @@ export default function StudioWorkspace() {
       }
 
       setPreviousModelUploads(Array.from(dedupedByName.values()));
+      setBrokenPreviousUploadIds([]);
     } catch (e: any) {
       setError(e?.message || "Failed to load previous model uploads");
       setPreviousModelUploads([]);
@@ -2199,8 +2226,17 @@ export default function StudioWorkspace() {
                         }`}
                         onClick={() => addPreviousUploadToRegistry(file)}
                       >
-                        {file.url ? (
-                          <img className="previous-upload-image" src={file.url} alt={file.fileName} />
+                        {file.url && !brokenPreviousUploadIds.includes(file.id) ? (
+                          <img
+                            className="previous-upload-image"
+                            src={file.url}
+                            alt="Previous upload preview"
+                            onError={() =>
+                              setBrokenPreviousUploadIds((prev) =>
+                                prev.includes(file.id) ? prev : [...prev, file.id]
+                              )
+                            }
+                          />
                         ) : (
                           <div className="muted centered">Preview unavailable</div>
                         )}
