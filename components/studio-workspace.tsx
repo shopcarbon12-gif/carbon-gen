@@ -2110,9 +2110,8 @@ export default function StudioWorkspace() {
           {modelPreviewItems.length ? (
             <div className="preview-grid">
               {modelPreviewItems.map((file) => (
-                <div className="preview-card" key={file.id}>
-                  <img src={file.localUrl} alt={file.name} />
-                  <div className="preview-name">{file.name}</div>
+                <div className="preview-card model-registry-preview-card" key={file.id}>
+                  <img className="model-registry-preview-image" src={file.localUrl} alt={file.name} />
                   {file.uploadedUrl ? (
                     <button
                       className="preview-remove"
@@ -3071,6 +3070,17 @@ export default function StudioWorkspace() {
           height: 90px;
           object-fit: cover;
           border-radius: 8px;
+        }
+        .model-registry-preview-card {
+          width: 200px;
+        }
+        .model-registry-preview-card img.model-registry-preview-image {
+          width: 100%;
+          height: auto;
+          aspect-ratio: 3 / 4;
+          object-fit: contain;
+          border-radius: 8px;
+          background: #f8fafc;
         }
         .item-catalog-selected-card {
           width: 200px;
