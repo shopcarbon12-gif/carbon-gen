@@ -97,13 +97,11 @@ type PushQueueImage = {
 
 type PushVariant = {
   id: string;
-  gid: string;
-  title: string;
   color: string;
   position: number;
-  imageId: string | null;
   imageUrl: string | null;
   assignedPushImageId: string | null;
+  variantCount: number;
 };
 
 const IMAGE_FILE_EXT_RE = /\.(avif|bmp|gif|heic|heif|jpeg|jpg|png|tif|tiff|webp)$/i;
@@ -1158,20 +1156,22 @@ export default function StudioWorkspace() {
       if (!resp.ok) {
         throw new Error(json?.error || "Failed to pull variants.");
       }
-      const rows = Array.isArray(json?.variants) ? json.variants : [];
+      const rows = Array.isArray(json?.colors)
+        ? json.colors
+        : Array.isArray(json?.variants)
+          ? json.variants
+          : [];
       setPushVariants(
         rows.map((row: any, idx: number) => ({
           id: String(row?.id || ""),
-          gid: String(row?.gid || ""),
-          title: String(row?.title || ""),
           color: String(row?.color || ""),
           position: Number(row?.position || idx + 1),
-          imageId: row?.imageId ? String(row.imageId) : null,
           imageUrl: row?.imageUrl ? String(row.imageUrl) : null,
           assignedPushImageId: null,
+          variantCount: Number(row?.variantCount || 1),
         }))
       );
-      setStatus(`Loaded ${rows.length} variant(s).`);
+      setStatus(`Loaded ${rows.length} color group(s).`);
     } catch (e: any) {
       setError(e?.message || "Failed to pull variants.");
       setStatus(null);
@@ -1387,13 +1387,13 @@ export default function StudioWorkspace() {
         altText: img.altText.trim(),
       }));
       const imageIndexByPushId = new Map(pushImages.map((img, idx) => [img.id, idx]));
-      const variantAssignments = pushVariants
+      const colorAssignments = pushVariants
         .filter((variant) => variant.assignedPushImageId && imageIndexByPushId.has(variant.assignedPushImageId))
         .map((variant) => ({
-          variantId: variant.id,
+          color: variant.color,
           imageIndex: imageIndexByPushId.get(String(variant.assignedPushImageId)) as number,
         }));
-      const variantOrder = pushVariants.map((variant) => variant.id).filter(Boolean);
+      const colorOrder = pushVariants.map((variant) => variant.color).filter(Boolean);
 
       const resp = await fetch("/api/shopify-push", {
         method: "POST",
@@ -1404,8 +1404,8 @@ export default function StudioWorkspace() {
           productId: pushProductId.trim(),
           images: payloadImages,
           removeExisting: true,
-          variantAssignments,
-          variantOrder,
+          colorAssignments,
+          colorOrder,
         }),
       });
       const json = await parseJsonResponse(resp, "/api/shopify-push");
@@ -1425,7 +1425,7 @@ export default function StudioWorkspace() {
       setStatus(
         reorderWarning
           ? `Shopify images updated. Variant order warning: ${reorderWarning}`
-          : "Shopify product images and variant assignments updated."
+          : "Shopify product images and color assignments updated."
       );
       await loadPushCatalogProducts();
     } catch (e: any) {
@@ -3683,7 +3683,7 @@ export default function StudioWorkspace() {
               onClick={pullPushVariants}
               disabled={!pushProductId.trim() || pullingVariants}
             >
-              {pullingVariants ? "Pulling Variants..." : "Pull Color Variants"}
+              {pullingVariants ? "Pulling Color Mains..." : "Pull Color Main Variants"}
             </button>
           </div>
           {pushVariants.length ? (
@@ -3715,11 +3715,11 @@ export default function StudioWorkspace() {
                     }}
                   >
                     <div className="push-variant-title">
-                      #{variant.position} {variant.color || variant.title || "Variant"}
+                      #{variant.position} {variant.color || "Color"} ({variant.variantCount})
                     </div>
                     <div className="push-variant-preview">
                       {previewUrl ? (
-                        <img src={previewUrl} alt={variant.color || variant.title || "Variant preview"} />
+                        <img src={previewUrl} alt={variant.color || "Variant preview"} />
                       ) : (
                         <div className="muted centered">Drop image here</div>
                       )}

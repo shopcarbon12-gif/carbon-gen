@@ -55,6 +55,16 @@ type ProductVariantNode = {
   image: { id: string; url: string } | null;
 };
 
+type VariantRow = {
+  id: string;
+  gid: string;
+  title: string;
+  color: string;
+  position: number;
+  imageId: string;
+  imageUrl: string;
+};
+
 type VariantAppendMediaResult = {
   productVariantAppendMedia: {
     product: { id: string } | null;
@@ -302,7 +312,33 @@ async function getProductVariants(shop: string, productGid: string) {
       };
     })
     .filter((v: { id: string }) => v.id)
-    .sort((a: { position: number }, b: { position: number }) => a.position - b.position);
+    .sort((a: { position: number }, b: { position: number }) => a.position - b.position) as VariantRow[];
+}
+
+function groupVariantRowsByColor(rows: VariantRow[]) {
+  const byColor = new Map<string, VariantRow[]>();
+  for (const row of rows) {
+    const key = norm(row.color || row.title).toLowerCase();
+    if (!key) continue;
+    const list = byColor.get(key) || [];
+    list.push(row);
+    byColor.set(key, list);
+  }
+  const grouped = Array.from(byColor.values())
+    .map((group) => {
+      const sorted = [...group].sort((a, b) => a.position - b.position);
+      const main = sorted[0];
+      return {
+        id: main.id,
+        color: main.color || main.title,
+        position: main.position,
+        imageUrl: main.imageUrl || "",
+        variantCount: sorted.length,
+        variantIds: sorted.map((row) => row.id),
+      };
+    })
+    .sort((a, b) => a.position - b.position);
+  return grouped;
 }
 
 async function assignVariantMedia(
@@ -393,19 +429,19 @@ export async function POST(req: NextRequest) {
   const productGid = toProductGid(norm(body?.productId));
   const mediaIds = Array.isArray(body?.mediaIds) ? body.mediaIds.map((v: unknown) => norm(v)).filter(Boolean) : [];
   const removeExisting = Boolean(body?.removeExisting);
-  const variantAssignments = Array.isArray(body?.variantAssignments)
-    ? body.variantAssignments
+  const colorAssignments = Array.isArray(body?.colorAssignments)
+    ? body.colorAssignments
         .map((row: any) => ({
-          variantId: norm(row?.variantId),
+          color: norm(row?.color).toLowerCase(),
           imageIndex: Number(row?.imageIndex),
         }))
         .filter(
-          (row: { variantId: string; imageIndex: number }) =>
-            row.variantId && Number.isFinite(row.imageIndex) && row.imageIndex >= 0
+          (row: { color: string; imageIndex: number }) =>
+            row.color && Number.isFinite(row.imageIndex) && row.imageIndex >= 0
         )
     : [];
-  const variantOrder = Array.isArray(body?.variantOrder)
-    ? body.variantOrder.map((v: unknown) => norm(v)).filter(Boolean)
+  const colorOrder = Array.isArray(body?.colorOrder)
+    ? body.colorOrder.map((v: unknown) => norm(v).toLowerCase()).filter(Boolean)
     : [];
   const images = Array.isArray(body?.images)
     ? body.images
@@ -426,7 +462,8 @@ export async function POST(req: NextRequest) {
   try {
     if (action === "get-variants") {
       const variants = await getProductVariants(shop, productGid);
-      return NextResponse.json({ success: true, variants });
+      const colors = groupVariantRowsByColor(variants);
+      return NextResponse.json({ success: true, colors });
     }
 
     if (action === "delete-media") {
@@ -461,23 +498,37 @@ export async function POST(req: NextRequest) {
         .map((row: { id: string; gid: string }) => [row.id, row.gid] as [string, string])
         .filter((row: [string, string]) => row[0] && row[1])
     );
-    const assignmentPayload = variantAssignments
-      .map((row: { variantId: string; imageIndex: number }) => {
-        const variantGid = variantGidByNumericId.get(toNumericId(row.variantId)) || "";
-        const mediaId = created.createdIds[row.imageIndex] || "";
-        return {
-          variantGid,
+    const variantRowsByColor = new Map<string, VariantRow[]>();
+    for (const row of variantRows) {
+      const key = norm(row.color || row.title).toLowerCase();
+      if (!key) continue;
+      const list = variantRowsByColor.get(key) || [];
+      list.push(row);
+      variantRowsByColor.set(key, list);
+    }
+
+    const assignmentPayload = colorAssignments.flatMap((row: { color: string; imageIndex: number }) => {
+      const mediaId = created.createdIds[row.imageIndex] || "";
+      if (!mediaId) return [];
+      const group = variantRowsByColor.get(row.color) || [];
+      return group
+        .map((variant) => ({
+          variantGid: variantGidByNumericId.get(variant.id) || "",
           mediaId,
-        };
-      })
-      .filter((row: { variantGid: string; mediaId: string }) => row.variantGid && row.mediaId);
+        }))
+        .filter((v) => v.variantGid && v.mediaId);
+    });
     if (assignmentPayload.length) {
       await assignVariantMedia(shop, productGid, assignmentPayload);
     }
 
-    const orderedVariantGids = variantOrder
-      .map((id: string) => variantGidByNumericId.get(toNumericId(id)) || "")
-      .filter(Boolean);
+    const orderedVariantGids = colorOrder.flatMap((color: string) => {
+      const group = variantRowsByColor.get(color) || [];
+      const sorted = [...group].sort((a, b) => a.position - b.position);
+      return sorted
+        .map((variant) => variantGidByNumericId.get(variant.id) || "")
+        .filter(Boolean);
+    });
     const reorderWarning = orderedVariantGids.length
       ? await reorderVariants(shop, productGid, orderedVariantGids)
       : null;
