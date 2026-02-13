@@ -13,6 +13,24 @@ function clampAltLength(text: string) {
   return `${trimmed.slice(0, 117).trimEnd()}...`;
 }
 
+async function toModelImageUrl(rawUrl: string) {
+  const url = normalizeText(rawUrl);
+  if (!url) return "";
+  if (url.startsWith("data:image/")) return url;
+  if (!/^https?:\/\//i.test(url)) return url;
+  try {
+    const resp = await fetch(url, {
+      headers: { Accept: "image/*,*/*;q=0.8", "User-Agent": "Mozilla/5.0" },
+    });
+    if (!resp.ok) return url;
+    const contentType = normalizeText(resp.headers.get("content-type")) || "image/png";
+    const bytes = Buffer.from(await resp.arrayBuffer());
+    return `data:${contentType};base64,${bytes.toString("base64")}`;
+  } catch {
+    return url;
+  }
+}
+
 export async function POST(req: NextRequest) {
   if (!isRequestAuthed(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -43,21 +61,23 @@ export async function POST(req: NextRequest) {
       `Item type context: ${itemType}.`,
     ].join("\n");
 
-    const completion = await client.chat.completions.create({
+    const modelImageUrl = await toModelImageUrl(imageUrl);
+    const response = await client.responses.create({
       model: "gpt-4o-mini",
       temperature: 0.2,
-      messages: [
+      max_output_tokens: 180,
+      input: [
         {
           role: "user",
           content: [
-            { type: "text", text: prompt },
-            { type: "image_url", image_url: { url: imageUrl } },
+            { type: "input_text", text: prompt },
+            { type: "input_image", image_url: modelImageUrl || imageUrl, detail: "auto" },
           ],
         },
       ],
     });
 
-    const rawAlt = normalizeText(completion.choices?.[0]?.message?.content || "");
+    const rawAlt = normalizeText(response.output_text || "");
     if (!rawAlt) {
       return NextResponse.json({ error: "Alt generation returned empty content." }, { status: 500 });
     }
@@ -71,4 +91,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-

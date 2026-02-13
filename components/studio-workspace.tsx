@@ -73,6 +73,7 @@ type SplitCrop = {
   poseNumber: number;
   fileName: string;
   imageBase64: string;
+  uploadedUrl?: string | null;
 };
 
 type DropboxImageResult = {
@@ -94,6 +95,7 @@ type PushQueueImage = {
   mediaId: string | null;
   url: string;
   title: string;
+  source: "shopify" | "generated_split" | "device_upload";
   altText: string;
   generatingAlt: boolean;
   deleting: boolean;
@@ -284,6 +286,8 @@ export default function StudioWorkspace() {
   const modelFolderRef = useRef<HTMLInputElement | null>(null);
   const itemPickerRef = useRef<HTMLInputElement | null>(null);
   const itemFolderRef = useRef<HTMLInputElement | null>(null);
+  const pushPickerRef = useRef<HTMLInputElement | null>(null);
+  const pushFolderRef = useRef<HTMLInputElement | null>(null);
   const [itemPreviews, setItemPreviews] = useState<Array<{ name: string; url: string }>>(
     []
   );
@@ -301,6 +305,8 @@ export default function StudioWorkspace() {
   >({});
   const [approvedPanels, setApprovedPanels] = useState<number[]>([]);
   const [splitCrops, setSplitCrops] = useState<SplitCrop[]>([]);
+  const [splitSendingToPush, setSplitSendingToPush] = useState(false);
+  const [pushUploading, setPushUploading] = useState(false);
   const [previewModal, setPreviewModal] = useState<{
     imageBase64: string;
     title: string;
@@ -509,6 +515,9 @@ export default function StudioWorkspace() {
     }
     if (itemFolderRef.current) {
       itemFolderRef.current.webkitdirectory = true;
+    }
+    if (pushFolderRef.current) {
+      pushFolderRef.current.webkitdirectory = true;
     }
   }, []);
 
@@ -993,29 +1002,8 @@ export default function StudioWorkspace() {
   }
 
   function buildGeneratedPushImages() {
-    const selectedBarcode = itemBarcodeSaved.trim();
-    if (!selectedBarcode) return [] as PushQueueImage[];
-    const panelNumbers = Object.keys(generatedPanels)
-      .map((key) => Number(key))
-      .filter((n) => Number.isFinite(n))
-      .sort((a, b) => a - b);
-    return panelNumbers
-      .map((panelNumber) => {
-        const b64 = generatedPanels[panelNumber];
-        if (!b64) return null;
-        const id = `generated:panel-${panelNumber}`;
-        return {
-          id,
-          sourceImageId: id,
-          mediaId: null,
-          url: `data:image/png;base64,${b64}`,
-          title: `Generated Panel ${panelNumber}`,
-          altText: "",
-          generatingAlt: false,
-          deleting: false,
-        } as PushQueueImage;
-      })
-      .filter((row): row is PushQueueImage => Boolean(row));
+    // Section 3 must use split outputs (or uploaded files), not unsplit panel images.
+    return [] as PushQueueImage[];
   }
 
   async function loadCurrentShopifyImages(productIdValue: string, includeGenerated: boolean) {
@@ -1041,6 +1029,7 @@ export default function StudioWorkspace() {
       mediaId: String(row?.id || ""),
       url: String(row?.url || "").trim(),
       title: "Current Shopify image",
+      source: "shopify" as const,
       altText: String(row?.altText || "").trim(),
       generatingAlt: false,
       deleting: false,
@@ -1097,6 +1086,7 @@ export default function StudioWorkspace() {
           mediaId: String(image.id || ""),
           url: String(image.url || "").trim(),
           title: String(image.altText || product.title || "Product image"),
+          source: "shopify",
           altText: String(image.altText || "").trim(),
           generatingAlt: false,
           deleting: false,
@@ -1509,6 +1499,12 @@ export default function StudioWorkspace() {
       if (!pushImages.length) {
         throw new Error("No images selected for Shopify push.");
       }
+      const invalidSource = pushImages.find((img) => !/^https?:\/\//i.test(String(img.url || "")));
+      if (invalidSource) {
+        throw new Error(
+          "Some push images are not uploaded URLs yet. Use split/upload actions before pushing to Shopify."
+        );
+      }
 
       const payloadImages = pushImages.map((img) => ({
         url: img.url,
@@ -1566,6 +1562,34 @@ export default function StudioWorkspace() {
 
   function filterImages(files: FileList | File[]) {
     return Array.from(files).filter((file) => isImageLikeFile(file));
+  }
+
+  async function handlePushFilesSelected(files: File[]) {
+    const filtered = filterImages(files);
+    if (!filtered.length) return;
+    setPushUploading(true);
+    setError(null);
+    try {
+      const urls = await uploadFilesToItemsBucket(filtered);
+      if (!urls.length) throw new Error("Upload returned no URLs.");
+      const uploadedRows: PushQueueImage[] = urls.map((url: string, idx: number) => ({
+        id: `upload:${Date.now()}:${idx}`,
+        sourceImageId: `upload:${idx}`,
+        mediaId: null,
+        url,
+        title: filtered[idx]?.name || `Uploaded image ${idx + 1}`,
+        source: "device_upload",
+        altText: "",
+        generatingAlt: false,
+        deleting: false,
+      }));
+      setPushImages((prev) => [...prev, ...uploadedRows]);
+      setStatus(`Added ${uploadedRows.length} uploaded image(s) to Shopify Push.`);
+    } catch (e: any) {
+      setError(e?.message || "Failed to upload images for Shopify Push.");
+    } finally {
+      setPushUploading(false);
+    }
   }
 
   async function handleModelFilesSelected(files: File[]) {
@@ -2274,6 +2298,10 @@ export default function StudioWorkspace() {
       "Fail-closed lock: if exact locked model identity and exact locked item look cannot both be shown, do not output an image.",
       "Outfit continuity lock: both left and right frames must represent the same selected outfit/look from item references (unless right frame is an intentional close-up of that same look).",
       "No outfit swaps, no colorway swaps, no garment substitutions across frames.",
+      "GLOBAL BACK-DESIGN HARD LOCK (ALL GENDERS, ALL PANELS, ALL POSES):",
+      "- For any back-facing frame, never invent, redesign, or hallucinate back graphics/logos/prints.",
+      "- If item references include a clear back design, reproduce that exact back design only.",
+      "- If item references do not include a clear back design, keep the back fully solid/clean in item color only.",
       "Photorealism hard lock: realistic human anatomy and skin texture. No CGI, no mannequin-like skin, no plastic look, no uncanny facial structure.",
       `Panel request: Panel ${args.panelNumber} (${args.panelLabel}).`,
       `Active pose priority: LEFT Pose ${args.poseA}, RIGHT Pose ${args.poseB}.`,
@@ -2659,36 +2687,32 @@ export default function StudioWorkspace() {
 
     function cropForSide(side: "left" | "right") {
       const sideOffsetX = side === "left" ? 0 : img.width - halfW;
-      // Normalize every split to a strict 770x1155 output frame.
-      const targetAspect = SPLIT_TARGET_WIDTH / SPLIT_TARGET_HEIGHT; // 2:3
-      const sourceAspect = halfW / halfH;
-      let cropW = halfW;
-      let cropH = halfH;
-      if (sourceAspect > targetAspect) {
-        cropW = Math.round(halfH * targetAspect);
-      } else {
-        cropH = Math.round(halfW / targetAspect);
-      }
-      const cropX = sideOffsetX + Math.floor((halfW - cropW) / 2);
-      const cropY = Math.floor((halfH - cropH) / 2);
-
+      // Normalize every split to a strict 770x1155 output frame without cutting content.
+      // Fit source half into target canvas with centered letterboxing.
+      const scale = Math.min(SPLIT_TARGET_WIDTH / halfW, SPLIT_TARGET_HEIGHT / halfH);
+      const drawW = Math.round(halfW * scale);
+      const drawH = Math.round(halfH * scale);
+      const drawX = Math.floor((SPLIT_TARGET_WIDTH - drawW) / 2);
+      const drawY = Math.floor((SPLIT_TARGET_HEIGHT - drawH) / 2);
       const canvas = document.createElement("canvas");
       canvas.width = SPLIT_TARGET_WIDTH;
       canvas.height = SPLIT_TARGET_HEIGHT;
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("Unable to initialize crop canvas");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, SPLIT_TARGET_WIDTH, SPLIT_TARGET_HEIGHT);
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
       ctx.drawImage(
         img,
-        cropX,
-        cropY,
-        cropW,
-        cropH,
+        sideOffsetX,
         0,
-        0,
-        SPLIT_TARGET_WIDTH,
-        SPLIT_TARGET_HEIGHT
+        halfW,
+        halfH,
+        drawX,
+        drawY,
+        drawW,
+        drawH
       );
       const dataUrl = canvas.toDataURL("image/png");
       return dataUrl.replace(/^data:image\/png;base64,/, "");
@@ -2725,6 +2749,82 @@ export default function StudioWorkspace() {
     a.href = `data:image/png;base64,${b64}`;
     a.download = filename;
     a.click();
+  }
+
+  function base64ToFile(base64: string, fileName: string) {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return new File([bytes], fileName, { type: "image/png" });
+  }
+
+  async function uploadFilesToItemsBucket(files: File[]) {
+    if (!files.length) return [] as string[];
+    const form = new FormData();
+    files.forEach((file) => form.append("files", file));
+    const resp = await fetch("/api/items", { method: "POST", body: form });
+    const json = await parseJsonResponse(resp, "/api/items");
+    if (!resp.ok) {
+      throw new Error(json?.error || "Failed to upload image(s).");
+    }
+    return Array.isArray(json?.urls)
+      ? json.urls.map((v: unknown) => String(v || "").trim()).filter(Boolean)
+      : [];
+  }
+
+  async function useSplitCropsInShopifyPush() {
+    if (!splitCrops.length) {
+      setError("No split images found. Generate and split first.");
+      return;
+    }
+    setSplitSendingToPush(true);
+    setError(null);
+    try {
+      const files = splitCrops.map((crop) => base64ToFile(crop.imageBase64, crop.fileName));
+      const urls = await uploadFilesToItemsBucket(files);
+      if (!urls.length) {
+        throw new Error("Split upload returned no URLs.");
+      }
+      const next = splitCrops.map((crop, idx) => {
+        const uploadedUrl = String(urls[idx] || "").trim();
+        return {
+          ...crop,
+          uploadedUrl,
+        };
+      });
+      setSplitCrops(next);
+
+      const pushRows: PushQueueImage[] = next
+        .filter((crop) => Boolean(crop.uploadedUrl))
+        .sort((a, b) => a.poseNumber - b.poseNumber)
+        .map((crop) => ({
+          id: `split:${crop.poseNumber}:${crop.fileName}`,
+          sourceImageId: `split:${crop.poseNumber}`,
+          mediaId: null,
+          url: String(crop.uploadedUrl || ""),
+          title: crop.fileName,
+          source: "generated_split",
+          altText: "",
+          generatingAlt: false,
+          deleting: false,
+        }));
+
+      if (!pushRows.length) {
+        throw new Error("No uploaded split images are available for Shopify push.");
+      }
+
+      setPushImages((prev) => {
+        const keep = prev.filter((img) => img.source === "shopify");
+        return [...keep, ...pushRows];
+      });
+      setStatus(`Added ${pushRows.length} split image(s) to Shopify Push.`);
+    } catch (e: any) {
+      setError(e?.message || "Failed to send split images to Shopify Push.");
+    } finally {
+      setSplitSendingToPush(false);
+    }
   }
 
   async function splitToTwoByThree() {
@@ -3731,6 +3831,16 @@ export default function StudioWorkspace() {
                 <button className="btn ghost" onClick={downloadAllSplitCrops}>
                   Download All Splits
                 </button>
+                <button
+                  className="btn ghost"
+                  type="button"
+                  onClick={useSplitCropsInShopifyPush}
+                  disabled={splitSendingToPush}
+                >
+                  {splitSendingToPush
+                    ? "Sending Splits..."
+                    : "Use Pictures In Shopify Push"}
+                </button>
               </div>
               <div className="preview-grid split-results-grid">
                 {splitCrops.map((crop) => (
@@ -3791,6 +3901,46 @@ export default function StudioWorkspace() {
               >
                 Use 0.5 Barcode
               </button>
+            </div>
+            <div
+              className="dropzone"
+              role="button"
+              tabIndex={0}
+              onClick={() => openInputPicker(pushPickerRef.current)}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={async (e) => {
+                e.preventDefault();
+                const filtered = await extractImagesFromDrop(e);
+                if (filtered.length) void handlePushFilesSelected(filtered);
+              }}
+            >
+              <div>Add images for Shopify Push (device/cloud)</div>
+              <div className="muted">
+                Drag and drop files/folders or choose from your device/cloud apps.
+              </div>
+            </div>
+            <input
+              ref={pushPickerRef}
+              type="file"
+              multiple
+              style={{ display: "none" }}
+              onChange={(e) => void handlePushFilesSelected(filterImages(e.target.files || []))}
+            />
+            <input
+              ref={pushFolderRef}
+              type="file"
+              multiple
+              style={{ display: "none" }}
+              onChange={(e) => void handlePushFilesSelected(filterImages(e.target.files || []))}
+            />
+            <div className="picker-row">
+              <button className="ghost-btn" type="button" onClick={() => openInputPicker(pushPickerRef.current)}>
+                Choose files
+              </button>
+              <button className="ghost-btn" type="button" onClick={() => openInputPicker(pushFolderRef.current)}>
+                Choose folder
+              </button>
+              <span className="muted">{pushUploading ? "Uploading..." : ""}</span>
             </div>
             {!shop.trim() && (
               <div className="muted centered">
@@ -4232,7 +4382,7 @@ export default function StudioWorkspace() {
         }
         .push-queue-card img {
           width: 100%;
-          height: 180px;
+          height: 220px;
           display: block;
           object-fit: contain;
           object-position: center;
@@ -4252,7 +4402,7 @@ export default function StudioWorkspace() {
           justify-content: center;
         }
         .push-variant-card {
-          flex: 0 0 180px;
+          flex: 0 0 210px;
           border: 1px solid #e2e8f0;
           border-radius: 10px;
           background: #fff;
@@ -4270,14 +4420,14 @@ export default function StudioWorkspace() {
           border: 1px solid #e2e8f0;
           border-radius: 8px;
           background: #f8fafc;
-          min-height: 120px;
+          min-height: 170px;
           display: grid;
           place-items: center;
           overflow: hidden;
         }
         .push-variant-preview img {
           width: 100%;
-          height: 120px;
+          height: 170px;
           object-fit: contain;
           object-position: center;
         }
@@ -4391,9 +4541,9 @@ export default function StudioWorkspace() {
         }
         .split-result-image {
           width: 100%;
-          height: auto;
-          aspect-ratio: 2 / 3;
+          height: 220px;
           object-fit: contain;
+          object-position: center;
           border-radius: 8px;
           background: #f8fafc;
         }
