@@ -15,6 +15,19 @@ function sanitizeReferenceUrl(value: unknown) {
   return v.trim();
 }
 
+function isTemporaryReferenceUrl(raw: string) {
+  const v = String(raw || "").toLowerCase();
+  if (!v) return false;
+  // Supabase signed object URLs
+  if (v.includes("/storage/v1/object/sign/")) return true;
+  // Typical signed query fragments
+  if (v.includes("token=") || v.includes("x-amz-signature=") || v.includes("x-amz-security-token="))
+    return true;
+  // Dropbox temporary links
+  if (v.includes("dl.dropboxusercontent.com")) return true;
+  return false;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const isAuthed = req.cookies.get("carbon_gen_auth_v1")?.value === "true";
@@ -37,14 +50,38 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    const cleaned = (data || []).map((row: any) => ({
-      ...row,
-      ref_image_urls: Array.isArray(row?.ref_image_urls)
+    const rows = Array.isArray(data) ? data : [];
+    const cleaned: any[] = [];
+    const staleModelIds: string[] = [];
+
+    for (const row of rows) {
+      const urls = Array.isArray(row?.ref_image_urls)
         ? row.ref_image_urls
             .map((v: unknown) => sanitizeReferenceUrl(v))
             .filter((v: string) => v.length > 0)
-        : [],
-    }));
+        : [];
+
+      const hasTemporaryRefs = urls.some((u) => isTemporaryReferenceUrl(u));
+      if (hasTemporaryRefs) {
+        const modelId = String(row?.model_id || "").trim();
+        if (modelId) staleModelIds.push(modelId);
+        continue;
+      }
+
+      cleaned.push({
+        ...row,
+        ref_image_urls: urls,
+      });
+    }
+
+    if (staleModelIds.length) {
+      await supabase
+        .from("models")
+        .delete()
+        .eq("user_id", userId)
+        .in("model_id", Array.from(new Set(staleModelIds)));
+    }
+
     return NextResponse.json({ models: cleaned });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Failed to load models" }, { status: 500 });
