@@ -37,6 +37,7 @@ const ITEM_TYPE_OPTIONS = [
 const CATALOG_PAGE_SIZE = 10;
 const SPLIT_TARGET_WIDTH = 770;
 const SPLIT_TARGET_HEIGHT = 1155;
+const ALT_GENERATION_BATCH_SIZE = 3;
 
 type ShopifyCatalogProduct = {
   id: string;
@@ -1142,7 +1143,7 @@ export default function StudioWorkspace() {
 
   async function generateAltForPushImage(imageId: string) {
     const target = pushImages.find((img) => img.id === imageId);
-    if (!target) return;
+    if (!target) return false;
     setPushImages((prev) =>
       prev.map((img) => (img.id === imageId ? { ...img, generatingAlt: true } : img))
     );
@@ -1167,11 +1168,13 @@ export default function StudioWorkspace() {
           img.id === imageId ? { ...img, altText: nextAlt, generatingAlt: false } : img
         )
       );
+      return true;
     } catch (e: any) {
       setPushImages((prev) =>
         prev.map((img) => (img.id === imageId ? { ...img, generatingAlt: false } : img))
       );
       setError(e?.message || "Failed to generate alt text.");
+      return false;
     }
   }
 
@@ -1181,11 +1184,24 @@ export default function StudioWorkspace() {
       setStatus("No missing alt text to generate.");
       return;
     }
-    for (const image of targets) {
-      // Sequential to keep OpenAI usage predictable and avoid burst failures.
-      await generateAltForPushImage(image.id);
+    let successCount = 0;
+    let failCount = 0;
+    for (let i = 0; i < targets.length; i += ALT_GENERATION_BATCH_SIZE) {
+      const batch = targets.slice(i, i + ALT_GENERATION_BATCH_SIZE);
+      setStatus(
+        `Generating alt text ${i + 1}-${Math.min(i + batch.length, targets.length)} of ${
+          targets.length
+        }...`
+      );
+      const results = await Promise.all(batch.map((image) => generateAltForPushImage(image.id)));
+      successCount += results.filter(Boolean).length;
+      failCount += results.length - results.filter(Boolean).length;
     }
-    setStatus("Generated missing alt text.");
+    if (failCount > 0) {
+      setStatus(`Generated alt for ${successCount}/${targets.length} image(s). ${failCount} failed.`);
+      return;
+    }
+    setStatus(`Generated missing alt text for ${successCount} image(s).`);
   }
 
   function movePushVariant(fromIndex: number, toIndex: number) {
