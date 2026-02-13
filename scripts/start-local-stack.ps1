@@ -61,6 +61,40 @@ function Is-PortListening {
   return $null -ne $conn
 }
 
+function Is-AppResponsive {
+  param([int]$Port)
+
+  try {
+    $resp = Invoke-WebRequest -Uri "http://localhost:$Port/api/health" -UseBasicParsing -TimeoutSec 2
+    if (-not ($resp.StatusCode -ge 200 -and $resp.StatusCode -lt 500)) {
+      return $false
+    }
+    $content = String($resp.Content)
+    # Accept only the expected Carbon health payload so other apps on 3000 are not reused.
+    return $content -match '"ok"\s*:\s*true'
+  } catch {
+    return $false
+  }
+}
+
+function Stop-ListenerOnPort {
+  param([int]$Port)
+
+  $conn = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+  if (-not $conn) {
+    return $true
+  }
+
+  $ownerPid = $conn.OwningProcess
+  if (-not $ownerPid) {
+    return $false
+  }
+
+  cmd /c "taskkill /PID $ownerPid /F >nul 2>&1" | Out-Null
+  Start-Sleep -Milliseconds 800
+  return -not (Is-PortListening -Port $Port)
+}
+
 if (!(Test-Path $cloudflared)) {
   throw "cloudflared not found at: $cloudflared"
 }
@@ -86,6 +120,14 @@ if (Test-Path $tunnelErrLog) { Remove-Item $tunnelErrLog -Force -ErrorAction Sil
 
 $devProc = $null
 $appAlreadyRunning = Is-PortListening -Port $appPort
+if ($appAlreadyRunning -and -not (Is-AppResponsive -Port $appPort)) {
+  Write-Warning "Port $appPort is in use but app is not responsive. Attempting to clear stale listener."
+  $cleared = Stop-ListenerOnPort -Port $appPort
+  if (-not $cleared) {
+    throw "Port $appPort is occupied by an unresponsive process that could not be terminated. Free the port manually or change LOCAL_APP_PORT."
+  }
+  $appAlreadyRunning = $false
+}
 
 if (-not $appAlreadyRunning) {
   # Start app in background only when there is no existing listener on the target port.
@@ -93,6 +135,27 @@ if (-not $appAlreadyRunning) {
     "/c",
     "cd /d `"$repo`" && npm run dev -- -p $appPort > `"$devLog`" 2>&1"
   ) -PassThru -WindowStyle Hidden
+  $started = $false
+  for ($i = 0; $i -lt 40; $i++) {
+    Start-Sleep -Milliseconds 500
+    if (Is-PortListening -Port $appPort) {
+      $started = $true
+      break
+    }
+    if ($devProc.HasExited) {
+      break
+    }
+    if (Test-Path $devLog) {
+      $tailText = (Get-Content $devLog -Tail 60 -ErrorAction SilentlyContinue) -join "`n"
+      if ($tailText -match "EADDRINUSE" -or $tailText -match "Failed to start server") {
+        break
+      }
+    }
+  }
+  if (-not $started) {
+    $tail = if (Test-Path $devLog) { (Get-Content $devLog -Tail 60) -join "`n" } else { "(no log file)" }
+    throw "Failed to start app on port $appPort.`nLast log lines:`n$tail"
+  }
 }
 
 # Wait until Next.js is reachable on configured port.
