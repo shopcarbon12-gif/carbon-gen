@@ -1854,6 +1854,44 @@ export default function StudioWorkspace() {
     return String(value || "").trim().toLowerCase().includes("dress");
   }
 
+  function isSwimwearItemType(value: string) {
+    const t = String(value || "").trim().toLowerCase();
+    if (!t) return false;
+    return (
+      t.includes("swimwear") ||
+      t.includes("swim short") ||
+      t.includes("swimshort") ||
+      t.includes("swim trunk") ||
+      t.includes("swim trunks") ||
+      t.includes("bikini") ||
+      t.includes("one-piece swimsuit") ||
+      t.includes("one piece swimsuit") ||
+      t.includes("swimsuit")
+    );
+  }
+
+  function getSwimwearStyleLockLines(gender: string, itemTypeValue: string) {
+    if (!isSwimwearItemType(itemTypeValue)) return [] as string[];
+    const g = String(gender || "").trim().toLowerCase();
+    const lines = [
+      "SWIMWEAR SAFETY + STYLING LOCK (NON-NEGOTIABLE):",
+      "- Keep the scene strictly ecommerce/catalog, neutral posture, and non-suggestive styling.",
+      "- No erotic framing, no provocative posing, and no intimate context.",
+      "- Use clean studio product-photography styling only.",
+      "- Foot styling for swimwear: use clean flip-flops/sandals/water-shoes, or naturally uncovered feet when needed.",
+    ];
+    if (g === "male") {
+      lines.push(
+        "- Male swimwear rule: a bare upper torso is allowed for swimwear-shorts looks in neutral catalog styling."
+      );
+    } else if (g === "female") {
+      lines.push(
+        "- Female swimwear rule: keep standard swimwear coverage consistent with item references and neutral catalog styling."
+      );
+    }
+    return lines;
+  }
+
   function isFemaleDressPanelBlocked(modelGender: string, itemTypeValue: string, panelNumber: number) {
     return (
       String(modelGender || "").trim().toLowerCase() === "female" &&
@@ -2021,6 +2059,13 @@ export default function StudioWorkspace() {
   function getPanelCriticalLockLines(gender: string, panelNumber: number, itemTypeValue = "") {
     const panelAdultLock = "- HARD AGE LOCK: the model is over 18+.";
     const lockedItemType = String(itemTypeValue || "").trim();
+    const swimwearActive = isSwimwearItemType(lockedItemType);
+    const footwearHardLockLine = swimwearActive
+      ? "- Swimwear footwear lock: full-body frames may use flip-flops/water-shoes, or naturally uncovered feet."
+      : "- Footwear hard lock: both full-body frames must show shoes. Barefoot is forbidden.";
+    const footwearWhenFullBodyLine = swimwearActive
+      ? "- Swimwear footwear lock: when a frame is full-body, use flip-flops/water-shoes, or naturally uncovered feet."
+      : "- Footwear hard lock: when a frame is full-body, shoes must be worn and visible.";
     const closeUpSubjectLine = lockedItemType
       ? `- CLOSE-UP SUBJECT LOCK: section 0.5 item type is "${lockedItemType}". Close-up must show this item type only.`
       : "- CLOSE-UP SUBJECT LOCK: close-up must follow section 0.5 item type only.";
@@ -2033,7 +2078,7 @@ export default function StudioWorkspace() {
           panelAdultLock,
           "- LEFT Pose 1 must be full-body front hero with head and feet fully visible.",
           "- RIGHT Pose 2 must be full-body back view with face visible over shoulder.",
-          "- Footwear hard lock: both full-body frames must show shoes. Barefoot is forbidden.",
+          footwearHardLockLine,
           "- Same exact model identity and same selected look in both frames.",
         ];
       }
@@ -2062,7 +2107,7 @@ export default function StudioWorkspace() {
         panelAdultLock,
         "- LEFT Pose 6 must be relaxed full-body front with face visible.",
         "- RIGHT Pose 8 must be a single controlled creative shot from the same exact selected look.",
-        "- Footwear hard lock: when a frame is full-body, shoes must be worn and visible.",
+        footwearWhenFullBodyLine,
         "- Keep identity and outfit locked; no substitutions.",
       ];
     }
@@ -2073,7 +2118,7 @@ export default function StudioWorkspace() {
         "- LEFT Pose 1 must be full-body front neutral hero, straight-on camera.",
         "- RIGHT Pose 2 must be full-body lifestyle with subtle weight shift only.",
         "- Both frames must show full head and full feet in frame (no cropping).",
-        "- Footwear hard lock: both full-body frames must show shoes. Barefoot is forbidden.",
+        footwearHardLockLine,
         "- Do not rotate LEFT frame into lifestyle angle. Do not replace RIGHT frame with torso crop.",
       ];
     }
@@ -2083,7 +2128,9 @@ export default function StudioWorkspace() {
         panelAdultLock,
         "- LEFT Pose 3 must be torso + head front crop (mid-thigh to head).",
         "- RIGHT Pose 4 must be full-body back view with full head and feet visible.",
-        "- RIGHT Pose 4 footwear hard lock: shoes must be worn and visible. Barefoot is forbidden.",
+        swimwearActive
+          ? "- RIGHT Pose 4 swimwear footwear lock: use flip-flops/water-shoes, or naturally uncovered feet."
+          : "- RIGHT Pose 4 footwear hard lock: shoes must be worn and visible. Barefoot is forbidden.",
         "- Same model identity, same selected look, no side swaps.",
       ];
     }
@@ -2159,6 +2206,8 @@ export default function StudioWorkspace() {
       args.panelNumber,
       args.itemType
     );
+    const swimwearActive = isSwimwearItemType(args.itemType);
+    const swimwearStyleLines = getSwimwearStyleLockLines(args.modelGender, args.itemType);
     const closeUpCategoryRule = getCloseUpCategoryRule(args.itemType);
     const closeUpSubjectLine = args.itemType.trim()
       ? `- CLOSE-UP SUBJECT LOCK: the close-up subject must match section 0.5 item type "${args.itemType.trim()}" exactly.`
@@ -2228,6 +2277,7 @@ export default function StudioWorkspace() {
       "Pose execution hard lock: LEFT frame must execute only LEFT active pose. RIGHT frame must execute only RIGHT active pose.",
       "ONLY these two active poses are allowed in this image.",
       ...criticalLockLines,
+      ...swimwearStyleLines,
       `LEFT ACTIVE POSE:\n${poseABlock}`,
       `RIGHT ACTIVE POSE:\n${poseBBlock}`,
       "All non-active poses are reference only and must not execute in this image.",
@@ -2235,8 +2285,12 @@ export default function StudioWorkspace() {
       "Full-body no-crop applies to: Male poses 1,2,4 and Female poses 1,2,3,6.",
       "2:3 split centering hard lock: each panel half is center-cropped to a final 2:3 portrait. Keep each active pose centered in its own half.",
       "2:3 safe-zone math lock (for 1536x1024 panel output): each half 768x1024 is center-cropped to 682x1023. Keep head/body/garment details inside this inner center-safe zone.",
-      "Footwear hard lock (full-body): for every full-body active pose, the model must wear visible shoes. Barefoot and socks-only are forbidden.",
-      "If footwear is not clearly defined in item refs, use clean neutral studio sneakers and keep the same pair consistent across all selected panels in this run.",
+      swimwearActive
+        ? "Swimwear footwear lock (full-body): use clean flip-flops/sandals/water-shoes, or naturally uncovered feet."
+        : "Footwear hard lock (full-body): for every full-body active pose, the model must wear visible shoes. Barefoot and socks-only are forbidden.",
+      swimwearActive
+        ? "If swimwear footwear is not defined in item refs, keep feet natural or use simple neutral flip-flops consistently across selected panels."
+        : "If footwear is not clearly defined in item refs, use clean neutral studio sneakers and keep the same pair consistent across all selected panels in this run.",
       "No-crop mapping lock: in any panel where the active pose is full-body (male/female mapping), frame top-of-hair to bottom-of-shoes with visible white margin.",
       "Camera framing rule for full-body active poses: fit the complete body from top of hair to bottom of shoes with visible white margin above the head and below the feet.",
       "If a full-body active pose would crop head or feet, zoom out and reframe until full body is fully visible.",

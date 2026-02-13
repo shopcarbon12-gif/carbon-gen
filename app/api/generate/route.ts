@@ -277,6 +277,22 @@ function inferItemTypeCategory(itemTypeValue: string) {
   return "item";
 }
 
+function isSwimwearItemType(itemTypeValue: string) {
+  const t = String(itemTypeValue || "").trim().toLowerCase();
+  if (!t) return false;
+  return (
+    t.includes("swimwear") ||
+    t.includes("swim short") ||
+    t.includes("swimshort") ||
+    t.includes("swim trunk") ||
+    t.includes("swim trunks") ||
+    t.includes("bikini") ||
+    t.includes("one-piece swimsuit") ||
+    t.includes("one piece swimsuit") ||
+    t.includes("swimsuit")
+  );
+}
+
 function getCloseUpCategoryQaRule(itemTypeValue: string) {
   const category = inferItemTypeCategory(itemTypeValue);
   if (category === "top") {
@@ -439,6 +455,7 @@ async function runPanelComplianceCheck(args: {
   const hasBackFacingActivePose =
     isBackFacingPose(args.panelQa.modelGender, args.panelQa.poseA) ||
     isBackFacingPose(args.panelQa.modelGender, args.panelQa.poseB);
+  const swimwearActive = isSwimwearItemType(args.panelQa.itemType);
   const closeUpSubjectLockActive = hasPanel3CloseUpSubjectLock(args.panelQa);
   const closeUpCategoryQaRule = getCloseUpCategoryQaRule(args.panelQa.itemType);
   const userContent: any[] = [
@@ -453,7 +470,9 @@ async function runPanelComplianceCheck(args: {
         `- Item type: ${args.panelQa.itemType || "apparel item"}`,
         ...(hasFullBodyActivePose
           ? [
-              "- Footwear hard lock active: full-body poses must include visible shoes. Barefoot is forbidden.",
+              swimwearActive
+                ? "- Swimwear footwear lock active: full-body poses may use flip-flops/water-shoes, or naturally uncovered feet."
+                : "- Footwear hard lock active: full-body poses must include visible shoes. Barefoot is forbidden.",
             ]
           : []),
         ...(closeUpSubjectLockActive
@@ -488,7 +507,9 @@ async function runPanelComplianceCheck(args: {
         '  "pass": boolean,',
         '  "reasons": string[]',
         "}",
-        "If any full-body pose appears barefoot or socks-only, set pass=false.",
+        swimwearActive
+          ? "For swimwear item type, uncovered feet are allowed; fail only if output is suggestive or mismatched to refs."
+          : "If any full-body pose appears barefoot or socks-only, set pass=false.",
         "If close-up subject lock is active and the right close-up clearly focuses on a different item type/category than the locked section 0.5 item type, set pass=false.",
         "If back-view strict lock is active and back-facing design does not clearly match item refs, set pass=false.",
         "If either side appears significantly off-center such that a center 2:3 crop would cut key model/item content, set pass=false.",
@@ -735,12 +756,19 @@ export async function POST(req: NextRequest) {
       }
 
       // One safe retry: keep request intent, enforce standard ecommerce clothing context.
+      const swimwearActive = isSwimwearItemType(normalizedPanelQa.itemType);
       const safePrompt = [
         lockedPrompt,
         "",
         "Safety clarification: professional ecommerce apparel photos only.",
         "No nudity, no underwear-only framing, no sexual context, fully clothed styling.",
         "Neutral studio product-photography presentation.",
+        ...(swimwearActive
+          ? [
+              "Swimwear clarification: neutral commercial swimwear catalog styling only.",
+              "Non-suggestive posture; sport/product presentation only.",
+            ]
+          : []),
         "Background lock: seamless pure white studio background only (#FFFFFF), no tint.",
       ].join("\n");
 
