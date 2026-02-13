@@ -1882,7 +1882,7 @@ export default function StudioWorkspace() {
     ];
     if (g === "male") {
       lines.push(
-        "- Male swimwear rule: shirtless upper-body styling is allowed for swimwear looks in neutral catalog presentation."
+        "- Male swimwear rule: standard commercial swimwear presentation is allowed in neutral catalog styling."
       );
     } else if (g === "female") {
       lines.push(

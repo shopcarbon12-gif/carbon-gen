@@ -138,6 +138,30 @@ function isOpenAiAuthError(err: unknown) {
   return /incorrect api key|invalid api key|api key provided/i.test(message);
 }
 
+function buildSwimwearSafetyRetryPrompt(basePrompt: string) {
+  return [
+    basePrompt,
+    "",
+    "SWIMWEAR RETRY SAFETY MODE:",
+    "- Professional ecommerce catalog image only.",
+    "- Adult model (18+) in standard commercial swimwear presentation.",
+    "- Neutral pose, neutral expression, non-suggestive composition.",
+    "- No erotic intent, no intimate framing, no provocative posture.",
+    "- Focus on garment fit, color, and material details.",
+    "- Seamless pure white studio background only.",
+  ].join("\n");
+}
+
+function buildGeneralSafetyRetryPrompt(basePrompt: string) {
+  return [
+    basePrompt,
+    "",
+    "Safety clarification: professional ecommerce apparel photos only.",
+    "No nudity, no sexual context, neutral product-photography presentation.",
+    "Background lock: seamless pure white studio background only (#FFFFFF), no tint.",
+  ].join("\n");
+}
+
 async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | null = null;
   try {
@@ -769,37 +793,45 @@ export async function POST(req: NextRequest) {
         return fallbackGenerateResponse(reason);
       }
 
-      // One safe retry: keep request intent, enforce standard ecommerce clothing context.
-      const safePrompt = [
-        lockedPrompt,
-        "",
-        "Safety clarification: professional ecommerce apparel photos only.",
-        "No nudity, no underwear-only framing, no sexual context, fully clothed styling.",
-        "Neutral studio product-photography presentation.",
-        ...(swimwearActive
-          ? [
-              "Swimwear clarification: neutral commercial swimwear catalog styling only.",
-              "Non-suggestive posture; sport/product presentation only.",
-            ]
-          : []),
-        "Background lock: seamless pure white studio background only (#FFFFFF), no tint.",
-      ].join("\n");
+      // Safe retries: for swimwear use dedicated neutral catalog language.
+      const retryPrompts = swimwearActive
+        ? [
+            buildSwimwearSafetyRetryPrompt(lockedPrompt),
+            buildSwimwearSafetyRetryPrompt(
+              [
+                lockedPrompt,
+                "",
+                "Additional constraints:",
+                "- Keep camera farther and centered; avoid tight body framing.",
+                "- Use straightforward front/back/product-detail composition only.",
+              ].join("\n")
+            ),
+          ]
+        : [buildGeneralSafetyRetryPrompt(lockedPrompt)];
 
-      try {
-        const retry = await withTimeout(
-          openai.images.edit({
-            model: imageModel,
-            image: referenceFiles,
-            prompt: safePrompt,
-            size: finalSize,
-            quality: "high",
-            input_fidelity: "high",
-          }),
-          imageTimeoutMs,
-          "OpenAI safe retry"
-        );
-        b64 = retry.data?.[0]?.b64_json ?? null;
-      } catch (retryErr: any) {
+      let retryErr: any = null;
+      for (let i = 0; i < retryPrompts.length; i += 1) {
+        try {
+          const retry = await withTimeout(
+            openai.images.edit({
+              model: imageModel,
+              image: referenceFiles,
+              prompt: retryPrompts[i],
+              size: finalSize,
+              quality: "high",
+              input_fidelity: "high",
+            }),
+            imageTimeoutMs,
+            i === 0 ? "OpenAI safe retry" : "OpenAI swimwear retry"
+          );
+          b64 = retry.data?.[0]?.b64_json ?? null;
+          if (b64) break;
+        } catch (e: any) {
+          retryErr = e;
+        }
+      }
+
+      if (!b64) {
         const requestId =
           retryErr?.requestID ||
           err?.requestID ||
@@ -809,7 +841,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(
           {
             error:
-              "Generation was blocked by the safety system (sexual content classification). Try less revealing references or a more neutral product framing.",
+              "Generation was blocked by safety moderation for this reference set. Try a less revealing crop/reference mix or use neutral front/back product shots.",
             requestId,
             code: retryErr?.code || err?.code || null,
           },
