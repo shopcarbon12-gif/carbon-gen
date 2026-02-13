@@ -22,6 +22,7 @@ const ITEM_TYPE_OPTIONS = [
   { value: "pants", label: "Pants" },
   { value: "jeans", label: "Jeans" },
   { value: "shorts", label: "Shorts" },
+  { value: "swimwear shorts", label: "Swimwear Shorts" },
   { value: "skirt", label: "Skirt" },
   { value: "dress", label: "Dress" },
   { value: "jumpsuit", label: "Jumpsuit" },
@@ -60,6 +61,7 @@ type SelectedCatalogImage = {
   id: string;
   url: string;
   title: string;
+  source: "shopify" | "dropbox";
   uploadedUrl: string | null;
   uploading: boolean;
   uploadError: string | null;
@@ -112,6 +114,20 @@ function isImageLikeFile(file: File) {
   const mime = String(file.type || "").toLowerCase();
   if (mime.startsWith("image/")) return true;
   return IMAGE_FILE_EXT_RE.test(file.name || "");
+}
+
+function mergeUniqueFiles(existing: File[], incoming: File[]) {
+  const next = [...existing];
+  const seen = new Set(
+    existing.map((f) => `${f.name}::${f.size}::${f.lastModified}::${f.type}`)
+  );
+  for (const file of incoming) {
+    const key = `${file.name}::${file.size}::${file.lastModified}::${file.type}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    next.push(file);
+  }
+  return next;
 }
 
 function openInputPicker(input: HTMLInputElement | null) {
@@ -199,6 +215,7 @@ export default function StudioWorkspace() {
   const [dropboxResults, setDropboxResults] = useState<DropboxImageResult[]>([]);
   const [dropboxFolderResults, setDropboxFolderResults] = useState<DropboxFolderResult[]>([]);
   const [dropboxSearched, setDropboxSearched] = useState(false);
+  const [dropboxListVisible, setDropboxListVisible] = useState(true);
   const [catalogQuery, setCatalogQuery] = useState("");
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogSearched, setCatalogSearched] = useState(false);
@@ -1299,13 +1316,24 @@ export default function StudioWorkspace() {
   }
 
   async function searchDropboxByBarcode() {
-    const barcode = itemBarcodeSaved.trim();
+    if (dropboxListVisible && (dropboxResults.length > 0 || dropboxFolderResults.length > 0)) {
+      setDropboxListVisible(false);
+      setStatus("Dropbox list hidden.");
+      return;
+    }
+    const barcode = sanitizeBarcodeInput(itemBarcode).trim() || itemBarcodeSaved.trim();
     if (!barcode) {
-      setError("Save a barcode first, then search Dropbox.");
+      setError("Type a barcode first, then search Dropbox.");
+      return;
+    }
+    if (!isValidBarcode(barcode)) {
+      setError("Barcode must be 7-9 chars: digits only, or C + 6-8 digits.");
       return;
     }
     setDropboxSearching(true);
     setDropboxSearched(true);
+    setDropboxListVisible(true);
+    setItemBarcodeSaved(barcode);
     setError(null);
     try {
       const resp = await fetch("/api/dropbox/search", {
@@ -1362,6 +1390,7 @@ export default function StudioWorkspace() {
       url: img.temporaryLink,
       title: img.title || "Dropbox image",
       barcode: itemBarcodeSaved.trim(),
+      source: "dropbox",
     });
   }
 
@@ -1375,6 +1404,7 @@ export default function StudioWorkspace() {
     url: string;
     title: string;
     barcode?: string;
+    source?: "shopify" | "dropbox";
   }) {
     const existing = selectedCatalogImages.find((img) => img.id === image.id);
     if (existing?.uploading) return;
@@ -1398,6 +1428,7 @@ export default function StudioWorkspace() {
       ...prev,
       {
         ...image,
+        source: image.source || "shopify",
         uploadedUrl: null,
         uploading: true,
         uploadError: null,
@@ -3064,9 +3095,16 @@ export default function StudioWorkspace() {
               className="btn ghost"
               type="button"
               onClick={searchDropboxByBarcode}
-              disabled={dropboxSearching || !isValidBarcode(itemBarcodeSaved)}
+              disabled={
+                dropboxSearching ||
+                !isValidBarcode(sanitizeBarcodeInput(itemBarcode).trim() || itemBarcodeSaved.trim())
+              }
             >
-              {dropboxSearching ? "Searching Dropbox..." : "Search Dropbox by Barcode"}
+              {dropboxSearching
+                ? "Searching Dropbox..."
+                : dropboxListVisible && (dropboxResults.length > 0 || dropboxFolderResults.length > 0)
+                  ? "Hide Dropbox List"
+                  : "Search Dropbox by Barcode"}
             </button>
           </div>
           {itemBarcodeSaved ? (
@@ -3085,7 +3123,7 @@ export default function StudioWorkspace() {
           {dropboxSearched && !dropboxSearching && !dropboxResults.length ? (
             <div className="muted centered">No Dropbox images found for this barcode.</div>
           ) : null}
-          {dropboxFolderResults.length ? (
+          {dropboxListVisible && dropboxFolderResults.length ? (
             <div className="card">
               <div className="card-title">Dropbox Matched Folders</div>
               <div className="dropbox-folder-list">
@@ -3100,7 +3138,7 @@ export default function StudioWorkspace() {
               </div>
             </div>
           ) : null}
-          {dropboxResults.length ? (
+          {dropboxListVisible && dropboxResults.length ? (
             <div className="preview-grid item-catalog-grid">
               {dropboxResults.map((img) => {
                 const selected = selectedCatalogImages.some((i) => i.id === `dropbox:${img.id}`);
@@ -3130,7 +3168,7 @@ export default function StudioWorkspace() {
             onDrop={async (e) => {
               e.preventDefault();
               const filtered = await extractImagesFromDrop(e);
-              if (filtered.length) setItemFiles(filtered);
+              if (filtered.length) setItemFiles((prev) => mergeUniqueFiles(prev, filtered));
             }}
           >
             <div>Drag & drop a folder (or images) here</div>
@@ -3144,14 +3182,18 @@ export default function StudioWorkspace() {
             type="file"
             multiple
             style={{ display: "none" }}
-            onChange={(e) => setItemFiles(filterImages(e.target.files || []))}
+            onChange={(e) =>
+              setItemFiles((prev) => mergeUniqueFiles(prev, filterImages(e.target.files || [])))
+            }
           />
           <input
             ref={itemFolderRef}
             type="file"
             multiple
             style={{ display: "none" }}
-            onChange={(e) => setItemFiles(filterImages(e.target.files || []))}
+            onChange={(e) =>
+              setItemFiles((prev) => mergeUniqueFiles(prev, filterImages(e.target.files || [])))
+            }
           />
           <div className="picker-row">
             <button
@@ -3264,6 +3306,7 @@ export default function StudioWorkspace() {
                                   url: img.url,
                                   title: product.title,
                                   barcode: getPrimaryBarcode(product),
+                                  source: "shopify",
                                 })
                               }
                             >
@@ -3334,8 +3377,8 @@ export default function StudioWorkspace() {
           <div className="muted centered">
             {itemFiles.length ? `${itemFiles.length} device files ready` : "No device files selected"} |{" "}
             {selectedCatalogImages.length
-              ? `${selectedCatalogImages.length} Shopify images selected`
-              : "No Shopify images selected"}
+              ? `${selectedCatalogImages.length} cloud/catalog images selected`
+              : "No cloud/catalog images selected"}
             {selectedCatalogImages.some((img) => img.uploading)
               ? ` | ${selectedCatalogImages.filter((img) => img.uploading).length} uploading`
               : ""}
@@ -3355,6 +3398,7 @@ export default function StudioWorkspace() {
                   </button>
                   <img src={file.url} alt={file.name} />
                   <div className="preview-name">{file.name}</div>
+                  <div className="preview-source">Source: Device upload</div>
                 </div>
               ))}
             </div>
@@ -3378,6 +3422,9 @@ export default function StudioWorkspace() {
                       : img.uploadError
                         ? "Upload failed (click product image to retry)"
                         : "Ready"}
+                  </div>
+                  <div className="preview-source">
+                    Source: {img.source === "dropbox" ? "Dropbox" : "Shopify catalog"}
                   </div>
                 </div>
               ))}
@@ -4258,16 +4305,16 @@ export default function StudioWorkspace() {
           object-position: center;
         }
         .item-selected-grid {
-          display: flex;
-          flex-wrap: wrap;
+          display: grid;
+          grid-template-columns: repeat(6, minmax(0, 1fr));
           justify-content: center;
           align-items: stretch;
           gap: 10px;
-          max-width: 1260px;
+          max-width: 100%;
           margin: 0 auto;
         }
         .item-selected-grid .preview-card {
-          width: 200px;
+          width: 100%;
         }
         .split-results-grid {
           display: grid;
@@ -4385,6 +4432,11 @@ export default function StudioWorkspace() {
           font-size: 0.75rem;
           color: #64748b;
           word-break: break-word;
+        }
+        .preview-source {
+          font-size: 0.72rem;
+          color: #475569;
+          font-weight: 600;
         }
         .model-list {
           display: flex;
@@ -4695,18 +4747,12 @@ export default function StudioWorkspace() {
           .item-catalog-grid {
             grid-template-columns: repeat(4, minmax(0, 1fr));
           }
-          .item-selected-grid {
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-          }
           .split-results-grid {
             grid-template-columns: repeat(4, minmax(0, 1fr));
           }
         }
         @media (min-width: 1281px) and (max-width: 1600px) {
           .item-catalog-grid {
-            grid-template-columns: repeat(5, minmax(0, 1fr));
-          }
-          .item-selected-grid {
             grid-template-columns: repeat(5, minmax(0, 1fr));
           }
           .split-results-grid {
