@@ -125,15 +125,6 @@ function parseDataImage(value: string) {
   return { contentType, bytes, ext };
 }
 
-function extFromContentType(contentType: string) {
-  const ct = String(contentType || "").toLowerCase();
-  if (ct.includes("png")) return "png";
-  if (ct.includes("jpeg") || ct.includes("jpg")) return "jpg";
-  if (ct.includes("webp")) return "webp";
-  if (ct.includes("gif")) return "gif";
-  return "png";
-}
-
 function toNumericId(value: string) {
   const v = norm(value);
   if (!v) return "";
@@ -302,47 +293,32 @@ async function createProductImages(
   for (const image of images) {
     const sourceUrl = norm(image.url);
     if (!sourceUrl) continue;
-    let bytes: Buffer | null = null;
-    let contentType = "image/png";
-    let ext = "png";
-
     if (isDataImageUrl(sourceUrl)) {
       const parsed = parseDataImage(sourceUrl);
       if (!parsed) continue;
-      bytes = parsed.bytes;
-      contentType = parsed.contentType;
-      ext = parsed.ext;
-    } else {
-      try {
-        const remote = await fetch(sourceUrl, {
-          headers: { Accept: "image/*,*/*;q=0.8", "User-Agent": "Mozilla/5.0" },
-        });
-        if (!remote.ok) {
-          throw new Error(`Unable to fetch source image URL (${remote.status}) for Shopify push.`);
-        }
-        contentType = norm(remote.headers.get("content-type")) || "image/png";
-        ext = extFromContentType(contentType);
-        bytes = Buffer.from(await remote.arrayBuffer());
-      } catch {
-        throw new Error("Unable to fetch source image URL for Shopify push.");
+      const path = `items/push-staging/${Date.now()}-${crypto.randomUUID()}.${parsed.ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from(bucket)
+        .upload(path, parsed.bytes, { contentType: parsed.contentType });
+      if (uploadError) throw new Error(uploadError.message || "Failed to stage image for Shopify push.");
+
+      const { data: signedData } = await supabase.storage.from(bucket).createSignedUrl(path, 60 * 60);
+      const stagedUrl = norm(signedData?.signedUrl || "");
+      if (stagedUrl) {
+        preparedImages.push({ url: stagedUrl, altText: image.altText });
+        continue;
       }
-    }
-
-    if (!bytes || !bytes.length) continue;
-    const path = `items/push-staging/${Date.now()}-${crypto.randomUUID()}.${ext}`;
-    const { error: uploadError } = await supabase.storage
-      .from(bucket)
-      .upload(path, bytes, { contentType });
-    if (uploadError) throw new Error(uploadError.message || "Failed to stage image for Shopify push.");
-
-    const { data: signedData } = await supabase.storage.from(bucket).createSignedUrl(path, 60 * 60);
-    const stagedUrl = norm(signedData?.signedUrl || "");
-    if (stagedUrl) {
-      preparedImages.push({ url: stagedUrl, altText: image.altText });
+      const publicUrl = supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
+      preparedImages.push({ url: norm(publicUrl), altText: image.altText });
       continue;
     }
-    const publicUrl = supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
-    preparedImages.push({ url: norm(publicUrl), altText: image.altText });
+
+    if (/^https?:\/\//i.test(sourceUrl)) {
+      preparedImages.push({ url: sourceUrl, altText: image.altText });
+      continue;
+    }
+
+    throw new Error("Unable to fetch source image URL for Shopify push.");
   }
   if (!preparedImages.length) {
     throw new Error("No valid images to push.");
