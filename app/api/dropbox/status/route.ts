@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { readSession } from "@/lib/userAuth";
-import { getDropboxTokenRow } from "@/lib/dropbox";
+import { getDropboxTokenRowForSession } from "@/lib/dropbox";
 
 export async function GET(req: NextRequest) {
   const session = readSession(req);
@@ -9,12 +9,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const userId = session.userId || session.username || "";
+  const username = session.username || "";
   if (!userId) {
     return NextResponse.json({ connected: false, reason: "missing_user" });
   }
 
   try {
-    const row = await getDropboxTokenRow(userId);
+    const row = await getDropboxTokenRowForSession({ userId, username });
     if (!row?.refresh_token) {
       return NextResponse.json({ connected: false, reason: "not_connected" });
     }
@@ -32,4 +33,3 @@ export async function GET(req: NextRequest) {
     );
   }
 }
-

@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { normalizeUsername } from "@/lib/userAuth";
 
 export type DropboxTokenRow = {
   user_id: string;
@@ -31,6 +32,35 @@ export async function getDropboxTokenRow(userId: string) {
     .maybeSingle();
   if (error) throw new Error(error.message);
   return (data as DropboxTokenRow | null) || null;
+}
+
+async function getUserIdByUsername(username: string) {
+  const normalized = normalizeUsername(username);
+  if (!normalized) return null;
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("app_users")
+    .select("id")
+    .eq("username", normalized)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return String((data as any)?.id || "").trim() || null;
+}
+
+export async function getDropboxTokenRowForSession(args: {
+  userId: string;
+  username?: string | null;
+}) {
+  const direct = await getDropboxTokenRow(args.userId);
+  if (direct?.refresh_token) return direct;
+
+  const byUsernameId = await getUserIdByUsername(String(args.username || ""));
+  if (byUsernameId && byUsernameId !== args.userId) {
+    const row = await getDropboxTokenRow(byUsernameId);
+    if (row?.refresh_token) return row;
+  }
+
+  return null;
 }
 
 export async function upsertDropboxToken(args: {
@@ -86,3 +116,11 @@ export async function getDropboxAccessTokenForUser(userId: string) {
   return refreshDropboxAccessToken(row.refresh_token);
 }
 
+export async function getDropboxAccessTokenForSession(args: {
+  userId: string;
+  username?: string | null;
+}) {
+  const row = await getDropboxTokenRowForSession(args);
+  if (!row?.refresh_token) return null;
+  return refreshDropboxAccessToken(row.refresh_token);
+}

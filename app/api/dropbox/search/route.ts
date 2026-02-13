@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { readSession } from "@/lib/userAuth";
-import { getDropboxAccessTokenForUser } from "@/lib/dropbox";
+import { getDropboxAccessTokenForSession } from "@/lib/dropbox";
 
 type DropboxFile = {
   id: string;
@@ -127,6 +127,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const userId = session.userId || session.username || "";
+  const username = session.username || "";
   if (!userId) {
     return NextResponse.json({ error: "Missing session user id." }, { status: 401 });
   }
@@ -144,7 +145,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const accessToken = await getDropboxAccessTokenForUser(userId);
+    const accessToken = await getDropboxAccessTokenForSession({ userId, username });
     if (!accessToken) {
       return NextResponse.json({ error: "Dropbox is not connected for this user." }, { status: 400 });
     }
