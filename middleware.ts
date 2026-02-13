@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-export function proxy(req: NextRequest) {
+export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const authBypass = (process.env.AUTH_BYPASS || "true").trim().toLowerCase() === "true";
 
@@ -14,7 +14,6 @@ export function proxy(req: NextRequest) {
       sameSite: "lax",
       path: "/",
     });
-    // Keep admin capabilities accessible while auth is temporarily bypassed.
     res.cookies.set({
       name: "carbon_gen_user_role",
       value: req.cookies.get("carbon_gen_user_role")?.value || "admin",

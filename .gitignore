@@ -44,3 +44,9 @@ yarn-error.log*
 next-env.d.ts
 
 .vercel
+
+# OpenNext
+.open-next
+
+# local backups
+backups/

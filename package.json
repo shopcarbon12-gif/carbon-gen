@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "build": "next build --webpack",
     "dev": "next dev",
     "dev:3001": "next dev -p 3001",
-    "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "hash-password": "node scripts/hash-password.mjs",
@@ -15,9 +15,14 @@
     "check:shopify": "node scripts/check-shopify-smoke.mjs",
     "start:tunnel": "powershell -ExecutionPolicy Bypass -File scripts/start-tunnel.ps1",
     "start:local": "powershell -ExecutionPolicy Bypass -File scripts/start-local-stack.ps1",
-    "stop:local": "powershell -ExecutionPolicy Bypass -File scripts/stop-local-stack.ps1"
+    "stop:local": "powershell -ExecutionPolicy Bypass -File scripts/stop-local-stack.ps1",
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload",
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
   },
   "dependencies": {
+    "@opennextjs/cloudflare": "^1.16.4",
     "@supabase/auth-helpers-nextjs": "^0.15.0",
     "@supabase/auth-helpers-react": "^0.15.0",
     "@supabase/ssr": "^0.8.0",
@@ -38,6 +43,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wrangler": "^4.65.0"
   }
 }
