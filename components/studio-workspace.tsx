@@ -3039,6 +3039,12 @@ export default function StudioWorkspace() {
                 </option>
               ))}
             </select>
+            <input
+              value={itemTypeCustom}
+              onChange={(e) => setItemTypeCustom(e.target.value)}
+              placeholder="Other apparel item (enabled only for 'Other Apparel Item')"
+              disabled={itemType !== "other apparel item"}
+            />
           </div>
           <div className="row">
             <input
@@ -3110,15 +3116,6 @@ export default function StudioWorkspace() {
                   </button>
                 );
               })}
-            </div>
-          ) : null}
-          {itemType === "other apparel item" ? (
-            <div className="row">
-              <input
-                value={itemTypeCustom}
-                onChange={(e) => setItemTypeCustom(e.target.value)}
-                placeholder="Type apparel item (e.g., thermal fleece vest)"
-              />
             </div>
           ) : null}
           <div className="source-note muted">
