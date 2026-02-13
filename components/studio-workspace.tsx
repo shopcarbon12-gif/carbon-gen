@@ -1586,21 +1586,39 @@ export default function StudioWorkspace() {
     setPushUploading(true);
     setError(null);
     try {
-      const urls = await uploadFilesToItemsBucket(filtered);
-      if (!urls.length) throw new Error("Upload returned no URLs.");
-      const uploadedRows: PushQueueImage[] = urls.map((url: string, idx: number) => ({
-        id: `upload:${Date.now()}:${idx}`,
+      const settled = await Promise.allSettled(
+        filtered.map(async (file) => {
+          const urls = await uploadFilesToItemsBucket([file]);
+          const url = String(urls[0] || "").trim();
+          if (!url) throw new Error(`No URL returned for ${file.name}`);
+          return { file, url };
+        })
+      );
+      const successes = settled
+        .filter((row): row is PromiseFulfilledResult<{ file: File; url: string }> => row.status === "fulfilled")
+        .map((row) => row.value);
+      const failures = settled
+        .filter((row): row is PromiseRejectedResult => row.status === "rejected")
+        .map((row) => String(row.reason?.message || "Upload failed"));
+
+      if (!successes.length) throw new Error(failures[0] || "Upload returned no URLs.");
+      const uploadedRows: PushQueueImage[] = successes.map(({ file, url }, idx: number) => ({
+        id: `upload:${Date.now()}:${idx}:${crypto.randomUUID()}`,
         sourceImageId: `upload:${idx}`,
         mediaId: null,
         url,
-        title: filtered[idx]?.name || `Uploaded image ${idx + 1}`,
+        title: file?.name || `Uploaded image ${idx + 1}`,
         source: "device_upload",
         altText: "",
         generatingAlt: false,
         deleting: false,
       }));
       setPushImages((prev) => [...prev, ...uploadedRows]);
-      setStatus(`Added ${uploadedRows.length} uploaded image(s) to Shopify Push.`);
+      setStatus(
+        failures.length
+          ? `Added ${uploadedRows.length} image(s). ${failures.length} failed.`
+          : `Added ${uploadedRows.length} uploaded image(s) to Shopify Push.`
+      );
     } catch (e: any) {
       setError(e?.message || "Failed to upload images for Shopify Push.");
     } finally {

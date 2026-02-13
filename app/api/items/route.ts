@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
         const bytes = new Uint8Array(arrayBuffer);
         const remoteContentType = remote.headers.get("content-type") || "application/octet-stream";
         const safeName = guessFileNameFromUrl(sourceUrl, i);
-        const path = `items/shopify/${batchId}/${Date.now()}-${safeName}`;
+        const path = `items/shopify/${batchId}/${Date.now()}-${crypto.randomUUID()}-${safeName}`;
 
         const { error: uploadError } = await supabase.storage
           .from(bucket)
@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
       const arrayBuffer = await file.arrayBuffer();
       const bytes = new Uint8Array(arrayBuffer);
       const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
-      const path = `items/${batchId}/${Date.now()}-${safeName}`;
+      const path = `items/${batchId}/${Date.now()}-${crypto.randomUUID()}-${safeName}`;
 
       const { error: uploadError } = await supabase.storage
         .from(bucket)
