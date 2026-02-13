@@ -125,6 +125,47 @@ function parseDataImage(value: string) {
   return { contentType, bytes, ext };
 }
 
+function parseSupabaseStorageObjectPath(sourceUrl: string) {
+  const supabaseBase = norm(process.env.NEXT_PUBLIC_SUPABASE_URL).replace(/\/+$/, "");
+  if (!supabaseBase) return null;
+  const raw = norm(sourceUrl);
+  if (!raw.startsWith(`${supabaseBase}/storage/v1/object/`)) return null;
+  try {
+    const parsed = new URL(raw);
+    const marker = "/storage/v1/object/";
+    const idx = parsed.pathname.indexOf(marker);
+    if (idx < 0) return null;
+    const tail = parsed.pathname.slice(idx + marker.length); // public|authenticated|sign/<bucket>/<path>
+    const parts = tail.split("/").filter(Boolean);
+    if (parts.length < 3) return null;
+    const mode = parts[0];
+    if (!["public", "authenticated", "sign"].includes(mode)) return null;
+    const bucket = decodeURIComponent(parts[1] || "");
+    const objectPath = decodeURIComponent(parts.slice(2).join("/"));
+    if (!bucket || !objectPath) return null;
+    return { bucket, objectPath };
+  } catch {
+    return null;
+  }
+}
+
+async function getShopifySourceUrl(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  sourceUrl: string
+) {
+  const raw = norm(sourceUrl);
+  if (!/^https?:\/\//i.test(raw)) return "";
+
+  const storageRef = parseSupabaseStorageObjectPath(raw);
+  if (!storageRef) return raw;
+
+  const { data } = await supabase.storage
+    .from(storageRef.bucket)
+    .createSignedUrl(storageRef.objectPath, 60 * 60);
+  const signed = norm(data?.signedUrl || "");
+  return signed || raw;
+}
+
 function toNumericId(value: string) {
   const v = norm(value);
   if (!v) return "";
@@ -314,7 +355,11 @@ async function createProductImages(
     }
 
     if (/^https?:\/\//i.test(sourceUrl)) {
-      preparedImages.push({ url: sourceUrl, altText: image.altText });
+      const shopifySourceUrl = await getShopifySourceUrl(supabase, sourceUrl);
+      if (!shopifySourceUrl) {
+        throw new Error("Unable to prepare source image URL for Shopify push.");
+      }
+      preparedImages.push({ url: shopifySourceUrl, altText: image.altText });
       continue;
     }
 
