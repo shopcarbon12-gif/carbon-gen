@@ -133,6 +133,18 @@ function mergeUniqueFiles(existing: File[], incoming: File[]) {
   return next;
 }
 
+function mergeUniqueByNameAndSize(existing: File[], incoming: File[]) {
+  const seen = new Set(existing.map((f) => `${f.name}::${f.size}`));
+  const out = [...existing];
+  for (const file of incoming) {
+    const key = `${file.name}::${file.size}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(file);
+  }
+  return out;
+}
+
 function openInputPicker(input: HTMLInputElement | null) {
   if (!input) return;
   const picker = input as HTMLInputElement & { showPicker?: () => void };
@@ -1515,10 +1527,14 @@ export default function StudioWorkspace() {
       if (!pushImages.length) {
         throw new Error("No images selected for Shopify push.");
       }
-      const invalidSource = pushImages.find((img) => !/^https?:\/\//i.test(String(img.url || "")));
+      const invalidSource = pushImages.find(
+        (img) =>
+          !/^https?:\/\//i.test(String(img.url || "")) &&
+          !/^data:image\/[a-zA-Z0-9.+-]+;base64,/i.test(String(img.url || ""))
+      );
       if (invalidSource) {
         throw new Error(
-          "Some push images are not uploaded URLs yet. Use split/upload actions before pushing to Shopify."
+          "Some push images are invalid. Re-add them before pushing to Shopify."
         );
       }
 
@@ -1587,12 +1603,7 @@ export default function StudioWorkspace() {
     setError(null);
     try {
       const settled = await Promise.allSettled(
-        filtered.map(async (file) => {
-          const urls = await uploadFilesToItemsBucket([file]);
-          const url = String(urls[0] || "").trim();
-          if (!url) throw new Error(`No URL returned for ${file.name}`);
-          return { file, url };
-        })
+        filtered.map(async (file) => ({ file, url: await fileToDataUrl(file) }))
       );
       const successes = settled
         .filter((row): row is PromiseFulfilledResult<{ file: File; url: string }> => row.status === "fulfilled")
@@ -1601,7 +1612,7 @@ export default function StudioWorkspace() {
         .filter((row): row is PromiseRejectedResult => row.status === "rejected")
         .map((row) => String(row.reason?.message || "Upload failed"));
 
-      if (!successes.length) throw new Error(failures[0] || "Upload returned no URLs.");
+      if (!successes.length) throw new Error(failures[0] || "No images could be read.");
       const uploadedRows: PushQueueImage[] = successes.map(({ file, url }, idx: number) => ({
         id: `upload:${Date.now()}:${idx}:${crypto.randomUUID()}`,
         sourceImageId: `upload:${idx}`,
@@ -2631,11 +2642,8 @@ export default function StudioWorkspace() {
       }
     }
 
-    if (!files.length && e.dataTransfer.files?.length) {
-      return filterImages(e.dataTransfer.files);
-    }
-
-    return files;
+    const fallbackFiles = e.dataTransfer.files?.length ? filterImages(e.dataTransfer.files) : [];
+    return mergeUniqueByNameAndSize(files, fallbackFiles);
   }
 
   useEffect(() => {
@@ -2794,6 +2802,15 @@ export default function StudioWorkspace() {
     return new File([bytes], fileName, { type: "image/png" });
   }
 
+  function fileToDataUrl(file: File) {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(new Error(`Failed to read ${file.name}`));
+      reader.readAsDataURL(file);
+    });
+  }
+
   async function uploadFilesToItemsBucket(files: File[]) {
     if (!files.length) return [] as string[];
     const form = new FormData();
@@ -2816,28 +2833,13 @@ export default function StudioWorkspace() {
     setSplitSendingToPush(true);
     setError(null);
     try {
-      const files = splitCrops.map((crop) => base64ToFile(crop.imageBase64, crop.fileName));
-      const urls = await uploadFilesToItemsBucket(files);
-      if (!urls.length) {
-        throw new Error("Split upload returned no URLs.");
-      }
-      const next = splitCrops.map((crop, idx) => {
-        const uploadedUrl = String(urls[idx] || "").trim();
-        return {
-          ...crop,
-          uploadedUrl,
-        };
-      });
-      setSplitCrops(next);
-
-      const pushRows: PushQueueImage[] = next
-        .filter((crop) => Boolean(crop.uploadedUrl))
+      const pushRows: PushQueueImage[] = [...splitCrops]
         .sort((a, b) => a.poseNumber - b.poseNumber)
         .map((crop) => ({
           id: `split:${crop.poseNumber}:${crop.fileName}`,
           sourceImageId: `split:${crop.poseNumber}`,
           mediaId: null,
-          url: String(crop.uploadedUrl || ""),
+          url: `data:image/png;base64,${crop.imageBase64}`,
           title: crop.fileName,
           source: "generated_split",
           altText: "",
@@ -2846,7 +2848,7 @@ export default function StudioWorkspace() {
         }));
 
       if (!pushRows.length) {
-        throw new Error("No uploaded split images are available for Shopify push.");
+        throw new Error("No split images are available for Shopify push.");
       }
 
       setPushImages((prev) => {
