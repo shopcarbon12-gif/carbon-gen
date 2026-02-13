@@ -611,7 +611,7 @@ export default function StudioWorkspace() {
       throw new Error(
         `Server returned HTML instead of JSON${where} (status ${resp.status}). ` +
           `This usually means a tunnel/proxy/origin issue. ` +
-          `Try directly on http://localhost:3001 and restart cloudflared + dev server. ` +
+          `Try directly on http://localhost:3000 and restart cloudflared + dev server. ` +
           `Snippet: ${snippet || "<empty>"}`
       );
     }
@@ -620,6 +620,37 @@ export default function StudioWorkspace() {
         ? `Unexpected response${where}: ${snippet}`
         : `Unexpected non-JSON response${where}`
     );
+  }
+
+  async function fetchJsonWithRetry(
+    endpoint: string,
+    init: RequestInit,
+    retries = 1
+  ): Promise<{ resp: Response; json: any }> {
+    let attempt = 0;
+    let lastError: any = null;
+    while (attempt <= retries) {
+      try {
+        const resp = await fetch(endpoint, init);
+        const json = await parseJsonResponse(resp, endpoint);
+        return { resp, json };
+      } catch (e: any) {
+        lastError = e;
+        const msg = String(e?.message || "");
+        const isNetwork =
+          /failed to fetch/i.test(msg) ||
+          /networkerror/i.test(msg) ||
+          /network request failed/i.test(msg);
+        if (!isNetwork || attempt >= retries) break;
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+      attempt += 1;
+    }
+    const suffix =
+      endpoint === "/api/generate"
+        ? "Network issue while calling generation API. Check internet/VPN and retry."
+        : "Network request failed.";
+    throw new Error(`${lastError?.message || "Request failed"} ${suffix}`.trim());
   }
 
   async function pushSeo() {
@@ -2288,28 +2319,30 @@ export default function StudioWorkspace() {
             itemType: effectiveItemType,
           });
 
-          const resp = await fetch("/api/generate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Accept: "application/json" },
-            body: JSON.stringify({
-              prompt,
-              // Keep requested panel ratio; quality is controlled by the API route.
-              size: "1536x1024",
-              modelRefs: selectedModel.ref_image_urls,
-              itemRefs: effectiveItemRefs,
-              panelQa: {
-                panelNumber,
-                panelLabel: panelButtonLabel,
-                poseA,
-                poseB,
-                modelName: selectedModel.name,
-                modelGender: selectedModel.gender,
-                itemType: effectiveItemType,
-              },
-            }),
-          });
-
-          const json = await parseJsonResponse(resp, "/api/generate");
+          const { resp, json } = await fetchJsonWithRetry(
+            "/api/generate",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Accept: "application/json" },
+              body: JSON.stringify({
+                prompt,
+                // Keep requested panel ratio; quality is controlled by the API route.
+                size: "1536x1024",
+                modelRefs: selectedModel.ref_image_urls,
+                itemRefs: effectiveItemRefs,
+                panelQa: {
+                  panelNumber,
+                  panelLabel: panelButtonLabel,
+                  poseA,
+                  poseB,
+                  modelName: selectedModel.name,
+                  modelGender: selectedModel.gender,
+                  itemType: effectiveItemType,
+                },
+              }),
+            },
+            1
+          );
           if (!resp.ok) {
             setGenerateOpenAiResponse((prev) =>
               prev
