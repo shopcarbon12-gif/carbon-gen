@@ -62,22 +62,44 @@ export async function POST(req: NextRequest) {
     ].join("\n");
 
     const modelImageUrl = await toModelImageUrl(imageUrl);
-    const response = await client.responses.create({
-      model: "gpt-4o-mini",
-      temperature: 0.2,
-      max_output_tokens: 180,
-      input: [
-        {
-          role: "user",
-          content: [
-            { type: "input_text", text: prompt },
-            { type: "input_image", image_url: modelImageUrl || imageUrl, detail: "auto" },
-          ],
-        },
-      ],
-    });
+    let rawAlt = "";
+    try {
+      const response = await client.responses.create({
+        model: "gpt-4o-mini",
+        temperature: 0.2,
+        max_output_tokens: 180,
+        input: [
+          {
+            role: "user",
+            content: [
+              { type: "input_text", text: prompt },
+              { type: "input_image", image_url: modelImageUrl || imageUrl, detail: "auto" },
+            ],
+          },
+        ],
+      });
+      rawAlt = normalizeText(response.output_text || "");
+    } catch {
+      rawAlt = "";
+    }
 
-    const rawAlt = normalizeText(response.output_text || "");
+    if (!rawAlt) {
+      const completion = await client.chat.completions.create({
+        model: "gpt-4o-mini",
+        temperature: 0.2,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: prompt },
+              { type: "image_url", image_url: { url: modelImageUrl || imageUrl } },
+            ],
+          },
+        ],
+      });
+      rawAlt = normalizeText(completion.choices?.[0]?.message?.content || "");
+    }
+
     if (!rawAlt) {
       return NextResponse.json({ error: "Alt generation returned empty content." }, { status: 500 });
     }
