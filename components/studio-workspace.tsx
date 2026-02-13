@@ -1882,7 +1882,7 @@ export default function StudioWorkspace() {
     ];
     if (g === "male") {
       lines.push(
-        "- Male swimwear rule: a bare upper torso is allowed for swimwear-shorts looks in neutral catalog styling."
+        "- Male swimwear rule: shirtless upper-body styling is allowed for swimwear looks in neutral catalog presentation."
       );
     } else if (g === "female") {
       lines.push(
@@ -2059,6 +2059,10 @@ export default function StudioWorkspace() {
   function getPanelCriticalLockLines(gender: string, panelNumber: number, itemTypeValue = "") {
     const panelAdultLock = "- HARD AGE LOCK: the model is over 18+.";
     const lockedItemType = String(itemTypeValue || "").trim();
+    const normalizedItemType =
+      String(gender || "").trim().toLowerCase() === "female" && isSwimwearItemType(lockedItemType)
+        ? "swimwear"
+        : lockedItemType;
     const swimwearActive = isSwimwearItemType(lockedItemType);
     const footwearHardLockLine = swimwearActive
       ? "- Swimwear footwear lock: full-body frames may use flip-flops/water-shoes, or naturally uncovered feet."
@@ -2066,8 +2070,8 @@ export default function StudioWorkspace() {
     const footwearWhenFullBodyLine = swimwearActive
       ? "- Swimwear footwear lock: when a frame is full-body, use flip-flops/water-shoes, or naturally uncovered feet."
       : "- Footwear hard lock: when a frame is full-body, shoes must be worn and visible.";
-    const closeUpSubjectLine = lockedItemType
-      ? `- CLOSE-UP SUBJECT LOCK: section 0.5 item type is "${lockedItemType}". Close-up must show this item type only.`
+    const closeUpSubjectLine = normalizedItemType
+      ? `- CLOSE-UP SUBJECT LOCK: section 0.5 item type is "${normalizedItemType}". Close-up must show this item type only.`
       : "- CLOSE-UP SUBJECT LOCK: close-up must follow section 0.5 item type only.";
     const closeUpCategoryRule = getCloseUpCategoryRule(lockedItemType);
     const g = String(gender || "").toLowerCase();
@@ -2209,8 +2213,13 @@ export default function StudioWorkspace() {
     const swimwearActive = isSwimwearItemType(args.itemType);
     const swimwearStyleLines = getSwimwearStyleLockLines(args.modelGender, args.itemType);
     const closeUpCategoryRule = getCloseUpCategoryRule(args.itemType);
-    const closeUpSubjectLine = args.itemType.trim()
-      ? `- CLOSE-UP SUBJECT LOCK: the close-up subject must match section 0.5 item type "${args.itemType.trim()}" exactly.`
+    const promptItemType =
+      String(args.modelGender || "").trim().toLowerCase() === "female" &&
+      isSwimwearItemType(args.itemType)
+        ? "swimwear"
+        : args.itemType.trim();
+    const closeUpSubjectLine = promptItemType
+      ? `- CLOSE-UP SUBJECT LOCK: the close-up subject must match section 0.5 item type "${promptItemType}" exactly.`
       : "- CLOSE-UP SUBJECT LOCK: the close-up subject must match section 0.5 item type exactly.";
 
     return [
@@ -2296,7 +2305,7 @@ export default function StudioWorkspace() {
       "If a full-body active pose would crop head or feet, zoom out and reframe until full body is fully visible.",
       "If an active pose is not full-body (e.g., close-up/lower-body/torso crop), follow that crop as defined.",
       `Model: ${args.modelName} (${args.modelGender}).`,
-      `Item type: ${args.itemType}.`,
+      `Item type: ${promptItemType || args.itemType}.`,
       "Pure white background, high-key studio light, faint contact shadow only.",
       "Background hard lock: keep a sharp, clean studio white background (no gray cast, no gradient, no vignette, no texture, no wrinkles).",
       "Background hard lock: use seamless pure white cyclorama look (#FFFFFF), no horizon line, and no color tint.",
@@ -4359,16 +4368,16 @@ export default function StudioWorkspace() {
           object-position: center;
         }
         .item-selected-grid {
-          display: grid;
-          grid-template-columns: repeat(6, minmax(0, 1fr));
+          display: flex;
+          flex-wrap: wrap;
           justify-content: center;
           align-items: stretch;
           gap: 10px;
-          max-width: 100%;
+          max-width: 1260px;
           margin: 0 auto;
         }
         .item-selected-grid .preview-card {
-          width: 100%;
+          width: 200px;
         }
         .split-results-grid {
           display: grid;
@@ -4455,9 +4464,11 @@ export default function StudioWorkspace() {
         }
         .item-catalog-selected-card img.item-catalog-selected-image {
           width: 100%;
-          height: auto;
-          aspect-ratio: 3 / 4;
+          height: 240px;
           object-fit: contain;
+          object-position: center;
+          display: block;
+          margin: 0 auto;
           border-radius: 8px;
           background: #f8fafc;
         }

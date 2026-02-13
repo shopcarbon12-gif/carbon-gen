@@ -676,8 +676,22 @@ export async function POST(req: NextRequest) {
     const openai = new OpenAI({ apiKey });
     const imageTimeoutMs = getImageTimeoutMs();
     const imageModel = (process.env.OPENAI_IMAGE_MODEL || "gpt-image-1.5").trim() || "gpt-image-1.5";
+    const swimwearActive = isSwimwearItemType(normalizedPanelQa.itemType);
     const serverIdentityLockPrompt = buildServerIdentityLockPrompt(normalizedPanelQa);
-    const lockedPrompt = [prompt, "", serverIdentityLockPrompt].join("\n");
+    const lockedPrompt = [
+      prompt,
+      "",
+      serverIdentityLockPrompt,
+      ...(swimwearActive
+        ? [
+            "SWIMWEAR SAFETY LOCK (SERVER):",
+            "Professional ecommerce swimwear catalog image only.",
+            "Adult model (18+), neutral posture, non-suggestive composition.",
+            "No erotic context, no intimate framing, no sexual emphasis.",
+            "Focus on garment fit, color, material, and product details.",
+          ]
+        : []),
+    ].join("\n");
 
     // Keep refs bounded: model identity anchors first, then product anchors.
     const modelAnchors = normalizedModelRefs.slice(0, 6);
@@ -756,7 +770,6 @@ export async function POST(req: NextRequest) {
       }
 
       // One safe retry: keep request intent, enforce standard ecommerce clothing context.
-      const swimwearActive = isSwimwearItemType(normalizedPanelQa.itemType);
       const safePrompt = [
         lockedPrompt,
         "",
