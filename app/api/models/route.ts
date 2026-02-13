@@ -22,6 +22,16 @@ function sanitizeReferenceUrl(value: unknown) {
   return v.trim();
 }
 
+function isTemporaryReferenceUrl(raw: string) {
+  const v = String(raw || "").toLowerCase();
+  if (!v) return false;
+  if (v.includes("/storage/v1/object/sign/")) return true;
+  if (v.includes("token=") || v.includes("x-amz-signature=") || v.includes("x-amz-security-token="))
+    return true;
+  if (v.includes("dl.dropboxusercontent.com")) return true;
+  return false;
+}
+
 async function modelNameExistsForUser(userId: string, candidateName: string) {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
@@ -63,6 +73,16 @@ export async function POST(req: NextRequest) {
             .map((v: unknown) => sanitizeReferenceUrl(v))
             .filter((v: string) => v.length > 0)
         : [];
+
+      if (urls.some((u) => isTemporaryReferenceUrl(u))) {
+        return NextResponse.json(
+          {
+            error:
+              "Some model reference images are temporary links and expired. Re-add the model from current uploads.",
+          },
+          { status: 400 }
+        );
+      }
     } else {
       const form = await req.formData();
       name = String(form.get("name") || "").trim();

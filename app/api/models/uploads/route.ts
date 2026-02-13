@@ -39,6 +39,16 @@ function sanitizeReferenceUrl(value: unknown) {
   return v.trim();
 }
 
+function isTemporaryReferenceUrl(raw: string) {
+  const v = String(raw || "").toLowerCase();
+  if (!v) return false;
+  if (v.includes("/storage/v1/object/sign/")) return true;
+  if (v.includes("token=") || v.includes("x-amz-signature=") || v.includes("x-amz-security-token="))
+    return true;
+  if (v.includes("dl.dropboxusercontent.com")) return true;
+  return false;
+}
+
 function fileNameFromPath(path: string) {
   return path.split("/").pop() || path;
 }
@@ -104,7 +114,7 @@ async function loadModelRowsForSession(userId: string | null) {
   if (userId) {
     const { data, error } = await supabase
       .from("models")
-      .select("name,gender,created_at,ref_image_urls")
+      .select("model_id,name,gender,created_at,ref_image_urls")
       .eq("user_id", userId)
       .order("created_at", { ascending: true });
     if (error) {
@@ -118,7 +128,7 @@ async function loadModelRowsForSession(userId: string | null) {
   // Fallback for legacy/cross-domain sessions that do not map to the current cookie user_id.
   const { data, error } = await supabase
     .from("models")
-    .select("name,gender,created_at,ref_image_urls")
+    .select("model_id,name,gender,created_at,ref_image_urls")
     .order("created_at", { ascending: true });
 
   if (error) {
@@ -151,16 +161,25 @@ export async function GET(req: NextRequest) {
       __bucket?: string | null;
       __objectPath?: string | null;
     }> = [];
+    const staleModelIds = new Set<string>();
 
     for (const row of modelRows || []) {
       const urls = Array.isArray((row as any).ref_image_urls) ? (row as any).ref_image_urls : [];
+      const modelId = String((row as any).model_id || "").trim();
       const modelName = String((row as any).name || "");
       const gender = normalizeGender((row as any).gender);
       const createdAt = String((row as any).created_at || "") || null;
+      const cleanedUrls = urls
+        .map((raw: unknown) => sanitizeReferenceUrl(raw))
+        .filter((raw: string) => raw.length > 0);
 
-      for (const raw of urls) {
-        const rawUrl = sanitizeReferenceUrl(raw);
-        if (!rawUrl) continue;
+      const hasTemporaryRefs = cleanedUrls.some((rawUrl: string) => isTemporaryReferenceUrl(rawUrl));
+      if (hasTemporaryRefs) {
+        if (modelId) staleModelIds.add(modelId);
+        continue;
+      }
+
+      for (const rawUrl of cleanedUrls) {
 
         const parsed = extractPathFromStorageUrl(rawUrl);
         // Keep only the configured bucket when parseable; otherwise keep legacy URL entries.
@@ -182,6 +201,16 @@ export async function GET(req: NextRequest) {
           __objectPath: parsed?.objectPath || null,
         });
       }
+    }
+
+    if (staleModelIds.size) {
+      const supabase = getSupabaseAdmin();
+      const userCookieId = req.cookies.get("carbon_gen_user_id")?.value?.trim() || null;
+      let staleDelete = supabase.from("models").delete().in("model_id", Array.from(staleModelIds));
+      if (userCookieId) {
+        staleDelete = staleDelete.eq("user_id", userCookieId);
+      }
+      await staleDelete;
     }
 
     // Deduplicate repeated uploads by source filename only.
