@@ -34,6 +34,18 @@ export async function getDropboxTokenRow(userId: string) {
   return (data as DropboxTokenRow | null) || null;
 }
 
+async function getLatestDropboxTokenRow() {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("dropbox_tokens")
+    .select("user_id,refresh_token,account_id,email,connected_at,updated_at")
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data as DropboxTokenRow | null) || null;
+}
+
 async function getUserIdByUsername(username: string) {
   const normalized = normalizeUsername(username);
   if (!normalized) return null;
@@ -58,6 +70,13 @@ export async function getDropboxTokenRowForSession(args: {
   if (byUsernameId && byUsernameId !== args.userId) {
     const row = await getDropboxTokenRow(byUsernameId);
     if (row?.refresh_token) return row;
+  }
+
+  // Admin fallback: when using master-login/admin session, allow the most recently
+  // connected Dropbox token to be used so Studio search still works.
+  if (normalizeUsername(String(args.username || "")) === "admin") {
+    const latest = await getLatestDropboxTokenRow();
+    if (latest?.refresh_token) return latest;
   }
 
   return null;
