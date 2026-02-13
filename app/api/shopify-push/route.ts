@@ -318,15 +318,13 @@ async function createProductImages(
           headers: { Accept: "image/*,*/*;q=0.8", "User-Agent": "Mozilla/5.0" },
         });
         if (!remote.ok) {
-          preparedImages.push({ url: sourceUrl, altText: image.altText });
-          continue;
+          throw new Error(`Unable to fetch source image URL (${remote.status}) for Shopify push.`);
         }
         contentType = norm(remote.headers.get("content-type")) || "image/png";
         ext = extFromContentType(contentType);
         bytes = Buffer.from(await remote.arrayBuffer());
       } catch {
-        preparedImages.push({ url: sourceUrl, altText: image.altText });
-        continue;
+        throw new Error("Unable to fetch source image URL for Shopify push.");
       }
     }
 
@@ -636,15 +634,16 @@ export async function POST(req: NextRequest) {
     }
 
     let deletedMediaIds: string[] = [];
+    let existingImageMediaIds: string[] = [];
     if (removeExisting) {
-      const existingImageMediaIds = await listProductImageMediaIds(shop, productGid);
-      if (existingImageMediaIds.length) {
-        const deleted = await deleteMedia(shop, productGid, existingImageMediaIds);
-        deletedMediaIds = deleted.deletedMediaIds || [];
-      }
+      existingImageMediaIds = await listProductImageMediaIds(shop, productGid);
     }
 
     const created = await createProductImages(shop, productGid, images);
+    if (removeExisting && existingImageMediaIds.length) {
+      const deleted = await deleteMedia(shop, productGid, existingImageMediaIds);
+      deletedMediaIds = deleted.deletedMediaIds || [];
+    }
     const variantRows = await getProductVariants(shop, productGid);
     const variantGidByNumericId = new Map(
       variantRows
