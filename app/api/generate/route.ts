@@ -179,6 +179,16 @@ function isFullBodyPose(gender: string, pose: number | null) {
   return p === 1 || p === 2 || p === 4;
 }
 
+function isBackFacingPose(gender: string, pose: number | null) {
+  if (!Number.isFinite(Number(pose))) return false;
+  const p = Number(pose);
+  const g = String(gender || "").trim().toLowerCase();
+  if (g === "female") {
+    return p === 2;
+  }
+  return p === 4 || p === 7;
+}
+
 function inferItemTypeCategory(itemTypeValue: string) {
   const t = String(itemTypeValue || "").trim().toLowerCase();
   if (!t) return "item";
@@ -327,6 +337,9 @@ function normalizePanelQa(value: any): PanelQaInput {
 function buildServerIdentityLockPrompt(panelQa: PanelQaInput) {
   const modelName = panelQa.modelName || "locked model";
   const modelGender = panelQa.modelGender || "model";
+  const backLockActive =
+    isBackFacingPose(panelQa.modelGender, panelQa.poseA) ||
+    isBackFacingPose(panelQa.modelGender, panelQa.poseB);
   return [
     "SERVER-ENFORCED IDENTITY LOCK (NON-NEGOTIABLE):",
     `- Use ONLY MODEL reference images for person identity (${modelName}, ${modelGender}).`,
@@ -340,6 +353,18 @@ function buildServerIdentityLockPrompt(panelQa: PanelQaInput) {
     "- No pink tint, warm tint, cream cast, gray cast, gradient, vignette, texture, or wrinkles.",
     "- Keep the exact same white background tone and lighting across all generated panels.",
     "- Keep only a very faint neutral contact shadow on floor; no colored bounce light.",
+    "SERVER-ENFORCED ITEM FIDELITY LOCK (NON-NEGOTIABLE):",
+    "- Garment design must match item-reference photos exactly.",
+    "- Never invent, replace, remove, recolor, or restyle logos/graphics/prints/embroidery/patches.",
+    "- If an item ref shows a back graphic/print, preserve that exact back design (position, scale, colors, and style).",
+    "- If refs do not show a back graphic, do not hallucinate one.",
+    ...(backLockActive
+      ? [
+          "BACK-VIEW STRICT LOCK ACTIVE:",
+          "- At least one active pose is back-facing in this panel.",
+          "- Back-facing frame must reflect the exact back design from refs; no substitutions.",
+        ]
+      : []),
   ].join("\n");
 }
 
@@ -411,6 +436,9 @@ async function runPanelComplianceCheck(args: {
   const hasFullBodyActivePose =
     isFullBodyPose(args.panelQa.modelGender, args.panelQa.poseA) ||
     isFullBodyPose(args.panelQa.modelGender, args.panelQa.poseB);
+  const hasBackFacingActivePose =
+    isBackFacingPose(args.panelQa.modelGender, args.panelQa.poseA) ||
+    isBackFacingPose(args.panelQa.modelGender, args.panelQa.poseB);
   const closeUpSubjectLockActive = hasPanel3CloseUpSubjectLock(args.panelQa);
   const closeUpCategoryQaRule = getCloseUpCategoryQaRule(args.panelQa.itemType);
   const userContent: any[] = [
@@ -435,6 +463,12 @@ async function runPanelComplianceCheck(args: {
               `- ${closeUpCategoryQaRule}`,
             ]
           : []),
+        ...(hasBackFacingActivePose
+          ? [
+              "- Back-view strict lock active for this panel.",
+              "- Any back-facing frame must keep the exact back design from item refs (no invented/changed back graphics).",
+            ]
+          : []),
         "- Identity fidelity lock active: generated person must match MODEL refs for facial geometry and skin tone/undertone.",
         "- Background lock active: seamless pure white studio background only (#FFFFFF), no tint.",
         "- 2:3 center-crop lock active: each left/right pose should be centered in its half so a center 2:3 crop keeps key subject details intact.",
@@ -456,6 +490,7 @@ async function runPanelComplianceCheck(args: {
         "}",
         "If any full-body pose appears barefoot or socks-only, set pass=false.",
         "If close-up subject lock is active and the right close-up clearly focuses on a different item type/category than the locked section 0.5 item type, set pass=false.",
+        "If back-view strict lock is active and back-facing design does not clearly match item refs, set pass=false.",
         "If either side appears significantly off-center such that a center 2:3 crop would cut key model/item content, set pass=false.",
         "If facial geometry or skin tone/undertone clearly drifts from MODEL refs, set pass=false.",
         "If background is not seamless pure white (any pink/warm/cream/gray tint, gradient, vignette, texture, or colored cast), set pass=false.",
