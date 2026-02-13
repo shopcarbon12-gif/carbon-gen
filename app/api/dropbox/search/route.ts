@@ -31,6 +31,25 @@ function normalizeBarcode(value: string) {
     .trim();
 }
 
+function buildBarcodeCandidates(barcode: string) {
+  const v = normalizeBarcode(barcode);
+  const set = new Set<string>();
+  if (!v) return [];
+  set.add(v);
+  if (v.startsWith("c")) {
+    const digits = v.slice(1);
+    if (digits) set.add(digits);
+  } else {
+    set.add(`c${v}`);
+  }
+  return Array.from(set).filter(Boolean);
+}
+
+function pathHasBarcodeToken(pathLower: string, tokens: string[]) {
+  const p = normalizePath(pathLower);
+  return tokens.some((t) => p.includes(t));
+}
+
 function isImageName(name: string) {
   return /\.(avif|bmp|gif|heic|heif|jpeg|jpg|png|tif|tiff|webp)$/i.test(name);
 }
@@ -151,16 +170,22 @@ export async function POST(req: NextRequest) {
     }
 
     const rootPath = await resolveSearchRoot(accessToken, DROPBOX_SEARCH_ROOT);
-    const search = await dropboxRpc(accessToken, "files/search_v2", {
-      query: barcode,
-      options: {
-        path: rootPath,
-        max_results: 50,
-        filename_only: false,
-      },
-    });
+    const barcodeCandidates = buildBarcodeCandidates(barcode);
+    const searchMatches: any[] = [];
+    for (const query of barcodeCandidates.slice(0, 2)) {
+      const search = await dropboxRpc(accessToken, "files/search_v2", {
+        query,
+        options: {
+          path: rootPath,
+          max_results: 50,
+          filename_only: false,
+        },
+      });
+      const matches = Array.isArray(search?.matches) ? search.matches : [];
+      searchMatches.push(...matches);
+    }
 
-    const matches = Array.isArray(search?.matches) ? search.matches : [];
+    const matches = searchMatches;
     const matchedFiles: DropboxFile[] = [];
     const matchedFolders: string[] = [];
     for (const match of matches) {
@@ -168,6 +193,7 @@ export async function POST(req: NextRequest) {
       const tag = String(m?.[".tag"] || "");
       const p = normalizePath(String(m?.path_lower || ""));
       if (!p || !p.startsWith(rootPath)) continue;
+      if (!pathHasBarcodeToken(p, barcodeCandidates)) continue;
       if (tag === "file") {
         const name = String(m?.name || "");
         if (isImageName(name)) {
@@ -187,7 +213,7 @@ export async function POST(req: NextRequest) {
       for (const entry of scanned) {
         const tag = String(entry?.[".tag"] || "");
         const p = normalizePath(String(entry?.path_lower || ""));
-        if (!p || !p.startsWith(rootPath) || !p.includes(barcode)) continue;
+        if (!p || !p.startsWith(rootPath) || !pathHasBarcodeToken(p, barcodeCandidates)) continue;
         if (tag === "folder") {
           matchedFolders.push(p);
           continue;
