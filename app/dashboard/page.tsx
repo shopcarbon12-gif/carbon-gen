@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   GenerationRecord,
@@ -137,7 +138,7 @@ export default function DashboardPage() {
         <h1 style={{ margin: 0 }}>Dashboard</h1>
 
         <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-          <a href="/">Home</a>
+          <Link href="/">Home</Link>
           <a href="/generate">Generate</a>
 
           <button

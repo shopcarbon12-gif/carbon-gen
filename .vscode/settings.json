@@ -1,0 +1,23 @@
+{
+  "terminal.integrated.defaultProfile.windows": "PowerShell",
+  "files.exclude": {
+    ".next": true,
+    ".open-next": true,
+    ".wrangler": true
+  },
+  "search.exclude": {
+    ".next": true,
+    ".open-next": true,
+    ".wrangler": true
+  },
+  "files.watcherExclude": {
+    "**/.next/**": true,
+    "**/.open-next/**": true,
+    "**/.wrangler/**": true
+  },
+  "eslint.workingDirectories": [
+    {
+      "mode": "auto"
+    }
+  ]
+}

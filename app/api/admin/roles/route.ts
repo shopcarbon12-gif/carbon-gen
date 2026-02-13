@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: insertErr.message }, { status: 500 });
     }
 
-    let sourcePermissions: Record<string, boolean> = {};
+    const sourcePermissions: Record<string, boolean> = {};
     if (cloneFrom) {
       const { data } = await supabase
         .from("app_role_permissions")
@@ -138,4 +138,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: missingTablesMessage(e) }, { status: 500 });
   }
 }
-
