@@ -38,6 +38,7 @@ const CATALOG_PAGE_SIZE = 10;
 const SPLIT_TARGET_WIDTH = 770;
 const SPLIT_TARGET_HEIGHT = 1155;
 const ALT_GENERATION_BATCH_SIZE = 3;
+const PUSH_STAGING_BATCH_SIZE = 4;
 
 type ShopifyCatalogProduct = {
   id: string;
@@ -1527,21 +1528,36 @@ export default function StudioWorkspace() {
       if (!pushImages.length) {
         throw new Error("No images selected for Shopify push.");
       }
-      const invalidSource = pushImages.find(
-        (img) =>
-          !/^https?:\/\//i.test(String(img.url || "")) &&
-          !/^data:image\/[a-zA-Z0-9.+-]+;base64,/i.test(String(img.url || ""))
+
+      const stagedUrlById = new Map<string, string>();
+      const dataRows = pushImages.filter((img) =>
+        /^data:image\/[a-zA-Z0-9.+-]+;base64,/i.test(String(img.url || ""))
       );
-      if (invalidSource) {
-        throw new Error(
-          "Some push images are invalid. Re-add them before pushing to Shopify."
+      for (let i = 0; i < dataRows.length; i += PUSH_STAGING_BATCH_SIZE) {
+        const batch = dataRows.slice(i, i + PUSH_STAGING_BATCH_SIZE);
+        setStatus(
+          `Preparing images for Shopify (${i + 1}-${Math.min(i + batch.length, dataRows.length)} of ${dataRows.length})...`
         );
+        const files = batch.map((img, idx) =>
+          dataUrlToFile(String(img.url || ""), img.title || `push-image-${i + idx + 1}.png`)
+        );
+        const urls = await uploadFilesToItemsBucket(files);
+        if (urls.length !== batch.length) {
+          throw new Error("Failed to prepare all images for Shopify push.");
+        }
+        for (let j = 0; j < batch.length; j += 1) {
+          stagedUrlById.set(batch[j].id, String(urls[j] || "").trim());
+        }
       }
 
       const payloadImages = pushImages.map((img) => ({
-        url: img.url,
+        url: stagedUrlById.get(img.id) || img.url,
         altText: img.altText.trim(),
       }));
+      const invalidSource = payloadImages.find((img) => !/^https?:\/\//i.test(String(img.url || "")));
+      if (invalidSource) {
+        throw new Error("Some push images could not be prepared. Re-add them before pushing.");
+      }
       const imageIndexByPushId = new Map(pushImages.map((img, idx) => [img.id, idx]));
       const colorAssignments = pushVariants
         .filter((variant) => variant.assignedPushImageId && imageIndexByPushId.has(variant.assignedPushImageId))
@@ -2800,6 +2816,32 @@ export default function StudioWorkspace() {
       bytes[i] = binary.charCodeAt(i);
     }
     return new File([bytes], fileName, { type: "image/png" });
+  }
+
+  function dataUrlToFile(dataUrl: string, fallbackName: string) {
+    const raw = String(dataUrl || "");
+    const match = raw.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/i);
+    if (!match) {
+      throw new Error("Invalid image data payload.");
+    }
+    const mime = String(match[1] || "image/png").toLowerCase();
+    const base64 = String(match[2] || "");
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    const ext =
+      mime.includes("png")
+        ? "png"
+        : mime.includes("jpeg") || mime.includes("jpg")
+          ? "jpg"
+          : mime.includes("webp")
+            ? "webp"
+            : "png";
+    const safe = String(fallbackName || "push-image").replace(/[^a-zA-Z0-9.\-_]/g, "_");
+    const finalName = safe.includes(".") ? safe : `${safe}.${ext}`;
+    return new File([bytes], finalName, { type: mime });
   }
 
   function fileToDataUrl(file: File) {
