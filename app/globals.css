@@ -1,8 +1,21 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap");
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #050505;
+  --foreground: #f8fafc;
+  --muted: rgba(226, 232, 240, 0.72);
+  --panel-bg: rgba(255, 255, 255, 0.035);
+  --panel-border: rgba(255, 255, 255, 0.1);
+  --panel-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  --control-bg: rgba(12, 8, 22, 0.42);
+  --control-border: rgba(255, 255, 255, 0.22);
+  --control-border-focus: rgba(255, 255, 255, 0.38);
+  --control-fg: #f8fafc;
+  --control-placeholder: rgba(203, 213, 225, 0.62);
+  --control-radius: 12px;
+  --control-height: 52px;
+  --control-padding-x: 14px;
 }
 
 * {
@@ -19,4 +32,196 @@ body {
 body {
   background: var(--background);
   color: var(--foreground);
+  font-family: "Inter", var(--font-geist-sans), "Segoe UI", Roboto, Arial, sans-serif;
+  position: relative;
+  isolation: isolate;
+}
+
+/* Background lock: this is the only source of page background in the app. */
+.app-bg-photo {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: #050505
+    url("https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2564&auto=format&fit=crop")
+    no-repeat center center fixed;
+  background-size: cover;
+  filter: saturate(1.12) contrast(1.06) brightness(1.04);
+}
+
+.app-bg-fade {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.62);
+}
+
+.app-root-content {
+  position: relative;
+  z-index: 2;
+  min-height: 100vh;
+}
+
+a {
+  color: inherit;
+  transition:
+    color 0.16s ease,
+    background-color 0.16s ease,
+    border-color 0.16s ease,
+    opacity 0.16s ease,
+    transform 0.16s ease;
+}
+
+a:hover {
+  opacity: 0.96;
+  transform: translateY(-1px);
+}
+
+a:active {
+  transform: translateY(0);
+}
+
+.glass-panel {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 20px;
+  box-shadow: var(--panel-shadow);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.control-label {
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+textarea,
+select {
+  width: 100%;
+  min-height: var(--control-height);
+  border-radius: var(--control-radius);
+  border: 1px solid var(--control-border);
+  background: var(--control-bg);
+  color: var(--control-fg);
+  padding: 10px var(--control-padding-x);
+  font: inherit;
+  text-transform: capitalize;
+  outline: none;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    background-color 0.16s ease;
+}
+
+textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"])::placeholder,
+textarea::placeholder {
+  color: var(--control-placeholder);
+  text-transform: capitalize;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
+textarea:focus,
+select:focus {
+  border-color: var(--control-border-focus);
+  box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.14);
+}
+
+/* Dropdown list text color (e.g., Gender options). */
+select option,
+select optgroup {
+  color: #000000;
+}
+
+button,
+.btn-base {
+  min-height: 46px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background-color 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease,
+    opacity 0.16s ease,
+    transform 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+button:hover:not(:disabled),
+.btn-base:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
+}
+
+button:active:not(:disabled),
+.btn-base:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn-primary {
+  background: #f3f4f6;
+  color: #060606;
+  border-color: #f3f4f6;
+}
+
+.btn-primary:hover {
+  background: #d9dce1;
+  border-color: #d9dce1;
+}
+
+.btn-outline {
+  background: transparent;
+  color: #f8fafc;
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.btn-outline:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.btn-danger {
+  background: rgba(239, 68, 68, 0.14);
+  color: #fecaca;
+  border-color: rgba(248, 113, 113, 0.4);
+}
+
+.btn-danger:hover {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+button:disabled,
+.btn-base:disabled {
+  opacity: 0.66;
+  cursor: not-allowed;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.24);
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.25);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.42);
 }

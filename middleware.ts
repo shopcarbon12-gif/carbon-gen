@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const loginPreview = req.nextUrl.searchParams.get("preview") === "1";
   const authBypass = (process.env.AUTH_BYPASS || "true").trim().toLowerCase() === "true";
 
   if (authBypass) {
@@ -39,7 +40,7 @@ export function middleware(req: NextRequest) {
         path: "/",
       });
     }
-    if (pathname === "/login") {
+    if (pathname === "/login" && !loginPreview) {
       const studioUrl = req.nextUrl.clone();
       studioUrl.pathname = "/studio/images";
       return NextResponse.redirect(studioUrl);

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 
@@ -9,15 +9,15 @@ export default function LoginPage() {
   const [status, setStatus] = useState<string | null>(null);
 
   async function onLogin() {
-    const un = username.trim();
-    const pw = password; // DO NOT trim (a real password may contain spaces)
+    const un = username.trim().toLowerCase();
+    const pw = password;
 
     if (!un) {
-      setStatus("❌ Please enter a username.");
+      setStatus("Enter your username.");
       return;
     }
     if (!pw) {
-      setStatus("❌ Please enter a password.");
+      setStatus("Enter your password.");
       return;
     }
 
@@ -32,65 +32,132 @@ export default function LoginPage() {
       });
 
       const data = await res.json().catch(() => ({}));
-
       if (!res.ok) {
         throw new Error(data?.error || `Login failed (${res.status})`);
       }
 
       window.location.href = "/studio/images";
     } catch (e: any) {
-      setStatus(`❌ ${e?.message || "Login failed"}`);
+      const msg = String(e?.message || "Login failed");
+      if (msg.toLowerCase().includes("invalid username or password")) {
+        setStatus("Invalid username or password.");
+      } else {
+        setStatus(msg);
+      }
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div style={{ maxWidth: 420, margin: "48px auto", fontFamily: "system-ui" }}>
-      <h1>Login</h1>
-      <p>Username + password login</p>
+    <div className="login-shell">
+      <section className="login-card glass-panel" aria-label="Carbon login">
+        <h1>CARBON</h1>
+        <p>STUDIO ENVIRONMENT</p>
 
-      <input
-        type="text"
-        value={username}
-        onChange={(e) => setUsername(e.target.value)}
-        placeholder="Username"
-        style={{ width: "100%", padding: 12, marginTop: 12 }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") onLogin();
-        }}
-      />
-
-      <input
-        type="password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        placeholder="Password"
-        style={{ width: "100%", padding: 12, marginTop: 12 }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") onLogin();
-        }}
-      />
-
-      <button
-        onClick={onLogin}
-        disabled={loading}
-        style={{ width: "100%", padding: 12, marginTop: 12, cursor: "pointer" }}
-      >
-        {loading ? "Logging in..." : "Login"}
-      </button>
-
-      {status && (
-        <pre
-          style={{
-            marginTop: 12,
-            whiteSpace: "pre-wrap",
-            color: status.startsWith("❌") ? "crimson" : "green",
+        <input
+          type="text"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          placeholder="Enter Username"
+          autoComplete="username"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") onLogin();
           }}
-        >
-          {status}
-        </pre>
-      )}
+        />
+
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Enter Password"
+          autoComplete="current-password"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") onLogin();
+          }}
+        />
+
+        <button type="button" onClick={onLogin} disabled={loading}>
+          {loading ? "Authenticating..." : "Authenticate"}
+        </button>
+
+        {status ? <div className="status">{status}</div> : null}
+      </section>
+
+      <style jsx>{`
+        .login-shell {
+          min-height: 100vh;
+          position: relative;
+          display: grid;
+          place-items: center;
+          padding: 24px;
+          overflow: hidden;
+          color: #fff;
+          font-family: "Inter", "Segoe UI", Roboto, Arial, sans-serif;
+        }
+        .login-card {
+          position: relative;
+          z-index: 2;
+          width: min(460px, 92vw);
+          border-radius: 22px;
+          padding: 38px 38px 34px;
+          text-align: center;
+        }
+        h1 {
+          margin: 0;
+          font-size: clamp(2.2rem, 5vw, 3.1rem);
+          line-height: 1;
+          letter-spacing: 0.04em;
+          font-weight: 800;
+          color: #f3f4f6;
+        }
+        p {
+          margin: 12px 0 26px;
+          font-size: 0.99rem;
+          letter-spacing: 0.28em;
+          color: rgba(226, 232, 240, 0.72);
+        }
+        input {
+          width: 100%;
+          min-height: 52px;
+          border-radius: 14px;
+          border: 1px solid rgba(255, 255, 255, 0.22);
+          background: rgba(12, 8, 22, 0.42);
+          color: #ffffff;
+          font-size: 1.02rem;
+          padding: 10px 14px;
+          outline: none;
+          margin-bottom: 12px;
+        }
+        input::placeholder {
+          color: rgba(203, 213, 225, 0.62);
+        }
+        input:focus {
+          border-color: rgba(255, 255, 255, 0.36);
+        }
+        button {
+          width: 100%;
+          height: 56px;
+          border: 1px solid #f3f4f6;
+          border-radius: 10px;
+          background: #f3f4f6;
+          color: #000;
+          font-size: 1.06rem;
+          font-weight: 700;
+          cursor: pointer;
+          margin-top: 4px;
+        }
+        button:disabled {
+          opacity: 0.75;
+          cursor: default;
+        }
+        .status {
+          margin-top: 12px;
+          font-size: 0.9rem;
+          color: #fca5a5;
+          min-height: 1.2rem;
+        }
+      `}</style>
     </div>
   );
 }

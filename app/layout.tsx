@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -27,7 +28,20 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <Script id="scroll-reset" strategy="beforeInteractive">{`
+          try {
+            if ("scrollRestoration" in history) {
+              history.scrollRestoration = "manual";
+            }
+            window.scrollTo(0, 0);
+            window.addEventListener("pageshow", function () {
+              window.scrollTo(0, 0);
+            });
+          } catch {}
+        `}</Script>
+        <div className="app-bg-photo" aria-hidden />
+        <div className="app-bg-fade" aria-hidden />
+        <div className="app-root-content">{children}</div>
       </body>
     </html>
   );

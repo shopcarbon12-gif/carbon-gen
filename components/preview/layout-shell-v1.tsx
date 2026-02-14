@@ -120,9 +120,6 @@ export default function LayoutShellV1() {
 
   return (
     <div className="preview-shell">
-      <div className="bg-photo" />
-      <div className="bg-fade" />
-
       <div className="mobile-top">
         <div className="brand-word">Carbon.</div>
         <button
@@ -233,25 +230,8 @@ export default function LayoutShellV1() {
         .preview-shell {
           min-height: 100vh;
           color: #fff;
-          background: #050505;
           position: relative;
           overflow: hidden;
-        }
-        .bg-photo {
-          position: absolute;
-          inset: 0;
-          background-image: url("https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2564&auto=format&fit=crop");
-          background-size: cover;
-          background-position: center;
-          opacity: 0.35;
-          z-index: 0;
-        }
-        .bg-fade {
-          position: absolute;
-          inset: 0;
-          background: radial-gradient(circle at 20% 15%, rgba(255, 255, 255, 0.1), transparent 45%),
-            linear-gradient(140deg, rgba(0, 0, 0, 0.86), rgba(0, 0, 0, 0.65), rgba(0, 0, 0, 0.88));
-          z-index: 0;
         }
         .mobile-top {
           display: none;
@@ -507,4 +487,3 @@ export default function LayoutShellV1() {
     </div>
   );
 }
-

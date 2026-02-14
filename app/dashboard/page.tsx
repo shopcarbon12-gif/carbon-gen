@@ -17,10 +17,8 @@ function includesAllTokens(haystack: string, tokens: string[]) {
 export default function DashboardPage() {
   const [items, setItems] = useState<GenerationRecord[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<"newest" | "oldest">("newest");
-
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,10 +30,8 @@ export default function DashboardPage() {
   async function refresh() {
     setError(null);
     setStatus(null);
-
     try {
       const list = await idbListGenerations(200);
-
       const sorted =
         sort === "newest"
           ? list
@@ -44,11 +40,10 @@ export default function DashboardPage() {
                 new Date(a.createdAt).getTime() -
                 new Date(b.createdAt).getTime()
             );
-
       setItems(sorted);
       setSelectedId((prev) => prev ?? sorted[0]?.id ?? null);
     } catch (e: any) {
-      setError(e?.message || "Failed to load from IndexedDB");
+      setError(e?.message || "Failed to load saved generations.");
     }
   }
 
@@ -68,7 +63,6 @@ export default function DashboardPage() {
       .toLowerCase()
       .split(/\s+/)
       .filter(Boolean);
-
     if (tokens.length === 0) return items;
     return items.filter((x) => includesAllTokens(x.prompt, tokens));
   }, [items, query]);
@@ -82,28 +76,25 @@ export default function DashboardPage() {
   async function onDeleteOne(id: string) {
     setError(null);
     setStatus(null);
-
     try {
       await idbDeleteGeneration(id);
       await refresh();
-      setStatus("✅ Deleted.");
+      setStatus("Deleted.");
     } catch (e: any) {
-      setError(e?.message || "Delete failed");
+      setError(e?.message || "Delete failed.");
     }
   }
 
   async function onClearAll() {
     setError(null);
     setStatus(null);
-
-    if (!confirm("Delete ALL saved generations?")) return;
-
+    if (!confirm("Delete all saved generations?")) return;
     try {
       await idbClearAll();
       await refresh();
-      setStatus("✅ Cleared all.");
+      setStatus("Cleared all.");
     } catch (e: any) {
-      setError(e?.message || "Clear all failed");
+      setError(e?.message || "Clear all failed.");
     }
   }
 
@@ -124,276 +115,345 @@ export default function DashboardPage() {
   }
 
   return (
-    <div style={{ maxWidth: 1200, margin: "48px auto", fontFamily: "system-ui" }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: 12,
-          marginBottom: 16,
-          flexWrap: "wrap",
-        }}
-      >
-        <h1 style={{ margin: 0 }}>Dashboard</h1>
-
-        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-          <Link href="/">Home</Link>
-          <a href="/generate">Generate</a>
-
-          <button
-            onClick={refresh}
-            style={{
-              padding: "10px 12px",
-              borderRadius: 8,
-              border: "1px solid #ddd",
-              cursor: "pointer",
-            }}
-          >
+    <main className="page">
+      <section className="glass-panel hero">
+        <div>
+          <div className="eyebrow">System</div>
+          <h1>Workspace Dashboard</h1>
+          <p className="muted">Browse, filter, preview, and manage saved generations.</p>
+        </div>
+        <div className="top-actions">
+          <Link href="/studio/images" className="chip">
+            Image Studio
+          </Link>
+          <Link href="/generate" className="chip">
+            Generate
+          </Link>
+          <button className="btn-base btn-outline action-btn" onClick={refresh}>
             Refresh
           </button>
-
-          <button
-            onClick={onClearAll}
-            style={{
-              padding: "10px 12px",
-              borderRadius: 8,
-              border: "1px solid #ddd",
-              cursor: "pointer",
-            }}
-          >
-            Clear all
+          <button className="btn-base btn-outline action-btn" onClick={onClearAll}>
+            Clear All
           </button>
-
-          <button
-            onClick={onLogout}
-            style={{
-              padding: "10px 12px",
-              borderRadius: 8,
-              border: "1px solid #ddd",
-              cursor: "pointer",
-            }}
-          >
+          <button className="btn-base btn-danger action-btn" onClick={onLogout}>
             Logout
           </button>
         </div>
-      </div>
+      </section>
 
       {(error || status) && (
-        <div style={{ marginBottom: 14 }}>
-          {error && <div style={{ color: "crimson" }}>❌ {error}</div>}
-          {status && <div style={{ color: "green" }}>{status}</div>}
-        </div>
+        <section className="glass-panel notice">
+          {error ? <div className="error">Error: {error}</div> : null}
+          {status ? <div className="status">{status}</div> : null}
+        </section>
       )}
 
-      <div
-        style={{
-          border: "1px solid #eee",
-          borderRadius: 10,
-          padding: 12,
-          marginBottom: 16,
-          display: "grid",
-          gap: 10,
-        }}
-      >
-        <div style={{ display: "grid", gap: 8 }}>
-          <label style={{ fontWeight: 600 }}>Search prompts</label>
+      <section className="glass-panel filters">
+        <div className="filter-col">
+          <label className="control-label" htmlFor="search">
+            Search Prompts
+          </label>
           <input
+            id="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder='Try: "hoodie", "studio", "mannequin"'
-            style={{
-              width: "100%",
-              padding: 12,
-              borderRadius: 8,
-              border: "1px solid #ddd",
-            }}
+            placeholder='Try "hoodie", "studio", or "mannequin"'
           />
         </div>
 
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "end" }}>
-          <div style={{ display: "grid", gap: 6 }}>
-            <label style={{ fontSize: 12, color: "#444" }}>Sort</label>
-            <select
-              value={sort}
-              onChange={(e) => setSort(e.target.value as any)}
-              style={{
-                padding: 10,
-                borderRadius: 8,
-                border: "1px solid #ddd",
-              }}
-            >
-              <option value="newest">Newest first</option>
-              <option value="oldest">Oldest first</option>
-            </select>
-          </div>
-
-          <div style={{ padding: 10, borderRadius: 8, border: "1px solid #eee" }}>
-            Results: <b>{filtered.length}</b> / {items.length}
-          </div>
+        <div className="filter-col small">
+          <label className="control-label" htmlFor="sort">
+            Sort
+          </label>
+          <select id="sort" value={sort} onChange={(e) => setSort(e.target.value as "newest" | "oldest")}>
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+          </select>
         </div>
-      </div>
+
+        <div className="result-pill">
+          Results: <b>{filtered.length}</b> / {items.length}
+        </div>
+      </section>
 
       {items.length === 0 ? (
-        <div style={{ padding: 16, border: "1px solid #eee", borderRadius: 10 }}>
-          <p style={{ marginTop: 0 }}>No saved generations yet.</p>
-          <a href="/generate">Go generate and save one →</a>
-        </div>
+        <section className="glass-panel card">
+          <p>No saved generations yet.</p>
+          <Link href="/generate" className="chip">
+            Go generate and save one
+          </Link>
+        </section>
       ) : filtered.length === 0 ? (
-        <div style={{ padding: 16, border: "1px solid #eee", borderRadius: 10 }}>
-          <p style={{ marginTop: 0 }}>No matches for your search.</p>
-          <button
-            onClick={() => setQuery("")}
-            style={{
-              padding: "10px 12px",
-              borderRadius: 8,
-              border: "1px solid #ddd",
-              cursor: "pointer",
-            }}
-          >
-            Clear search
+        <section className="glass-panel card">
+          <p>No matches for your search.</p>
+          <button className="btn-base btn-outline action-btn" onClick={() => setQuery("")}>
+            Clear Search
           </button>
-        </div>
+        </section>
       ) : (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 420px",
-            gap: 16,
-            alignItems: "start",
-          }}
-        >
-          <div style={{ border: "1px solid #eee", borderRadius: 10, padding: 12 }}>
-            <div style={{ fontWeight: 600, marginBottom: 10 }}>Gallery</div>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                gap: 12,
-              }}
-            >
+        <section className="main-grid">
+          <article className="glass-panel card">
+            <div className="card-title">Gallery</div>
+            <div className="gallery">
               {filtered.map((x) => {
                 const isActive = x.id === selectedId;
-
                 return (
                   <div
                     key={x.id}
+                    className={`tile ${isActive ? "active" : ""}`}
                     onClick={() => setSelectedId(x.id)}
-                    style={{
-                      border: isActive ? "2px solid #111" : "1px solid #ddd",
-                      borderRadius: 10,
-                      overflow: "hidden",
-                      cursor: "pointer",
-                      background: "white",
-                    }}
                     title={x.prompt}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setSelectedId(x.id);
+                      }
+                    }}
                   >
-                    <div style={{ aspectRatio: "1 / 1", background: "#fafafa" }}>
-                      <img
-                        src={`data:image/png;base64,${x.imageBase64}`}
-                        alt="Saved generation"
-                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                      />
-                    </div>
-
-                    <div style={{ padding: 10 }}>
-                      <div style={{ fontSize: 12, color: "#666" }}>
-                        {new Date(x.createdAt).toLocaleString()}
+                    <img src={`data:image/png;base64,${x.imageBase64}`} alt="Saved generation" />
+                    <div className="tile-meta">
+                      <div className="tile-date">{new Date(x.createdAt).toLocaleString()}</div>
+                      <div className="tile-prompt">
+                        {x.prompt.length > 80 ? `${x.prompt.slice(0, 80)}...` : x.prompt}
                       </div>
-
-                      <div style={{ marginTop: 6, fontSize: 13, lineHeight: 1.25 }}>
-                        {x.prompt.length > 70 ? x.prompt.slice(0, 70) + "…" : x.prompt}
-                      </div>
-
-                      <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onDeleteOne(x.id);
-                          }}
-                          style={{
-                            padding: "6px 10px",
-                            borderRadius: 999,
-                            border: "1px solid #ddd",
-                            cursor: "pointer",
-                            fontSize: 12,
-                            color: "crimson",
-                          }}
-                        >
-                          Delete
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        className="tile-delete"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteOne(x.id);
+                        }}
+                      >
+                        Delete
+                      </button>
                     </div>
                   </div>
                 );
               })}
             </div>
-          </div>
+          </article>
 
-          <div style={{ border: "1px solid #eee", borderRadius: 10, padding: 16 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+          <article className="glass-panel card">
+            <div className="preview-head">
               <div>
-                <div style={{ fontSize: 12, color: "#666" }}>
+                <div className="tile-date">
                   {selected ? new Date(selected.createdAt).toLocaleString() : "No selection"}
                 </div>
-                <h2 style={{ margin: "8px 0 0 0" }}>Preview</h2>
+                <div className="card-title">Preview</div>
               </div>
-
-              {selected && (
-                <button
-                  onClick={onDownloadSelected}
-                  style={{
-                    padding: "10px 12px",
-                    borderRadius: 8,
-                    border: "1px solid #ddd",
-                    cursor: "pointer",
-                    height: 40,
-                    alignSelf: "flex-start",
-                  }}
-                >
+              {selected ? (
+                <button className="btn-base btn-outline action-btn" onClick={onDownloadSelected}>
                   Download PNG
                 </button>
-              )}
+              ) : null}
             </div>
 
             {!selected ? (
-              <div style={{ marginTop: 12 }}>Click any item in the gallery.</div>
+              <p>Click any item in the gallery.</p>
             ) : (
               <>
-                <p style={{ marginTop: 10, color: "#333" }}>
+                <p className="muted">
                   <b>Prompt:</b> {selected.prompt}
                 </p>
-
-                <img
-                  src={`data:image/png;base64,${selected.imageBase64}`}
-                  alt="Selected generation"
-                  style={{
-                    width: "100%",
-                    border: "1px solid #ddd",
-                    borderRadius: 10,
-                  }}
-                />
-
-                <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
-                  <button
-                    onClick={() => onDeleteOne(selected.id)}
-                    style={{
-                      padding: "10px 12px",
-                      borderRadius: 8,
-                      border: "1px solid #ddd",
-                      cursor: "pointer",
-                      color: "crimson",
-                    }}
-                  >
-                    Delete selected
-                  </button>
+                <div className="preview-wrap">
+                  <img src={`data:image/png;base64,${selected.imageBase64}`} alt="Selected generation" />
                 </div>
+                <button className="btn-base btn-danger action-btn" onClick={() => onDeleteOne(selected.id)}>
+                  Delete Selected
+                </button>
               </>
             )}
-          </div>
-        </div>
+          </article>
+        </section>
       )}
-    </div>
+
+      <style jsx>{`
+        .page {
+          max-width: 1320px;
+          margin: 0 auto;
+          padding: 22px 8px 26px;
+          display: grid;
+          gap: 14px;
+          color: #f8fafc;
+        }
+        .hero,
+        .filters,
+        .card,
+        .notice {
+          padding: 18px;
+        }
+        .eyebrow {
+          font-size: 0.74rem;
+          text-transform: uppercase;
+          letter-spacing: 0.12em;
+          color: rgba(52, 211, 153, 0.92);
+          font-weight: 700;
+          margin-bottom: 6px;
+        }
+        h1 {
+          margin: 0;
+          font-size: clamp(1.9rem, 3vw, 2.7rem);
+          line-height: 1.1;
+        }
+        .muted {
+          color: rgba(226, 232, 240, 0.82);
+          margin: 0;
+        }
+        .top-actions {
+          margin-top: 14px;
+          display: flex;
+          gap: 10px;
+          flex-wrap: wrap;
+          align-items: center;
+        }
+        .chip {
+          text-decoration: none;
+          border-radius: 999px;
+          border: 1px solid rgba(255, 255, 255, 0.24);
+          background: rgba(255, 255, 255, 0.04);
+          color: #f8fafc;
+          padding: 9px 14px;
+          font-size: 0.84rem;
+          font-weight: 700;
+        }
+        .chip:hover {
+          border-color: rgba(255, 255, 255, 0.34);
+          background: rgba(255, 255, 255, 0.1);
+        }
+        .action-btn {
+          min-width: 130px;
+          padding: 10px 14px;
+        }
+        .notice {
+          display: grid;
+          gap: 4px;
+        }
+        .error {
+          color: #fca5a5;
+          font-weight: 700;
+        }
+        .status {
+          color: #86efac;
+          font-weight: 700;
+        }
+        .filters {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 220px auto;
+          gap: 10px;
+          align-items: end;
+        }
+        .filter-col {
+          display: grid;
+          gap: 8px;
+        }
+        .result-pill {
+          min-height: 46px;
+          border-radius: 999px;
+          border: 1px solid rgba(255, 255, 255, 0.24);
+          background: rgba(255, 255, 255, 0.06);
+          padding: 10px 14px;
+          display: inline-flex;
+          align-items: center;
+          white-space: nowrap;
+          font-size: 0.9rem;
+        }
+        .main-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+          gap: 14px;
+          align-items: start;
+        }
+        .card {
+          display: grid;
+          gap: 12px;
+        }
+        .card-title {
+          font-size: 1.05rem;
+          font-weight: 700;
+        }
+        .gallery {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 10px;
+        }
+        .tile {
+          border: 1px solid rgba(255, 255, 255, 0.16);
+          border-radius: 12px;
+          overflow: hidden;
+          background: rgba(255, 255, 255, 0.04);
+          color: #f8fafc;
+          text-align: left;
+          padding: 0;
+          cursor: pointer;
+        }
+        .tile.active {
+          border-color: rgba(52, 211, 153, 0.72);
+          box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.24);
+        }
+        .tile img {
+          width: 100%;
+          aspect-ratio: 1 / 1;
+          object-fit: cover;
+          display: block;
+        }
+        .tile-meta {
+          padding: 10px;
+          display: grid;
+          gap: 6px;
+        }
+        .tile-date {
+          color: rgba(226, 232, 240, 0.68);
+          font-size: 0.75rem;
+        }
+        .tile-prompt {
+          font-size: 0.83rem;
+          line-height: 1.35;
+        }
+        .tile-delete {
+          min-height: 0;
+          width: fit-content;
+          border-radius: 999px;
+          border: 1px solid rgba(248, 113, 113, 0.4);
+          background: rgba(239, 68, 68, 0.14);
+          color: #fecaca;
+          font-size: 0.74rem;
+          padding: 4px 10px;
+          cursor: pointer;
+        }
+        .preview-head {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+        .preview-wrap {
+          border-radius: 14px;
+          border: 1px solid rgba(255, 255, 255, 0.14);
+          background: rgba(255, 255, 255, 0.03);
+          padding: 10px;
+        }
+        .preview-wrap img {
+          width: 100%;
+          border-radius: 10px;
+          display: block;
+        }
+        @media (max-width: 1120px) {
+          .filters {
+            grid-template-columns: minmax(0, 1fr);
+          }
+          .main-grid {
+            grid-template-columns: minmax(0, 1fr);
+          }
+        }
+        @media (max-width: 840px) {
+          .gallery {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+        }
+      `}</style>
+    </main>
   );
 }

@@ -269,42 +269,53 @@ export default function RolesPage() {
       <style jsx>{`
         .page {
           max-width: 1180px;
-          margin: 48px auto;
-          padding: 24px;
-          font-family: "Space Grotesk", system-ui, sans-serif;
-          color: #0f172a;
+          margin: 0 auto;
+          padding: 22px 8px 26px;
+          color: #f8fafc;
           display: grid;
-          gap: 16px;
+          gap: 14px;
         }
         .hero {
           display: grid;
           gap: 12px;
         }
         .eyebrow {
-          font-size: 0.75rem;
+          font-size: 0.74rem;
           text-transform: uppercase;
           letter-spacing: 0.12em;
-          color: #0b6b58;
+          color: rgba(52, 211, 153, 0.92);
           font-weight: 700;
         }
         h1 {
-          margin: 6px 0;
-          font-size: clamp(1.8rem, 3vw, 2.5rem);
+          margin: 0;
+          font-size: clamp(1.9rem, 3vw, 2.7rem);
+          line-height: 1.1;
         }
         .nav {
           display: flex;
           gap: 10px;
           flex-wrap: wrap;
-          padding: 12px;
-          border: 1px solid #e2e8f0;
-          border-radius: 10px;
-          background: #f8fafc;
+          padding: 10px;
+          border: 1px solid rgba(255, 255, 255, 0.16);
+          border-radius: 12px;
+          background: rgba(255, 255, 255, 0.04);
+        }
+        .nav :global(a) {
+          text-decoration: none;
+          border-radius: 999px;
+          border: 1px solid rgba(255, 255, 255, 0.22);
+          padding: 7px 12px;
+          font-size: 0.82rem;
+          font-weight: 700;
         }
         .card {
-          border: 1px solid #e2e8f0;
-          border-radius: 14px;
-          padding: 16px;
-          background: #fff;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 16px;
+          padding: 18px;
+          background: rgba(255, 255, 255, 0.035);
+          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
           display: grid;
           gap: 10px;
         }
@@ -312,32 +323,24 @@ export default function RolesPage() {
           font-weight: 700;
         }
         .muted {
-          color: #64748b;
+          color: rgba(226, 232, 240, 0.82);
         }
         .error {
-          color: #b91c1c;
-          font-weight: 600;
+          color: #fca5a5;
+          font-weight: 700;
         }
         .create-grid {
           display: grid;
           gap: 8px;
           grid-template-columns: 1.6fr 1.2fr auto;
         }
-        input,
-        select {
-          border: 1px solid #e2e8f0;
-          border-radius: 10px;
-          padding: 10px 12px;
-          font-size: 0.95rem;
-          min-height: 42px;
-        }
         .btn {
-          border: 1px solid #0b6b58;
-          background: #0b6b58;
-          color: #fff;
-          border-radius: 999px;
+          border: 1px solid #f3f4f6;
+          background: #f3f4f6;
+          color: #050505;
+          border-radius: 10px;
           padding: 10px 14px;
-          font-weight: 600;
+          font-weight: 700;
           cursor: pointer;
           text-decoration: none;
           display: inline-flex;
@@ -345,13 +348,14 @@ export default function RolesPage() {
           justify-content: center;
         }
         .btn.danger {
-          background: #fff;
-          color: #b91c1c;
-          border-color: #fecaca;
+          background: rgba(239, 68, 68, 0.14);
+          color: #fecaca;
+          border-color: rgba(248, 113, 113, 0.4);
         }
         .btn.mini {
           padding: 2px 8px;
           font-size: 0.75rem;
+          min-height: 28px;
         }
         .btn:disabled {
           opacity: 0.65;
@@ -359,8 +363,8 @@ export default function RolesPage() {
         }
         .matrix-wrap {
           overflow: auto;
-          border: 1px solid #e2e8f0;
-          border-radius: 10px;
+          border: 1px solid rgba(255, 255, 255, 0.16);
+          border-radius: 12px;
         }
         table {
           width: 100%;
@@ -369,12 +373,13 @@ export default function RolesPage() {
         }
         th,
         td {
-          border-bottom: 1px solid #e2e8f0;
-          border-right: 1px solid #e2e8f0;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+          border-right: 1px solid rgba(255, 255, 255, 0.14);
           padding: 8px;
           vertical-align: middle;
           text-align: center;
-          background: #fff;
+          background: rgba(255, 255, 255, 0.03);
+          color: #f8fafc;
         }
         th:first-child,
         td:first-child {
@@ -382,7 +387,7 @@ export default function RolesPage() {
           min-width: 260px;
         }
         th {
-          background: #f8fafc;
+          background: rgba(255, 255, 255, 0.08);
           position: sticky;
           top: 0;
           z-index: 2;
@@ -397,15 +402,15 @@ export default function RolesPage() {
           gap: 2px;
         }
         .perm-label span {
-          color: #64748b;
+          color: rgba(203, 213, 225, 0.78);
           font-size: 0.8rem;
         }
         .banner {
           margin-top: 4px;
           padding: 10px 12px;
-          border: 1px solid #e2e8f0;
+          border: 1px solid rgba(255, 255, 255, 0.18);
           border-radius: 12px;
-          background: #f8fafc;
+          background: rgba(255, 255, 255, 0.05);
           display: grid;
           gap: 4px;
         }

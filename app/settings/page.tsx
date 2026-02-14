@@ -650,42 +650,53 @@ export default function SettingsPage() {
       <style jsx>{`
         .page {
           max-width: 1080px;
-          margin: 48px auto;
-          padding: 24px;
-          font-family: "Space Grotesk", system-ui, sans-serif;
-          color: #0f172a;
+          margin: 0 auto;
+          padding: 22px 8px 26px;
+          color: #f8fafc;
           display: grid;
-          gap: 16px;
+          gap: 14px;
         }
         .hero {
           display: grid;
           gap: 12px;
         }
         .eyebrow {
-          font-size: 0.75rem;
+          font-size: 0.74rem;
           text-transform: uppercase;
           letter-spacing: 0.12em;
-          color: #0b6b58;
+          color: rgba(52, 211, 153, 0.92);
           font-weight: 700;
         }
         h1 {
-          margin: 6px 0;
-          font-size: clamp(1.8rem, 3vw, 2.5rem);
+          margin: 0;
+          font-size: clamp(1.9rem, 3vw, 2.7rem);
+          line-height: 1.1;
         }
         .nav {
           display: flex;
           gap: 10px;
           flex-wrap: wrap;
-          padding: 12px;
-          border: 1px solid #e2e8f0;
-          border-radius: 10px;
-          background: #f8fafc;
+          padding: 10px;
+          border: 1px solid rgba(255, 255, 255, 0.16);
+          border-radius: 12px;
+          background: rgba(255, 255, 255, 0.04);
+        }
+        .nav :global(a) {
+          text-decoration: none;
+          border-radius: 999px;
+          border: 1px solid rgba(255, 255, 255, 0.22);
+          padding: 7px 12px;
+          font-size: 0.82rem;
+          font-weight: 700;
         }
         .card {
-          border: 1px solid #e2e8f0;
-          border-radius: 14px;
-          padding: 16px;
-          background: #fff;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 16px;
+          padding: 18px;
+          background: rgba(255, 255, 255, 0.035);
+          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
           display: grid;
           gap: 10px;
         }
@@ -693,22 +704,14 @@ export default function SettingsPage() {
           font-weight: 700;
         }
         .muted {
-          color: #64748b;
-        }
-        input,
-        select {
-          border: 1px solid #e2e8f0;
-          border-radius: 10px;
-          padding: 10px 12px;
-          font-size: 0.95rem;
-          min-height: 42px;
+          color: rgba(226, 232, 240, 0.82);
         }
         .status-row {
           display: flex;
           align-items: center;
           gap: 8px;
           font-size: 0.9rem;
-          color: #475569;
+          color: rgba(226, 232, 240, 0.86);
         }
         .status-dot {
           width: 10px;
@@ -725,27 +728,28 @@ export default function SettingsPage() {
           gap: 10px;
         }
         .btn {
-          border: 1px solid #0b6b58;
-          background: #0b6b58;
-          color: #fff;
-          border-radius: 999px;
+          border: 1px solid #f3f4f6;
+          background: #f3f4f6;
+          color: #050505;
+          border-radius: 10px;
           padding: 10px 14px;
-          font-weight: 600;
+          font-weight: 700;
           cursor: pointer;
           text-decoration: none;
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          min-height: 40px;
+          min-height: 46px;
         }
         .btn.ghost {
           background: transparent;
-          color: #0b6b58;
+          color: #f8fafc;
+          border-color: rgba(255, 255, 255, 0.28);
         }
         .btn.danger {
-          background: #fff;
-          color: #b91c1c;
-          border-color: #fecaca;
+          background: rgba(239, 68, 68, 0.14);
+          color: #fecaca;
+          border-color: rgba(248, 113, 113, 0.4);
         }
         .btn:disabled {
           cursor: not-allowed;
@@ -766,28 +770,29 @@ export default function SettingsPage() {
           gap: 8px;
           align-items: center;
           padding: 8px;
-          border: 1px solid #e2e8f0;
+          border: 1px solid rgba(255, 255, 255, 0.16);
           border-radius: 10px;
+          background: rgba(255, 255, 255, 0.02);
         }
         .active-toggle {
           display: inline-flex;
           gap: 6px;
           align-items: center;
-          color: #334155;
+          color: rgba(226, 232, 240, 0.9);
           font-size: 0.9rem;
         }
         .banner {
           margin-top: 4px;
           padding: 10px 12px;
-          border: 1px solid #e2e8f0;
+          border: 1px solid rgba(255, 255, 255, 0.18);
           border-radius: 12px;
-          background: #f8fafc;
+          background: rgba(255, 255, 255, 0.05);
           display: grid;
           gap: 4px;
         }
         .error {
-          color: #b91c1c;
-          font-weight: 600;
+          color: #fca5a5;
+          font-weight: 700;
         }
         @media (max-width: 940px) {
           .create-grid {

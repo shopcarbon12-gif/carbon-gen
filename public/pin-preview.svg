@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="140" height="90" viewBox="0 0 140 90" role="img" aria-label="Pin icon preview">
+  <rect width="140" height="90" fill="#0b0f1a"/>
+  <g transform="translate(58 25)" fill="#fff">
+    <circle cx="12" cy="6" r="3" />
+    <path d="M10 9h4l-.7 4.1 2.1 2.2c.56.58.15 1.57-.66 1.57H13v4l-1 1-1-1v-4H9.26c-.81 0-1.22-.99-.66-1.57l2.1-2.2L10 9Z" />
+  </g>
+</svg>

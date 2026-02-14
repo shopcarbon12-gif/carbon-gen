@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 
 type SectionShellProps = {
@@ -6,59 +8,95 @@ type SectionShellProps = {
 };
 
 const links = [
-  { href: "/dashboard", label: "Dashboard" },
   { href: "/studio/images", label: "Image Studio" },
   { href: "/studio/video", label: "Motion Studio" },
   { href: "/studio/social", label: "Ad Generator" },
   { href: "/ops/seo", label: "Content & SEO" },
   { href: "/ops/inventory", label: "Collection Mapper" },
-  { href: "/generate", label: "Generate" },
-  { href: "/vault", label: "Vault" },
-  { href: "/activity", label: "Activity" },
-  { href: "/settings", label: "Settings" },
+  { href: "/dashboard", label: "Workspace Dashboard" },
+  { href: "/settings", label: "Settings & APIs" },
 ];
 
 export function SectionShell({ title, description }: SectionShellProps) {
   return (
-    <main style={{ maxWidth: 960, margin: "48px auto", padding: 24, fontFamily: "system-ui" }}>
-      <header style={{ display: "grid", gap: 8 }}>
-        <h1 style={{ margin: 0 }}>{title}</h1>
-        <p style={{ margin: 0, color: "#555" }}>{description}</p>
-      </header>
+    <main className="section-page">
+      <section className="glass-panel hero">
+        <div>
+          <div className="eyebrow">Carbon Gen Workspace</div>
+          <h1>{title}</h1>
+          <p>{description}</p>
+        </div>
+      </section>
 
-      <nav
-        style={{
-          display: "flex",
-          gap: 10,
-          flexWrap: "wrap",
-          marginTop: 16,
-          padding: 12,
-          borderRadius: 10,
-          border: "1px solid #e6e6e6",
-          background: "#fafafa",
-        }}
-      >
+      <section className="glass-panel links">
         {links.map((item) => (
-          <Link key={item.href} href={item.href}>
+          <Link key={item.href} href={item.href} className="nav-chip">
             {item.label}
           </Link>
         ))}
-      </nav>
+      </section>
 
-      <section
-        style={{
-          marginTop: 16,
-          border: "1px solid #e6e6e6",
-          borderRadius: 10,
-          padding: 16,
-          background: "white",
-        }}
-      >
-        <p style={{ margin: 0 }}>
-          This route is now active and protected. Build feature logic here without touching auth
-          or middleware.
+      <section className="glass-panel body">
+        <p>
+          Route scaffold is ready. Feature logic for this workspace can be implemented here while
+          keeping the same shared Carbon UI system.
         </p>
       </section>
+
+      <style jsx>{`
+        .section-page {
+          max-width: 1180px;
+          margin: 0 auto;
+          padding: 22px 8px 26px;
+          display: grid;
+          gap: 14px;
+          color: #f8fafc;
+        }
+        .hero,
+        .links,
+        .body {
+          padding: 18px;
+        }
+        .eyebrow {
+          font-size: 0.74rem;
+          text-transform: uppercase;
+          letter-spacing: 0.12em;
+          color: rgba(52, 211, 153, 0.92);
+          font-weight: 700;
+          margin-bottom: 6px;
+        }
+        h1 {
+          margin: 0;
+          font-size: clamp(1.9rem, 3vw, 2.8rem);
+          line-height: 1.1;
+        }
+        p {
+          margin: 10px 0 0;
+          color: rgba(226, 232, 240, 0.82);
+          font-size: 1rem;
+          line-height: 1.45;
+        }
+        .links {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 10px;
+        }
+        .nav-chip {
+          text-decoration: none;
+          border-radius: 999px;
+          border: 1px solid rgba(255, 255, 255, 0.24);
+          background: rgba(255, 255, 255, 0.04);
+          color: #f8fafc;
+          padding: 9px 14px;
+          font-size: 0.84rem;
+          font-weight: 700;
+          transition: 150ms ease;
+        }
+        .nav-chip:hover {
+          border-color: rgba(255, 255, 255, 0.34);
+          background: rgba(255, 255, 255, 0.1);
+        }
+      `}</style>
     </main>
   );
 }

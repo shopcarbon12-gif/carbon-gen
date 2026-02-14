@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -33,10 +33,7 @@ export default function GeneratePage() {
       });
 
       const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data?.error || `Request failed (${res.status})`);
-      }
+      if (!res.ok) throw new Error(data?.error || `Request failed (${res.status})`);
 
       const b64 = data?.imageBase64 ?? null;
       if (!b64) throw new Error("No imageBase64 returned from API");
@@ -63,9 +60,8 @@ export default function GeneratePage() {
         prompt,
         imageBase64,
       };
-
       await idbAddGeneration(rec);
-      setStatus("Saved to IndexedDB. Open Dashboard to view it.");
+      setStatus("Saved to Dashboard.");
     } catch (e: any) {
       setError(e?.message || "Save failed");
     } finally {
@@ -87,114 +83,150 @@ export default function GeneratePage() {
   }
 
   return (
-    <div style={{ maxWidth: 1000, margin: "48px auto", fontFamily: "system-ui" }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: 12,
-          marginBottom: 16,
-          flexWrap: "wrap",
-        }}
-      >
-        <h1 style={{ margin: 0 }}>Generate</h1>
+    <main className="page">
+      <section className="glass-panel card">
+        <div className="eyebrow">Creative Suite</div>
+        <h1>Generate</h1>
+        <p className="muted">
+          Use a focused prompt, generate an image, then save the result into your workspace.
+        </p>
 
-        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-          <Link href="/">Home</Link>
-          <Link href="/dashboard">Dashboard</Link>
-          <Link href="/studio/images">Image Studio</Link>
-          <button
-            onClick={onLogout}
-            style={{
-              padding: "10px 12px",
-              borderRadius: 8,
-              border: "1px solid #ddd",
-              cursor: "pointer",
-            }}
-          >
-            Logout
-          </button>
+        <div className="links">
+          <Link href="/studio/images" className="chip">
+            Image Studio
+          </Link>
+          <Link href="/dashboard" className="chip">
+            Dashboard
+          </Link>
+          <Link href="/ops/seo" className="chip">
+            Content & SEO
+          </Link>
         </div>
-      </div>
+      </section>
 
-      <div style={{ display: "grid", gap: 12 }}>
-        <label style={{ fontWeight: 600 }}>Prompt</label>
+      <section className="glass-panel card">
+        <label className="control-label" htmlFor="prompt">
+          Prompt
+        </label>
         <textarea
+          id="prompt"
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           rows={4}
-          style={{
-            width: "100%",
-            padding: 12,
-            fontFamily: "inherit",
-            border: "1px solid #ddd",
-            borderRadius: 8,
-          }}
         />
 
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <button
-            onClick={onGenerate}
-            disabled={loading}
-            style={{
-              padding: "12px 14px",
-              borderRadius: 8,
-              border: "1px solid #ddd",
-              cursor: loading ? "not-allowed" : "pointer",
-              minWidth: 140,
-            }}
-          >
+        <div className="actions">
+          <button className="btn-base btn-primary action-btn" onClick={onGenerate} disabled={loading}>
             {loading ? "Generating..." : "Generate"}
           </button>
-
-          <button
-            onClick={onSave}
-            disabled={!canSave}
-            style={{
-              padding: "12px 14px",
-              borderRadius: 8,
-              border: "1px solid #ddd",
-              cursor: !canSave ? "not-allowed" : "pointer",
-              minWidth: 180,
-            }}
-          >
+          <button className="btn-base btn-outline action-btn" onClick={onSave} disabled={!canSave}>
             {saving ? "Saving..." : "Save to Dashboard"}
           </button>
-
-          <button
-            onClick={onDownload}
-            disabled={!imageBase64}
-            style={{
-              padding: "12px 14px",
-              borderRadius: 8,
-              border: "1px solid #ddd",
-              cursor: !imageBase64 ? "not-allowed" : "pointer",
-              minWidth: 140,
-            }}
-          >
+          <button className="btn-base btn-outline action-btn" onClick={onDownload} disabled={!imageBase64}>
             Download PNG
+          </button>
+          <button className="btn-base btn-danger action-btn" onClick={onLogout}>
+            Logout
           </button>
         </div>
 
-        {error && <div style={{ color: "crimson" }}>Error: {error}</div>}
-        {status && <div style={{ color: "green" }}>{status}</div>}
+        {error ? <p className="error">Error: {error}</p> : null}
+        {status ? <p className="status">{status}</p> : null}
+      </section>
 
-        {imageBase64 && (
-          <div style={{ marginTop: 10 }}>
-            <h2 style={{ margin: "0 0 8px 0" }}>Generated image</h2>
-            <img
-              src={`data:image/png;base64,${imageBase64}`}
-              alt="Generated"
-              style={{
-                maxWidth: "100%",
-                border: "1px solid #ddd",
-                borderRadius: 10,
-              }}
-            />
+      {imageBase64 ? (
+        <section className="glass-panel card">
+          <div className="preview-title">Generated Image</div>
+          <div className="preview-wrap">
+            <img src={`data:image/png;base64,${imageBase64}`} alt="Generated" />
           </div>
-        )}
-      </div>
-    </div>
+        </section>
+      ) : null}
+
+      <style jsx>{`
+        .page {
+          max-width: 1140px;
+          margin: 0 auto;
+          padding: 22px 8px 26px;
+          display: grid;
+          gap: 14px;
+          color: #f8fafc;
+        }
+        .card {
+          padding: 18px;
+          display: grid;
+          gap: 12px;
+        }
+        .eyebrow {
+          font-size: 0.74rem;
+          text-transform: uppercase;
+          letter-spacing: 0.12em;
+          color: rgba(52, 211, 153, 0.92);
+          font-weight: 700;
+        }
+        h1 {
+          margin: 0;
+          font-size: clamp(1.95rem, 3vw, 2.8rem);
+          line-height: 1.1;
+        }
+        .muted {
+          margin: 0;
+          color: rgba(226, 232, 240, 0.8);
+        }
+        .links {
+          display: flex;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+        .chip {
+          text-decoration: none;
+          border-radius: 999px;
+          border: 1px solid rgba(255, 255, 255, 0.24);
+          background: rgba(255, 255, 255, 0.04);
+          color: #f8fafc;
+          padding: 9px 14px;
+          font-size: 0.84rem;
+          font-weight: 700;
+        }
+        .chip:hover {
+          border-color: rgba(255, 255, 255, 0.34);
+          background: rgba(255, 255, 255, 0.1);
+        }
+        .actions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 10px;
+        }
+        .action-btn {
+          min-width: 170px;
+          padding: 10px 14px;
+        }
+        .error {
+          margin: 0;
+          color: #fca5a5;
+          font-weight: 700;
+        }
+        .status {
+          margin: 0;
+          color: #86efac;
+          font-weight: 700;
+        }
+        .preview-title {
+          font-size: 1.05rem;
+          font-weight: 700;
+        }
+        .preview-wrap {
+          border-radius: 14px;
+          border: 1px solid rgba(255, 255, 255, 0.14);
+          background: rgba(255, 255, 255, 0.03);
+          padding: 10px;
+        }
+        .preview-wrap img {
+          width: 100%;
+          border-radius: 10px;
+          display: block;
+        }
+      `}</style>
+    </main>
   );
 }

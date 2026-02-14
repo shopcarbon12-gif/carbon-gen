@@ -1744,11 +1744,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     refreshModels();
   }
 
-  async function onLogout() {
-    await fetch("/api/logout", { method: "POST" });
-    window.location.href = "/login";
-  }
-
   async function loadPreviousModelUploads() {
     setPreviousModelUploadsLoading(true);
     setError(null);
@@ -3028,55 +3023,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
 
   const showCreativeSections = mode === "all" || mode === "images";
   const showOpsSections = mode === "all" || mode === "ops-seo";
-  const heroTitle =
-    mode === "images"
-      ? "Image Studio"
-      : mode === "ops-seo"
-      ? "Content & SEO Manager"
-      : "Image Generation + Shopify/SEO Control Center";
-  const heroDescription =
-    mode === "images"
-      ? "Model registry, item references, panel generation, and 2:3 cropping in one focused creation workspace."
-      : mode === "ops-seo"
-      ? "Pull Shopify products, manage SEO metadata, edit alt text, and push media updates live."
-      : "OAuth-based Shopify connection, strict panel generation, and SEO + alt text control. This is the v1 build baseline.";
 
   return (
     <div className="page">
-      <header className="hero">
-        <div>
-          <div className="eyebrow">Carbon Gen Workspace</div>
-          <h1>{heroTitle}</h1>
-          <p>{heroDescription}</p>
-          <div className="top-actions">
-            <button className="btn ghost logout-btn" type="button" onClick={onLogout}>
-              Logout
-            </button>
-          </div>
-        </div>
-        <div className="connect-card">
-          <div>
-            <div className="card-title">Shopify Connection</div>
-            <p className="muted">
-              Manage connect/reconnect/disconnect from the Settings page.
-            </p>
-          </div>
-          <div className="status-row">
-            <span className={`status-dot ${connected ? "on" : "off"}`} />
-            <span>
-              {connected ? "Connected" : "Not connected"}
-              {shop ? <em> - {shop}</em> : null}
-              {connected && installedAt ? (
-                <em> - Installed {new Date(installedAt).toLocaleString()}</em>
-              ) : null}
-            </span>
-          </div>
-          <a className="btn ghost" href="/settings">
-            Open Shopify Settings
-          </a>
-        </div>
-      </header>
-
       {(error || status) && (
         <div className="banner">
           {error && <span className="error">Error: {error}</span>}
@@ -4575,9 +4524,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           font-size: 0.75rem;
         }
         .catalog-image.selected {
-          border-color: #0b6b58;
+          border-color: #000000;
           background: #e7f4f1;
-          color: #0b6b58;
+          color: #000000;
         }
         .catalog-image img {
           width: 100%;
@@ -4590,8 +4539,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         }
         .ghost-btn {
           border: 1px solid #e2e8f0;
-          background: #fff;
-          color: #0b6b58;
+          background: #0000002a;
+          color: #ffffff;
           border-radius: 999px;
           padding: 6px 12px;
           font-size: 0.85rem;
@@ -4788,8 +4737,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           cursor: pointer;
         }
         .ghost-btn.danger {
-          color: #b91c1c;
-          border-color: #fecaca;
+          color: #ffffff;
+          background: #ff4b4b62;
+          border-color: #ffffff;
         }
         .model-name {
           font-weight: 600;
@@ -4805,9 +4755,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           resize: vertical;
         }
         .btn {
-          border: 1px solid #0b6b58;
-          background: #0b6b58;
-          color: white;
+          border: 1px solid #ffffff;
+          background: #ffffff;
+          color: #000000;
           padding: 10px 14px;
           border-radius: 999px;
           font-weight: 600;
@@ -4815,7 +4765,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         }
         .btn.ghost {
           background: transparent;
-          color: #0b6b58;
+          color: #ffffff;
         }
         .btn.primary {
           display: inline-flex;
@@ -4849,9 +4799,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           cursor: pointer;
         }
         .pill.active {
-          border-color: #0b6b58;
-          color: #0b6b58;
-          background: #e7f4f1;
+          border-color: #ffffff;
+          color: #ffffff;
+          background: rgba(0, 0, 0, 0.4);
         }
         .pill.unavailable {
           opacity: 0.55;
@@ -5030,6 +4980,108 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           font-weight: 700;
           cursor: pointer;
           line-height: 1;
+        }
+        /* Bright glass overrides so Image Studio matches Motion Studio styling. */
+        .page {
+          color: #f8fafc;
+          font-family: "Inter", var(--font-geist-sans), "Segoe UI", Roboto, Arial, sans-serif;
+          --cg-fg: #f8fafc;
+          --cg-muted: rgba(226, 232, 240, 0.9);
+          --cg-border: rgba(255, 255, 255, 0.24);
+          --cg-border-strong: rgba(255, 255, 255, 0.38);
+          --cg-surface: rgba(255, 255, 255, 0.14);
+          --cg-surface-soft: rgba(255, 255, 255, 0.1);
+        }
+        h1,
+        .card-title,
+        .catalog-title,
+        .panel-preview-label,
+        .preview-modal-title,
+        .push-variant-title {
+          color: var(--cg-fg);
+        }
+        .eyebrow {
+          color: #34d399;
+        }
+        .muted,
+        .preview-name,
+        .preview-source,
+        .panel-selection-summary,
+        .status-row,
+        .model-meta {
+          color: var(--cg-muted);
+        }
+        .connect-card,
+        .card,
+        .catalog-product,
+        .dropbox-folder-row,
+        .push-queue-card,
+        .push-variant-card,
+        .push-mapping-row,
+        .catalog-image,
+        .preview-card,
+        .model-pill,
+        .panel-preview-card,
+        .dialog-log,
+        .openai-raw,
+        .banner,
+        .preview-modal {
+          background: var(--cg-surface);
+          border-color: var(--cg-border);
+          color: var(--cg-fg);
+          backdrop-filter: blur(14px) saturate(1.14);
+          -webkit-backdrop-filter: blur(14px) saturate(1.14);
+        }
+        .dropzone,
+        .push-variant-preview,
+        .panel-image,
+        .frame,
+        .split-result-image,
+        .model-registry-preview-card img.model-registry-preview-image,
+        .item-catalog-selected-card img.item-catalog-selected-image,
+        .previous-upload-card img.previous-upload-image,
+        .catalog-image img,
+        .push-queue-card img,
+        .preview-modal-image,
+        .dialog-msg,
+        .dialog-msg.user,
+        .dialog-msg.assistant {
+          background: var(--cg-surface-soft);
+          border-color: var(--cg-border);
+        }
+        input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+        textarea,
+        select {
+          background: rgba(255, 255, 255, 0.13);
+          color: var(--cg-fg);
+          border-color: rgba(255, 255, 255, 0.32);
+          border-radius: 12px;
+          min-height: 52px;
+          padding: 10px 14px;
+        }
+        input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
+        textarea:focus,
+        select:focus {
+          border-color: rgba(255, 255, 255, 0.5);
+          box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.18);
+        }
+        input:not([type="checkbox"]):not([type="radio"]):not([type="range"])::placeholder,
+        textarea::placeholder {
+          color: var(--cg-muted);
+        }
+        .barcode-chip,
+        .panel-selection-summary,
+        .pill,
+        .preview-remove-corner,
+        .preview-remove,
+        .model-remove,
+        .preview-modal-close {
+          background: var(--cg-surface-soft);
+          border-color: var(--cg-border-strong);
+          color: var(--cg-fg);
+        }
+        .divider {
+          background: var(--cg-border);
         }
         @media (max-width: 900px) {
           .hero {
