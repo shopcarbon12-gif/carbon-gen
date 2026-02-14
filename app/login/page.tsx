@@ -37,7 +37,7 @@ export default function LoginPage() {
         throw new Error(data?.error || `Login failed (${res.status})`);
       }
 
-      window.location.href = "/studio";
+      window.location.href = "/studio/images";
     } catch (e: any) {
       setStatus(`❌ ${e?.message || "Login failed"}`);
     } finally {

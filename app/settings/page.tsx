@@ -442,10 +442,10 @@ export default function SettingsPage() {
           <p className="muted">Shopify integration plus admin-only user and role controls.</p>
         </div>
         <nav className="nav">
-          <Link href="/studio">Studio</Link>
+          <Link href="/studio/images">Image Studio</Link>
           <Link href="/dashboard">Dashboard</Link>
-          <Link href="/shopify">Shopify</Link>
-          <Link href="/seo">SEO</Link>
+          <Link href="/ops/seo">Content & SEO</Link>
+          <Link href="/ops/inventory">Collection Mapper</Link>
         </nav>
       </header>
 

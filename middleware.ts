@@ -41,7 +41,7 @@ export function middleware(req: NextRequest) {
     }
     if (pathname === "/login") {
       const studioUrl = req.nextUrl.clone();
-      studioUrl.pathname = "/studio";
+      studioUrl.pathname = "/studio/images";
       return NextResponse.redirect(studioUrl);
     }
     return res;
@@ -55,6 +55,7 @@ export function middleware(req: NextRequest) {
     "/vault",
     "/shopify",
     "/seo",
+    "/ops",
     "/activity",
     "/settings",
   ];
@@ -68,7 +69,7 @@ export function middleware(req: NextRequest) {
 
   if (pathname === "/login" && isAuthed) {
     const studioUrl = req.nextUrl.clone();
-    studioUrl.pathname = "/studio";
+    studioUrl.pathname = "/studio/images";
     return NextResponse.redirect(studioUrl);
   }
 
@@ -84,6 +85,7 @@ export const config = {
     "/vault/:path*",
     "/shopify/:path*",
     "/seo/:path*",
+    "/ops/:path*",
     "/activity/:path*",
     "/settings/:path*",
     "/login",

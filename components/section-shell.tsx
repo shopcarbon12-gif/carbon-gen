@@ -7,11 +7,13 @@ type SectionShellProps = {
 
 const links = [
   { href: "/dashboard", label: "Dashboard" },
+  { href: "/studio/images", label: "Image Studio" },
+  { href: "/studio/video", label: "Motion Studio" },
+  { href: "/studio/social", label: "Ad Generator" },
+  { href: "/ops/seo", label: "Content & SEO" },
+  { href: "/ops/inventory", label: "Collection Mapper" },
   { href: "/generate", label: "Generate" },
-  { href: "/studio", label: "Studio" },
   { href: "/vault", label: "Vault" },
-  { href: "/shopify", label: "Shopify" },
-  { href: "/seo", label: "SEO" },
   { href: "/activity", label: "Activity" },
   { href: "/settings", label: "Settings" },
 ];

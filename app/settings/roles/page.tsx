@@ -166,7 +166,8 @@ export default function RolesPage() {
         </div>
         <nav className="nav">
           <Link href="/settings">Back To Settings</Link>
-          <Link href="/studio">Studio</Link>
+          <Link href="/studio/images">Image Studio</Link>
+          <Link href="/ops/seo">Content & SEO</Link>
         </nav>
       </header>
 
@@ -417,4 +418,3 @@ export default function RolesPage() {
     </main>
   );
 }
-

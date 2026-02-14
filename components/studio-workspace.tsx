@@ -212,7 +212,13 @@ function normalizeModelName(value: string) {
     .toLowerCase();
 }
 
-export default function StudioWorkspace() {
+export type StudioWorkspaceMode = "all" | "images" | "ops-seo";
+
+type StudioWorkspaceProps = {
+  mode?: StudioWorkspaceMode;
+};
+
+export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) {
   const [shop, setShop] = useState("");
   const [handle, setHandle] = useState("");
   const [productId, setProductId] = useState("");
@@ -3020,16 +3026,28 @@ export default function StudioWorkspace() {
     setError(null);
   }
 
+  const showCreativeSections = mode === "all" || mode === "images";
+  const showOpsSections = mode === "all" || mode === "ops-seo";
+  const heroTitle =
+    mode === "images"
+      ? "Image Studio"
+      : mode === "ops-seo"
+      ? "Content & SEO Manager"
+      : "Image Generation + Shopify/SEO Control Center";
+  const heroDescription =
+    mode === "images"
+      ? "Model registry, item references, panel generation, and 2:3 cropping in one focused creation workspace."
+      : mode === "ops-seo"
+      ? "Pull Shopify products, manage SEO metadata, edit alt text, and push media updates live."
+      : "OAuth-based Shopify connection, strict panel generation, and SEO + alt text control. This is the v1 build baseline.";
+
   return (
     <div className="page">
       <header className="hero">
         <div>
-          <div className="eyebrow">Carbon Gen Studio</div>
-          <h1>Image Generation + Shopify/SEO Control Center</h1>
-          <p>
-            OAuth-based Shopify connection, strict panel generation, and SEO + alt
-            text control. This is the v1 build baseline.
-          </p>
+          <div className="eyebrow">Carbon Gen Workspace</div>
+          <h1>{heroTitle}</h1>
+          <p>{heroDescription}</p>
           <div className="top-actions">
             <button className="btn ghost logout-btn" type="button" onClick={onLogout}>
               Logout
@@ -3067,6 +3085,8 @@ export default function StudioWorkspace() {
       )}
 
       <main className="grid">
+        {showCreativeSections ? (
+          <>
         <section className="card">
           <div className="card-title">0) Model Registry</div>
           <p className="muted">
@@ -3944,7 +3964,11 @@ export default function StudioWorkspace() {
             </div>
           ) : null}
         </section>
+          </>
+        ) : null}
 
+        {showOpsSections ? (
+          <>
         <section className="card">
           <div className="card-title">3) Shopify Push (Images)</div>
           <p className="muted">
@@ -4271,6 +4295,8 @@ export default function StudioWorkspace() {
             Push SEO
           </button>
         </section>
+          </>
+        ) : null}
       </main>
 
       {previewModal ? (

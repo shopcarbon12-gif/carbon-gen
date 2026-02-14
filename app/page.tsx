@@ -14,7 +14,11 @@ export default function Home() {
       </p>
 
       <p style={{ marginTop: 8 }}>
-        Full workspace: <Link href="/studio">Studio</Link>
+        Full workspace: <Link href="/studio/images">Image Studio</Link>
+      </p>
+
+      <p style={{ marginTop: 8 }}>
+        Store operations: <Link href="/ops/seo">Content & SEO Manager</Link>
       </p>
     </div>
   );

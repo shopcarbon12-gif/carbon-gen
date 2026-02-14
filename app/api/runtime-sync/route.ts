@@ -11,7 +11,8 @@ type FileFingerprint = {
 
 const TARGET_FILES = [
   "app/dashboard/page.tsx",
-  "app/studio/page.tsx",
+  "app/studio/images/page.tsx",
+  "app/ops/seo/page.tsx",
   "components/studio-workspace.tsx",
   "app/api/generate/route.ts",
   "app/api/openai/dialog/route.ts",
@@ -19,7 +20,7 @@ const TARGET_FILES = [
 ];
 
 const DASHBOARD_FILE = "app/dashboard/page.tsx";
-const STUDIO_FILE = "app/studio/page.tsx";
+const STUDIO_FILE = "app/studio/images/page.tsx";
 const SHARED_WORKSPACE_FILE = "components/studio-workspace.tsx";
 
 async function hashFile(relativePath: string): Promise<FileFingerprint> {
@@ -45,7 +46,7 @@ async function readFileText(relativePath: string) {
 function usesSharedWorkspace(content: string | null) {
   if (!content) return false;
   const importsShared = /from\s+["']@\/components\/studio-workspace["']/.test(content);
-  const rendersShared = /<StudioWorkspace\s*\/>/.test(content);
+  const rendersShared = /<StudioWorkspace(?:\s+[^>]*)?\s*\/>/.test(content);
   return importsShared && rendersShared;
 }
 

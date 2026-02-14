@@ -103,7 +103,7 @@ export default function GeneratePage() {
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
           <Link href="/">Home</Link>
           <Link href="/dashboard">Dashboard</Link>
-          <Link href="/studio">Studio</Link>
+          <Link href="/studio/images">Image Studio</Link>
           <button
             onClick={onLogout}
             style={{

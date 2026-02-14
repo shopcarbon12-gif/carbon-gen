@@ -1,5 +1,5 @@
-import StudioWorkspace from "@/components/studio-workspace";
+import { redirect } from "next/navigation";
 
 export default function StudioPage() {
-  return <StudioWorkspace />;
+  redirect("/studio/images");
 }

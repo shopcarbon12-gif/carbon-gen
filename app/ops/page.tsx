@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
-export default function SeoPage() {
+export default function OpsPage() {
   redirect("/ops/seo");
 }
+

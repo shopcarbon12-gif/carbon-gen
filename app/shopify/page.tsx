@@ -1,10 +1,5 @@
-import { SectionShell } from "@/components/section-shell";
+import { redirect } from "next/navigation";
 
 export default function ShopifyPage() {
-  return (
-    <SectionShell
-      title="Shopify"
-      description="Catalog sync surface for product pull/push and publishing."
-    />
-  );
+  redirect("/ops/seo");
 }
