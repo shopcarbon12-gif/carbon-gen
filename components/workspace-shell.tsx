@@ -153,14 +153,15 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
       const rows = Array.isArray(payload.integrations) ? payload.integrations : [];
 
       const next: IntegrationItem[] = rows
-        .map((row: unknown) => {
+        .map((row: unknown): IntegrationItem | null => {
           if (!row || typeof row !== "object") return null;
           const value = row as Record<string, unknown>;
           const id = String(value.id || "").trim();
           const name = String(value.name || "").trim();
           const endpoint = String(value.endpoint || "").trim();
           const settingsHref = String(value.settingsHref || "/settings").trim() || "/settings";
-          const status = value.status === "online" ? "online" : "offline";
+          const status: IntegrationItem["status"] =
+            value.status === "online" ? "online" : "offline";
           const label = String(value.label || (status === "online" ? "Online" : "Offline"));
           if (!id || !name) return null;
           return { id, name, endpoint, settingsHref, status, label };
