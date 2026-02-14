@@ -62,7 +62,7 @@ npm install
 ```bash
 npm run dev
 ```
-5. Open the URL printed in terminal (usually `http://localhost:3000` or `http://localhost:3001`).
+5. Open the URL printed in terminal (usually `http://localhost:3000`).
 
 Optional: pin the local stack port in `.env.local` (recommended):
 ```env
@@ -88,11 +88,19 @@ npm run start:local
 ```
 It now runs both processes in the background (no terminal clutter).
 `start:local` always syncs cloudflared ingress to `LOCAL_APP_PORT` (default `3000`).
+Local guard: if a full project copy is detected inside `backups/`, startup moves it to
+`D:\Projects\carbon-gen-backups-outside` automatically to prevent Next.js startup hangs.
 
 One-command stop:
 ```bash
 npm run stop:local
 ```
+
+Safe restore snapshot:
+```bash
+npm run backup:restore
+```
+This writes a git bundle + restore note to `D:\Projects\carbon-gen-backups-outside`.
 
 Expected public URL:
 ```text
@@ -192,3 +200,6 @@ npm run check:shopify
   - callback URL in Shopify must exactly match `SHOPIFY_REDIRECT_URI`
 - `localhost refused to connect`:
   - verify `LOCAL_APP_PORT` in `.env.local` and run `npm run start:local` again
+- Dev starts but hangs forever before serving pages:
+  - do not keep full project copies inside `backups/`
+  - run `npm run backup:restore` for safe snapshots outside the repo

@@ -55,6 +55,44 @@ function Sync-CloudflaredPort {
   }
 }
 
+function Move-RecursiveBackupSnapshots {
+  param([string]$RepoPath)
+
+  $backupsDir = Join-Path $RepoPath "backups"
+  if (!(Test-Path $backupsDir)) {
+    return
+  }
+
+  $projectsRoot = Split-Path -Parent (Split-Path -Parent $RepoPath)
+  $externalBackupRoot = Join-Path $projectsRoot "carbon-gen-backups-outside"
+
+  $candidates = Get-ChildItem $backupsDir -Directory -ErrorAction SilentlyContinue | Where-Object {
+    $dir = $_.FullName
+    (Test-Path (Join-Path $dir "package.json")) -and
+    (Test-Path (Join-Path $dir "app")) -and
+    (
+      (Test-Path (Join-Path $dir "backups")) -or
+      (Test-Path (Join-Path $dir "node_modules")) -or
+      (Test-Path (Join-Path $dir ".next"))
+    )
+  }
+
+  foreach ($candidate in $candidates) {
+    if (!(Test-Path $externalBackupRoot)) {
+      New-Item -ItemType Directory -Path $externalBackupRoot -Force | Out-Null
+    }
+
+    $target = Join-Path $externalBackupRoot $candidate.Name
+    if (Test-Path $target) {
+      $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+      $target = Join-Path $externalBackupRoot ("{0}-{1}" -f $candidate.Name, $stamp)
+    }
+
+    Move-Item -Path $candidate.FullName -Destination $target -Force
+    Write-Warning "Moved recursive backup out of repo: $($candidate.FullName) -> $target"
+  }
+}
+
 function Is-PortListening {
   param([int]$Port)
   $conn = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
@@ -70,7 +108,7 @@ function Is-AppResponsive {
       return $false
     }
     $content = String($resp.Content)
-    # Accept only the expected Carbon health payload so other apps on 3000 are not reused.
+    # Accept only the expected Carbon health payload so other apps on this port are not reused.
     return $content -match '"ok"\s*:\s*true'
   } catch {
     return $false
@@ -104,6 +142,7 @@ if (!(Test-Path $config)) {
 
 $appPort = Get-ConfiguredPort
 Sync-CloudflaredPort -ConfigPath $config -Port $appPort
+Move-RecursiveBackupSnapshots -RepoPath $repo
 
 # Ensure previous local stack is stopped.
 & "$PSScriptRoot\stop-local-stack.ps1" | Out-Null
@@ -133,7 +172,7 @@ if (-not $appAlreadyRunning) {
   # Start app in background only when there is no existing listener on the target port.
   $devProc = Start-Process cmd.exe -ArgumentList @(
     "/c",
-    "cd /d `"$repo`" && npm run dev -- -p $appPort > `"$devLog`" 2>&1"
+    "cd /d `"$repo`" && npm run dev:raw -- -p $appPort > `"$devLog`" 2>&1"
   ) -PassThru -WindowStyle Hidden
   $started = $false
   for ($i = 0; $i -lt 40; $i++) {

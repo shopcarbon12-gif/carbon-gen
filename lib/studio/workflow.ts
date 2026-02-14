@@ -18,7 +18,7 @@ export async function parseJsonResponse(resp: Response, endpoint?: string) {
     throw new Error(
       `Server returned HTML instead of JSON${where} (status ${resp.status}). ` +
         `This usually means a tunnel/proxy/origin issue. ` +
-        `Try directly on http://localhost:3001 and restart cloudflared + dev server. ` +
+        `Try directly on http://localhost:3000 and restart cloudflared + dev server. ` +
         `Snippet: ${snippet || "<empty>"}`
     );
   }
