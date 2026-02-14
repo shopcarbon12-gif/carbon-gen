@@ -5,8 +5,8 @@
   "scripts": {
     "build": "next build --webpack",
     "dev": "powershell -ExecutionPolicy Bypass -File scripts/dev-local.ps1",
-    "dev:raw": "next dev",
-    "dev:3000": "next dev -p 3000",
+    "dev:raw": "next dev --webpack",
+    "dev:3000": "next dev --webpack -p 3000",
     "start": "next start",
     "lint": "eslint",
     "hash-password": "node scripts/hash-password.mjs",

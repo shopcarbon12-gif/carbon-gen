@@ -60,13 +60,13 @@ function Get-ListenerPid {
 }
 
 function Is-RepoNextProcess {
-  param([int]$Pid)
-  if (-not $Pid) {
+  param([int]$ProcessId)
+  if (-not $ProcessId) {
     return $false
   }
 
   try {
-    $proc = Get-CimInstance Win32_Process -Filter "ProcessId=$Pid"
+    $proc = Get-CimInstance Win32_Process -Filter "ProcessId=$ProcessId"
     if (-not $proc) {
       return $false
     }
