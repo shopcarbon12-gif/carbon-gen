@@ -179,11 +179,6 @@ export default function LayoutShellV1() {
 
         <main className="main">
           <div className="hero">
-            <div>
-              <div className="eyebrow">Template Direction</div>
-              <h1>{content.title}</h1>
-              <p>{content.subtitle}</p>
-            </div>
             <GlassPanel className="status-card">
               <div className="status-title">Preview Mode</div>
               <div className="status-copy">
@@ -362,22 +357,8 @@ export default function LayoutShellV1() {
           padding: 6px 4px 20px;
         }
         .hero {
-          display: grid;
-          grid-template-columns: minmax(0, 1fr) 300px;
-          gap: 14px;
-          align-items: stretch;
-        }
-        .eyebrow {
-          text-transform: uppercase;
-          letter-spacing: 0.09em;
-          font-size: 11px;
-          color: rgba(255, 255, 255, 0.7);
-          margin-bottom: 9px;
-        }
-        h1 {
-          margin: 0;
-          font-size: clamp(1.5rem, 3.4vw, 2.3rem);
-          line-height: 1.08;
+          display: flex;
+          justify-content: flex-end;
         }
         p {
           color: rgba(255, 255, 255, 0.86);
@@ -468,7 +449,7 @@ export default function LayoutShellV1() {
             display: none;
           }
           .hero {
-            grid-template-columns: 1fr;
+            justify-content: stretch;
           }
           .grid {
             grid-template-columns: 1fr;

@@ -85,12 +85,6 @@ export default function GeneratePage() {
   return (
     <main className="page">
       <section className="glass-panel card">
-        <div className="eyebrow">Creative Suite</div>
-        <h1>Generate</h1>
-        <p className="muted">
-          Use a focused prompt, generate an image, then save the result into your workspace.
-        </p>
-
         <div className="links">
           <Link href="/studio/images" className="chip">
             Image Studio
@@ -156,22 +150,6 @@ export default function GeneratePage() {
           padding: 18px;
           display: grid;
           gap: 12px;
-        }
-        .eyebrow {
-          font-size: 0.74rem;
-          text-transform: uppercase;
-          letter-spacing: 0.12em;
-          color: rgba(52, 211, 153, 0.92);
-          font-weight: 700;
-        }
-        h1 {
-          margin: 0;
-          font-size: clamp(1.95rem, 3vw, 2.8rem);
-          line-height: 1.1;
-        }
-        .muted {
-          margin: 0;
-          color: rgba(226, 232, 240, 0.8);
         }
         .links {
           display: flex;

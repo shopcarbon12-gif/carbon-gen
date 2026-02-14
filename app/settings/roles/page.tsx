@@ -158,18 +158,11 @@ export default function RolesPage() {
 
   return (
     <main className="page">
-      <header className="hero">
-        <div>
-          <div className="eyebrow">Carbon Gen</div>
-          <h1>Create New Role</h1>
-          <p className="muted">Define role permissions using a checkbox matrix.</p>
-        </div>
-        <nav className="nav">
-          <Link href="/settings">Back To Settings</Link>
-          <Link href="/studio/images">Image Studio</Link>
-          <Link href="/ops/seo">Content & SEO</Link>
-        </nav>
-      </header>
+      <section className="nav">
+        <Link href="/settings">Back To Settings</Link>
+        <Link href="/studio/images">Image Studio</Link>
+        <Link href="/ops/seo">Content & SEO</Link>
+      </section>
 
       {loading ? (
         <section className="card">
@@ -274,22 +267,6 @@ export default function RolesPage() {
           color: #f8fafc;
           display: grid;
           gap: 14px;
-        }
-        .hero {
-          display: grid;
-          gap: 12px;
-        }
-        .eyebrow {
-          font-size: 0.74rem;
-          text-transform: uppercase;
-          letter-spacing: 0.12em;
-          color: rgba(52, 211, 153, 0.92);
-          font-weight: 700;
-        }
-        h1 {
-          margin: 0;
-          font-size: clamp(1.9rem, 3vw, 2.7rem);
-          line-height: 1.1;
         }
         .nav {
           display: flex;

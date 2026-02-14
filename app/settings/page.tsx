@@ -435,19 +435,12 @@ export default function SettingsPage() {
 
   return (
     <main className="page">
-      <header className="hero">
-        <div>
-          <div className="eyebrow">Carbon Gen</div>
-          <h1>Settings</h1>
-          <p className="muted">Shopify integration plus admin-only user and role controls.</p>
-        </div>
-        <nav className="nav">
-          <Link href="/studio/images">Image Studio</Link>
-          <Link href="/dashboard">Dashboard</Link>
-          <Link href="/ops/seo">Content & SEO</Link>
-          <Link href="/ops/inventory">Collection Mapper</Link>
-        </nav>
-      </header>
+      <section className="nav">
+        <Link href="/studio/images">Image Studio</Link>
+        <Link href="/dashboard">Dashboard</Link>
+        <Link href="/ops/seo">Content & SEO</Link>
+        <Link href="/ops/inventory">Collection Mapper</Link>
+      </section>
 
       <section className="card">
         <div className="card-title">Session</div>
@@ -462,7 +455,17 @@ export default function SettingsPage() {
         )}
       </section>
 
-      <section className="card">
+      <section id="integration-core-api" className="card">
+        <div className="card-title">Core API</div>
+        <p className="muted">Workspace health endpoint used by integration monitoring.</p>
+        <div className="actions">
+          <a className="btn ghost" href="/api/health" target="_blank" rel="noreferrer">
+            Open Health Endpoint
+          </a>
+        </div>
+      </section>
+
+      <section id="integration-shopify" className="card">
         <div className="card-title">Shopify Connection</div>
         <p className="muted">Add your store domain once, then connect/reconnect or disconnect from here.</p>
 
@@ -508,7 +511,7 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      <section className="card">
+      <section id="integration-dropbox" className="card">
         <div className="card-title">Dropbox Connection</div>
         <p className="muted">
           Connect Dropbox once, then Studio can search by barcode and load image files directly.
@@ -656,22 +659,6 @@ export default function SettingsPage() {
           display: grid;
           gap: 14px;
         }
-        .hero {
-          display: grid;
-          gap: 12px;
-        }
-        .eyebrow {
-          font-size: 0.74rem;
-          text-transform: uppercase;
-          letter-spacing: 0.12em;
-          color: rgba(52, 211, 153, 0.92);
-          font-weight: 700;
-        }
-        h1 {
-          margin: 0;
-          font-size: clamp(1.9rem, 3vw, 2.7rem);
-          line-height: 1.1;
-        }
         .nav {
           display: flex;
           gap: 10px;
@@ -699,6 +686,9 @@ export default function SettingsPage() {
           -webkit-backdrop-filter: blur(16px);
           display: grid;
           gap: 10px;
+        }
+        .card[id] {
+          scroll-margin-top: 92px;
         }
         .card-title {
           font-weight: 700;

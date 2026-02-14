@@ -49,12 +49,10 @@ export default function DashboardPage() {
 
   useEffect(() => {
     refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sort]);
 
   const filtered = useMemo(() => {
@@ -116,12 +114,7 @@ export default function DashboardPage() {
 
   return (
     <main className="page">
-      <section className="glass-panel hero">
-        <div>
-          <div className="eyebrow">System</div>
-          <h1>Workspace Dashboard</h1>
-          <p className="muted">Browse, filter, preview, and manage saved generations.</p>
-        </div>
+      <section className="glass-panel top-actions-wrap">
         <div className="top-actions">
           <Link href="/studio/images" className="chip">
             Image Studio
@@ -278,24 +271,11 @@ export default function DashboardPage() {
           gap: 14px;
           color: #f8fafc;
         }
-        .hero,
+        .top-actions-wrap,
         .filters,
         .card,
         .notice {
           padding: 18px;
-        }
-        .eyebrow {
-          font-size: 0.74rem;
-          text-transform: uppercase;
-          letter-spacing: 0.12em;
-          color: rgba(52, 211, 153, 0.92);
-          font-weight: 700;
-          margin-bottom: 6px;
-        }
-        h1 {
-          margin: 0;
-          font-size: clamp(1.9rem, 3vw, 2.7rem);
-          line-height: 1.1;
         }
         .muted {
           color: rgba(226, 232, 240, 0.82);

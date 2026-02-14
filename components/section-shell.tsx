@@ -2,11 +2,6 @@
 
 import Link from "next/link";
 
-type SectionShellProps = {
-  title: string;
-  description: string;
-};
-
 const links = [
   { href: "/studio/images", label: "Image Studio" },
   { href: "/studio/video", label: "Motion Studio" },
@@ -17,17 +12,9 @@ const links = [
   { href: "/settings", label: "Settings & APIs" },
 ];
 
-export function SectionShell({ title, description }: SectionShellProps) {
+export function SectionShell() {
   return (
     <main className="section-page">
-      <section className="glass-panel hero">
-        <div>
-          <div className="eyebrow">Carbon Gen Workspace</div>
-          <h1>{title}</h1>
-          <p>{description}</p>
-        </div>
-      </section>
-
       <section className="glass-panel links">
         {links.map((item) => (
           <Link key={item.href} href={item.href} className="nav-chip">
@@ -52,23 +39,9 @@ export function SectionShell({ title, description }: SectionShellProps) {
           gap: 14px;
           color: #f8fafc;
         }
-        .hero,
         .links,
         .body {
           padding: 18px;
-        }
-        .eyebrow {
-          font-size: 0.74rem;
-          text-transform: uppercase;
-          letter-spacing: 0.12em;
-          color: rgba(52, 211, 153, 0.92);
-          font-weight: 700;
-          margin-bottom: 6px;
-        }
-        h1 {
-          margin: 0;
-          font-size: clamp(1.9rem, 3vw, 2.8rem);
-          line-height: 1.1;
         }
         p {
           margin: 10px 0 0;

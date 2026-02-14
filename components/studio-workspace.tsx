@@ -3023,15 +3023,67 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
 
   const showCreativeSections = mode === "all" || mode === "images";
   const showOpsSections = mode === "all" || mode === "ops-seo";
+  const modelUploadCompleted = modelPreviewItems.filter((p) => Boolean(p.uploadedUrl)).length;
+  const modelUploadTarget = modelPreviewItems.length || modelUploadTotal;
+  const activeProgress: string[] = [];
+
+  if (modelUploading || modelUploadPending > 0) {
+    activeProgress.push(
+      `Model uploads: ${modelUploadCompleted}/${modelUploadTarget || modelUploadCompleted || 0}`
+    );
+  }
+  if (panelGenerating || panelsInFlight.length > 0) {
+    activeProgress.push("Image generation in progress");
+  }
+  if (dropboxSearching) {
+    activeProgress.push("Searching Dropbox");
+  }
+  if (catalogLoading || pushCatalogLoading) {
+    activeProgress.push("Loading Shopify catalog");
+  }
+  if (pushUploading || pushingImages || splitSendingToPush) {
+    activeProgress.push("Pushing images to Shopify");
+  }
+  if (emptyingBucket) {
+    activeProgress.push("Emptying bucket");
+  }
+
+  const statusTone: "error" | "working" | "success" | "idle" = error
+    ? "error"
+    : activeProgress.length
+      ? "working"
+      : status
+        ? "success"
+        : "idle";
+  const statusHeadline =
+    error ||
+    status ||
+    (statusTone === "working"
+      ? "Action in progress..."
+      : "Ready. Start from Model Registry or Item References.");
 
   return (
     <div className="page">
-      {(error || status) && (
-        <div className="banner">
-          {error && <span className="error">Error: {error}</span>}
-          {status && <span>{status}</span>}
+      <section className={`card status-bar ${statusTone}`} aria-live="polite" aria-atomic="true">
+        <div className="status-bar-head">
+          <div className="status-bar-title">Progress / Error Section</div>
+          <span className={`status-chip ${statusTone}`}>
+            {statusTone === "error"
+              ? "Error"
+              : statusTone === "working"
+                ? "Working"
+                : statusTone === "success"
+                  ? "Done"
+                  : "Idle"}
+          </span>
         </div>
-      )}
+        <div className="status-bar-message">
+          {statusTone === "error" ? `Error: ${statusHeadline}` : statusHeadline}
+        </div>
+        {activeProgress.length ? (
+          <div className="status-bar-meta">{activeProgress.join(" | ")}</div>
+        ) : null}
+      </section>
 
       <main className="grid">
         {showCreativeSections ? (
@@ -3058,6 +3110,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           </div>
           <div
             className="dropzone"
+            data-integration-anchor="model-dropzone"
             role="button"
             tabIndex={0}
             onClick={() => openInputPicker(modelPickerRef.current)}
@@ -4275,6 +4328,13 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           font-family: "Space Grotesk", system-ui, sans-serif;
           color: #0f172a;
         }
+        :global(.content:not(.menu-open)) .page {
+          padding-left: clamp(16px, 2vw, 28px);
+        }
+        :global(.content.menu-open) .page {
+          padding-left: 0;
+          padding-right: 0;
+        }
         .hero {
           display: grid;
           grid-template-columns: minmax(0, 1fr) minmax(0, 360px);
@@ -4308,6 +4368,82 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           background: #ffffff;
           display: grid;
           gap: 10px;
+        }
+        .status-bar {
+          position: sticky;
+          top: 82px;
+          z-index: 34;
+          gap: 8px;
+        }
+        .status-bar-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+        }
+        .status-bar-title {
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          font-size: 0.74rem;
+          color: #475569;
+        }
+        .status-chip {
+          border: 1px solid #e2e8f0;
+          border-radius: 999px;
+          padding: 3px 9px;
+          font-size: 0.72rem;
+          font-weight: 700;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          white-space: nowrap;
+        }
+        .status-chip.idle {
+          color: #94a3b8;
+          border-color: #cbd5e1;
+          background: #f1f5f9;
+        }
+        .status-chip.working {
+          color: #7c2d12;
+          border-color: #fdba74;
+          background: #ffedd5;
+        }
+        .status-chip.success {
+          color: #166534;
+          border-color: #86efac;
+          background: #dcfce7;
+        }
+        .status-chip.error {
+          color: #991b1b;
+          border-color: #fca5a5;
+          background: #fee2e2;
+        }
+        .status-bar.idle {
+          border-color: #dbe5f1;
+        }
+        .status-bar.working {
+          border-color: #facc15;
+          box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.15), 0 8px 24px rgba(0, 0, 0, 0.24);
+        }
+        .status-bar.success {
+          border-color: #86efac;
+          box-shadow: 0 0 0 1px rgba(134, 239, 172, 0.14), 0 8px 24px rgba(0, 0, 0, 0.2);
+        }
+        .status-bar.error {
+          border-color: #fca5a5;
+          box-shadow: 0 0 0 1px rgba(252, 165, 165, 0.16), 0 8px 24px rgba(0, 0, 0, 0.22);
+        }
+        .status-bar-message {
+          font-size: 0.95rem;
+          font-weight: 600;
+          color: #0f172a;
+          line-height: 1.35;
+        }
+        .status-bar-meta {
+          font-size: 0.8rem;
+          color: #475569;
+          line-height: 1.25;
+          word-break: break-word;
         }
         .card-title {
           font-weight: 700;
@@ -4857,15 +4993,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           width: 2px;
           background: #e2e8f0;
         }
-        .banner {
-          margin: 12px 0 20px;
-          padding: 10px 12px;
-          border: 1px solid #e2e8f0;
-          border-radius: 12px;
-          background: #f8fafc;
-          display: flex;
-          gap: 12px;
-        }
         .status-row {
           display: flex;
           align-items: center;
@@ -4893,10 +5020,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         .logout-btn {
           border-color: #cbd5e1;
           color: #0f172a;
-        }
-        .error {
-          color: #b91c1c;
-          font-weight: 600;
         }
         .openai-raw {
           border: 1px solid #e2e8f0;
@@ -5024,7 +5147,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         .panel-preview-card,
         .dialog-log,
         .openai-raw,
-        .banner,
         .preview-modal {
           background: var(--cg-surface);
           border-color: var(--cg-border);
@@ -5083,7 +5205,17 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         .divider {
           background: var(--cg-border);
         }
+        .status-bar-title,
+        .status-bar-meta {
+          color: var(--cg-muted);
+        }
+        .status-bar-message {
+          color: var(--cg-fg);
+        }
         @media (max-width: 900px) {
+          .status-bar {
+            top: 78px;
+          }
           .hero {
             grid-template-columns: 1fr;
           }
