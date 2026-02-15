@@ -68,14 +68,22 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const [modelFiles, itemFiles] = await Promise.all([
-      listFilesRecursive(bucket, "models"),
-      listFilesRecursive(bucket, "items"),
-    ]);
+    const prefix = String(req.nextUrl.searchParams.get("prefix") || "")
+      .trim()
+      .replace(/^\/+/, "")
+      .replace(/\/+$/, "");
+
+    const targetPrefixes = prefix
+      ? [prefix]
+      : ["models", "items"];
+    const listedGroups = await Promise.all(
+      targetPrefixes.map((p) => listFilesRecursive(bucket, p))
+    );
+    const allFiles = listedGroups.flat();
 
     const supabase = getSupabaseAdmin();
     const withUrls = await Promise.all(
-      [...modelFiles, ...itemFiles].map(async (f) => {
+      allFiles.map(async (f) => {
         const signed = await supabase.storage.from(bucket).createSignedUrl(f.path, 60 * 60);
         const uploadedAt = parseTimestampFromPath(f.path) || f.created_at || null;
         return {

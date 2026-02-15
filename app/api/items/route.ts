@@ -18,6 +18,16 @@ function guessFileNameFromUrl(rawUrl: string, index: number) {
   return `catalog-image-${index + 1}.jpg`;
 }
 
+function sanitizeFolderPrefix(input: unknown) {
+  const raw = String(input || "")
+    .trim()
+    .replace(/^\/+/, "")
+    .replace(/\/+$/, "");
+  if (!raw) return "items";
+  if (!/^(?:items|final-results)(?:\/[a-zA-Z0-9._-]+)*$/.test(raw)) return "items";
+  return raw;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const contentType = req.headers.get("content-type") || "";
@@ -32,6 +42,7 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         );
       }
+      const folderPrefix = sanitizeFolderPrefix(body?.folderPrefix);
 
       const bucket = (process.env.SUPABASE_STORAGE_BUCKET_ITEMS || "").trim();
       if (!bucket) {
@@ -56,7 +67,7 @@ export async function POST(req: NextRequest) {
         const bytes = new Uint8Array(arrayBuffer);
         const remoteContentType = remote.headers.get("content-type") || "application/octet-stream";
         const safeName = guessFileNameFromUrl(sourceUrl, i);
-        const path = `items/shopify/${batchId}/${Date.now()}-${crypto.randomUUID()}-${safeName}`;
+        const path = `${folderPrefix}/${batchId}/${Date.now()}-${crypto.randomUUID()}-${safeName}`;
 
         const { error: uploadError } = await supabase.storage
           .from(bucket)
@@ -75,6 +86,7 @@ export async function POST(req: NextRequest) {
 
     const form = await req.formData();
     const files = form.getAll("files").filter(Boolean) as File[];
+    const folderPrefix = sanitizeFolderPrefix(form.get("folderPrefix"));
 
     if (!files.length) {
       return NextResponse.json({ error: "No files uploaded." }, { status: 400 });
@@ -93,7 +105,7 @@ export async function POST(req: NextRequest) {
       const arrayBuffer = await file.arrayBuffer();
       const bytes = new Uint8Array(arrayBuffer);
       const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
-      const path = `items/${batchId}/${Date.now()}-${crypto.randomUUID()}-${safeName}`;
+      const path = `${folderPrefix}/${batchId}/${Date.now()}-${crypto.randomUUID()}-${safeName}`;
 
       const { error: uploadError } = await supabase.storage
         .from(bucket)

@@ -11,6 +11,7 @@ type CatalogProduct = {
   title: string;
   handle: string;
   status: string;
+  publishedAt: string | null;
   barcodes: string[];
   images: Array<{ id: string; url: string; altText: string }>;
 };
@@ -22,9 +23,17 @@ type CatalogPageInfo = {
   startCursor: string | null;
 };
 
-function isAllowedProductStatus(value: string) {
-  const status = String(value || "").trim().toUpperCase();
-  return status === "ACTIVE" || status === "DRAFT";
+const BASE_CATALOG_FILTER = "status:active -status:unlisted published_status:published";
+
+function isAllowedProduct(product: CatalogProduct) {
+  const status = String(product.status || "").trim().toUpperCase();
+  return status === "ACTIVE" && Boolean(String(product.publishedAt || "").trim());
+}
+
+function buildShopifyCatalogQuery(rawQuery: string | null) {
+  const q = String(rawQuery || "").trim();
+  if (!q) return BASE_CATALOG_FILTER;
+  return `${q} ${BASE_CATALOG_FILTER}`;
 }
 
 function toCatalogProducts(json: any): CatalogProduct[] {
@@ -34,6 +43,7 @@ function toCatalogProducts(json: any): CatalogProduct[] {
       title: edge?.node?.title,
       handle: edge?.node?.handle,
       status: String(edge?.node?.status || "").trim().toUpperCase(),
+      publishedAt: edge?.node?.publishedAt ? String(edge.node.publishedAt) : null,
       barcodes: Array.from(
         new Set(
           (edge?.node?.variants?.nodes || [])
@@ -48,7 +58,7 @@ function toCatalogProducts(json: any): CatalogProduct[] {
           altText: img?.altText || "",
         }))
         .filter((img: any) => img?.url),
-    }))?.filter((p: CatalogProduct) => isAllowedProductStatus(p.status)) || []
+    }))?.filter((p: CatalogProduct) => isAllowedProduct(p)) || []
   );
 }
 
@@ -99,10 +109,11 @@ async function getTokenCandidates(shop: string) {
 async function fetchCatalogWithToken(
   shop: string,
   token: string,
-  q: string | null,
+  rawQuery: string | null,
   first: number,
   after: string | null
 ) {
+  const queryFilter = buildShopifyCatalogQuery(rawQuery);
   const query = `
     query ProductCatalog($query: String, $first: Int!, $after: String) {
       products(first: $first, after: $after, query: $query, sortKey: UPDATED_AT, reverse: true) {
@@ -112,6 +123,7 @@ async function fetchCatalogWithToken(
             title
             handle
             status
+            publishedAt
             variants(first: 50) {
               nodes {
                 barcode
@@ -143,7 +155,7 @@ async function fetchCatalogWithToken(
         "Content-Type": "application/json",
         "X-Shopify-Access-Token": token,
       },
-      body: JSON.stringify({ query, variables: { query: q || null, first, after } }),
+      body: JSON.stringify({ query, variables: { query: queryFilter, first, after } }),
       cache: "no-store",
     });
     const json = await resp.json().catch(() => ({}));
@@ -212,7 +224,7 @@ export async function GET(req: NextRequest) {
       let pageInfo = attempt.pageInfo;
       // Shopify query syntax can be strict; fallback to broad fetch + local contains filter.
       if (q && !after && products.length === 0) {
-        const broad = await fetchCatalogWithToken(shop, candidate.token, null, 250, null);
+        const broad = await fetchCatalogWithToken(shop, candidate.token, "", 250, null);
         if (broad.ok) {
           products = broad.products.filter((product) => matchesQuery(product, q));
           pageInfo = {

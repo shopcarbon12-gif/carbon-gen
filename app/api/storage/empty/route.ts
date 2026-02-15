@@ -58,11 +58,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const [modelFiles, itemFiles] = await Promise.all([
-      listFilesRecursive(bucket, "models"),
-      listFilesRecursive(bucket, "items"),
-    ]);
-    const all = Array.from(new Set([...modelFiles, ...itemFiles]));
+    const body = await req.json().catch(() => ({}));
+    const prefix = String(body?.prefix || "")
+      .trim()
+      .replace(/^\/+/, "")
+      .replace(/\/+$/, "");
+
+    const targetPrefixes = prefix
+      ? [prefix]
+      : ["models", "items"];
+    const listedGroups = await Promise.all(
+      targetPrefixes.map((p) => listFilesRecursive(bucket, p))
+    );
+    const all = Array.from(new Set(listedGroups.flat()));
 
     if (!all.length) {
       return NextResponse.json({ ok: true, deleted: 0 });

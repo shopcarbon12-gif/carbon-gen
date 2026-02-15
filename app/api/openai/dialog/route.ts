@@ -8,11 +8,22 @@ type DialogMessage = {
   content: string;
 };
 
+function normalizeText(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
 function isOpenAiAuthError(err: unknown) {
   const status = Number((err as any)?.status || (err as any)?.statusCode || 0);
   const message = String((err as any)?.message || "");
   if (status === 401) return true;
   return /incorrect api key|invalid api key|api key provided/i.test(message);
+}
+
+function isOpenAiRateLimitError(err: unknown) {
+  const status = Number((err as any)?.status || (err as any)?.statusCode || 0);
+  const message = String((err as any)?.message || "");
+  if (status === 429) return true;
+  return /rate limit|quota|too many requests/i.test(message);
 }
 
 function normalizeMessages(value: unknown): DialogMessage[] {
@@ -36,44 +47,91 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
     const messages = normalizeMessages(body?.messages);
-    const contextError =
-      typeof body?.contextError === "string" ? body.contextError.trim().slice(0, 6000) : "";
+    const contextError = normalizeText(body?.contextError).slice(0, 6000);
 
     if (!messages.length) {
       return NextResponse.json({ error: "Missing dialog messages" }, { status: 400 });
     }
 
-    const apiKey = (process.env.OPENAI_API_KEY || "").trim();
+    const apiKey = normalizeText(process.env.OPENAI_API_KEY);
     if (!apiKey) {
-      return NextResponse.json({
-        reply:
-          "OPENAI_API_KEY is not configured. Check .env.local, then restart dev server and retry.",
-      });
+      return NextResponse.json(
+        {
+          error:
+            "OPENAI_API_KEY is not configured. Add it to .env.local and restart the dev server.",
+        },
+        { status: 500 }
+      );
     }
 
     const client = new OpenAI({ apiKey });
+    const model =
+      normalizeText(process.env.OPENAI_DIALOG_MODEL) ||
+      normalizeText(process.env.OPENAI_CHAT_MODEL) ||
+      "gpt-4o-mini";
     const system =
-      "You are a concise troubleshooting assistant for a fashion ecommerce image studio app. " +
+      "You are ChatGPT integrated into a fashion ecommerce image studio app. " +
       "Give practical debugging steps, likely causes, and exact next actions.";
 
-    const completion = await client.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0.2,
-      messages: [
-        { role: "system", content: system },
-        ...(contextError
-          ? [
-              {
-                role: "system" as const,
-                content: `Latest generation error context:\n${contextError}`,
-              },
-            ]
-          : []),
-        ...messages.map((m) => ({ role: m.role, content: m.content })),
-      ],
-    });
+    let reply = "";
+    try {
+      const response = await client.responses.create({
+        model,
+        temperature: 0.2,
+        max_output_tokens: 900,
+        input: [
+          {
+            role: "system",
+            content: [{ type: "input_text", text: system }],
+          },
+          ...(contextError
+            ? [
+                {
+                  role: "system" as const,
+                  content: [
+                    {
+                      type: "input_text" as const,
+                      text: `Latest generation error context:\n${contextError}`,
+                    },
+                  ],
+                },
+              ]
+            : []),
+          ...messages.map((m) => ({
+            role: m.role,
+            content: [{ type: "input_text" as const, text: m.content }],
+          })),
+        ],
+      });
+      reply = normalizeText(response.output_text);
+    } catch {
+      reply = "";
+    }
 
-    const reply = completion.choices?.[0]?.message?.content?.trim() || "(No response text)";
+    if (!reply) {
+      const completion = await client.chat.completions.create({
+        model,
+        temperature: 0.2,
+        messages: [
+          { role: "system", content: system },
+          ...(contextError
+            ? [
+                {
+                  role: "system" as const,
+                  content: `Latest generation error context:\n${contextError}`,
+                },
+              ]
+            : []),
+          ...messages.map((m) => ({ role: m.role, content: m.content })),
+        ],
+      });
+      reply = normalizeText(completion.choices?.[0]?.message?.content);
+    }
+
+    if (!reply) {
+      return NextResponse.json({ error: "Chat returned empty content." }, { status: 502 });
+    }
+
     return NextResponse.json({ reply });
   } catch (e: any) {
     if (isOpenAiAuthError(e)) {
@@ -83,6 +141,12 @@ export async function POST(req: NextRequest) {
             "OpenAI authentication failed on server. Update OPENAI_API_KEY in production env and redeploy.",
         },
         { status: 500 }
+      );
+    }
+    if (isOpenAiRateLimitError(e)) {
+      return NextResponse.json(
+        { error: "OpenAI rate limit reached. Wait a moment and try again." },
+        { status: 429 }
       );
     }
     const details = e?.message || "OpenAI dialog failed";

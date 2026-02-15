@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   FEMALE_PANEL_MAPPING_TEXT,
   FEMALE_POSE_LIBRARY,
@@ -16,6 +16,7 @@ const ITEM_TYPE_OPTIONS = [
   { value: "jacket", label: "Jacket" },
   { value: "coat", label: "Coat" },
   { value: "t-shirt", label: "T-Shirt" },
+  { value: "tank top", label: "Tank Top" },
   { value: "shirt", label: "Shirt" },
   { value: "sweatshirt", label: "Sweatshirt" },
   { value: "sweater", label: "Sweater" },
@@ -39,6 +40,15 @@ const SPLIT_TARGET_WIDTH = 770;
 const SPLIT_TARGET_HEIGHT = 1155;
 const ALT_GENERATION_BATCH_SIZE = 3;
 const PUSH_STAGING_BATCH_SIZE = 4;
+const GENERATION_STAGES: Array<{ at: number; text: string; sub: string }> = [
+  { at: 0, text: "Initializing model...", sub: "Loading components" },
+  { at: 12, text: "Understanding prompt...", sub: "Extracting style and intent" },
+  { at: 28, text: "Composing scene...", sub: "Layout and perspective" },
+  { at: 45, text: "Diffusing pixels...", sub: "Turning noise into structure" },
+  { at: 65, text: "Adding lighting...", sub: "Shadows and highlights" },
+  { at: 80, text: "Enhancing details...", sub: "Textures and micro-contrast" },
+  { at: 92, text: "Final render pass...", sub: "Polishing output" },
+];
 
 type ShopifyCatalogProduct = {
   id: string;
@@ -76,6 +86,15 @@ type SplitCrop = {
   fileName: string;
   imageBase64: string;
   uploadedUrl?: string | null;
+};
+
+type FinalResultUpload = {
+  id: string;
+  path: string;
+  fileName: string;
+  uploadedAt: string | null;
+  url: string | null;
+  previewUrl: string | null;
 };
 
 type DropboxImageResult = {
@@ -212,6 +231,13 @@ function normalizeModelName(value: string) {
     .toLowerCase();
 }
 
+function formatElapsedStopwatch(ms: number) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
 export type StudioWorkspaceMode = "all" | "images" | "ops-seo";
 
 type StudioWorkspaceProps = {
@@ -306,6 +332,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   const modelFolderRef = useRef<HTMLInputElement | null>(null);
   const itemPickerRef = useRef<HTMLInputElement | null>(null);
   const itemFolderRef = useRef<HTMLInputElement | null>(null);
+  const finalResultPickerRef = useRef<HTMLInputElement | null>(null);
+  const finalResultFolderRef = useRef<HTMLInputElement | null>(null);
   const pushPickerRef = useRef<HTMLInputElement | null>(null);
   const pushFolderRef = useRef<HTMLInputElement | null>(null);
   const [itemPreviews, setItemPreviews] = useState<Array<{ name: string; url: string }>>(
@@ -325,8 +353,16 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   >({});
   const [approvedPanels, setApprovedPanels] = useState<number[]>([]);
   const [splitCrops, setSplitCrops] = useState<SplitCrop[]>([]);
+  const [selectedSplitKeys, setSelectedSplitKeys] = useState<string[]>([]);
   const [splitSendingToPush, setSplitSendingToPush] = useState(false);
   const [pushUploading, setPushUploading] = useState(false);
+  const [finalResultFiles, setFinalResultFiles] = useState<File[]>([]);
+  const [finalResultPreviews, setFinalResultPreviews] = useState<Array<{ id: string; name: string; url: string }>>([]);
+  const [savingFinalResults, setSavingFinalResults] = useState(false);
+  const [finalResultsVisible, setFinalResultsVisible] = useState(false);
+  const [finalResultsLoading, setFinalResultsLoading] = useState(false);
+  const [finalResultUploads, setFinalResultUploads] = useState<FinalResultUpload[]>([]);
+  const [emptyingFinalResults, setEmptyingFinalResults] = useState(false);
   const [previewModal, setPreviewModal] = useState<{
     imageBase64: string;
     title: string;
@@ -335,6 +371,19 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   const [dialogMessages, setDialogMessages] = useState<Array<{ role: "user" | "assistant"; content: string }>>([]);
   const [dialogInput, setDialogInput] = useState("");
   const [dialogLoading, setDialogLoading] = useState(false);
+  const [chatNeedsAttention, setChatNeedsAttention] = useState(false);
+  const [generationElapsedMs, setGenerationElapsedMs] = useState(0);
+  const generationStartRef = useRef<number | null>(null);
+  const generationRafRef = useRef<number | null>(null);
+  const [progressLogoSrc, setProgressLogoSrc] = useState("/logo.svg");
+  const [chatExpanded, setChatExpanded] = useState(false);
+  const inlineChatLogRef = useRef<HTMLDivElement | null>(null);
+  const sideChatLogRef = useRef<HTMLDivElement | null>(null);
+  const pageRef = useRef<HTMLDivElement | null>(null);
+  const statusBarRef = useRef<HTMLElement | null>(null);
+  const [statusBarHeight, setStatusBarHeight] = useState(0);
+  const gridRef = useRef<HTMLElement | null>(null);
+  const [gridScrollbarWidth, setGridScrollbarWidth] = useState(0);
   const [previousModelUploads, setPreviousModelUploads] = useState<PreviousModelUpload[]>([]);
   const [previousModelUploadsLoading, setPreviousModelUploadsLoading] = useState(false);
   const [previousSort, setPreviousSort] = useState<"date_asc" | "date_desc" | "name_az">(
@@ -458,9 +507,50 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     setGeneratedPanels({});
     setApprovedPanels([]);
     setSplitCrops([]);
+    setSelectedSplitKeys([]);
     setPanelsInFlight([]);
     setGenerateOpenAiResponse(null);
   }, [selectedModelId]);
+
+  useEffect(() => {
+    if (!splitCrops.length) {
+      setSelectedSplitKeys([]);
+      return;
+    }
+    setSelectedSplitKeys(splitCrops.map((crop) => `${crop.panel}:${crop.side}`));
+  }, [splitCrops]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const isGenerating = panelGenerating || panelsInFlight.length > 0;
+    if (!isGenerating) {
+      if (generationRafRef.current !== null) {
+        window.cancelAnimationFrame(generationRafRef.current);
+        generationRafRef.current = null;
+      }
+      generationStartRef.current = null;
+      return;
+    }
+
+    if (generationStartRef.current === null) {
+      generationStartRef.current = performance.now();
+      setGenerationElapsedMs(0);
+    }
+
+    const tick = (now: number) => {
+      const start = generationStartRef.current ?? now;
+      setGenerationElapsedMs(now - start);
+      generationRafRef.current = window.requestAnimationFrame(tick);
+    };
+
+    generationRafRef.current = window.requestAnimationFrame(tick);
+    return () => {
+      if (generationRafRef.current !== null) {
+        window.cancelAnimationFrame(generationRafRef.current);
+        generationRafRef.current = null;
+      }
+    };
+  }, [panelGenerating, panelsInFlight.length]);
 
   function refreshModels() {
     fetch("/api/models/list", { cache: "no-store" })
@@ -1812,7 +1902,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
 
   async function emptyBucket() {
     const ok = window.confirm(
-      "This will permanently delete all files under models/ and items/ in the bucket. Continue?"
+      "This will permanently delete all files under models/ and items/ in storage. Continue?"
     );
     if (!ok) return;
 
@@ -1821,12 +1911,12 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     try {
       const resp = await fetch("/api/storage/empty", { method: "POST" });
       const json = await parseJsonResponse(resp);
-      if (!resp.ok) throw new Error(json?.error || "Failed to empty bucket");
-      setStatus(`Bucket emptied. Deleted ${json?.deleted ?? 0} file(s).`);
+      if (!resp.ok) throw new Error(json?.error || "Failed to empty storage");
+      setStatus(`Storage emptied. Deleted ${json?.deleted ?? 0} file(s).`);
       setPreviousModelUploads([]);
       refreshModels();
     } catch (e: any) {
-      setError(e?.message || "Failed to empty bucket");
+      setError(e?.message || "Failed to empty storage");
     } finally {
       setEmptyingBucket(false);
     }
@@ -2528,11 +2618,12 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             1
           );
           if (!resp.ok) {
-            setGenerateOpenAiResponse((prev) =>
-              prev
-                ? `${prev}\n\n---\n${formatGenerateDebugPayload(json, panelNumber)}`
-                : formatGenerateDebugPayload(json, panelNumber)
-            );
+            const openAiRelated =
+              Boolean(json?.openaiRaw) ||
+              /openai|policy|safety|content/i.test(String(json?.error || ""));
+            if (openAiRelated) {
+              appendGenerateRawResponse(formatGenerateDebugPayload(json, panelNumber));
+            }
             const details = shortErrorDetails(json?.details);
             const baseMsg = json?.error || `Panel ${panelNumber} generation failed`;
             throw new Error(details ? `${baseMsg}: ${details}` : baseMsg);
@@ -2674,6 +2765,18 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     };
   }, [itemFiles]);
 
+  useEffect(() => {
+    const previews = finalResultFiles.map((file) => ({
+      id: `${file.name}::${file.size}::${file.lastModified}`,
+      name: file.name,
+      url: URL.createObjectURL(file),
+    }));
+    setFinalResultPreviews(previews);
+    return () => {
+      previews.forEach((p) => URL.revokeObjectURL(p.url));
+    };
+  }, [finalResultFiles]);
+
   function removeItemFileAt(index: number) {
     setItemFiles((prev) => prev.filter((_, i) => i !== index));
   }
@@ -2799,7 +2902,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     const safeBarcode = normalizeBarcodeForFileName(barcode);
     return {
       poseNumber,
-      fileName: `pose${poseNumber}-${safeBarcode}.png`,
+      fileName: `${safeBarcode}-pose${poseNumber}.png`,
     };
   }
 
@@ -2854,10 +2957,11 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     });
   }
 
-  async function uploadFilesToItemsBucket(files: File[]) {
+  async function uploadFilesToItemsBucket(files: File[], folderPrefix = "items") {
     if (!files.length) return [] as string[];
     const form = new FormData();
     files.forEach((file) => form.append("files", file));
+    form.append("folderPrefix", folderPrefix);
     const resp = await fetch("/api/items", { method: "POST", body: form });
     const json = await parseJsonResponse(resp, "/api/items");
     if (!resp.ok) {
@@ -2965,12 +3069,160 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     setStatus(`Downloading ${splitCrops.length} crop image(s).`);
   }
 
+  function splitCropKey(crop: SplitCrop) {
+    return `${crop.panel}:${crop.side}`;
+  }
+
+  function toggleSplitCropSelection(crop: SplitCrop) {
+    const key = splitCropKey(crop);
+    setSelectedSplitKeys((prev) =>
+      prev.includes(key) ? prev.filter((v) => v !== key) : [...prev, key]
+    );
+  }
+
+  function downloadSelectedSplitCrops() {
+    const selected = splitCrops.filter((crop) => selectedSplitKeys.includes(splitCropKey(crop)));
+    if (!selected.length) {
+      setError("No selected split crops to download.");
+      return;
+    }
+    selected.forEach((crop) => downloadSplitCrop(crop));
+    setError(null);
+    setStatus(`Downloading ${selected.length} selected crop image(s).`);
+  }
+
+  async function loadFinalResultUploads() {
+    setFinalResultsVisible(true);
+    setFinalResultsLoading(true);
+    setError(null);
+    try {
+      const resp = await fetch("/api/storage/list?prefix=final-results", { cache: "no-store" });
+      const json = await parseJsonResponse(resp, "/api/storage/list?prefix=final-results");
+      if (!resp.ok) throw new Error(json?.error || "Failed to load previous items.");
+      const rows = Array.isArray(json?.files) ? json.files : [];
+      const mapped: FinalResultUpload[] = rows
+        .map((row: any) => {
+          const path = String(row?.path || "").trim();
+          const fileName = path.split("/").pop() || path;
+          return {
+            id: path || `final-result:${crypto.randomUUID()}`,
+            path,
+            fileName,
+            uploadedAt: row?.uploadedAt ? String(row.uploadedAt) : null,
+            url: row?.url ? String(row.url) : null,
+            previewUrl: row?.url ? String(row.url) : null,
+          };
+        })
+        .filter((row: FinalResultUpload) => row.path.startsWith("final-results/"));
+      setFinalResultUploads(mapped);
+      setStatus(`Loaded ${mapped.length} previous final result item(s).`);
+    } catch (e: any) {
+      setError(e?.message || "Failed to load previous items.");
+    } finally {
+      setFinalResultsLoading(false);
+    }
+  }
+
+  async function saveFinalResultsToStorage() {
+    const splitFiles = splitCrops.map((crop) => base64ToFile(crop.imageBase64, crop.fileName));
+    const extraFiles = [...finalResultFiles];
+    if (!splitFiles.length && !extraFiles.length) {
+      setError("No final result images to save.");
+      return;
+    }
+
+    setSavingFinalResults(true);
+    setError(null);
+    try {
+      const splitUrls = splitFiles.length
+        ? await uploadFilesToItemsBucket(splitFiles, "final-results/split")
+        : [];
+      const extraUrls = extraFiles.length
+        ? await uploadFilesToItemsBucket(extraFiles, "final-results/manual")
+        : [];
+
+      if (splitUrls.length) {
+        setSplitCrops((prev) =>
+          prev.map((crop, idx) => ({
+            ...crop,
+            uploadedUrl: splitUrls[idx] || crop.uploadedUrl || null,
+          }))
+        );
+      }
+
+      const savedCount = splitUrls.length + extraUrls.length;
+      setStatus(`Saved ${savedCount} final result image(s) to storage.`);
+      if (extraUrls.length) {
+        setFinalResultFiles([]);
+      }
+      await loadFinalResultUploads();
+    } catch (e: any) {
+      setError(e?.message || "Failed to save final results.");
+    } finally {
+      setSavingFinalResults(false);
+    }
+  }
+
+  async function emptyFinalResultsStorage() {
+    const ok = window.confirm(
+      "This will permanently delete final result files uploaded from this section. Continue?"
+    );
+    if (!ok) return;
+
+    setEmptyingFinalResults(true);
+    setError(null);
+    try {
+      const resp = await fetch("/api/storage/empty", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prefix: "final-results" }),
+      });
+      const json = await parseJsonResponse(resp);
+      if (!resp.ok) throw new Error(json?.error || "Failed to empty final results storage.");
+      setFinalResultUploads([]);
+      setStatus(`Final results storage emptied. Deleted ${json?.deleted ?? 0} file(s).`);
+    } catch (e: any) {
+      setError(e?.message || "Failed to empty final results storage.");
+    } finally {
+      setEmptyingFinalResults(false);
+    }
+  }
+
+  async function handleFinalResultFilesSelected(files: File[]) {
+    if (!files.length) return;
+    setFinalResultFiles((prev) => mergeUniqueFiles(prev, files));
+    setStatus(`Added ${files.length} file(s) to Final Results queue.`);
+    setError(null);
+  }
+
+  function removeFinalResultFileAt(index: number) {
+    setFinalResultFiles((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function buildAutoDialogPromptFromError(rawError: string) {
+    const normalized = String(rawError || "").replace(/\s+/g, " ").trim();
+    const clipped = normalized.length > 1200 ? `${normalized.slice(0, 1200)}...` : normalized;
+    return `what is the reason i got these errors: ${clipped}`;
+  }
+
+  function appendGenerateRawResponse(payload: string) {
+    const clean = String(payload || "").trim();
+    if (!clean) return;
+    setGenerateOpenAiResponse((prev) => {
+      const next = prev ? `${prev}\n\n---\n${clean}` : clean;
+      setDialogInput(buildAutoDialogPromptFromError(next));
+      setChatNeedsAttention(true);
+      return next;
+    });
+  }
+
   async function sendDialogMessage() {
     const text = dialogInput.trim();
     if (!text || dialogLoading) return;
     const next = [...dialogMessages, { role: "user" as const, content: text }];
     setDialogMessages(next);
     setDialogInput("");
+    setChatNeedsAttention(false);
     setDialogLoading(true);
     setError(null);
     try {
@@ -3017,12 +3269,91 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   function clearDialogChat() {
     setDialogMessages([]);
     setDialogInput("");
+    setChatNeedsAttention(false);
     setStatus("OpenAI troubleshooting chat cleared.");
     setError(null);
   }
 
   const showCreativeSections = mode === "all" || mode === "images";
   const showOpsSections = mode === "all" || mode === "ops-seo";
+
+  useEffect(() => {
+    if (!showCreativeSections && chatExpanded) {
+      setChatExpanded(false);
+    }
+  }, [showCreativeSections, chatExpanded]);
+
+  useEffect(() => {
+    const pageNode = pageRef.current;
+    if (!pageNode) return;
+
+    const contentNode = pageNode.closest(".content");
+    const shellNode = pageNode.closest(".shell");
+    const expanded = showCreativeSections && chatExpanded;
+
+    if (contentNode) contentNode.classList.toggle("chat-expanded", expanded);
+    if (shellNode) shellNode.classList.toggle("chat-expanded", expanded);
+
+    return () => {
+      if (contentNode) contentNode.classList.remove("chat-expanded");
+      if (shellNode) shellNode.classList.remove("chat-expanded");
+    };
+  }, [chatExpanded, showCreativeSections]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const node = statusBarRef.current;
+    if (!node) return;
+
+    const sync = () => {
+      const nextHeight = Math.ceil(node.getBoundingClientRect().height);
+      setStatusBarHeight((prev) => (prev === nextHeight ? prev : nextHeight));
+    };
+
+    sync();
+    let ro: ResizeObserver | null = null;
+    if ("ResizeObserver" in window) {
+      ro = new ResizeObserver(() => sync());
+      ro.observe(node);
+    }
+    window.addEventListener("resize", sync);
+    return () => {
+      window.removeEventListener("resize", sync);
+      ro?.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const gridNode = gridRef.current;
+    if (!gridNode) return;
+
+    const sync = () => {
+      const nextWidth = Math.max(0, gridNode.offsetWidth - gridNode.clientWidth);
+      setGridScrollbarWidth((prev) => (prev === nextWidth ? prev : nextWidth));
+    };
+
+    sync();
+    let ro: ResizeObserver | null = null;
+    if ("ResizeObserver" in window) {
+      ro = new ResizeObserver(() => sync());
+      ro.observe(gridNode);
+    }
+    window.addEventListener("resize", sync);
+    return () => {
+      window.removeEventListener("resize", sync);
+      ro?.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    const logs = [inlineChatLogRef.current, sideChatLogRef.current];
+    for (const node of logs) {
+      if (!node) continue;
+      node.scrollTop = node.scrollHeight;
+    }
+  }, [dialogMessages, dialogLoading]);
+
   const modelUploadCompleted = modelPreviewItems.filter((p) => Boolean(p.uploadedUrl)).length;
   const modelUploadTarget = modelPreviewItems.length || modelUploadTotal;
   const activeProgress: string[] = [];
@@ -3044,8 +3375,17 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   if (pushUploading || pushingImages || splitSendingToPush) {
     activeProgress.push("Pushing images to Shopify");
   }
+  if (savingFinalResults) {
+    activeProgress.push("Saving final results");
+  }
+  if (finalResultsLoading) {
+    activeProgress.push("Loading previous items");
+  }
+  if (emptyingFinalResults) {
+    activeProgress.push("Emptying final results storage");
+  }
   if (emptyingBucket) {
-    activeProgress.push("Emptying bucket");
+    activeProgress.push("Emptying storage");
   }
 
   const statusTone: "error" | "working" | "success" | "idle" = error
@@ -3061,12 +3401,52 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     (statusTone === "working"
       ? "Action in progress..."
       : "Ready. Start from Model Registry or Item References.");
+  const isGeneratingNow = panelGenerating || panelsInFlight.length > 0;
+  const generationStage = useMemo(() => {
+    if (!isGeneratingNow) return null;
+    const elapsedSeconds = Math.max(0, Math.floor(generationElapsedMs / 1000));
+    let stage = GENERATION_STAGES[0];
+    for (const candidate of GENERATION_STAGES) {
+      if (elapsedSeconds >= candidate.at) stage = candidate;
+    }
+    return stage;
+  }, [generationElapsedMs, isGeneratingNow]);
+  const generationElapsedLabel = formatElapsedStopwatch(generationElapsedMs);
+  const hasRawOpenAiResponse = Boolean(generateOpenAiResponse && generateOpenAiResponse.trim());
+
+  function onStatusBarCopyRawResponse() {
+    if (!hasRawOpenAiResponse) return;
+    void copyErrorPayload();
+  }
+
+  const pageStyle = {
+    ["--status-bar-height" as string]: `${statusBarHeight}px`,
+    ["--grid-scrollbar-width" as string]: `${gridScrollbarWidth}px`,
+  } as CSSProperties;
 
   return (
-    <div className="page">
-      <section className={`card status-bar ${statusTone}`} aria-live="polite" aria-atomic="true">
+    <div ref={pageRef} className="page" style={pageStyle}>
+      <section
+        ref={statusBarRef}
+        className={`card status-bar ${statusTone} ${hasRawOpenAiResponse ? "copy-ready" : ""}`}
+        aria-live="polite"
+        aria-atomic="true"
+        role={hasRawOpenAiResponse ? "button" : undefined}
+        tabIndex={hasRawOpenAiResponse ? 0 : undefined}
+        onClick={hasRawOpenAiResponse ? onStatusBarCopyRawResponse : undefined}
+        onKeyDown={
+          hasRawOpenAiResponse
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onStatusBarCopyRawResponse();
+                }
+              }
+            : undefined
+        }
+      >
         <div className="status-bar-head">
-          <div className="status-bar-title">Progress / Error Section</div>
+          <div className="status-bar-title">prgress bar</div>
           <span className={`status-chip ${statusTone}`}>
             {statusTone === "error"
               ? "Error"
@@ -3080,19 +3460,38 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         <div className="status-bar-message">
           {statusTone === "error" ? `Error: ${statusHeadline}` : statusHeadline}
         </div>
-        {activeProgress.length ? (
+        {isGeneratingNow && generationStage ? (
+          <div className="status-generation">
+            <div className="status-generation-logo-wrap">
+              <img
+                src={progressLogoSrc}
+                alt="Generation logo"
+                className="status-generation-logo"
+                onError={() =>
+                  setProgressLogoSrc((prev) => (prev === "/logo.svg" ? "/logo.jpg" : prev))
+                }
+              />
+            </div>
+            <div className="status-generation-text">
+              <div className="status-generation-stage">{generationStage.text}</div>
+              <div className="status-generation-sub">{generationStage.sub}</div>
+            </div>
+            <div className="status-generation-time">{generationElapsedLabel}</div>
+          </div>
+        ) : null}
+        {hasRawOpenAiResponse ? (
+          <div className="status-bar-meta">OpenAI error found. Click this bar to copy raw response for AI Chat.</div>
+        ) : activeProgress.length ? (
           <div className="status-bar-meta">{activeProgress.join(" | ")}</div>
         ) : null}
       </section>
 
-      <main className="grid">
+      <main ref={gridRef} className="grid">
         {showCreativeSections ? (
           <>
         <section className="card">
-          <div className="card-title">0) Model Registry</div>
-          <p className="muted">
-            Upload a model profile (3+ reference photos). This becomes the identity anchor.
-          </p>
+          <div className="card-title">Model Registry</div>
+          <p className="muted">Upload a model profile.</p>
           <div className="row">
             <input
               value={modelName}
@@ -3125,10 +3524,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             }}
           >
             <div>Drag & drop a folder (or images) here</div>
-            <div className="muted">
-              Click to select from your device or cloud apps (Drive, Dropbox, OneDrive). Only
-              image files are used.
-            </div>
+            <div className="muted">Click to select from your device. Only image files are used</div>
           </div>
           <input
             ref={modelPickerRef}
@@ -3174,7 +3570,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               : "No files selected"}
           </div>
           {modelPreviewItems.length ? (
-            <div className="preview-grid">
+            <div className="preview-grid model-registry-grid">
               {modelPreviewItems.map((file) => (
                 <div className="preview-card model-registry-preview-card" key={file.id}>
                   <img className="model-registry-preview-image" src={file.localUrl} alt={file.name} />
@@ -3195,15 +3591,15 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             <button className="btn ghost" type="button" onClick={onPreviousUploadsPrimaryAction}>
               {previousUploadsVisible
                 ? "Hide Previous Uploads"
-                : "Load Previous Uploads"}
+                : "Load Previous Model"}
             </button>
             <button
-              className="btn ghost"
+              className="ghost-btn danger match-load-font"
               type="button"
               onClick={emptyBucket}
               disabled={emptyingBucket}
             >
-              {emptyingBucket ? "Emptying Bucket..." : "Empty Bucket (models + items)"}
+              {emptyingBucket ? "Emptying Storage..." : "Empty Storage"}
             </button>
           </div>
           <button className="btn" onClick={createModel}>
@@ -3316,7 +3712,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         </section>
 
         <section className="card">
-          <div className="card-title">0.5) Item References</div>
+          <div className="card-title">Item References</div>
           <p className="muted">
             Choose image source: upload from device/cloud apps or import existing product images from
             Shopify.
@@ -3435,10 +3831,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             }}
           >
             <div>Drag & drop a folder (or images) here</div>
-            <div className="muted">
-              Click to select from your device or cloud apps (Drive, Dropbox, OneDrive). Only
-              image files are used.
-            </div>
+            <div className="muted">Click to select from your device. Only image files are used</div>
           </div>
           <input
             ref={itemPickerRef}
@@ -3699,12 +4092,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         </section>
 
         <section className="card">
-          <div className="card-title">1) Image Generation</div>
+          <div className="card-title">Image Generation</div>
           <p className="muted">
             Select a panel and generate. Approve or regenerate. Split into 2:3 crops after approval.
-          </p>
-          <p className="muted">
-            Split to 2:3 is a free local crop tool. It never regenerates images.
           </p>
           <div className="row">
             <select
@@ -3776,9 +4166,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             >
               Select All Panels
             </button>
-            <button className="btn ghost" type="button" onClick={() => setSelectedPanels([1])}>
-              Panel 1 Only
-            </button>
           </div>
           <div className="panel-preview-grid">
             {[...selectedPanels].sort((a, b) => a - b).map((panelNumber) => {
@@ -3836,54 +4223,16 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             <button className="btn ghost" onClick={approveSelectedPanels}>
               Approve Selected
             </button>
-            <button className="btn ghost" onClick={approveAllGeneratedPanels}>
-              Approve All Generated
-            </button>
-            <button
-              className="btn ghost"
-              onClick={() => generatePanels("regenerate")}
-              disabled={panelGenerating}
-            >
-              Regenerate Panel {lowestSelectedPanel}
-            </button>
-            <button
-              className="btn ghost"
-              onClick={() => generatePanels("regenerate_selected")}
-              disabled={panelGenerating}
-            >
-              Regenerate Selected ({selectedPanels.length})
-            </button>
             <button className="btn ghost" onClick={splitToTwoByThree}>
               Split to 2:3
             </button>
           </div>
-          <div className="card">
-            <div className="card-title">1.1) OpenAI Raw Response</div>
-            <p className="muted">
-              Exact OpenAI/provider response for generation failures (including policy blocks).
-            </p>
-            {generateOpenAiResponse ? (
-              <pre className="openai-raw">{generateOpenAiResponse}</pre>
-            ) : (
-              <div className="muted centered">No OpenAI error payload captured yet.</div>
-            )}
-            <div className="row">
-              <button
-                className="btn ghost"
-                type="button"
-                onClick={copyErrorPayload}
-                disabled={!generateOpenAiResponse}
-              >
-                Copy Raw Response
-              </button>
-            </div>
-          </div>
-          <div className="card">
-            <div className="card-title">1.2) OpenAI Troubleshooting Chat</div>
+          <div className="card chat-inline-fallback">
+            <div className="card-title">1.2) AI Chat</div>
             <p className="muted">
               Ask follow-up questions directly and keep a continuous troubleshooting dialog.
             </p>
-            <div className="dialog-log">
+            <div ref={inlineChatLogRef} className="dialog-log">
               {dialogMessages.length ? (
                 dialogMessages.map((msg, idx) => (
                   <div key={`${msg.role}-${idx}`} className={`dialog-msg ${msg.role}`}>
@@ -3896,8 +4245,12 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             </div>
             <div className="row">
               <input
+                className={chatNeedsAttention ? "chat-input-attention" : ""}
                 value={dialogInput}
-                onChange={(e) => setDialogInput(e.target.value)}
+                onChange={(e) => {
+                  setDialogInput(e.target.value);
+                  setChatNeedsAttention(false);
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault();
@@ -3924,47 +4277,157 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               </button>
             </div>
           </div>
-          {splitCrops.length ? (
-            <div className="card">
-              <div className="card-title">1.5) 2:3 Results</div>
-              <div className="row">
-                <button className="btn ghost" onClick={downloadAllSplitCrops}>
-                  Download All Splits
-                </button>
-                <button
-                  className="btn ghost"
-                  type="button"
-                  onClick={useSplitCropsInShopifyPush}
-                  disabled={splitSendingToPush}
-                >
-                  {splitSendingToPush
-                    ? "Sending Splits..."
-                    : "Use Pictures In Shopify Push"}
-                </button>
+          <div className="card">
+            <div className="card-title">Final Results</div>
+            <div className="row">
+              <button className="btn ghost" onClick={downloadAllSplitCrops} disabled={!splitCrops.length}>
+                Download All Splits
+              </button>
+              <button
+                className="btn ghost"
+                type="button"
+                onClick={downloadSelectedSplitCrops}
+                disabled={!selectedSplitKeys.length}
+              >
+                Download Selected
+              </button>
+              <button
+                className="btn ghost"
+                type="button"
+                onClick={useSplitCropsInShopifyPush}
+                disabled={splitSendingToPush || !splitCrops.length}
+              >
+                {splitSendingToPush ? "Sending Splits..." : "Use Pictures In Shopify Push"}
+              </button>
+            </div>
+            <div className="row">
+              <button
+                className="btn ghost"
+                type="button"
+                onClick={saveFinalResultsToStorage}
+                disabled={savingFinalResults || (!splitCrops.length && !finalResultFiles.length)}
+              >
+                {savingFinalResults ? "Saving..." : "Save Final Results"}
+              </button>
+              <button className="btn ghost" type="button" onClick={loadFinalResultUploads}>
+                Load Previous Items
+              </button>
+              <button
+                className="ghost-btn danger match-load-font"
+                type="button"
+                onClick={emptyFinalResultsStorage}
+                disabled={emptyingFinalResults}
+              >
+                {emptyingFinalResults ? "Emptying Storage..." : "Empty Storage"}
+              </button>
+            </div>
+            <div
+              className="dropzone"
+              role="button"
+              tabIndex={0}
+              onClick={() => openInputPicker(finalResultPickerRef.current)}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={async (e) => {
+                e.preventDefault();
+                const filtered = await extractImagesFromDrop(e);
+                if (filtered.length) void handleFinalResultFilesSelected(filtered);
+              }}
+            >
+              <div>Add files/folders for Final Results (device/cloud)</div>
+              <div className="muted">
+                Drag and drop files/folders or choose from your device/cloud apps.
               </div>
-              <div className="preview-grid split-results-grid">
-                {splitCrops.map((crop) => (
-                  <div className="preview-card split-result-card" key={`${crop.panel}-${crop.side}`}>
-                    <img
-                      className="split-result-image"
-                      src={`data:image/png;base64,${crop.imageBase64}`}
-                      alt={`Pose ${crop.poseNumber} 2:3`}
-                    />
-                    <div className="preview-name">
-                      {crop.fileName}
-                    </div>
+            </div>
+            <input
+              ref={finalResultPickerRef}
+              type="file"
+              multiple
+              style={{ display: "none" }}
+              onChange={(e) => void handleFinalResultFilesSelected(filterImages(e.target.files || []))}
+            />
+            <input
+              ref={finalResultFolderRef}
+              type="file"
+              multiple
+              style={{ display: "none" }}
+              onChange={(e) => void handleFinalResultFilesSelected(filterImages(e.target.files || []))}
+            />
+            <div className="picker-row">
+              <button className="ghost-btn" type="button" onClick={() => openInputPicker(finalResultPickerRef.current)}>
+                Choose files
+              </button>
+              <button className="ghost-btn" type="button" onClick={() => openInputPicker(finalResultFolderRef.current)}>
+                Choose folder
+              </button>
+            </div>
+            {finalResultPreviews.length ? (
+              <div className="preview-grid final-extra-grid">
+                {finalResultPreviews.map((file, idx) => (
+                  <div className="preview-card split-result-card" key={file.id}>
                     <button
-                      className="ghost-btn"
                       type="button"
-                      onClick={() => downloadSplitCrop(crop)}
+                      className="preview-remove-corner"
+                      onClick={() => removeFinalResultFileAt(idx)}
+                      aria-label={`Remove ${file.name}`}
                     >
-                      Download
+                      X
                     </button>
+                    <img className="split-result-image" src={file.url} alt={file.name} />
+                    <div className="preview-name">{file.name}</div>
+                    <div className="preview-source">Source: Device/Cloud</div>
                   </div>
                 ))}
               </div>
-            </div>
-          ) : null}
+            ) : null}
+            {splitCrops.length ? (
+              <div className="preview-grid split-results-grid">
+                {splitCrops.map((crop) => {
+                  const selected = selectedSplitKeys.includes(splitCropKey(crop));
+                  return (
+                    <div
+                      className={`preview-card split-result-card selectable ${selected ? "selected" : ""}`}
+                      key={`${crop.panel}-${crop.side}`}
+                      onClick={() => toggleSplitCropSelection(crop)}
+                    >
+                      <img
+                        className="split-result-image"
+                        src={`data:image/png;base64,${crop.imageBase64}`}
+                        alt={`Pose ${crop.poseNumber} 2:3`}
+                      />
+                      <div className="preview-name">{crop.fileName}</div>
+                      {crop.uploadedUrl ? <div className="preview-source">Saved</div> : null}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="muted centered">No split results yet. Generate and split first.</div>
+            )}
+            {finalResultsVisible ? (
+              finalResultsLoading ? (
+                <div className="muted centered">Loading previous items...</div>
+              ) : finalResultUploads.length ? (
+                <div className="preview-grid previous-upload-grid">
+                  {finalResultUploads.map((file) => (
+                    <div className="preview-card previous-upload-card" key={file.id}>
+                      {file.previewUrl ? (
+                        <img
+                          className="previous-upload-image"
+                          src={file.previewUrl}
+                          alt={file.fileName || "Final result preview"}
+                        />
+                      ) : (
+                        <div className="muted centered">Preview unavailable</div>
+                      )}
+                      <div className="preview-name">{file.fileName || file.path}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="muted centered">No previous items found.</div>
+              )
+            ) : null}
+          </div>
         </section>
           </>
         ) : null}
@@ -4301,6 +4764,98 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         ) : null}
       </main>
 
+      {showCreativeSections ? (
+        <aside className="chat-side-panel" aria-label="AI chat">
+          <section className="card chat-side-card">
+            <div className="chat-side-head">
+              <div className="chat-side-head-left">
+                <button
+                  type="button"
+                  className={`chat-expand-btn ${chatExpanded ? "expanded" : ""}`}
+                  onClick={() => setChatExpanded((prev) => !prev)}
+                  aria-pressed={chatExpanded}
+                  aria-label={chatExpanded ? "Collapse AI chat panel" : "Expand AI chat panel"}
+                  title={chatExpanded ? "Collapse chat" : "Expand chat"}
+                >
+                  <svg
+                    className="chat-expand-icon"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                    aria-hidden
+                  >
+                    {chatExpanded ? (
+                      <path
+                        d="M6 8l4 4-4 4M18 8l-4 4 4 4"
+                        stroke="currentColor"
+                        strokeWidth="1.9"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    ) : (
+                      <path
+                        d="M10 8l-4 4 4 4M14 8l4 4-4 4"
+                        stroke="currentColor"
+                        strokeWidth="1.9"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    )}
+                  </svg>
+                </button>
+                <div className="card-title chat-side-title">1.2) AI Chat</div>
+              </div>
+            </div>
+            <div ref={sideChatLogRef} className="chat-window-log">
+              {dialogMessages.length ? (
+                dialogMessages.map((msg, idx) => (
+                  <div key={`side-${msg.role}-${idx}`} className={`dialog-msg ${msg.role}`}>
+                    <strong>{msg.role === "user" ? "You" : "Assistant"}:</strong> {msg.content}
+                  </div>
+                ))
+              ) : (
+                <div className="muted centered">No chat messages yet.</div>
+              )}
+            </div>
+            <div className="chat-side-actions">
+              <input
+                className={chatNeedsAttention ? "chat-input-attention" : ""}
+                value={dialogInput}
+                onChange={(e) => {
+                  setDialogInput(e.target.value);
+                  setChatNeedsAttention(false);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    sendDialogMessage();
+                  }
+                }}
+                placeholder="Ask OpenAI why a generation failed and how to fix it..."
+              />
+              <div className="row">
+                <button
+                  className="btn"
+                  type="button"
+                  onClick={sendDialogMessage}
+                  disabled={dialogLoading || !dialogInput.trim()}
+                >
+                  {dialogLoading ? "Sending..." : "Send"}
+                </button>
+                <button
+                  className="btn ghost"
+                  type="button"
+                  onClick={clearDialogChat}
+                  disabled={!dialogMessages.length && !dialogInput.trim()}
+                >
+                  Clear Chat
+                </button>
+              </div>
+            </div>
+          </section>
+        </aside>
+      ) : null}
+
       {previewModal ? (
         <div className="preview-modal-overlay" onClick={() => setPreviewModal(null)}>
           <div className="preview-modal" onClick={(e) => e.stopPropagation()}>
@@ -4324,12 +4879,20 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
 
       <style jsx>{`
         .page {
-          padding: 32px 6vw 60px;
+          padding: calc(var(--integration-panel-top, 89px) - 58px) 6vw 0;
+          height: calc(100vh - 58px);
+          height: calc(100dvh - 58px);
+          min-height: calc(100vh - 58px);
+          min-height: calc(100dvh - 58px);
+          display: grid;
+          grid-template-rows: auto minmax(0, 1fr);
+          overflow: hidden;
           font-family: "Space Grotesk", system-ui, sans-serif;
           color: #0f172a;
         }
         :global(.content:not(.menu-open)) .page {
           padding-left: clamp(16px, 2vw, 28px);
+          padding-right: 0;
         }
         :global(.content.menu-open) .page {
           padding-left: 0;
@@ -4370,10 +4933,43 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           gap: 10px;
         }
         .status-bar {
-          position: sticky;
-          top: 82px;
-          z-index: 34;
+          position: fixed;
+          top: var(--integration-panel-top, 89px);
+          left: clamp(16px, 2vw, 28px);
+          right: calc(
+            var(
+              --content-right-pad,
+              calc(
+                var(--integration-panel-width, 255px) + var(--page-edge-gap, 12px) +
+                  var(--content-api-gap, 13px)
+              )
+            ) + var(--grid-scrollbar-width, 0px)
+          );
+          z-index: 40;
           gap: 8px;
+          will-change: right, left;
+          transition:
+            left var(--chat-expand-duration, 280ms)
+              var(--chat-expand-ease, cubic-bezier(0.2, 0.85, 0.2, 1)),
+            right var(--chat-expand-duration, 280ms)
+              var(--chat-expand-ease, cubic-bezier(0.2, 0.85, 0.2, 1));
+        }
+        .status-bar.copy-ready {
+          cursor: pointer;
+        }
+        .status-bar.copy-ready:hover {
+          border-color: #93c5fd;
+          box-shadow: 0 0 0 1px rgba(147, 197, 253, 0.22), 0 8px 24px rgba(0, 0, 0, 0.2);
+        }
+        .status-bar.copy-ready:focus-visible {
+          outline: 2px solid #93c5fd;
+          outline-offset: 2px;
+        }
+        :global(.content.menu-open) .status-bar {
+          left: 280px;
+        }
+        :global(.content.no-integration-panel) .status-bar {
+          right: 0;
         }
         .status-bar-head {
           display: flex;
@@ -4383,7 +4979,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         }
         .status-bar-title {
           font-weight: 700;
-          letter-spacing: 0.08em;
+          letter-spacing: 0.01em;
           text-transform: uppercase;
           font-size: 0.74rem;
           color: #475569;
@@ -4445,12 +5041,77 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           line-height: 1.25;
           word-break: break-word;
         }
+        .status-generation {
+          display: grid;
+          grid-template-columns: auto minmax(0, 1fr) auto;
+          align-items: center;
+          gap: 12px;
+          border: 1px solid #e2e8f0;
+          border-radius: 12px;
+          padding: 10px;
+          background: rgba(255, 255, 255, 0.12);
+        }
+        .status-generation-logo-wrap {
+          width: 48px;
+          height: 48px;
+          display: grid;
+          place-items: center;
+          animation: status-logo-pulse 1.5s ease-in-out infinite;
+        }
+        .status-generation-logo {
+          width: 40px;
+          height: 40px;
+          object-fit: contain;
+          border-radius: 8px;
+        }
+        .status-generation-text {
+          min-width: 0;
+          display: grid;
+          gap: 2px;
+        }
+        .status-generation-stage {
+          font-size: 0.93rem;
+          font-weight: 700;
+          line-height: 1.2;
+        }
+        .status-generation-sub {
+          font-size: 0.78rem;
+          color: #64748b;
+          line-height: 1.2;
+        }
+        .status-generation-time {
+          font-size: 0.84rem;
+          font-weight: 700;
+          border: 1px solid #cbd5e1;
+          border-radius: 999px;
+          padding: 4px 10px;
+          white-space: nowrap;
+        }
+        @keyframes status-logo-pulse {
+          0%,
+          100% {
+            transform: scale(1);
+            filter: drop-shadow(0 0 0 rgba(255, 255, 255, 0));
+          }
+          50% {
+            transform: scale(1.04);
+            filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.2));
+          }
+        }
         .card-title {
           font-weight: 700;
         }
         .grid {
           display: grid;
           gap: 16px;
+          min-height: 0;
+          overflow-y: auto;
+          overscroll-behavior: contain;
+          margin-top: calc(var(--status-bar-height, 96px) + 12px);
+          width: calc(100% + var(--content-right-pad, 0px));
+          margin-right: calc(-1 * var(--content-right-pad, 0px));
+          padding-right: var(--content-right-pad, 0px);
+          padding-bottom: 60px;
         }
         .muted {
           color: #64748b;
@@ -4691,15 +5352,28 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           width: 100%;
           max-width: 900px;
         }
-        .item-catalog-grid {
+        .model-registry-grid {
           display: grid;
-          grid-template-columns: repeat(6, minmax(0, 1fr));
-          max-width: 100%;
+          grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+          max-width: 900px;
           justify-content: stretch;
           align-items: stretch;
         }
+        :global(.content:not(.menu-open)) .model-registry-grid {
+          grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+          max-width: 1180px;
+        }
+        .item-catalog-grid {
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: center;
+          align-items: stretch;
+          gap: 10px;
+          max-width: 1260px;
+          margin: 0 auto;
+        }
         .item-catalog-grid .catalog-image {
-          width: 100%;
+          width: 150px;
         }
         .item-catalog-grid .catalog-image img {
           height: 120px;
@@ -4719,18 +5393,20 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           width: 200px;
         }
         .split-results-grid {
-          display: grid;
-          grid-template-columns: repeat(6, minmax(0, 1fr));
-          max-width: 100%;
-          justify-content: stretch;
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: center;
           align-items: stretch;
+          gap: 10px;
+          max-width: 1260px;
+          margin: 0 auto;
         }
         .split-results-grid .split-result-card {
-          width: 100%;
+          width: 200px;
         }
         .split-result-image {
           width: 100%;
-          height: 220px;
+          height: 240px;
           object-fit: contain;
           object-position: center;
           border-radius: 8px;
@@ -4876,6 +5552,10 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           color: #ffffff;
           background: #ff4b4b62;
           border-color: #ffffff;
+        }
+        .match-load-font {
+          font-size: 1rem;
+          font-weight: 600;
         }
         .model-name {
           font-weight: 600;
@@ -5059,6 +5739,148 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           background: #f3faf7;
           border-color: #c6f6d5;
         }
+        .chat-inline-fallback {
+          display: none;
+        }
+        .chat-side-panel {
+          position: fixed;
+          right: var(--page-edge-gap, 12px);
+          top: calc(
+            var(--integration-panel-top, 89px) + var(--integration-panel-height, 214px) + 12px
+          );
+          bottom: 12px;
+          width: min(var(--integration-panel-width, 255px), calc(100vw - 24px));
+          z-index: 42;
+          pointer-events: none;
+          will-change: width, top;
+          transition:
+            width var(--chat-expand-duration, 280ms)
+              var(--chat-expand-ease, cubic-bezier(0.2, 0.85, 0.2, 1)),
+            top var(--chat-expand-duration, 280ms)
+              var(--chat-expand-ease, cubic-bezier(0.2, 0.85, 0.2, 1));
+        }
+        .chat-side-card {
+          width: 100%;
+          height: 100%;
+          display: grid;
+          grid-template-rows: auto minmax(0, 1fr) auto;
+          gap: 8px;
+          pointer-events: auto;
+        }
+        .chat-side-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+        }
+        .chat-side-head-left {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          min-width: 0;
+        }
+        .chat-expand-btn {
+          width: 28px;
+          height: 28px;
+          min-width: 28px;
+          min-height: 28px;
+          border-radius: 8px;
+          border: 1px solid #cbd5e1;
+          background: #f8fafc;
+          color: #334155;
+          display: grid;
+          place-items: center;
+          line-height: 0;
+          padding: 0;
+          flex-shrink: 0;
+          transition:
+            background-color 160ms ease,
+            border-color 160ms ease,
+            color 160ms ease,
+            transform 160ms ease;
+        }
+        .chat-expand-btn.expanded {
+          background: #e2e8f0;
+        }
+        .chat-expand-btn:active {
+          transform: translateY(1px);
+        }
+        .chat-expand-icon {
+          width: 14px;
+          height: 14px;
+          display: block;
+          transition:
+            transform var(--chat-expand-duration, 280ms)
+              var(--chat-expand-ease, cubic-bezier(0.2, 0.85, 0.2, 1));
+        }
+        .chat-side-title {
+          margin: 0;
+          font-weight: 800;
+          letter-spacing: 0.01em;
+          text-transform: none;
+          line-height: 1.1;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .chat-side-status {
+          border: 1px solid #e2e8f0;
+          border-radius: 999px;
+          padding: 3px 9px;
+          font-size: 0.68rem;
+          font-weight: 700;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          white-space: nowrap;
+        }
+        .chat-side-status.ready {
+          color: #166534;
+          border-color: #86efac;
+          background: #dcfce7;
+        }
+        .chat-side-status.loading {
+          color: #7c2d12;
+          border-color: #fdba74;
+          background: #ffedd5;
+        }
+        .chat-side-sub {
+          font-size: 0.83rem;
+        }
+        .chat-window-log {
+          min-height: 0;
+          overflow: auto;
+          display: grid;
+          gap: 8px;
+          padding-right: 2px;
+        }
+        .chat-side-actions {
+          display: grid;
+          gap: 8px;
+        }
+        .chat-side-actions .row {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 8px;
+        }
+        .chat-input-attention {
+          animation: chat-input-flicker 1.1s ease-in-out infinite;
+        }
+        @keyframes chat-input-flicker {
+          0%,
+          100% {
+            border-color: #f59e0b;
+            box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.34);
+          }
+          50% {
+            border-color: #fdba74;
+            box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.28);
+          }
+        }
+        :global(.shell.chat-expanded) .chat-side-panel {
+          top: var(--integration-panel-top, 89px);
+          width: min(var(--chat-expanded-width, 560px), calc(100vw - 24px));
+        }
         .preview-modal-overlay {
           position: fixed;
           inset: 0;
@@ -5212,9 +6034,37 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         .status-bar-message {
           color: var(--cg-fg);
         }
+        .chat-expand-btn {
+          background: var(--cg-surface-soft);
+          border-color: var(--cg-border-strong);
+          color: var(--cg-fg);
+        }
+        .chat-expand-btn.expanded {
+          background: var(--cg-surface);
+        }
+        @media (max-width: 1180px) {
+          .chat-inline-fallback {
+            display: grid;
+          }
+          .status-bar {
+            left: clamp(16px, 2vw, 28px);
+            right: 0;
+          }
+          :global(.content.menu-open) .status-bar {
+            left: clamp(16px, 2vw, 28px);
+          }
+          .chat-side-panel {
+            display: none;
+          }
+        }
         @media (max-width: 900px) {
           .status-bar {
             top: 78px;
+            left: clamp(16px, 2vw, 28px);
+            right: 0;
+          }
+          :global(.content.menu-open) .status-bar {
+            left: clamp(16px, 2vw, 28px);
           }
           .hero {
             grid-template-columns: 1fr;
@@ -5276,6 +6126,3 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     </div>
   );
 }
-
-
-

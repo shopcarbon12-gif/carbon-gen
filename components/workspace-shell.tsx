@@ -20,10 +20,6 @@ type IntegrationItem = {
   label: string;
 };
 
-const INTEGRATION_PANEL_TOP = 89;
-const INTEGRATION_PANEL_BOTTOM = 12;
-const INTEGRATION_ANCHOR_SELECTOR = "[data-integration-anchor='model-dropzone']";
-
 const ACTIVE_ITEM_STYLE: CSSProperties = {
   color: "#fff",
   fontWeight: 600,
@@ -74,22 +70,16 @@ function getCurrentTitle(pathname: string) {
 export function WorkspaceShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const showIntegrationPanel = !pathname.startsWith("/settings");
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPinned, setMenuPinned] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [integrations, setIntegrations] = useState<IntegrationItem[]>([]);
   const [integrationsLoading, setIntegrationsLoading] = useState(true);
   const [integrationsRefreshing, setIntegrationsRefreshing] = useState(false);
-  const [integrationPanelHeight, setIntegrationPanelHeight] = useState<number | null>(null);
   const mountedRef = useRef(true);
   const currentTitle = getCurrentTitle(pathname);
   const drawerOpen = menuOpen || menuPinned;
-  const integrationPanelCompact = integrationPanelHeight !== null;
-  const visibleIntegrations = integrationPanelCompact ? integrations.slice(0, 3) : integrations;
-  const hiddenIntegrationCount = Math.max(integrations.length - visibleIntegrations.length, 0);
-  const shellStyle: CSSProperties | undefined = integrationPanelHeight
-    ? ({ ["--integration-panel-height" as string]: `${integrationPanelHeight}px` } as CSSProperties)
-    : undefined;
 
   useEffect(() => {
     try {
@@ -181,49 +171,13 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (!showIntegrationPanel) return;
     void refreshIntegrations(false);
     const timer = window.setInterval(() => {
       void refreshIntegrations(false);
     }, 45000);
     return () => window.clearInterval(timer);
-  }, [refreshIntegrations]);
-
-  const syncIntegrationPanelHeight = useCallback(() => {
-    if (typeof window === "undefined") return;
-    const anchor = document.querySelector<HTMLElement>(INTEGRATION_ANCHOR_SELECTOR);
-    if (!anchor) {
-      setIntegrationPanelHeight(null);
-      return;
-    }
-
-    const anchorBottom = anchor.getBoundingClientRect().bottom;
-    const maxHeight = window.innerHeight - INTEGRATION_PANEL_TOP - INTEGRATION_PANEL_BOTTOM;
-    const desired = Math.round(anchorBottom - INTEGRATION_PANEL_TOP);
-    if (!Number.isFinite(desired)) {
-      setIntegrationPanelHeight(null);
-      return;
-    }
-    const clamped = Math.min(Math.max(desired, 210), maxHeight);
-    setIntegrationPanelHeight(clamped);
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const scheduleSync = () => {
-      window.requestAnimationFrame(() => {
-        syncIntegrationPanelHeight();
-      });
-    };
-
-    scheduleSync();
-    const timer = window.setTimeout(scheduleSync, 160);
-    window.addEventListener("resize", scheduleSync);
-    return () => {
-      window.clearTimeout(timer);
-      window.removeEventListener("resize", scheduleSync);
-    };
-  }, [syncIntegrationPanelHeight, pathname, drawerOpen]);
+  }, [refreshIntegrations, showIntegrationPanel]);
 
   function toggleMenu() {
     if (menuPinned) {
@@ -253,7 +207,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="shell" style={shellStyle}>
+    <div className="shell">
       <svg
         aria-hidden
         focusable="false"
@@ -366,88 +320,86 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
         </nav>
       </aside>
 
-      <aside
-        className={`integration-panel-wrap ${integrationPanelCompact ? "compact" : ""}`}
-        aria-label="API integrations"
-      >
-        <section className="integration-panel glass-panel">
-          <div className="integration-header">
-            <button
-              type="button"
-              className={`integration-refresh ${integrationsRefreshing ? "spinning" : ""}`}
-              onClick={() => void refreshIntegrations(true)}
-              aria-label="Refresh integration statuses"
-              disabled={integrationsRefreshing}
-            >
-              <svg
-                className="integration-refresh-icon"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                aria-hidden
+      {showIntegrationPanel ? (
+        <aside className="integration-panel-wrap" aria-label="API integrations">
+          <section className="integration-panel glass-panel">
+            <div className="integration-header">
+              <div className="integration-title">API INTEGRATIONS</div>
+              <button
+                type="button"
+                className={`integration-refresh ${integrationsRefreshing ? "spinning" : ""}`}
+                onClick={() => void refreshIntegrations(true)}
+                aria-label="Refresh integration statuses"
+                disabled={integrationsRefreshing}
               >
-                <path
-                  d="M20 8a8 8 0 0 0-14-3M4 4v5h5"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d="M4 16a8 8 0 0 0 14 3m2 1v-5h-5"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </button>
-            <div className="integration-title">
-              {integrationPanelCompact ? "API STATUS" : "API INTEGRATIONS"}
+                <svg
+                  className="integration-refresh-icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  aria-hidden
+                >
+                  <path
+                    d="M20 8a8 8 0 0 0-14-3M4 4v5h5"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M4 16a8 8 0 0 0 14 3m2 1v-5h-5"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
             </div>
-          </div>
-          <div className="integration-list">
-            {integrationsLoading && integrations.length === 0 ? (
-              <div className="integration-row static">
-                <span className="integration-name">Checking integrations</span>
-                <span className="integration-state">
-                  <span className="integration-dot checking" aria-hidden />
-                  <span>Checking</span>
-                </span>
-              </div>
-            ) : integrations.length ? (
-              visibleIntegrations.map((integration) => {
-                const state = normalizeIntegrationState(integration.status);
-                return (
-                  <Link
-                    key={integration.id}
-                    href={integration.settingsHref || "/settings"}
-                    className="integration-row"
-                    title={`${integration.name} (${integration.endpoint})`}
-                  >
-                    <span className="integration-name">{integration.name}</span>
-                    <span className="integration-state">
-                      <span className={`integration-dot ${state}`} aria-hidden />
-                      <span>{integration.label}</span>
-                    </span>
-                  </Link>
-                );
-              })
-            ) : (
-              <div className="integration-empty">No integrations found.</div>
-            )}
-            {hiddenIntegrationCount > 0 ? (
-              <div className="integration-more">+{hiddenIntegrationCount} more</div>
-            ) : null}
-          </div>
-        </section>
-      </aside>
+            <div className="integration-list">
+              {integrationsLoading && integrations.length === 0 ? (
+                <div className="integration-row static">
+                  <span className="integration-name">Checking integrations</span>
+                  <span className="integration-state">
+                    <span className="integration-dot checking" aria-hidden />
+                    <span className="integration-label">Checking</span>
+                  </span>
+                </div>
+              ) : integrations.length ? (
+                integrations.map((integration) => {
+                  const state = normalizeIntegrationState(integration.status);
+                  return (
+                    <Link
+                      key={integration.id}
+                      href={integration.settingsHref || "/settings"}
+                      className="integration-row"
+                      title={`${integration.name} (${integration.endpoint})`}
+                    >
+                      <span className="integration-name">{integration.name}</span>
+                      <span className="integration-state">
+                        <span className={`integration-dot ${state}`} aria-hidden />
+                        <span className="integration-label">{integration.label}</span>
+                      </span>
+                    </Link>
+                  );
+                })
+              ) : (
+                <div className="integration-empty">No integrations found.</div>
+              )}
+            </div>
+          </section>
+        </aside>
+      ) : null}
 
       {drawerOpen && !menuPinned ? (
         <button className="backdrop" aria-label="Close menu overlay" onClick={() => setMenuOpen(false)} />
       ) : null}
 
-      <main className={`content ${drawerOpen ? "menu-open" : ""}`}>{children}</main>
+      <main
+        className={`content ${drawerOpen ? "menu-open" : ""} ${showIntegrationPanel ? "" : "no-integration-panel"}`}
+      >
+        {children}
+      </main>
 
       <style jsx>{`
         :root {
@@ -459,9 +411,17 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           --pill-border: rgba(255, 255, 255, 0.14);
         }
         .shell {
+          --page-edge-gap: clamp(16px, 2vw, 28px);
+          --integration-panel-width: 255px;
+          --integration-panel-height: 214px;
+          --chat-expanded-width: min(560px, calc(100vw - 24px));
+          --content-api-gap: 13px;
+          --chat-expand-duration: 280ms;
+          --chat-expand-ease: cubic-bezier(0.2, 0.85, 0.2, 1);
           min-height: 100vh;
           position: relative;
-          overflow-x: hidden;
+          /* Keep horizontal bleed clipped without breaking sticky descendants (progress bar). */
+          overflow-x: clip;
           color: #f8fafc;
         }
         .topbar {
@@ -607,13 +567,24 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
         }
         .integration-panel-wrap {
           position: fixed;
-          right: 12px;
+          right: var(--page-edge-gap);
           top: 89px;
-          height: var(--integration-panel-height, calc(100vh - 101px));
-          width: min(255px, calc(100vw - 24px));
+          height: min(var(--integration-panel-height), calc(100vh - 101px));
+          width: min(var(--integration-panel-width), calc(100vw - 24px));
           z-index: 44;
           display: flex;
           align-items: stretch;
+          pointer-events: none;
+          transform: translateX(0);
+          opacity: 1;
+          will-change: transform, opacity;
+          transition:
+            transform var(--chat-expand-duration) var(--chat-expand-ease),
+            opacity 180ms ease;
+        }
+        .shell.chat-expanded .integration-panel-wrap {
+          transform: translateX(calc(100% + 32px));
+          opacity: 0;
           pointer-events: none;
         }
         .integration-panel {
@@ -633,22 +604,26 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           gap: 10px;
           font-family: "Inter", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
           pointer-events: auto;
-          overflow-y: auto;
+          overflow-y: hidden;
         }
         .integration-header {
           display: flex;
           align-items: center;
-          gap: 10px;
+          justify-content: space-between;
+          gap: 12px;
         }
         .integration-refresh {
+          min-width: 28px;
+          min-height: 28px;
           width: 28px;
           height: 28px;
-          border-radius: 999px;
+          border-radius: 50%;
           border: 1px solid rgba(255, 255, 255, 0.28);
           background: rgba(255, 255, 255, 0.08);
           color: rgba(255, 255, 255, 0.95);
           display: grid;
           place-items: center;
+          line-height: 0;
           padding: 0;
           flex-shrink: 0;
           cursor: pointer;
@@ -674,29 +649,54 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
         }
         .integration-list {
           display: grid;
-          gap: 8px;
+          gap: 10px;
           min-height: 0;
-          overflow-y: auto;
+          overflow: hidden;
         }
-        .integration-row {
+        .integration-row,
+        :global(a.integration-row) {
           display: flex;
           align-items: center;
-          justify-content: space-between;
-          gap: 12px;
+          gap: 10px;
           border-radius: 10px;
-          border: 1px solid rgba(255, 255, 255, 0.16);
-          background: rgba(255, 255, 255, 0.04);
+          border: 1px solid rgba(255, 255, 255, 0.46);
+          background: rgba(255, 255, 255, 0.16);
+          box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.34),
+            0 6px 16px rgba(2, 6, 23, 0.2);
+          min-height: 38px;
           padding: 8px 10px;
           text-decoration: none;
           transition:
             border-color 160ms ease,
-            background-color 160ms ease;
+            background 160ms ease,
+            box-shadow 160ms ease;
         }
         .integration-row:hover,
         .integration-row:focus-visible {
-          border-color: rgba(255, 255, 255, 0.34);
-          background: rgba(255, 255, 255, 0.08);
+          border-color: rgba(255, 255, 255, 0.66);
+          background: rgba(255, 255, 255, 0.22);
+          box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.42),
+            0 8px 20px rgba(2, 6, 23, 0.24);
           outline: none;
+        }
+        :global(a.integration-row:hover),
+        :global(a.integration-row:focus-visible) {
+          border-color: rgba(255, 255, 255, 0.66);
+          background: rgba(255, 255, 255, 0.22);
+          box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.42),
+            0 8px 20px rgba(2, 6, 23, 0.24);
+          outline: none;
+        }
+        .integration-row:active {
+          border-color: rgba(255, 255, 255, 0.56);
+          background: rgba(255, 255, 255, 0.18);
+        }
+        :global(a.integration-row:active) {
+          border-color: rgba(255, 255, 255, 0.56);
+          background: rgba(255, 255, 255, 0.18);
         }
         .integration-row.static {
           cursor: default;
@@ -706,16 +706,28 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           font-size: 13px;
           font-weight: 600;
           line-height: 1.25;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
         .integration-state {
-          display: inline-flex;
+          margin-left: auto;
+          display: inline-grid;
+          grid-template-columns: 12px minmax(58px, auto);
+          column-gap: 8px;
           align-items: center;
-          gap: 7px;
+          justify-items: start;
+          min-width: 76px;
+        }
+        .integration-label {
           color: var(--muted);
           font-size: 12px;
           font-weight: 600;
-          line-height: 1;
+          line-height: 1.15;
           white-space: nowrap;
+          text-align: right;
+          justify-self: end;
         }
         .integration-empty {
           border-radius: 10px;
@@ -738,6 +750,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           height: 10px;
           border-radius: 999px;
           flex-shrink: 0;
+          justify-self: center;
         }
         .integration-dot.online {
           background: #22c55e;
@@ -755,37 +768,6 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           to {
             transform: rotate(360deg);
           }
-        }
-        .integration-panel-wrap.compact .integration-panel {
-          padding: 14px 14px 12px;
-          gap: 8px;
-        }
-        .integration-panel-wrap.compact .integration-title {
-          font-size: 12px;
-          letter-spacing: 0.02em;
-        }
-        .integration-panel-wrap.compact .integration-list {
-          gap: 6px;
-        }
-        .integration-panel-wrap.compact .integration-row {
-          padding: 7px 8px;
-          gap: 8px;
-          border-radius: 9px;
-        }
-        .integration-panel-wrap.compact .integration-name {
-          font-size: 12px;
-        }
-        .integration-panel-wrap.compact .integration-state {
-          font-size: 11px;
-          gap: 6px;
-        }
-        .integration-panel-wrap.compact .integration-dot {
-          width: 8px;
-          height: 8px;
-        }
-        .integration-panel-wrap.compact .integration-empty {
-          font-size: 11px;
-          padding: 9px;
         }
         .carbon-panel {
           width: 100%;
@@ -949,6 +931,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           height: 20px;
           display: block;
           color: #ffffff;
+          transform: rotate(180deg);
           filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.65));
         }
         .menu-pin-btn.active {
@@ -968,14 +951,28 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           opacity: 1 !important;
         }
         .content {
+          --content-right-pad: calc(
+            var(--integration-panel-width) + var(--page-edge-gap) + var(--content-api-gap)
+          );
           position: relative;
           z-index: 10;
           min-height: 100vh;
           padding-top: 58px;
-          padding-right: 280px;
+          padding-right: var(--content-right-pad);
+          will-change: padding-right;
           transition:
-            padding-left 360ms cubic-bezier(0.22, 1, 0.36, 1),
-            padding-right 360ms cubic-bezier(0.22, 1, 0.36, 1);
+            padding-left var(--chat-expand-duration) var(--chat-expand-ease),
+            padding-right var(--chat-expand-duration) var(--chat-expand-ease);
+        }
+        .shell.chat-expanded .content {
+          --content-right-pad: calc(
+            var(--chat-expanded-width) + var(--page-edge-gap) + var(--content-api-gap)
+          );
+          padding-right: var(--content-right-pad);
+        }
+        .content.no-integration-panel {
+          --content-right-pad: 0px;
+          padding-right: 0;
         }
         .content.menu-open {
           padding-left: 280px;
@@ -998,6 +995,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
             display: none;
           }
           .content {
+            --content-right-pad: 0px;
             padding-left: 0;
             padding-right: 0;
           }
@@ -1021,10 +1019,10 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
             width: min(255px, calc(100vw - 20px));
           }
           .integration-panel-wrap {
-            right: 10px;
+            right: var(--page-edge-gap);
             top: 89px;
-            height: var(--integration-panel-height, calc(100vh - 99px));
-            width: min(255px, calc(100vw - 20px));
+            height: min(var(--integration-panel-height), calc(100vh - 99px));
+            width: min(var(--integration-panel-width), calc(100vw - 20px));
           }
         }
       `}</style>
