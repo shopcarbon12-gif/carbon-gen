@@ -23,6 +23,7 @@ type EndpointCache = {
 let endpointCache: EndpointCache | null = null;
 
 const ENDPOINT_CACHE_MS = 60_000;
+const DEFAULT_INTEGRATION_ENDPOINTS = ["/api/health", "/api/dropbox/status", "/api/shopify/status"];
 
 function titleCase(value: string) {
   return value
@@ -111,12 +112,21 @@ async function discoverIntegrationEndpoints() {
     return a.localeCompare(b);
   });
 
+  const configured = String(process.env.INTEGRATION_ENDPOINTS || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((value) => (value.startsWith("/api/") ? value : `/api/${value.replace(/^\/+/, "")}`));
+
+  const fallback = configured.length ? configured : DEFAULT_INTEGRATION_ENDPOINTS;
+  const finalEndpoints = sorted.length ? sorted : fallback;
+
   endpointCache = {
     expiresAt: now + ENDPOINT_CACHE_MS,
-    endpoints: sorted,
+    endpoints: finalEndpoints,
   };
 
-  return sorted;
+  return finalEndpoints;
 }
 
 function inferStatus(responseOk: boolean, json: unknown): IntegrationStatus {
