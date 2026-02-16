@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import {
   FEMALE_PANEL_MAPPING_TEXT,
   FEMALE_POSE_LIBRARY,
@@ -11,33 +18,12 @@ import {
 
 const panels = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }];
 
-const ITEM_TYPE_OPTIONS = [
-  { value: "hoodie", label: "Hoodie" },
-  { value: "jacket", label: "Jacket" },
-  { value: "coat", label: "Coat" },
-  { value: "t-shirt", label: "T-Shirt" },
-  { value: "tank top", label: "Tank Top" },
-  { value: "shirt", label: "Shirt" },
-  { value: "sweatshirt", label: "Sweatshirt" },
-  { value: "sweater", label: "Sweater" },
-  { value: "pants", label: "Pants" },
-  { value: "jeans", label: "Jeans" },
-  { value: "shorts", label: "Shorts" },
-  { value: "swimwear shorts", label: "Swimwear Shorts" },
-  { value: "skirt", label: "Skirt" },
-  { value: "dress", label: "Dress" },
-  { value: "jumpsuit", label: "Jumpsuit" },
-  { value: "activewear set", label: "Activewear Set" },
-  { value: "full outfit set", label: "Full Outfit Set" },
-  { value: "shoes", label: "Shoes" },
-  { value: "bag", label: "Bag" },
-  { value: "accessories", label: "Accessories" },
-  { value: "other apparel item", label: "Other Apparel Item" },
-];
-
 const CATALOG_PAGE_SIZE = 10;
 const SPLIT_TARGET_WIDTH = 770;
 const SPLIT_TARGET_HEIGHT = 1155;
+const FLAT_SPLIT_TARGET_WIDTH = 900;
+const FLAT_SPLIT_TARGET_HEIGHT = 1200;
+const PUSH_TRANSFER_STORAGE_KEY = "cg_push_transfer_v1";
 const ALT_GENERATION_BATCH_SIZE = 3;
 const PUSH_STAGING_BATCH_SIZE = 4;
 const GENERATION_STAGES: Array<{ at: number; text: string; sub: string }> = [
@@ -73,10 +59,17 @@ type SelectedCatalogImage = {
   id: string;
   url: string;
   title: string;
-  source: "shopify" | "dropbox";
+  source: "shopify" | "dropbox" | "generated_flat" | "final_results_storage";
   uploadedUrl: string | null;
   uploading: boolean;
   uploadError: string | null;
+};
+
+type ItemFlatSplitImage = {
+  id: string;
+  side: "front" | "back";
+  fileName: string;
+  imageBase64: string;
 };
 
 type SplitCrop = {
@@ -186,9 +179,92 @@ function sanitizeBarcodeInput(value: string) {
     .slice(0, 9);
 }
 
+function fileToDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Failed to read image for clothing type scan."));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function fileToDetectionDataUrl(file: File, maxSide = 768) {
+  try {
+    const objectUrl = URL.createObjectURL(file);
+    try {
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const node = new Image();
+        node.onload = () => resolve(node);
+        node.onerror = () => reject(new Error("Failed to decode image."));
+        node.src = objectUrl;
+      });
+
+      const longest = Math.max(img.naturalWidth || 1, img.naturalHeight || 1);
+      const scale = Math.min(1, maxSide / longest);
+      const width = Math.max(1, Math.round((img.naturalWidth || 1) * scale));
+      const height = Math.max(1, Math.round((img.naturalHeight || 1) * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Canvas unavailable");
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(img, 0, 0, width, height);
+      const jpeg = canvas.toDataURL("image/jpeg", 0.82);
+      if (jpeg && jpeg.startsWith("data:image/")) return jpeg;
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  } catch {
+    // Fallback to original file encoding.
+  }
+  return fileToDataUrl(file);
+}
+
+function normalizeDetectedItemType(value: unknown) {
+  const text = String(value || "")
+    .trim()
+    .replace(/^"+|"+$/g, "")
+    .replace(/\s+/g, " ")
+    .replace(/[.;:!?]+$/g, "");
+  if (!text) return "";
+  return text.length > 60 ? text.slice(0, 60).trim() : text;
+}
+
+function inferItemTypeFromText(value: unknown) {
+  const text = String(value || "").toLowerCase();
+  if (!text) return "";
+  if (/\btank\b/.test(text)) return "tank top";
+  if (/\b(t[\s-]?shirt|tee)\b/.test(text)) return "t-shirt";
+  if (/\bhoodie\b/.test(text)) return "hoodie";
+  if (/\bsweatshirt\b/.test(text)) return "sweatshirt";
+  if (/\bsweater\b/.test(text)) return "sweater";
+  if (/\bjacket\b/.test(text)) return "jacket";
+  if (/\bcoat\b/.test(text)) return "coat";
+  if (/\bjeans?\b/.test(text)) return "jeans";
+  if (/\b(cargo|jogger|trouser|pants?)\b/.test(text)) return "pants";
+  if (/\bshorts?\b/.test(text)) return "shorts";
+  if (/\bskirt\b/.test(text)) return "skirt";
+  if (/\bdress\b/.test(text)) return "dress";
+  if (/\bjumpsuit\b/.test(text)) return "jumpsuit";
+  if (/\b(swim|trunk|bikini)\b/.test(text)) return "swimwear";
+  if (/\bshoe|sneaker|boot\b/.test(text)) return "shoes";
+  if (/\bbag\b/.test(text)) return "bag";
+  if (/\b(accessor|belt|hat|cap|scarf)\b/.test(text)) return "accessories";
+  return "";
+}
+
 function isValidBarcode(value: string) {
   const v = String(value || "").trim();
   return /^(?:c\d{6,8}|\d{7,9})$/.test(v);
+}
+
+function extractBarcodeFromText(value: string) {
+  const raw = String(value || "").toLowerCase();
+  if (!raw) return "";
+  const match = raw.match(/\b(c\d{6,8}|\d{7,9})\b/);
+  return match ? String(match[1] || "").trim() : "";
 }
 
 function canonicalPreviousUploadName(fileName: string, path: string) {
@@ -256,7 +332,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   const [modelFiles, setModelFiles] = useState<File[]>([]);
   const [itemFiles, setItemFiles] = useState<File[]>([]);
   const [itemType, setItemType] = useState("");
-  const [itemTypeCustom, setItemTypeCustom] = useState("");
+  const [itemTypeDetecting, setItemTypeDetecting] = useState(false);
   const [itemBarcode, setItemBarcode] = useState("");
   const [itemBarcodeSaved, setItemBarcodeSaved] = useState("");
   const [dropboxSearching, setDropboxSearching] = useState(false);
@@ -269,12 +345,13 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   const [catalogSearched, setCatalogSearched] = useState(false);
   const [catalogProducts, setCatalogProducts] = useState<ShopifyCatalogProduct[]>([]);
   const [catalogPage, setCatalogPage] = useState(1);
+  const [catalogTotalPages, setCatalogTotalPages] = useState(1);
+  const [catalogResultsHidden, setCatalogResultsHidden] = useState(false);
   const [catalogQueryForResults, setCatalogQueryForResults] = useState("");
   const [catalogHasNextPage, setCatalogHasNextPage] = useState(false);
   const [catalogAfterCursorsByPage, setCatalogAfterCursorsByPage] = useState<Array<string | null>>([
     null,
   ]);
-  const [itemCatalogCollapsed, setItemCatalogCollapsed] = useState(false);
   const [pushSearchQuery, setPushSearchQuery] = useState("");
   const [pushCatalogLoading, setPushCatalogLoading] = useState(false);
   const [pushCatalogSearched, setPushCatalogSearched] = useState(false);
@@ -328,6 +405,10 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   >([]);
   const [selectedModelId, setSelectedModelId] = useState("");
   const [itemReferenceUrls, setItemReferenceUrls] = useState<string[]>([]);
+  const [itemFlatCompositeBase64, setItemFlatCompositeBase64] = useState<string | null>(null);
+  const [itemFlatSplitImages, setItemFlatSplitImages] = useState<ItemFlatSplitImage[]>([]);
+  const [addingFlatSplitIds, setAddingFlatSplitIds] = useState<string[]>([]);
+  const [itemFlatGenerating, setItemFlatGenerating] = useState(false);
   const modelPickerRef = useRef<HTMLInputElement | null>(null);
   const modelFolderRef = useRef<HTMLInputElement | null>(null);
   const itemPickerRef = useRef<HTMLInputElement | null>(null);
@@ -362,6 +443,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   const [finalResultsVisible, setFinalResultsVisible] = useState(false);
   const [finalResultsLoading, setFinalResultsLoading] = useState(false);
   const [finalResultUploads, setFinalResultUploads] = useState<FinalResultUpload[]>([]);
+  const [selectedFinalResultUploadIds, setSelectedFinalResultUploadIds] = useState<string[]>([]);
   const [emptyingFinalResults, setEmptyingFinalResults] = useState(false);
   const [previewModal, setPreviewModal] = useState<{
     imageBase64: string;
@@ -382,8 +464,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   const pageRef = useRef<HTMLDivElement | null>(null);
   const statusBarRef = useRef<HTMLElement | null>(null);
   const [statusBarHeight, setStatusBarHeight] = useState(0);
-  const gridRef = useRef<HTMLElement | null>(null);
-  const [gridScrollbarWidth, setGridScrollbarWidth] = useState(0);
   const [previousModelUploads, setPreviousModelUploads] = useState<PreviousModelUpload[]>([]);
   const [previousModelUploadsLoading, setPreviousModelUploadsLoading] = useState(false);
   const [previousSort, setPreviousSort] = useState<"date_asc" | "date_desc" | "name_az">(
@@ -399,19 +479,96 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   const [installedAt, setInstalledAt] = useState<string | null>(null);
   const [dropboxConnected, setDropboxConnected] = useState<boolean | null>(null);
   const [dropboxEmail, setDropboxEmail] = useState<string | null>(null);
+  const [pickerMaskVisible, setPickerMaskVisible] = useState(false);
+  const pickerMaskTimerRef = useRef<number | null>(null);
+  const [workspaceHydrated, setWorkspaceHydrated] = useState(false);
+  const itemTypeDetectionSourceRef = useRef("");
+  const itemTypeDetectionRequestRef = useRef(0);
 
   const lowestSelectedPanel = useMemo(() => {
     const sorted = [...selectedPanels].sort((a, b) => a - b);
     return sorted[0] || 1;
   }, [selectedPanels]);
 
-  const resolvedItemType = useMemo(() => {
-    const selected = itemType.trim();
-    if (selected === "other apparel item") {
-      return itemTypeCustom.trim();
+  const resolvedItemType = useMemo(() => itemType.trim(), [itemType]);
+
+  const detectItemTypeFromSource = useCallback(
+    async (input: { sourceSignature: string; file?: File; imageUrl?: string; hintText?: string }) => {
+      const sourceSignature = String(input.sourceSignature || "").trim();
+      if (!sourceSignature) return;
+      if (itemTypeDetectionSourceRef.current === sourceSignature) return;
+      itemTypeDetectionSourceRef.current = sourceSignature;
+
+      const fallbackType = inferItemTypeFromText(input.hintText);
+      const requestId = itemTypeDetectionRequestRef.current + 1;
+      itemTypeDetectionRequestRef.current = requestId;
+      setItemTypeDetecting(true);
+
+      try {
+        let payload: Record<string, string> | null = null;
+        if (input.file) {
+          const imageDataUrl = await fileToDetectionDataUrl(input.file);
+          if (imageDataUrl) payload = { imageDataUrl };
+        } else if (input.imageUrl) {
+          payload = { imageUrl: input.imageUrl };
+        }
+
+        if (!payload) {
+          if (fallbackType && itemTypeDetectionRequestRef.current === requestId) {
+            setItemType(fallbackType);
+          }
+          return;
+        }
+
+        const resp = await fetch("/api/openai/item-type", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const json = await parseJsonResponse(resp, "/api/openai/item-type");
+        if (!resp.ok) {
+          throw new Error(json?.error || "Failed to detect clothing type.");
+        }
+        const detected = normalizeDetectedItemType(json?.itemType);
+        if (itemTypeDetectionRequestRef.current !== requestId) return;
+        if (detected) {
+          setItemType(detected);
+          return;
+        }
+        if (fallbackType) setItemType(fallbackType);
+      } catch {
+        if (fallbackType && itemTypeDetectionRequestRef.current === requestId) {
+          setItemType(fallbackType);
+        }
+      } finally {
+        if (itemTypeDetectionRequestRef.current === requestId) {
+          setItemTypeDetecting(false);
+        }
+      }
+    },
+    []
+  );
+
+  const hidePickerMask = useCallback((delayMs = 180) => {
+    if (typeof window === "undefined") return;
+    if (pickerMaskTimerRef.current !== null) {
+      window.clearTimeout(pickerMaskTimerRef.current);
+      pickerMaskTimerRef.current = null;
     }
-    return selected;
-  }, [itemType, itemTypeCustom]);
+    pickerMaskTimerRef.current = window.setTimeout(() => {
+      setPickerMaskVisible(false);
+      pickerMaskTimerRef.current = null;
+    }, delayMs);
+  }, []);
+
+  const openInputPickerWithMask = useCallback(
+    (input: HTMLInputElement | null) => {
+      setPickerMaskVisible(true);
+      openInputPicker(input);
+      hidePickerMask(1200);
+    },
+    [hidePickerMask]
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -521,6 +678,64 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   }, [splitCrops]);
 
   useEffect(() => {
+    if (!finalResultUploads.length) {
+      setSelectedFinalResultUploadIds([]);
+      return;
+    }
+    setSelectedFinalResultUploadIds((prev) =>
+      prev.filter((id) => finalResultUploads.some((file) => file.id === id))
+    );
+  }, [finalResultUploads]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const raw = window.localStorage.getItem(PUSH_TRANSFER_STORAGE_KEY);
+    if (!raw) return;
+
+    try {
+      const parsed = JSON.parse(raw) as {
+        barcode?: unknown;
+        images?: unknown;
+      };
+      const transferred = Array.isArray(parsed?.images) ? parsed.images : [];
+      const rows: PushQueueImage[] = transferred.reduce((acc: PushQueueImage[], row: any, idx: number) => {
+        const url = String(row?.url || "").trim();
+        if (!url) return acc;
+        acc.push({
+          id: String(row?.id || `transfer:${idx}:${crypto.randomUUID()}`),
+          sourceImageId: String(row?.sourceImageId || `transfer:${idx}`),
+          mediaId: null,
+          url,
+          title: String(row?.title || `Transferred image ${idx + 1}`),
+          source: "device_upload",
+          altText: String(row?.altText || ""),
+          generatingAlt: false,
+          deleting: false,
+        });
+        return acc;
+      }, []);
+
+      if (rows.length) {
+        setPushImages((prev) => (prev.length ? prev : rows));
+        if (mode === "ops-seo") {
+          setStatus(`Loaded ${rows.length} transferred image(s) for Shopify Push.`);
+        }
+      }
+
+      const transferredBarcode = sanitizeBarcodeInput(String(parsed?.barcode || "")).trim();
+      if (transferredBarcode && isValidBarcode(transferredBarcode)) {
+        setItemBarcode((prev) => (prev.trim() ? prev : transferredBarcode));
+        setItemBarcodeSaved((prev) => (prev.trim() ? prev : transferredBarcode));
+        setPushSearchQuery((prev) => (prev.trim() ? prev : transferredBarcode));
+      }
+    } catch {
+      // Ignore malformed transfer payloads.
+    } finally {
+      window.localStorage.removeItem(PUSH_TRANSFER_STORAGE_KEY);
+    }
+  }, [mode]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     const isGenerating = panelGenerating || panelsInFlight.length > 0;
     if (!isGenerating) {
@@ -620,6 +835,23 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   }, [shop]);
 
   useEffect(() => {
+    setWorkspaceHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onFocus = () => hidePickerMask(180);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      if (pickerMaskTimerRef.current !== null) {
+        window.clearTimeout(pickerMaskTimerRef.current);
+        pickerMaskTimerRef.current = null;
+      }
+    };
+  }, [hidePickerMask]);
+
+  useEffect(() => {
     if (modelFolderRef.current) {
       modelFolderRef.current.webkitdirectory = true;
     }
@@ -694,6 +926,15 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           : "";
     if (!text) return "";
     return text.length > maxLen ? `${text.slice(0, maxLen)}...` : text;
+  }
+
+  function isModerationBlockedErrorMessage(value: unknown) {
+    const text = String(value || "");
+    return (
+      /blocked by safety moderation/i.test(text) ||
+      /moderation[_\s-]*blocked/i.test(text) ||
+      /safety_violations=\[sexual\]/i.test(text)
+    );
   }
 
   function formatGenerateDebugPayload(json: any, panelNumber: number) {
@@ -883,10 +1124,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   async function persistItemReferences(options?: { silentSuccess?: boolean }) {
     const silentSuccess = Boolean(options?.silentSuccess);
     if (!itemType.trim()) {
-      throw new Error("Please select an item type from the list.");
-    }
-    if (itemType === "other apparel item" && !itemTypeCustom.trim()) {
-      throw new Error("Please type the apparel item for 'Other Apparel Item'.");
+      throw new Error("Please enter clothing type.");
     }
     const activeBarcode = itemBarcodeSaved.trim();
     if (!activeBarcode) {
@@ -928,7 +1166,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
 
     setItemReferenceUrls(merged);
     setItemUploadCount(merged.length);
-    setItemCatalogCollapsed(true);
     setItemFiles([]);
 
     if (!silentSuccess) {
@@ -953,6 +1190,145 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     }
   }
 
+  async function generateFlatFrontBackFromItemRefs() {
+    setError(null);
+    setItemFlatGenerating(true);
+    setItemFlatSplitImages([]);
+    setAddingFlatSplitIds([]);
+    try {
+      let effectiveItemRefs = itemReferenceUrls;
+      let effectiveItemType = resolvedItemType;
+
+      const hasPendingItemInputs =
+        Boolean(itemFiles.length) || Boolean(selectedCatalogImages.length);
+      if (!effectiveItemRefs.length || hasPendingItemInputs) {
+        setStatus("Saving item references before flat generation...");
+        const saved = await persistItemReferences({ silentSuccess: true });
+        effectiveItemRefs = saved.merged;
+        effectiveItemType = saved.effectiveItemType || effectiveItemType;
+      }
+
+      if (!effectiveItemRefs.length) {
+        throw new Error(
+          "Please add item references from device/cloud/catalog before generating front and back."
+        );
+      }
+
+      setStatus("Generating flat front/back item image...");
+      const { resp, json } = await fetchJsonWithRetry(
+        "/api/openai/item-flat",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({
+            itemRefs: effectiveItemRefs,
+            itemType: effectiveItemType,
+          }),
+        },
+        1
+      );
+
+      if (!resp.ok) {
+        const details = shortErrorDetails(json?.details);
+        const baseMsg = json?.error || "Flat front/back generation failed";
+        throw new Error(details ? `${baseMsg}: ${details}` : baseMsg);
+      }
+
+      const b64 = typeof json?.imageBase64 === "string" ? json.imageBase64 : "";
+      if (!b64) {
+        throw new Error("No front/back image returned from OpenAI.");
+      }
+
+      setItemFlatCompositeBase64(b64);
+      const splitImages = await splitFlatFrontBackToThreeByFour(b64, itemBarcodeSaved.trim());
+      setItemFlatSplitImages(splitImages);
+      const refCount =
+        Number(json?.referencesUsed) > 0 ? Number(json.referencesUsed) : effectiveItemRefs.length;
+      setStatus(
+        `Flat front/back generated and split to 3:4 (front + back) from ${refCount} item reference image(s).`
+      );
+    } catch (e: any) {
+      setError(e?.message || "Flat front/back generation failed.");
+      setStatus(null);
+    } finally {
+      setItemFlatGenerating(false);
+    }
+  }
+
+  async function addFlatSplitToSelectedItems(crop: ItemFlatSplitImage, options?: { silent?: boolean }) {
+    const silent = Boolean(options?.silent);
+    const existing = selectedCatalogImages.find((img) => img.id === crop.id);
+    if (existing?.uploadedUrl) {
+      if (!silent) setStatus(`${crop.side === "front" ? "Front" : "Back"} 3:4 flat is already in selected items.`);
+      return;
+    }
+    if (addingFlatSplitIds.includes(crop.id)) return;
+
+    const previewUrl = `data:image/png;base64,${crop.imageBase64}`;
+    setAddingFlatSplitIds((prev) => [...prev, crop.id]);
+    setError(null);
+    setSelectedCatalogImages((prev) => {
+      const nextRow: SelectedCatalogImage = {
+        id: crop.id,
+        url: previewUrl,
+        title: crop.fileName,
+        source: "generated_flat",
+        uploadedUrl: existing?.uploadedUrl || null,
+        uploading: true,
+        uploadError: null,
+      };
+      return [...prev.filter((img) => img.id !== crop.id), nextRow];
+    });
+
+    try {
+      const file = base64ToFile(crop.imageBase64, crop.fileName);
+      const urls = await uploadFilesToItemsBucket([file], "items/generated-flat");
+      const uploaded = String(urls[0] || "").trim();
+      if (!uploaded) throw new Error("Generated flat split upload returned no URL.");
+
+      setSelectedCatalogImages((prev) =>
+        prev.map((img) =>
+          img.id === crop.id
+            ? { ...img, uploadedUrl: uploaded, uploading: false, uploadError: null }
+            : img
+        )
+      );
+      setItemReferenceUrls((prev) => Array.from(new Set([...prev, uploaded])));
+      setItemUploadCount((prev) => (prev || 0) + 1);
+      if (!silent) {
+        setStatus(`Added ${crop.side === "front" ? "front" : "back"} 3:4 flat image to selected items.`);
+      }
+    } catch (e: any) {
+      const message = e?.message || "Failed to add generated flat split image.";
+      setSelectedCatalogImages((prev) =>
+        prev.map((img) =>
+          img.id === crop.id
+            ? { ...img, uploading: false, uploadError: message }
+            : img
+        )
+      );
+      setError(message);
+    } finally {
+      setAddingFlatSplitIds((prev) => prev.filter((id) => id !== crop.id));
+    }
+  }
+
+  async function addAllFlatSplitsToSelectedItems() {
+    const pending = itemFlatSplitImages.filter((crop) => {
+      const existing = selectedCatalogImages.find((img) => img.id === crop.id);
+      return !existing?.uploadedUrl;
+    });
+    if (!pending.length) {
+      setStatus("Front/back 3:4 flat images are already in selected items.");
+      return;
+    }
+    for (const crop of pending) {
+      // Keep one final summary status instead of one per item.
+      await addFlatSplitToSelectedItems(crop, { silent: true });
+    }
+    setStatus(`Added ${pending.length} generated 3:4 flat image(s) to selected items.`);
+  }
+
   async function loadCatalogImages(options?: {
     after?: string | null;
     page?: number;
@@ -963,31 +1339,36 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       setCatalogProducts([]);
       setCatalogSearched(false);
       setCatalogPage(1);
+      setCatalogTotalPages(1);
+      setCatalogResultsHidden(false);
       setCatalogHasNextPage(false);
       setCatalogAfterCursorsByPage([null]);
       return;
     }
     const query = String(options?.queryOverride ?? catalogQuery).trim();
-    const isEmptyQuery = query.length === 0;
     const page = Number(options?.page || 1);
     let after = options?.after ?? null;
     setCatalogLoading(true);
     setCatalogSearched(true);
+    setCatalogResultsHidden(false);
+    if (page === 1 && !after) {
+      setCatalogTotalPages(1);
+    }
     setError(null);
     try {
       let products: ShopifyCatalogProduct[] = [];
       let hasNextPage = false;
       let endCursor: string | null = null;
+      let reportedTotalPages: number | null = null;
 
-      // Empty-query mode is cursor-paginated at 10 products per page.
-      // Skip empty pages that may occur after status filtering.
+      // Always paginate at 10 products per page (query or no query).
       for (let guard = 0; guard < 25; guard += 1) {
-        const params = new URLSearchParams({ shop: shopValue });
+        const params = new URLSearchParams({
+          shop: shopValue,
+          first: String(CATALOG_PAGE_SIZE),
+        });
         if (query) params.set("q", query);
-        if (isEmptyQuery) {
-          params.set("first", String(CATALOG_PAGE_SIZE));
-          if (after) params.set("after", after);
-        }
+        if (after) params.set("after", after);
 
         const resp = await fetch(`/api/shopify/catalog?${params.toString()}`, {
           cache: "no-store",
@@ -996,11 +1377,14 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         if (!resp.ok) throw new Error(json.error || "Failed to load Shopify catalog");
 
         products = Array.isArray(json.products) ? json.products : [];
+        const totalPagesValue = Number(json?.totalPages);
+        if (Number.isFinite(totalPagesValue) && totalPagesValue > 0) {
+          reportedTotalPages = Math.trunc(totalPagesValue);
+        }
         const pageInfo = json?.pageInfo || {};
         hasNextPage = Boolean(pageInfo?.hasNextPage);
         endCursor = pageInfo?.endCursor ? String(pageInfo.endCursor) : null;
 
-        if (!isEmptyQuery) break;
         if (products.length > 0) break;
         if (!hasNextPage || !endCursor) break;
         after = endCursor;
@@ -1008,24 +1392,25 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
 
       setCatalogProducts(products);
       setCatalogQueryForResults(query);
-      if (isEmptyQuery) {
-        setCatalogPage(page);
-        setCatalogHasNextPage(hasNextPage);
-        setCatalogAfterCursorsByPage((prev) => {
-          const next = [...prev];
-          next[page - 1] = after;
-          next[page] = endCursor;
-          return next.slice(0, page + 2);
-        });
-      } else {
-        setCatalogPage(1);
-        setCatalogHasNextPage(false);
-        setCatalogAfterCursorsByPage([null]);
-      }
+      setCatalogPage(page);
+      setCatalogTotalPages((prev) => {
+        if (reportedTotalPages && reportedTotalPages > 0) return reportedTotalPages;
+        if (hasNextPage) return Math.max(prev, page + 1);
+        return Math.max(page, 1);
+      });
+      setCatalogHasNextPage(hasNextPage);
+      setCatalogAfterCursorsByPage((prev) => {
+        const next = [...prev];
+        next[page - 1] = after;
+        next[page] = endCursor;
+        return next.slice(0, page + 2);
+      });
     } catch (e: any) {
       setError(e?.message || "Failed to load Shopify catalog");
       setCatalogProducts([]);
       setCatalogPage(1);
+      setCatalogTotalPages(1);
+      setCatalogResultsHidden(false);
       setCatalogHasNextPage(false);
       setCatalogAfterCursorsByPage([null]);
     } finally {
@@ -1035,7 +1420,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
 
   async function loadCatalogNextPage() {
     if (catalogLoading || !catalogHasNextPage) return;
-    if (catalogQueryForResults.trim()) return;
     const nextPage = catalogPage + 1;
     const nextAfter = catalogAfterCursorsByPage[catalogPage] || null;
     await loadCatalogImages({ queryOverride: catalogQueryForResults, page: nextPage, after: nextAfter });
@@ -1043,7 +1427,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
 
   async function loadCatalogPreviousPage() {
     if (catalogLoading || catalogPage <= 1) return;
-    if (catalogQueryForResults.trim()) return;
     const prevPage = catalogPage - 1;
     const prevAfter = catalogAfterCursorsByPage[prevPage - 1] || null;
     await loadCatalogImages({ queryOverride: catalogQueryForResults, page: prevPage, after: prevAfter });
@@ -1051,7 +1434,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
 
   async function loadCatalogFirstPage() {
     if (catalogLoading || catalogPage === 1) return;
-    if (catalogQueryForResults.trim()) return;
     await loadCatalogImages({ queryOverride: catalogQueryForResults, page: 1, after: null });
   }
 
@@ -1519,7 +1901,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     url: string;
     title: string;
     barcode?: string;
-    source?: "shopify" | "dropbox";
+    source?: "shopify" | "dropbox" | "generated_flat" | "final_results_storage";
   }) {
     const existing = selectedCatalogImages.find((img) => img.id === image.id);
     if (existing?.uploading) return;
@@ -1549,6 +1931,13 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         uploadError: null,
       },
     ]);
+    if ((image.source || "shopify") !== "generated_flat") {
+      void detectItemTypeFromSource({
+        sourceSignature: `catalog:${image.id}:${image.url}`,
+        imageUrl: image.url,
+        hintText: `${image.title} ${image.url}`,
+      });
+    }
     void importCatalogImageToBucket(image);
   }
 
@@ -1994,16 +2383,12 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     return rows;
   }, [previousModelUploads, previousSort, previousGenderFilter]);
 
-  const isCatalogEmptyQueryResults = useMemo(
-    () => catalogQueryForResults.trim().length === 0,
-    [catalogQueryForResults]
-  );
   const showCatalogPagination = useMemo(
     () =>
-      isCatalogEmptyQueryResults &&
       catalogSearched &&
-      (catalogPage > 1 || catalogHasNextPage),
-    [isCatalogEmptyQueryResults, catalogSearched, catalogPage, catalogHasNextPage]
+      !catalogResultsHidden &&
+      (catalogPage > 1 || catalogHasNextPage || catalogTotalPages > 1),
+    [catalogSearched, catalogResultsHidden, catalogPage, catalogHasNextPage, catalogTotalPages]
   );
 
   const visibleCatalogProducts = useMemo(() => catalogProducts, [catalogProducts]);
@@ -2649,13 +3034,18 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       if (useAllSelected) {
         const settled = await Promise.allSettled(queue.map((panelNumber) => generateOnePanel(panelNumber)));
         const succeeded: Record<number, string> = {};
-        const failed: string[] = [];
+        const failed: Array<{ panelNumber: number; message: string }> = [];
 
-        for (const result of settled) {
+        for (let i = 0; i < settled.length; i += 1) {
+          const result = settled[i];
+          const panelNumber = queue[i];
           if (result.status === "fulfilled") {
             succeeded[result.value.panelNumber] = result.value.b64;
           } else {
-            failed.push(result.reason?.message || "Unknown generation failure.");
+            failed.push({
+              panelNumber,
+              message: result.reason?.message || "Unknown generation failure.",
+            });
           }
         }
 
@@ -2676,13 +3066,29 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         }
 
         if (failed.length) {
-          const uniqueFailed = Array.from(new Set(failed));
+          const uniqueFailed = Array.from(new Set(failed.map((entry) => entry.message)));
+          const failedPanels = uniqueSortedPanels(
+            failed
+              .map((entry) => entry.panelNumber)
+              .filter((value) => Number.isFinite(value))
+          );
+          const moderationOnly = failed.every((entry) =>
+            isModerationBlockedErrorMessage(entry.message)
+          );
           if (succeededPanels.length) {
             setStatus(
               `${actionWord} partial success. Completed panel(s): ${succeededPanels.join(", ")}.`
             );
           } else {
             setStatus(null);
+          }
+          if (moderationOnly) {
+            const panelScope = failedPanels.length
+              ? `panel(s): ${failedPanels.join(", ")}`
+              : "selected panel(s)";
+            throw new Error(
+              `Generation was blocked by safety moderation for ${panelScope}. Try neutral front/back product shots, avoid tight body crops, and keep references product-focused.`
+            );
           }
           throw new Error(uniqueFailed.join(" | "));
         }
@@ -2764,6 +3170,40 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       previews.forEach((p) => URL.revokeObjectURL(p.url));
     };
   }, [itemFiles]);
+
+  useEffect(() => {
+    const latestFile = itemFiles.length ? itemFiles[itemFiles.length - 1] : null;
+    const latestCatalogImage = selectedCatalogImages.length
+      ? selectedCatalogImages[selectedCatalogImages.length - 1]
+      : null;
+
+    let sourceSignature = "";
+    if (latestFile) {
+      sourceSignature = `file:${latestFile.name}:${latestFile.size}:${latestFile.lastModified}`;
+    } else if (latestCatalogImage && latestCatalogImage.source !== "generated_flat") {
+      sourceSignature = `catalog:${latestCatalogImage.id}:${latestCatalogImage.url}`;
+    }
+
+    if (!sourceSignature) {
+      itemTypeDetectionSourceRef.current = "";
+      return;
+    }
+    if (latestFile) {
+      void detectItemTypeFromSource({
+        sourceSignature,
+        file: latestFile,
+        hintText: latestFile.name,
+      });
+      return;
+    }
+    if (latestCatalogImage) {
+      void detectItemTypeFromSource({
+        sourceSignature,
+        imageUrl: latestCatalogImage.url,
+        hintText: `${latestCatalogImage.title} ${latestCatalogImage.url}`,
+      });
+    }
+  }, [itemFiles, selectedCatalogImages, detectItemTypeFromSource]);
 
   useEffect(() => {
     const previews = finalResultFiles.map((file) => ({
@@ -2886,6 +3326,66 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     };
   }
 
+  async function splitFlatFrontBackToThreeByFour(
+    b64: string,
+    barcode: string
+  ): Promise<ItemFlatSplitImage[]> {
+    const img = await loadBase64Image(b64);
+    const halfW = Math.floor(img.width / 2);
+    const halfH = img.height;
+    const targetRatio = FLAT_SPLIT_TARGET_WIDTH / FLAT_SPLIT_TARGET_HEIGHT;
+    const safeBarcode = normalizeBarcodeForFileName(barcode);
+    const token = Date.now();
+
+    function cropHalf(side: "front" | "back", index: 0 | 1): ItemFlatSplitImage {
+      const sideOffsetX = index === 0 ? 0 : img.width - halfW;
+      let srcX = sideOffsetX;
+      let srcY = 0;
+      let srcW = halfW;
+      let srcH = halfH;
+      const sourceRatio = halfW / halfH;
+
+      // Convert each half into strict 3:4 portrait via centered crop.
+      if (sourceRatio > targetRatio) {
+        srcW = Math.max(1, Math.round(halfH * targetRatio));
+        srcX = sideOffsetX + Math.floor((halfW - srcW) / 2);
+      } else if (sourceRatio < targetRatio) {
+        srcH = Math.max(1, Math.round(halfW / targetRatio));
+        srcY = Math.floor((halfH - srcH) / 2);
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.width = FLAT_SPLIT_TARGET_WIDTH;
+      canvas.height = FLAT_SPLIT_TARGET_HEIGHT;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Unable to initialize 3:4 flat split canvas.");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, FLAT_SPLIT_TARGET_WIDTH, FLAT_SPLIT_TARGET_HEIGHT);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(
+        img,
+        srcX,
+        srcY,
+        srcW,
+        srcH,
+        0,
+        0,
+        FLAT_SPLIT_TARGET_WIDTH,
+        FLAT_SPLIT_TARGET_HEIGHT
+      );
+      const dataUrl = canvas.toDataURL("image/png");
+      return {
+        id: `flat-34:${token}:${side}`,
+        side,
+        fileName: `${safeBarcode}-flat-${side}-3x4.png`,
+        imageBase64: dataUrl.replace(/^data:image\/png;base64,/, ""),
+      };
+    }
+
+    return [cropHalf("front", 0), cropHalf("back", 1)];
+  }
+
   function normalizeBarcodeForFileName(value: string) {
     const cleaned = String(value || "").trim().replace(/[^a-zA-Z0-9_-]/g, "");
     return cleaned || "no-barcode";
@@ -2973,14 +3473,30 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   }
 
   async function useSplitCropsInShopifyPush() {
-    if (!splitCrops.length) {
-      setError("No split images found. Generate and split first.");
-      return;
-    }
     setSplitSendingToPush(true);
     setError(null);
     try {
-      const pushRows: PushQueueImage[] = [...splitCrops]
+      const readySelectedItems = selectedCatalogImagesRef.current.filter(
+        (img) => !img.uploading && !img.uploadError && Boolean((img.uploadedUrl || img.url || "").trim())
+      );
+
+      const splitPool = selectedSplitKeys.length
+        ? splitCrops.filter((crop) => selectedSplitKeys.includes(splitCropKey(crop)))
+        : splitCrops;
+
+      const selectedRows: PushQueueImage[] = readySelectedItems.map((img, idx) => ({
+        id: `selected:${img.id}`,
+        sourceImageId: `selected:${img.id}:${idx}`,
+        mediaId: null,
+        url: String(img.uploadedUrl || img.url || "").trim(),
+        title: img.title || `Selected item ${idx + 1}`,
+        source: "device_upload",
+        altText: "",
+        generatingAlt: false,
+        deleting: false,
+      }));
+
+      const splitRows: PushQueueImage[] = [...splitPool]
         .sort((a, b) => a.poseNumber - b.poseNumber)
         .map((crop) => ({
           id: `split:${crop.poseNumber}:${crop.fileName}`,
@@ -2988,21 +3504,59 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           mediaId: null,
           url: `data:image/png;base64,${crop.imageBase64}`,
           title: crop.fileName,
-          source: "generated_split",
+          source: "generated_split" as const,
           altText: "",
           generatingAlt: false,
           deleting: false,
         }));
 
+      // If user already chose Selected Items, those take priority.
+      const pushRows = selectedRows.length ? selectedRows : splitRows;
+
       if (!pushRows.length) {
-        throw new Error("No split images are available for Shopify push.");
+        throw new Error("No images are available for Shopify push.");
       }
 
       setPushImages((prev) => {
         const keep = prev.filter((img) => img.source === "shopify");
-        return [...keep, ...pushRows];
+        const merged = [...keep, ...pushRows];
+        const deduped = new Map<string, PushQueueImage>();
+        merged.forEach((row) => {
+          const key = `${row.id}::${row.url}`;
+          if (!deduped.has(key)) deduped.set(key, row);
+        });
+        return [...deduped.values()];
       });
-      setStatus(`Added ${pushRows.length} split image(s) to Shopify Push.`);
+
+      const inferredBarcode =
+        sanitizeBarcodeInput(itemBarcodeSaved).trim() ||
+        extractBarcodeFromText(pushRows.map((row) => row.title).join(" "));
+      if (inferredBarcode && isValidBarcode(inferredBarcode)) {
+        setItemBarcode(inferredBarcode);
+        setItemBarcodeSaved(inferredBarcode);
+        setPushSearchQuery((prev) => (prev.trim() ? prev : inferredBarcode));
+      }
+
+      if (typeof window !== "undefined") {
+        const transferPayload = {
+          createdAt: Date.now(),
+          barcode: inferredBarcode || "",
+          images: pushRows.map((row) => ({
+            id: row.id,
+            sourceImageId: row.sourceImageId,
+            url: row.url,
+            title: row.title,
+            altText: row.altText || "",
+          })),
+        };
+        window.localStorage.setItem(PUSH_TRANSFER_STORAGE_KEY, JSON.stringify(transferPayload));
+      }
+
+      setStatus(`Prepared ${pushRows.length} image(s) for Shopify Push.`);
+
+      if (!showOpsSections && typeof window !== "undefined") {
+        window.location.href = "/studio/seo";
+      }
     } catch (e: any) {
       setError(e?.message || "Failed to send split images to Shopify Push.");
     } finally {
@@ -3115,12 +3669,81 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         })
         .filter((row: FinalResultUpload) => row.path.startsWith("final-results/"));
       setFinalResultUploads(mapped);
+      setSelectedFinalResultUploadIds([]);
       setStatus(`Loaded ${mapped.length} previous final result item(s).`);
     } catch (e: any) {
       setError(e?.message || "Failed to load previous items.");
     } finally {
       setFinalResultsLoading(false);
     }
+  }
+
+  function toggleFinalResultUploadSelection(id: string) {
+    setSelectedFinalResultUploadIds((prev) =>
+      prev.includes(id) ? prev.filter((v) => v !== id) : [...prev, id]
+    );
+  }
+
+  function addSelectedFinalResultsToShopifyPush() {
+    const selected = finalResultUploads.filter((file) => selectedFinalResultUploadIds.includes(file.id));
+    if (!selected.length) {
+      setError("Select previous items first.");
+      return;
+    }
+
+    const nextRows: SelectedCatalogImage[] = selected.reduce((acc: SelectedCatalogImage[], file) => {
+        const imageUrl = String(file.url || file.previewUrl || "").trim();
+        if (!imageUrl) return acc;
+        acc.push({
+          id: `final-upload:${file.id}`,
+          url: imageUrl,
+          title: file.fileName || "Final result item",
+          source: "final_results_storage",
+          uploadedUrl: imageUrl,
+          uploading: false,
+          uploadError: null,
+        });
+        return acc;
+      }, []);
+
+    if (!nextRows.length) {
+      setError("Selected files do not have usable image URLs.");
+      return;
+    }
+
+    const pushRows: PushQueueImage[] = nextRows.map((row, idx) => ({
+      id: `final-push:${row.id}`,
+      sourceImageId: `final-results:${idx}:${row.id}`,
+      mediaId: null,
+      url: String(row.uploadedUrl || row.url || "").trim(),
+      title: row.title || "Final result item",
+      source: "device_upload",
+      altText: "",
+      generatingAlt: false,
+      deleting: false,
+    }));
+
+    setPushImages((prev) => {
+      const merged = [...prev, ...pushRows];
+      const deduped = new Map<string, PushQueueImage>();
+      merged.forEach((img) => {
+        const key = `${img.id}::${img.url}`;
+        if (!deduped.has(key)) deduped.set(key, img);
+      });
+      return [...deduped.values()];
+    });
+
+    const inferredBarcode =
+      sanitizeBarcodeInput(itemBarcodeSaved).trim() ||
+      extractBarcodeFromText(selected.map((row) => `${row.fileName} ${row.path}`).join(" "));
+    if (inferredBarcode && isValidBarcode(inferredBarcode)) {
+      setItemBarcode(inferredBarcode);
+      setItemBarcodeSaved(inferredBarcode);
+      setPushSearchQuery((prev) => (prev.trim() ? prev : inferredBarcode));
+    }
+
+    setError(null);
+    setStatus(`Added ${pushRows.length} previous item(s) to Shopify Push.`);
   }
 
   async function saveFinalResultsToStorage() {
@@ -3270,7 +3893,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     setDialogMessages([]);
     setDialogInput("");
     setChatNeedsAttention(false);
-    setStatus("OpenAI troubleshooting chat cleared.");
+    setStatus("Chat cleared.");
     setError(null);
   }
 
@@ -3315,29 +3938,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     if ("ResizeObserver" in window) {
       ro = new ResizeObserver(() => sync());
       ro.observe(node);
-    }
-    window.addEventListener("resize", sync);
-    return () => {
-      window.removeEventListener("resize", sync);
-      ro?.disconnect();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const gridNode = gridRef.current;
-    if (!gridNode) return;
-
-    const sync = () => {
-      const nextWidth = Math.max(0, gridNode.offsetWidth - gridNode.clientWidth);
-      setGridScrollbarWidth((prev) => (prev === nextWidth ? prev : nextWidth));
-    };
-
-    sync();
-    let ro: ResizeObserver | null = null;
-    if ("ResizeObserver" in window) {
-      ro = new ResizeObserver(() => sync());
-      ro.observe(gridNode);
     }
     window.addEventListener("resize", sync);
     return () => {
@@ -3421,11 +4021,19 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
 
   const pageStyle = {
     ["--status-bar-height" as string]: `${statusBarHeight}px`,
-    ["--grid-scrollbar-width" as string]: `${gridScrollbarWidth}px`,
   } as CSSProperties;
 
   return (
-    <div ref={pageRef} className="page" style={pageStyle}>
+    <div
+      ref={pageRef}
+      className={`page ${workspaceHydrated ? "is-hydrated" : "is-hydrating"}`}
+      style={pageStyle}
+    >
+      {pickerMaskVisible ? (
+        <div className="picker-transition-mask" aria-hidden>
+          <span className="picker-transition-label">Preparing upload...</span>
+        </div>
+      ) : null}
       <section
         ref={statusBarRef}
         className={`card status-bar ${statusTone} ${hasRawOpenAiResponse ? "copy-ready" : ""}`}
@@ -3486,7 +4094,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         ) : null}
       </section>
 
-      <main ref={gridRef} className="grid">
+      <main className="grid">
         {showCreativeSections ? (
           <>
         <section className="card">
@@ -3512,7 +4120,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             data-integration-anchor="model-dropzone"
             role="button"
             tabIndex={0}
-            onClick={() => openInputPicker(modelPickerRef.current)}
+            onClick={() => openInputPickerWithMask(modelPickerRef.current)}
             onDragOver={(e) => e.preventDefault()}
             onDrop={async (e) => {
               e.preventDefault();
@@ -3552,14 +4160,14 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             <button
               className="ghost-btn"
               type="button"
-              onClick={() => openInputPicker(modelPickerRef.current)}
+              onClick={() => openInputPickerWithMask(modelPickerRef.current)}
             >
               Choose files
             </button>
             <button
               className="ghost-btn"
               type="button"
-              onClick={() => openInputPicker(modelFolderRef.current)}
+              onClick={() => openInputPickerWithMask(modelFolderRef.current)}
             >
               Choose folder
             </button>
@@ -3718,23 +4326,16 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             Shopify.
           </p>
           <div className="row">
-            <select
+            <input
               value={itemType}
               onChange={(e) => setItemType(e.target.value)}
-            >
-              <option value="">Select clothing type</option>
-              {ITEM_TYPE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <input
-              value={itemTypeCustom}
-              onChange={(e) => setItemTypeCustom(e.target.value)}
-              placeholder="Other apparel item (enabled only for 'Other Apparel Item')"
-              disabled={itemType !== "other apparel item"}
+              placeholder="Clothing type (auto-detected from selected image)"
             />
+          </div>
+          <div className="muted centered">
+            {itemTypeDetecting
+              ? "Scanning selected image to detect clothing type..."
+              : "Clothing type auto-fills when you select an image. You can edit it manually."}
           </div>
           <div className="row">
             <input
@@ -3822,7 +4423,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             className="dropzone"
             role="button"
             tabIndex={0}
-            onClick={() => openInputPicker(itemPickerRef.current)}
+            onClick={() => openInputPickerWithMask(itemPickerRef.current)}
             onDragOver={(e) => e.preventDefault()}
             onDrop={async (e) => {
               e.preventDefault();
@@ -3855,14 +4456,14 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             <button
               className="ghost-btn"
               type="button"
-              onClick={() => openInputPicker(itemPickerRef.current)}
+              onClick={() => openInputPickerWithMask(itemPickerRef.current)}
             >
               Choose files
             </button>
             <button
               className="ghost-btn"
               type="button"
-              onClick={() => openInputPicker(itemFolderRef.current)}
+              onClick={() => openInputPickerWithMask(itemFolderRef.current)}
             >
               Choose folder
             </button>
@@ -3871,13 +4472,13 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             <button
               className="btn ghost"
               type="button"
-              onClick={() => setItemCatalogCollapsed((prev) => !prev)}
+              onClick={generateFlatFrontBackFromItemRefs}
+              disabled={itemFlatGenerating}
             >
-              {itemCatalogCollapsed ? "Show Catalog" : "Hide Catalog"}
+              {itemFlatGenerating ? "Generating Front + Back..." : "Generate Flat Front + Back"}
             </button>
           </div>
-          {!itemCatalogCollapsed ? (
-            <div className="catalog-wrap">
+          <div className="catalog-wrap">
               <div className="row">
                 <input
                   value={catalogQuery}
@@ -3889,6 +4490,17 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                   {catalogLoading ? "Loading..." : "Search Catalog"}
                 </button>
               </div>
+              {catalogSearched && !catalogResultsHidden ? (
+                <div className="row">
+                  <button
+                    className="btn ghost"
+                    type="button"
+                    onClick={() => setCatalogResultsHidden(true)}
+                  >
+                    Hide Catalog
+                  </button>
+                </div>
+              ) : null}
               {!shop.trim() && (
                 <div className="muted centered">
                   Enter your shop domain above to browse Shopify catalog images.
@@ -3899,7 +4511,12 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                   Search by product name/handle, or leave search empty to browse 10 products per page.
                 </div>
               )}
-              {shop.trim() && catalogSearched && !catalogLoading && !catalogProducts.length && (
+              {shop.trim() && catalogSearched && catalogResultsHidden ? (
+                <div className="muted centered">
+                  Catalog hidden. Click Search Catalog to show it again.
+                </div>
+              ) : null}
+              {shop.trim() && catalogSearched && !catalogResultsHidden && !catalogLoading && !catalogProducts.length && (
                 <div className="muted centered">No matching catalog products with images found.</div>
               )}
               {showCatalogPagination ? (
@@ -3913,7 +4530,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                     {"<-"}
                   </button>
                   <div className="muted centered">
-                    Page {catalogPage}{catalogHasNextPage ? "" : " (last page)"}
+                    Page {catalogPage} / {catalogTotalPages}
                   </div>
                   <button
                     className="ghost-btn"
@@ -3933,7 +4550,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                   </button>
                 </div>
               ) : null}
-              {catalogProducts.length ? (
+              {!catalogResultsHidden && catalogProducts.length ? (
                 <div className="catalog-products">
                   {visibleCatalogProducts.map((product) => (
                     <div className="catalog-product" key={product.id}>
@@ -3984,6 +4601,17 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                   ))}
                 </div>
               ) : null}
+              {catalogSearched && !catalogResultsHidden ? (
+                <div className="row">
+                  <button
+                    className="btn ghost"
+                    type="button"
+                    onClick={() => setCatalogResultsHidden(true)}
+                  >
+                    Hide Catalog
+                  </button>
+                </div>
+              ) : null}
               {showCatalogPagination ? (
                 <div className="catalog-pagination">
                   <button
@@ -3995,7 +4623,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                     {"<-"}
                   </button>
                   <div className="muted centered">
-                    Page {catalogPage}{catalogHasNextPage ? "" : " (last page)"}
+                    Page {catalogPage} / {catalogTotalPages}
                   </div>
                   <button
                     className="ghost-btn"
@@ -4015,21 +4643,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                   </button>
                 </div>
               ) : null}
-              <div className="row">
-                <button
-                  className="btn ghost"
-                  type="button"
-                  onClick={() => setItemCatalogCollapsed(true)}
-                >
-                  Hide Catalog
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="muted centered">
-              Catalog is hidden. Selected catalog images are preserved.
-            </div>
-          )}
+          </div>
           <div className="muted centered">
             {itemFiles.length ? `${itemFiles.length} device files ready` : "No device files selected"} |{" "}
             {selectedCatalogImages.length
@@ -4080,15 +4694,98 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                         : "Ready"}
                   </div>
                   <div className="preview-source">
-                    Source: {img.source === "dropbox" ? "Dropbox" : "Shopify catalog"}
+                    Source:{" "}
+                    {img.source === "dropbox"
+                      ? "Dropbox"
+                      : img.source === "generated_flat"
+                        ? "Generated flat (3:4)"
+                        : img.source === "final_results_storage"
+                          ? "Final Results (storage)"
+                        : "Shopify catalog"}
                   </div>
                 </div>
               ))}
             </div>
           ) : null}
-          <button className="btn" onClick={uploadItems}>
-            Save Item References + Type
-          </button>
+          <div className="row">
+            <button className="btn" type="button" onClick={uploadItems}>
+              Save Item References + Type
+            </button>
+          </div>
+          {itemFlatSplitImages.length ? (
+            <div className="card">
+              <div className="card-title">Generated Flat 3:4 Split (Front + Back)</div>
+              <div className="row">
+                <button
+                  className="btn ghost"
+                  type="button"
+                  onClick={addAllFlatSplitsToSelectedItems}
+                  disabled={
+                    !itemFlatSplitImages.length ||
+                    addingFlatSplitIds.length > 0 ||
+                    itemFlatSplitImages.every((crop) =>
+                      selectedCatalogImages.some((img) => img.id === crop.id && Boolean(img.uploadedUrl))
+                    )
+                  }
+                >
+                  Add Front + Back To Selected Items
+                </button>
+              </div>
+              <div className="preview-grid item-flat-preview-grid">
+                {itemFlatSplitImages.map((crop) => {
+                  const selectedEntry = selectedCatalogImages.find((img) => img.id === crop.id);
+                  const isAdding = addingFlatSplitIds.includes(crop.id) || Boolean(selectedEntry?.uploading);
+                  const isAdded = Boolean(selectedEntry?.uploadedUrl);
+                  return (
+                    <div className="preview-card item-flat-split-card" key={crop.id}>
+                      <img
+                        className="item-flat-preview-image"
+                        src={`data:image/png;base64,${crop.imageBase64}`}
+                        alt={`Generated ${crop.side} flat 3:4`}
+                        onClick={() =>
+                          setPreviewModal({
+                            imageBase64: crop.imageBase64,
+                            title: `${crop.side === "front" ? "Front" : "Back"} 3:4 Flat Preview`,
+                          })
+                        }
+                      />
+                      <div className="preview-name">
+                        {crop.side === "front" ? "Front" : "Back"} | 3:4
+                      </div>
+                    <button
+                      className="ghost-btn"
+                      type="button"
+                        onClick={() => void addFlatSplitToSelectedItems(crop)}
+                        disabled={isAdding || isAdded}
+                      >
+                        {isAdded ? "Added To Selected Items" : isAdding ? "Adding..." : "Add To Selected Items"}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : itemFlatCompositeBase64 ? (
+            <div className="card">
+              <div className="card-title">Generated Item Flat (Front + Back)</div>
+              <div className="preview-grid item-flat-preview-grid">
+                <div className="preview-card item-flat-preview-card">
+                  <img
+                    className="item-flat-preview-image"
+                    src={`data:image/png;base64,${itemFlatCompositeBase64}`}
+                    alt="Generated item flat front and back side by side"
+                    onClick={() =>
+                      setPreviewModal({
+                        imageBase64: itemFlatCompositeBase64,
+                        title: "Item Flat Front + Back Preview",
+                      })
+                    }
+                  />
+                  <div className="preview-name">Front + Back flat ecommerce output</div>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </section>
 
         <section className="card">
@@ -4228,19 +4925,22 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             </button>
           </div>
           <div className="card chat-inline-fallback">
-            <div className="card-title">1.2) AI Chat</div>
-            <p className="muted">
-              Ask follow-up questions directly and keep a continuous troubleshooting dialog.
-            </p>
+            <div className="chat-side-head">
+              <div className="card-title">ChatGPT</div>
+              <span className={`chat-side-status ${dialogLoading ? "loading" : "ready"}`}>
+                {dialogLoading ? "WORKING" : "READY"}
+              </span>
+            </div>
+            <p className="chat-side-sub">Ask anything.</p>
             <div ref={inlineChatLogRef} className="dialog-log">
               {dialogMessages.length ? (
                 dialogMessages.map((msg, idx) => (
                   <div key={`${msg.role}-${idx}`} className={`dialog-msg ${msg.role}`}>
-                    <strong>{msg.role === "user" ? "You" : "Assistant"}:</strong> {msg.content}
+                    <strong>{msg.role === "user" ? "You" : "ChatGPT"}:</strong> {msg.content}
                   </div>
                 ))
               ) : (
-                <div className="muted centered">No chat messages yet.</div>
+                <div className="muted centered">How can I help you today?</div>
               )}
             </div>
             <div className="row">
@@ -4257,24 +4957,26 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                     sendDialogMessage();
                   }
                 }}
-                placeholder="Ask OpenAI why a generation failed and how to fix it..."
+                placeholder="Message ChatGPT..."
               />
-              <button
-                className="btn"
-                type="button"
-                onClick={sendDialogMessage}
-                disabled={dialogLoading || !dialogInput.trim()}
-              >
-                {dialogLoading ? "Sending..." : "Send"}
-              </button>
-              <button
-                className="btn ghost"
-                type="button"
-                onClick={clearDialogChat}
-                disabled={!dialogMessages.length && !dialogInput.trim()}
-              >
-                Clear Chat
-              </button>
+              <div className="chat-side-buttons">
+                <button
+                  className="btn chat-send-btn"
+                  type="button"
+                  onClick={sendDialogMessage}
+                  disabled={dialogLoading || !dialogInput.trim()}
+                >
+                  {dialogLoading ? "Sending..." : "Send"}
+                </button>
+                <button
+                  className="btn ghost chat-clear-btn"
+                  type="button"
+                  onClick={clearDialogChat}
+                  disabled={!dialogMessages.length && !dialogInput.trim()}
+                >
+                  Clear
+                </button>
+              </div>
             </div>
           </div>
           <div className="card">
@@ -4295,7 +4997,13 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                 className="btn ghost"
                 type="button"
                 onClick={useSplitCropsInShopifyPush}
-                disabled={splitSendingToPush || !splitCrops.length}
+                disabled={
+                  splitSendingToPush ||
+                  (!splitCrops.length &&
+                    !selectedCatalogImages.some(
+                      (img) => !img.uploading && !img.uploadError && Boolean((img.uploadedUrl || img.url || "").trim())
+                    ))
+                }
               >
                 {splitSendingToPush ? "Sending Splits..." : "Use Pictures In Shopify Push"}
               </button>
@@ -4309,23 +5017,12 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               >
                 {savingFinalResults ? "Saving..." : "Save Final Results"}
               </button>
-              <button className="btn ghost" type="button" onClick={loadFinalResultUploads}>
-                Load Previous Items
-              </button>
-              <button
-                className="ghost-btn danger match-load-font"
-                type="button"
-                onClick={emptyFinalResultsStorage}
-                disabled={emptyingFinalResults}
-              >
-                {emptyingFinalResults ? "Emptying Storage..." : "Empty Storage"}
-              </button>
             </div>
             <div
               className="dropzone"
               role="button"
               tabIndex={0}
-              onClick={() => openInputPicker(finalResultPickerRef.current)}
+              onClick={() => openInputPickerWithMask(finalResultPickerRef.current)}
               onDragOver={(e) => e.preventDefault()}
               onDrop={async (e) => {
                 e.preventDefault();
@@ -4353,10 +5050,10 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               onChange={(e) => void handleFinalResultFilesSelected(filterImages(e.target.files || []))}
             />
             <div className="picker-row">
-              <button className="ghost-btn" type="button" onClick={() => openInputPicker(finalResultPickerRef.current)}>
+              <button className="ghost-btn" type="button" onClick={() => openInputPickerWithMask(finalResultPickerRef.current)}>
                 Choose files
               </button>
-              <button className="ghost-btn" type="button" onClick={() => openInputPicker(finalResultFolderRef.current)}>
+              <button className="ghost-btn" type="button" onClick={() => openInputPickerWithMask(finalResultFolderRef.current)}>
                 Choose folder
               </button>
             </div>
@@ -4403,30 +5100,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             ) : (
               <div className="muted centered">No split results yet. Generate and split first.</div>
             )}
-            {finalResultsVisible ? (
-              finalResultsLoading ? (
-                <div className="muted centered">Loading previous items...</div>
-              ) : finalResultUploads.length ? (
-                <div className="preview-grid previous-upload-grid">
-                  {finalResultUploads.map((file) => (
-                    <div className="preview-card previous-upload-card" key={file.id}>
-                      {file.previewUrl ? (
-                        <img
-                          className="previous-upload-image"
-                          src={file.previewUrl}
-                          alt={file.fileName || "Final result preview"}
-                        />
-                      ) : (
-                        <div className="muted centered">Preview unavailable</div>
-                      )}
-                      <div className="preview-name">{file.fileName || file.path}</div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="muted centered">No previous items found.</div>
-              )
-            ) : null}
           </div>
         </section>
           </>
@@ -4469,11 +5142,32 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                 Use 0.5 Barcode
               </button>
             </div>
+            <div className="row">
+              <button className="btn ghost" type="button" onClick={loadFinalResultUploads}>
+                Load Previous Items
+              </button>
+              <button
+                className="btn ghost"
+                type="button"
+                onClick={addSelectedFinalResultsToShopifyPush}
+                disabled={!selectedFinalResultUploadIds.length}
+              >
+                Add Selected To Shopify Push
+              </button>
+              <button
+                className="ghost-btn danger match-load-font"
+                type="button"
+                onClick={emptyFinalResultsStorage}
+                disabled={emptyingFinalResults}
+              >
+                {emptyingFinalResults ? "Emptying Storage..." : "Empty Storage"}
+              </button>
+            </div>
             <div
               className="dropzone"
               role="button"
               tabIndex={0}
-              onClick={() => openInputPicker(pushPickerRef.current)}
+              onClick={() => openInputPickerWithMask(pushPickerRef.current)}
               onDragOver={(e) => e.preventDefault()}
               onDrop={async (e) => {
                 e.preventDefault();
@@ -4501,14 +5195,57 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               onChange={(e) => void handlePushFilesSelected(filterImages(e.target.files || []))}
             />
             <div className="picker-row">
-              <button className="ghost-btn" type="button" onClick={() => openInputPicker(pushPickerRef.current)}>
+              <button className="ghost-btn" type="button" onClick={() => openInputPickerWithMask(pushPickerRef.current)}>
                 Choose files
               </button>
-              <button className="ghost-btn" type="button" onClick={() => openInputPicker(pushFolderRef.current)}>
+              <button className="ghost-btn" type="button" onClick={() => openInputPickerWithMask(pushFolderRef.current)}>
                 Choose folder
               </button>
               <span className="muted">{pushUploading ? "Uploading..." : ""}</span>
             </div>
+            {finalResultsVisible ? (
+              finalResultsLoading ? (
+                <div className="muted centered">Loading previous items...</div>
+              ) : finalResultUploads.length ? (
+                <div className="preview-grid previous-upload-grid">
+                  {finalResultUploads.map((file) => (
+                    <div
+                      className={`preview-card previous-upload-card selectable ${
+                        selectedFinalResultUploadIds.includes(file.id) ? "selected" : ""
+                      }`}
+                      key={file.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => toggleFinalResultUploadSelection(file.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          toggleFinalResultUploadSelection(file.id);
+                        }
+                      }}
+                    >
+                      {file.previewUrl ? (
+                        <img
+                          className="previous-upload-image"
+                          src={file.previewUrl}
+                          alt={file.fileName || "Final result preview"}
+                        />
+                      ) : (
+                        <div className="muted centered">Preview unavailable</div>
+                      )}
+                      <div className="preview-name">{file.fileName || file.path}</div>
+                      <div className="preview-source">
+                        {selectedFinalResultUploadIds.includes(file.id)
+                          ? "Selected"
+                          : "Click to select"}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="muted centered">No previous items found.</div>
+              )
+            ) : null}
             {!shop.trim() && (
               <div className="muted centered">
                 Enter your shop domain above to browse Shopify catalog images.
@@ -4764,98 +5501,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         ) : null}
       </main>
 
-      {showCreativeSections ? (
-        <aside className="chat-side-panel" aria-label="AI chat">
-          <section className="card chat-side-card">
-            <div className="chat-side-head">
-              <div className="chat-side-head-left">
-                <button
-                  type="button"
-                  className={`chat-expand-btn ${chatExpanded ? "expanded" : ""}`}
-                  onClick={() => setChatExpanded((prev) => !prev)}
-                  aria-pressed={chatExpanded}
-                  aria-label={chatExpanded ? "Collapse AI chat panel" : "Expand AI chat panel"}
-                  title={chatExpanded ? "Collapse chat" : "Expand chat"}
-                >
-                  <svg
-                    className="chat-expand-icon"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                    aria-hidden
-                  >
-                    {chatExpanded ? (
-                      <path
-                        d="M6 8l4 4-4 4M18 8l-4 4 4 4"
-                        stroke="currentColor"
-                        strokeWidth="1.9"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    ) : (
-                      <path
-                        d="M10 8l-4 4 4 4M14 8l4 4-4 4"
-                        stroke="currentColor"
-                        strokeWidth="1.9"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    )}
-                  </svg>
-                </button>
-                <div className="card-title chat-side-title">1.2) AI Chat</div>
-              </div>
-            </div>
-            <div ref={sideChatLogRef} className="chat-window-log">
-              {dialogMessages.length ? (
-                dialogMessages.map((msg, idx) => (
-                  <div key={`side-${msg.role}-${idx}`} className={`dialog-msg ${msg.role}`}>
-                    <strong>{msg.role === "user" ? "You" : "Assistant"}:</strong> {msg.content}
-                  </div>
-                ))
-              ) : (
-                <div className="muted centered">No chat messages yet.</div>
-              )}
-            </div>
-            <div className="chat-side-actions">
-              <input
-                className={chatNeedsAttention ? "chat-input-attention" : ""}
-                value={dialogInput}
-                onChange={(e) => {
-                  setDialogInput(e.target.value);
-                  setChatNeedsAttention(false);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    sendDialogMessage();
-                  }
-                }}
-                placeholder="Ask OpenAI why a generation failed and how to fix it..."
-              />
-              <div className="row">
-                <button
-                  className="btn"
-                  type="button"
-                  onClick={sendDialogMessage}
-                  disabled={dialogLoading || !dialogInput.trim()}
-                >
-                  {dialogLoading ? "Sending..." : "Send"}
-                </button>
-                <button
-                  className="btn ghost"
-                  type="button"
-                  onClick={clearDialogChat}
-                  disabled={!dialogMessages.length && !dialogInput.trim()}
-                >
-                  Clear Chat
-                </button>
-              </div>
-            </div>
-          </section>
-        </aside>
-      ) : null}
-
       {previewModal ? (
         <div className="preview-modal-overlay" onClick={() => setPreviewModal(null)}>
           <div className="preview-modal" onClick={(e) => e.stopPropagation()}>
@@ -4879,19 +5524,44 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
 
       <style jsx>{`
         .page {
+          --page-inline-gap: clamp(16px, 2vw, 28px);
           padding: calc(var(--integration-panel-top, 89px) - 58px) 6vw 0;
-          height: calc(100vh - 58px);
-          height: calc(100dvh - 58px);
           min-height: calc(100vh - 58px);
           min-height: calc(100dvh - 58px);
-          display: grid;
-          grid-template-rows: auto minmax(0, 1fr);
-          overflow: hidden;
+          display: block;
+          overflow: visible;
           font-family: "Space Grotesk", system-ui, sans-serif;
           color: #0f172a;
         }
+        .page.is-hydrating {
+          visibility: hidden;
+        }
+        .page.is-hydrated {
+          visibility: visible;
+        }
+        .picker-transition-mask {
+          position: fixed;
+          inset: 0;
+          z-index: 120;
+          pointer-events: none;
+          display: grid;
+          place-items: center;
+          background: rgba(8, 6, 14, 0.54);
+          backdrop-filter: blur(3px);
+          -webkit-backdrop-filter: blur(3px);
+        }
+        .picker-transition-label {
+          border-radius: 999px;
+          border: 1px solid rgba(255, 255, 255, 0.42);
+          background: rgba(24, 12, 39, 0.72);
+          color: rgba(255, 255, 255, 0.96);
+          padding: 9px 14px;
+          font-size: 0.86rem;
+          font-weight: 700;
+          letter-spacing: 0.01em;
+        }
         :global(.content:not(.menu-open)) .page {
-          padding-left: clamp(16px, 2vw, 28px);
+          padding-left: var(--page-inline-gap);
           padding-right: 0;
         }
         :global(.content.menu-open) .page {
@@ -4935,15 +5605,15 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         .status-bar {
           position: fixed;
           top: var(--integration-panel-top, 89px);
-          left: clamp(16px, 2vw, 28px);
+          left: var(--page-inline-gap);
           right: calc(
-            var(
-              --content-right-pad,
-              calc(
-                var(--integration-panel-width, 255px) + var(--page-edge-gap, 12px) +
+                var(
+                  --content-right-pad,
+                  calc(
+                var(--integration-panel-width, 255px) + var(--page-edge-gap, 13px) +
                   var(--content-api-gap, 13px)
               )
-            ) + var(--grid-scrollbar-width, 0px)
+            )
           );
           z-index: 40;
           gap: 8px;
@@ -4969,7 +5639,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           left: 280px;
         }
         :global(.content.no-integration-panel) .status-bar {
-          right: 0;
+          right: var(--page-inline-gap);
         }
         .status-bar-head {
           display: flex;
@@ -5104,8 +5774,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         .grid {
           display: grid;
           gap: 16px;
-          min-height: 0;
-          overflow-y: auto;
+          overflow: visible;
           overscroll-behavior: contain;
           margin-top: calc(var(--status-bar-height, 96px) + 12px);
           width: calc(100% + var(--content-right-pad, 0px));
@@ -5392,6 +6061,39 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         .item-selected-grid .preview-card {
           width: 200px;
         }
+        .item-flat-preview-grid {
+          max-width: 1260px;
+        }
+        .item-flat-preview-card {
+          width: min(900px, 100%);
+        }
+        .item-flat-split-card {
+          width: 200px;
+        }
+        .item-flat-split-card img.item-flat-preview-image {
+          width: 100%;
+          height: 240px;
+          object-fit: contain;
+          object-position: center;
+          display: block;
+          margin: 0 auto;
+          border-radius: 8px;
+          background: #f8fafc;
+          cursor: zoom-in;
+        }
+        .item-flat-preview-card img.item-flat-preview-image {
+          width: 100%;
+          height: auto;
+          min-height: 240px;
+          max-height: 520px;
+          object-fit: contain;
+          object-position: center;
+          display: block;
+          margin: 0 auto;
+          border-radius: 8px;
+          background: #f8fafc;
+          cursor: zoom-in;
+        }
         .split-results-grid {
           display: flex;
           flex-wrap: wrap;
@@ -5401,16 +6103,20 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           max-width: 1260px;
           margin: 0 auto;
         }
-        .split-results-grid .split-result-card {
-          width: 200px;
+        .split-results-grid .split-result-card,
+        .final-extra-grid .split-result-card {
+          width: 220px;
         }
-        .split-result-image {
+        .split-result-card img.split-result-image {
           width: 100%;
-          height: 240px;
+          height: auto;
+          aspect-ratio: 3 / 4;
           object-fit: contain;
           object-position: center;
           border-radius: 8px;
           background: #f8fafc;
+          display: block;
+          margin: 0 auto;
         }
         .preview-card {
           border: 1px solid #e2e8f0;
@@ -5744,12 +6450,13 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         }
         .chat-side-panel {
           position: fixed;
-          right: var(--page-edge-gap, 12px);
+          right: var(--page-edge-gap, 13px);
           top: calc(
-            var(--integration-panel-top, 89px) + var(--integration-panel-height, 214px) + 12px
+            var(--integration-panel-top, 89px) + var(--integration-panel-height, 214px) +
+              var(--content-api-gap, 13px)
           );
-          bottom: 12px;
-          width: min(var(--integration-panel-width, 255px), calc(100vw - 24px));
+          bottom: 13px;
+          width: min(var(--integration-panel-width, 255px), calc(100vw - 26px));
           z-index: 42;
           pointer-events: none;
           will-change: width, top;
@@ -5763,9 +6470,10 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           width: 100%;
           height: 100%;
           display: grid;
-          grid-template-rows: auto minmax(0, 1fr) auto;
-          gap: 8px;
+          grid-template-rows: auto auto minmax(0, 1fr) auto;
+          gap: 10px;
           pointer-events: auto;
+          border-radius: 18px;
         }
         .chat-side-head {
           display: flex;
@@ -5780,14 +6488,14 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           min-width: 0;
         }
         .chat-expand-btn {
-          width: 28px;
-          height: 28px;
-          min-width: 28px;
-          min-height: 28px;
-          border-radius: 8px;
-          border: 1px solid #cbd5e1;
-          background: #f8fafc;
-          color: #334155;
+          width: 24px;
+          height: 24px;
+          min-width: 24px;
+          min-height: 24px;
+          border-radius: 999px;
+          border: 1px solid rgba(255, 255, 255, 0.42);
+          background: rgba(255, 255, 255, 0.12);
+          color: rgba(255, 255, 255, 0.96);
           display: grid;
           place-items: center;
           line-height: 0;
@@ -5817,7 +6525,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           margin: 0;
           font-weight: 800;
           letter-spacing: 0.01em;
-          text-transform: none;
+          text-transform: uppercase;
           line-height: 1.1;
           min-width: 0;
           overflow: hidden;
@@ -5825,43 +6533,65 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           white-space: nowrap;
         }
         .chat-side-status {
-          border: 1px solid #e2e8f0;
+          border: 1px solid rgba(255, 255, 255, 0.55);
           border-radius: 999px;
-          padding: 3px 9px;
-          font-size: 0.68rem;
+          padding: 3px 10px;
+          font-size: 0.72rem;
           font-weight: 700;
-          letter-spacing: 0.05em;
+          letter-spacing: 0.04em;
           text-transform: uppercase;
           white-space: nowrap;
         }
         .chat-side-status.ready {
-          color: #166534;
-          border-color: #86efac;
-          background: #dcfce7;
+          color: rgba(255, 255, 255, 0.95);
+          border-color: rgba(255, 255, 255, 0.62);
+          background: rgba(255, 255, 255, 0.16);
         }
         .chat-side-status.loading {
-          color: #7c2d12;
-          border-color: #fdba74;
-          background: #ffedd5;
+          color: rgba(255, 255, 255, 0.98);
+          border-color: rgba(253, 186, 116, 0.85);
+          background: rgba(245, 158, 11, 0.2);
         }
         .chat-side-sub {
-          font-size: 0.83rem;
+          margin: 0;
+          font-size: 0.9rem;
+          line-height: 1.35;
+          color: rgba(226, 232, 240, 0.95);
         }
         .chat-window-log {
+          border: 1px solid rgba(255, 255, 255, 0.35);
+          border-radius: 12px;
+          background:
+            linear-gradient(
+              180deg,
+              rgba(255, 255, 255, 0.2) 0%,
+              rgba(255, 255, 255, 0.14) 76%,
+              rgba(187, 133, 255, 0.3) 100%
+            );
           min-height: 0;
           overflow: auto;
           display: grid;
           gap: 8px;
-          padding-right: 2px;
+          padding: 10px;
         }
         .chat-side-actions {
           display: grid;
           gap: 8px;
         }
-        .chat-side-actions .row {
+        .chat-side-buttons {
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 8px;
+        }
+        .chat-send-btn {
+          background: rgba(255, 255, 255, 0.72);
+          border-color: rgba(255, 255, 255, 0.72);
+          color: #16122b;
+        }
+        .chat-clear-btn {
+          background: transparent;
+          border-color: rgba(255, 255, 255, 0.62);
+          color: rgba(255, 255, 255, 0.9);
         }
         .chat-input-attention {
           animation: chat-input-flicker 1.1s ease-in-out infinite;
@@ -5879,7 +6609,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         }
         :global(.shell.chat-expanded) .chat-side-panel {
           top: var(--integration-panel-top, 89px);
-          width: min(var(--chat-expanded-width, 560px), calc(100vw - 24px));
+          width: min(var(--chat-expanded-width, 560px), calc(100vw - 26px));
         }
         .preview-modal-overlay {
           position: fixed;
@@ -6047,11 +6777,11 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             display: grid;
           }
           .status-bar {
-            left: clamp(16px, 2vw, 28px);
-            right: 0;
+            left: var(--page-inline-gap);
+            right: var(--page-inline-gap);
           }
           :global(.content.menu-open) .status-bar {
-            left: clamp(16px, 2vw, 28px);
+            left: var(--page-inline-gap);
           }
           .chat-side-panel {
             display: none;
@@ -6060,11 +6790,11 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         @media (max-width: 900px) {
           .status-bar {
             top: 78px;
-            left: clamp(16px, 2vw, 28px);
-            right: 0;
+            left: var(--page-inline-gap);
+            right: var(--page-inline-gap);
           }
           :global(.content.menu-open) .status-bar {
-            left: clamp(16px, 2vw, 28px);
+            left: var(--page-inline-gap);
           }
           .hero {
             grid-template-columns: 1fr;
@@ -6126,3 +6856,4 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     </div>
   );
 }
+

@@ -438,7 +438,7 @@ export default function SettingsPage() {
       <section className="nav">
         <Link href="/studio/images">Image Studio</Link>
         <Link href="/dashboard">Dashboard</Link>
-        <Link href="/ops/seo">Content & SEO</Link>
+        <Link href="/studio/seo">Content & SEO</Link>
         <Link href="/ops/inventory">Collection Mapper</Link>
       </section>
 

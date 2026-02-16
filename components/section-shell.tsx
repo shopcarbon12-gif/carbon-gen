@@ -4,9 +4,9 @@ import Link from "next/link";
 
 const links = [
   { href: "/studio/images", label: "Image Studio" },
+  { href: "/studio/seo", label: "SEO Manager" },
   { href: "/studio/video", label: "Motion Studio" },
   { href: "/studio/social", label: "Ad Generator" },
-  { href: "/ops/seo", label: "Content & SEO" },
   { href: "/ops/inventory", label: "Collection Mapper" },
   { href: "/dashboard", label: "Workspace Dashboard" },
   { href: "/settings", label: "Settings & APIs" },

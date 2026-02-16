@@ -92,7 +92,7 @@ export default function GeneratePage() {
           <Link href="/dashboard" className="chip">
             Dashboard
           </Link>
-          <Link href="/ops/seo" className="chip">
+          <Link href="/studio/seo" className="chip">
             Content & SEO
           </Link>
         </div>

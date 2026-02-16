@@ -34,10 +34,10 @@ const ACTIVE_ITEM_STYLE: CSSProperties = {
 
 const navItems: NavItem[] = [
   { href: "/studio/images", label: "Image Generator" },
+  { href: "/studio/seo", label: "SEO Manager" },
   { href: "/studio/video", label: "Video Promos (Reels)" },
   { href: "/studio/social", label: "Social Ads & Meta" },
   { href: "/ops/inventory", label: "Collection Mapping" },
-  { href: "/ops/seo", label: "Lightspeed Inventory" },
   { href: "/dashboard", label: "Workspace Dashboard" },
 ];
 
@@ -71,12 +71,18 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const showIntegrationPanel = !pathname.startsWith("/settings");
+  const showChatPanel = true;
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPinned, setMenuPinned] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [integrations, setIntegrations] = useState<IntegrationItem[]>([]);
   const [integrationsLoading, setIntegrationsLoading] = useState(true);
   const [integrationsRefreshing, setIntegrationsRefreshing] = useState(false);
+  const [dialogMessages, setDialogMessages] = useState<Array<{ role: "user" | "assistant"; content: string }>>([]);
+  const [dialogInput, setDialogInput] = useState("");
+  const [dialogLoading, setDialogLoading] = useState(false);
+  const [chatExpanded, setChatExpanded] = useState(false);
+  const chatLogRef = useRef<HTMLDivElement | null>(null);
   const mountedRef = useRef(true);
   const currentTitle = getCurrentTitle(pathname);
   const drawerOpen = menuOpen || menuPinned;
@@ -97,6 +103,23 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
       // ignore storage errors
     }
   }, [menuPinned]);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem("carbon_chat_expanded");
+      setChatExpanded(raw === "1");
+    } catch {
+      setChatExpanded(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("carbon_chat_expanded", chatExpanded ? "1" : "0");
+    } catch {
+      // ignore storage errors
+    }
+  }, [chatExpanded]);
 
   useEffect(() => {
     // Prevent background scroll only for temporary overlay mode.
@@ -179,6 +202,12 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
     return () => window.clearInterval(timer);
   }, [refreshIntegrations, showIntegrationPanel]);
 
+  useEffect(() => {
+    const node = chatLogRef.current;
+    if (!node) return;
+    node.scrollTop = node.scrollHeight;
+  }, [dialogMessages, dialogLoading]);
+
   function toggleMenu() {
     if (menuPinned) {
       setMenuPinned(false);
@@ -206,8 +235,40 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
     }
   }
 
+  async function sendDialogMessage() {
+    const text = dialogInput.trim();
+    if (!text || dialogLoading) return;
+    const next = [...dialogMessages, { role: "user" as const, content: text }];
+    setDialogMessages(next);
+    setDialogInput("");
+    setDialogLoading(true);
+    try {
+      const resp = await fetch("/api/openai/dialog", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: next, contextError: "" }),
+      });
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        throw new Error(String(json?.error || "OpenAI dialog failed"));
+      }
+      const reply = String(json?.reply || "").trim() || "(No response text)";
+      setDialogMessages((prev) => [...prev, { role: "assistant", content: reply }]);
+    } catch (e: any) {
+      const message = String(e?.message || "OpenAI dialog failed");
+      setDialogMessages((prev) => [...prev, { role: "assistant", content: `Error: ${message}` }]);
+    } finally {
+      setDialogLoading(false);
+    }
+  }
+
+  function clearDialogChat() {
+    setDialogMessages([]);
+    setDialogInput("");
+  }
+
   return (
-    <div className="shell">
+    <div className={`shell ${chatExpanded && showChatPanel ? "chat-expanded" : ""}`}>
       <svg
         aria-hidden
         focusable="false"
@@ -232,6 +293,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
 
       <header className="topbar">
         <button
+          suppressHydrationWarning
           type="button"
           className={`menu-toggle ${menuOpen ? "open" : ""}`}
           onClick={toggleMenu}
@@ -266,6 +328,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
               const active = isActive(pathname, item.href);
               return (
                 <button
+                  suppressHydrationWarning
                   key={item.href}
                   type="button"
                   onClick={() => {
@@ -284,6 +347,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           </div>
           <div className="menu-footer">
             <button
+              suppressHydrationWarning
               className="menu-settings-btn"
               type="button"
               onClick={() => {
@@ -295,10 +359,17 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
             </button>
             <div className="menu-divider" />
             <div className="menu-bottom-row">
-              <button className="menu-logout-btn" type="button" onClick={onLogout} disabled={loggingOut}>
+              <button
+                suppressHydrationWarning
+                className="menu-logout-btn"
+                type="button"
+                onClick={onLogout}
+                disabled={loggingOut}
+              >
                 {loggingOut ? "LOGGING OUT..." : "LOGOUT"}
               </button>
               <button
+                suppressHydrationWarning
                 className={`menu-pin-btn ${menuPinned ? "active" : ""}`}
                 type="button"
                 onClick={togglePin}
@@ -324,8 +395,9 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
         <aside className="integration-panel-wrap" aria-label="API integrations">
           <section className="integration-panel glass-panel">
             <div className="integration-header">
-              <div className="integration-title">API INTEGRATIONS</div>
+              <div className="integration-title">API STATUS</div>
               <button
+                suppressHydrationWarning
                 type="button"
                 className={`integration-refresh ${integrationsRefreshing ? "spinning" : ""}`}
                 onClick={() => void refreshIntegrations(true)}
@@ -391,8 +463,113 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
         </aside>
       ) : null}
 
+      {showChatPanel ? (
+        <aside
+          className={`chat-panel-wrap ${showIntegrationPanel ? "" : "no-api"}`}
+          aria-label="ChatGPT"
+        >
+          <section className="chat-panel glass-panel">
+            <button
+              suppressHydrationWarning
+              type="button"
+              className={`chat-corner-expand ${chatExpanded ? "expanded" : ""}`}
+              onClick={() => setChatExpanded((prev) => !prev)}
+              aria-pressed={chatExpanded}
+              aria-label={chatExpanded ? "Collapse chat panel" : "Expand chat panel"}
+            >
+              <svg
+                className="chat-corner-expand-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                aria-hidden
+              >
+                <path
+                  d="M6 18L18 6"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d="M12 6H18V12"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d="M6 12V18H12"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+            <div className="chat-header">
+              <div className="chat-title">ChatGPT</div>
+              <span className={`chat-status ${dialogLoading ? "loading" : "ready"}`}>
+                {dialogLoading ? "WORKING" : "READY"}
+              </span>
+            </div>
+            <p className="chat-sub">Ask anything.</p>
+            <div ref={chatLogRef} className="chat-log">
+              {dialogMessages.length ? (
+                dialogMessages.map((msg, idx) => (
+                  <div key={`shell-chat-${idx}`} className={`chat-msg ${msg.role}`}>
+                    <strong>{msg.role === "user" ? "You" : "ChatGPT"}:</strong> {msg.content}
+                  </div>
+                ))
+              ) : (
+                <div className="chat-empty">No chat messages yet.</div>
+              )}
+            </div>
+            <div className="chat-actions">
+              <input
+                suppressHydrationWarning
+                value={dialogInput}
+                onChange={(e) => setDialogInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    sendDialogMessage();
+                  }
+                }}
+                placeholder="Message ChatGPT..."
+              />
+              <div className="chat-buttons">
+                <button
+                  suppressHydrationWarning
+                  className="btn chat-send-btn"
+                  type="button"
+                  onClick={sendDialogMessage}
+                  disabled={dialogLoading || !dialogInput.trim()}
+                >
+                  {dialogLoading ? "Sending..." : "Send"}
+                </button>
+                <button
+                  suppressHydrationWarning
+                  className="btn ghost chat-clear-btn"
+                  type="button"
+                  onClick={clearDialogChat}
+                  disabled={!dialogMessages.length && !dialogInput.trim()}
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+          </section>
+        </aside>
+      ) : null}
+
       {drawerOpen && !menuPinned ? (
-        <button className="backdrop" aria-label="Close menu overlay" onClick={() => setMenuOpen(false)} />
+        <button
+          suppressHydrationWarning
+          className="backdrop"
+          aria-label="Close menu overlay"
+          onClick={() => setMenuOpen(false)}
+        />
       ) : null}
 
       <main
@@ -411,13 +588,14 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           --pill-border: rgba(255, 255, 255, 0.14);
         }
         .shell {
-          --page-edge-gap: clamp(16px, 2vw, 28px);
+          --page-edge-gap: 13px;
           --integration-panel-width: 255px;
           --integration-panel-height: 214px;
-          --chat-expanded-width: min(560px, calc(100vw - 24px));
+          --chat-expanded-width: min(560px, calc(100vw - 26px));
           --content-api-gap: 13px;
           --chat-expand-duration: 280ms;
           --chat-expand-ease: cubic-bezier(0.2, 0.85, 0.2, 1);
+          --right-rail-width: var(--integration-panel-width);
           min-height: 100vh;
           position: relative;
           /* Keep horizontal bleed clipped without breaking sticky descendants (progress bar). */
@@ -539,10 +717,10 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
         }
         .carbon-panel-wrap {
           position: fixed;
-          left: 12px;
+          left: 13px;
           top: 89px;
-          bottom: 12px;
-          width: min(255px, calc(100vw - 24px));
+          bottom: 13px;
+          width: min(255px, calc(100vw - 26px));
           z-index: 60;
           display: flex;
           align-items: stretch;
@@ -569,8 +747,8 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           position: fixed;
           right: var(--page-edge-gap);
           top: 89px;
-          height: min(var(--integration-panel-height), calc(100vh - 101px));
-          width: min(var(--integration-panel-width), calc(100vw - 24px));
+          height: min(var(--integration-panel-height), calc(100vh - 102px));
+          width: min(var(--integration-panel-width), calc(100vw - 26px));
           z-index: 44;
           display: flex;
           align-items: stretch;
@@ -586,6 +764,209 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           transform: translateX(calc(100% + 32px));
           opacity: 0;
           pointer-events: none;
+          visibility: hidden;
+        }
+        .chat-panel-wrap {
+          position: fixed;
+          right: var(--page-edge-gap);
+          top: calc(89px + min(var(--integration-panel-height), calc(100vh - 102px)) + var(--content-api-gap));
+          height: calc(100vh - (89px + min(var(--integration-panel-height), calc(100vh - 102px)) + var(--content-api-gap)) - 13px);
+          width: min(var(--integration-panel-width), calc(100vw - 26px));
+          z-index: 45;
+          display: flex;
+          align-items: stretch;
+          pointer-events: none;
+          will-change: width, top, height;
+          transition:
+            width var(--chat-expand-duration) var(--chat-expand-ease),
+            top var(--chat-expand-duration) var(--chat-expand-ease),
+            height var(--chat-expand-duration) var(--chat-expand-ease);
+        }
+        .chat-panel-wrap.no-api {
+          top: 89px;
+          height: calc(100vh - 102px);
+        }
+        .shell.chat-expanded .chat-panel-wrap {
+          top: 89px;
+          height: calc(100vh - 102px);
+          width: min(var(--chat-expanded-width), calc(100vw - 26px));
+          z-index: 46;
+        }
+        .chat-panel {
+          width: 100%;
+          height: 100%;
+          border-radius: 18px;
+          border: 1px solid var(--card-border);
+          background: rgba(113, 49, 154, 0.42);
+          backdrop-filter: blur(14px) saturate(1.2);
+          -webkit-backdrop-filter: blur(14px) saturate(1.2);
+          box-shadow:
+            0 24px 70px rgba(0, 0, 0, 0.45),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+          padding: 14px;
+          display: grid;
+          grid-template-rows: auto auto minmax(0, 1fr) auto;
+          gap: 10px;
+          pointer-events: auto;
+          position: relative;
+        }
+        .chat-corner-expand {
+          position: absolute;
+          top: 10px;
+          left: 10px;
+          width: 24px;
+          height: 24px;
+          min-width: 24px;
+          min-height: 24px;
+          border-radius: 999px;
+          border: 1px solid rgba(255, 255, 255, 0.5);
+          background: rgba(255, 255, 255, 0.14);
+          color: rgba(255, 255, 255, 0.95);
+          display: grid;
+          place-items: center;
+          line-height: 0;
+          padding: 0;
+          z-index: 2;
+          cursor: pointer;
+          transition: none;
+        }
+        .chat-corner-expand.expanded {
+          background: rgba(255, 255, 255, 0.72);
+          border-color: rgba(255, 255, 255, 0.72);
+          color: #16122b;
+        }
+        .chat-corner-expand-icon {
+          width: 15px;
+          height: 15px;
+          display: block;
+          transform: rotate(-90deg);
+          transition: color 160ms ease;
+        }
+        .chat-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          padding-left: 30px;
+          min-width: 0;
+        }
+        .chat-title {
+          font-size: clamp(1.45rem, 2.6vw, 1.9rem);
+          font-weight: 800;
+          line-height: 1.1;
+          letter-spacing: 0.01em;
+          text-transform: none;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .chat-status {
+          border: 1px solid rgba(255, 255, 255, 0.55);
+          border-radius: 999px;
+          padding: 3px 10px;
+          font-size: 0.72rem;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          white-space: nowrap;
+          flex-shrink: 0;
+        }
+        .chat-status.ready {
+          color: rgba(255, 255, 255, 0.95);
+          border-color: rgba(255, 255, 255, 0.62);
+          background: rgba(255, 255, 255, 0.16);
+        }
+        .chat-status.loading {
+          color: rgba(255, 255, 255, 0.98);
+          border-color: rgba(253, 186, 116, 0.85);
+          background: rgba(245, 158, 11, 0.2);
+        }
+        .chat-sub {
+          margin: 0;
+          font-size: 0.9rem;
+          line-height: 1.35;
+          color: rgba(226, 232, 240, 0.95);
+        }
+        .chat-log {
+          border: 1px solid rgba(255, 255, 255, 0.35);
+          border-radius: 12px;
+          background:
+            linear-gradient(
+              180deg,
+              rgba(255, 255, 255, 0.2) 0%,
+              rgba(255, 255, 255, 0.14) 76%,
+              rgba(187, 133, 255, 0.3) 100%
+            );
+          min-height: 0;
+          overflow: auto;
+          display: grid;
+          align-content: start;
+          gap: 8px;
+          padding: 10px;
+        }
+        .chat-msg {
+          font-size: 0.86rem;
+          line-height: 1.35;
+          color: rgba(255, 255, 255, 0.95);
+          background: rgba(255, 255, 255, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.22);
+          border-radius: 10px;
+          padding: 8px 10px;
+          word-break: break-word;
+        }
+        .chat-msg.user {
+          background: rgba(255, 255, 255, 0.16);
+        }
+        .chat-empty {
+          color: rgba(226, 232, 240, 0.86);
+          font-size: 0.92rem;
+          text-align: left;
+          padding: 4px 2px;
+        }
+        .chat-actions {
+          display: grid;
+          gap: 8px;
+        }
+        .chat-actions input {
+          width: 100%;
+          min-height: 44px;
+          border-radius: 12px;
+          border: 1px solid rgba(255, 255, 255, 0.35);
+          background: rgba(255, 255, 255, 0.14);
+          color: rgba(255, 255, 255, 0.96);
+          padding: 10px 12px;
+          outline: none;
+        }
+        .chat-actions input::placeholder {
+          color: rgba(226, 232, 240, 0.78);
+        }
+        .chat-buttons {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 8px;
+        }
+        .chat-buttons button {
+          min-height: 44px;
+          border-radius: 999px;
+          border: 1px solid rgba(255, 255, 255, 0.45);
+          font-weight: 700;
+          cursor: pointer;
+          transition: none;
+        }
+        .chat-buttons button:disabled {
+          opacity: 0.65;
+          cursor: not-allowed;
+        }
+        .chat-send-btn {
+          background: rgba(255, 255, 255, 0.72);
+          border-color: rgba(255, 255, 255, 0.72);
+          color: #16122b;
+        }
+        .chat-clear-btn {
+          background: transparent;
+          border-color: rgba(255, 255, 255, 0.62);
+          color: rgba(255, 255, 255, 0.9);
         }
         .integration-panel {
           width: 100%;
@@ -604,7 +985,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           gap: 10px;
           font-family: "Inter", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
           pointer-events: auto;
-          overflow-y: hidden;
+          overflow-y: auto;
         }
         .integration-header {
           display: flex;
@@ -952,7 +1333,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
         }
         .content {
           --content-right-pad: calc(
-            var(--integration-panel-width) + var(--page-edge-gap) + var(--content-api-gap)
+            var(--right-rail-width) + var(--page-edge-gap) + var(--content-api-gap)
           );
           position: relative;
           z-index: 10;
@@ -971,8 +1352,16 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           padding-right: var(--content-right-pad);
         }
         .content.no-integration-panel {
-          --content-right-pad: 0px;
-          padding-right: 0;
+          --content-right-pad: calc(
+            var(--right-rail-width) + var(--page-edge-gap) + var(--content-api-gap)
+          );
+          padding-right: var(--content-right-pad);
+        }
+        .shell.chat-expanded .content.no-integration-panel {
+          --content-right-pad: calc(
+            var(--chat-expanded-width) + var(--page-edge-gap) + var(--content-api-gap)
+          );
+          padding-right: var(--content-right-pad);
         }
         .content.menu-open {
           padding-left: 280px;
@@ -994,9 +1383,17 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           .integration-panel-wrap {
             display: none;
           }
+          .chat-panel-wrap {
+            display: none;
+          }
           .content {
             --content-right-pad: 0px;
             padding-left: 0;
+            padding-right: 0;
+          }
+          .shell.chat-expanded .content,
+          .shell.chat-expanded .content.no-integration-panel {
+            --content-right-pad: 0px;
             padding-right: 0;
           }
           .content.menu-open {
@@ -1013,16 +1410,16 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
             max-width: min(52vw, 165px);
           }
           .carbon-panel-wrap {
-            left: 10px;
+            left: 13px;
             top: 89px;
-            bottom: 10px;
-            width: min(255px, calc(100vw - 20px));
+            bottom: 13px;
+            width: min(255px, calc(100vw - 26px));
           }
           .integration-panel-wrap {
-            right: var(--page-edge-gap);
+            right: 13px;
             top: 89px;
-            height: min(var(--integration-panel-height), calc(100vh - 99px));
-            width: min(var(--integration-panel-width), calc(100vw - 20px));
+            height: min(var(--integration-panel-height), calc(100vh - 102px));
+            width: min(var(--integration-panel-width), calc(100vw - 26px));
           }
         }
       `}</style>

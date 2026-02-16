@@ -12,7 +12,7 @@ type FileFingerprint = {
 const TARGET_FILES = [
   "app/dashboard/page.tsx",
   "app/studio/images/page.tsx",
-  "app/ops/seo/page.tsx",
+  "app/studio/seo/page.tsx",
   "components/studio-workspace.tsx",
   "app/api/generate/route.ts",
   "app/api/openai/dialog/route.ts",

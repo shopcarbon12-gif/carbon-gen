@@ -1,6 +1,5 @@
-import StudioWorkspace from "@/components/studio-workspace";
+import { redirect } from "next/navigation";
 
 export default function OpsSeoPage() {
-  return <StudioWorkspace mode="ops-seo" />;
+  redirect("/studio/seo");
 }
-

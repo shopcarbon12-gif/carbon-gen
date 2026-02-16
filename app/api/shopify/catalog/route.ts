@@ -176,11 +176,14 @@ async function fetchCatalogWithToken(
       };
     }
 
+    const totalCount = await fetchCatalogCountWithToken(shop, token, rawQuery);
+
     return {
       ok: true as const,
       status: 200,
       products: toCatalogProducts(json),
       pageInfo: toCatalogPageInfo(json),
+      totalCount,
     };
   } catch (e: any) {
     return {
@@ -189,6 +192,59 @@ async function fetchCatalogWithToken(
       details: e?.message || "Catalog fetch failed",
     };
   }
+}
+
+async function fetchCatalogCountWithToken(
+  shop: string,
+  token: string,
+  rawQuery: string | null
+): Promise<number | null> {
+  const queryFilter = buildShopifyCatalogQuery(rawQuery);
+  const queries = [
+    `
+      query ProductCatalogCount($query: String) {
+        productsCount(query: $query) {
+          count
+        }
+      }
+    `,
+    `
+      query ProductCatalogCount($query: String) {
+        productsCount(query: $query)
+      }
+    `,
+  ];
+
+  for (const query of queries) {
+    try {
+      const resp = await fetch(`https://${shop}/admin/api/${API_VERSION}/graphql.json`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Shopify-Access-Token": token,
+        },
+        body: JSON.stringify({ query, variables: { query: queryFilter } }),
+        cache: "no-store",
+      });
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok) continue;
+      if (Array.isArray(json?.errors) && json.errors.length) continue;
+
+      const raw = json?.data?.productsCount;
+      const value =
+        typeof raw === "number"
+          ? raw
+          : raw && typeof raw === "object" && typeof raw.count === "number"
+            ? raw.count
+            : null;
+      if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+        return value;
+      }
+    } catch {
+      // Best-effort count only.
+    }
+  }
+  return null;
 }
 
 export async function GET(req: NextRequest) {
@@ -235,8 +291,12 @@ export async function GET(req: NextRequest) {
           };
         }
       }
+      const totalPages =
+        typeof attempt.totalCount === "number" && Number.isFinite(attempt.totalCount)
+          ? Math.max(1, Math.ceil(Math.max(0, attempt.totalCount) / first))
+          : null;
 
-      return NextResponse.json({ products, pageInfo, source: candidate.source });
+      return NextResponse.json({ products, pageInfo, totalPages, source: candidate.source });
     }
 
     return NextResponse.json(

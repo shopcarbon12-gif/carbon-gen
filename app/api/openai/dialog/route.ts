@@ -70,8 +70,8 @@ export async function POST(req: NextRequest) {
       normalizeText(process.env.OPENAI_CHAT_MODEL) ||
       "gpt-4o-mini";
     const system =
-      "You are ChatGPT integrated into a fashion ecommerce image studio app. " +
-      "Give practical debugging steps, likely causes, and exact next actions.";
+      "You are ChatGPT, a large language model trained by OpenAI. " +
+      "Be helpful, accurate, and concise.";
 
     let reply = "";
     try {

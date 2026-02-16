@@ -161,7 +161,7 @@ export default function RolesPage() {
       <section className="nav">
         <Link href="/settings">Back To Settings</Link>
         <Link href="/studio/images">Image Studio</Link>
-        <Link href="/ops/seo">Content & SEO</Link>
+        <Link href="/studio/seo">Content & SEO</Link>
       </section>
 
       {loading ? (

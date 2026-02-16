@@ -847,7 +847,7 @@ export async function POST(req: NextRequest) {
             error:
               "Generation was blocked by safety moderation for this reference set. Try a less revealing crop/reference mix or use neutral front/back product shots.",
             requestId,
-            code: retryErr?.code || err?.code || null,
+            code: retryErr?.code || err?.code || "moderation_blocked",
           },
           { status: 400 }
         );
