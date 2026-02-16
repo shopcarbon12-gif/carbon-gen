@@ -23,6 +23,7 @@ type EndpointCache = {
 let endpointCache: EndpointCache | null = null;
 
 const ENDPOINT_CACHE_MS = 60_000;
+const ENDPOINT_PROBE_TIMEOUT_MS = 4500;
 const DEFAULT_INTEGRATION_ENDPOINTS = ["/api/health", "/api/dropbox/status", "/api/shopify/status"];
 
 function titleCase(value: string) {
@@ -165,12 +166,15 @@ function inferLabel(status: IntegrationStatus, json: unknown) {
 async function probeEndpoint(req: NextRequest, endpoint: string): Promise<IntegrationRecord> {
   const origin = new URL(req.url).origin;
   const cookie = req.headers.get("cookie") || "";
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), ENDPOINT_PROBE_TIMEOUT_MS);
 
   try {
     const response = await fetch(`${origin}${endpoint}`, {
       method: "GET",
       headers: cookie ? { cookie } : undefined,
       cache: "no-store",
+      signal: controller.signal,
     });
 
     let json: unknown = null;
@@ -199,6 +203,8 @@ async function probeEndpoint(req: NextRequest, endpoint: string): Promise<Integr
       status: "offline",
       label: "Offline",
     };
+  } finally {
+    clearTimeout(timeout);
   }
 }
 

@@ -33,6 +33,8 @@ export default function RootLayout({
       >
         <div className="app-bg-photo" aria-hidden />
         <div className="app-bg-fade" aria-hidden />
+        <div className="app-bg-top-photo" aria-hidden />
+        <div className="app-bg-top-fade" aria-hidden />
         <div className="app-root-content">{children}</div>
       </body>
     </html>

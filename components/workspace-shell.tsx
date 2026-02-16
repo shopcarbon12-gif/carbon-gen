@@ -1336,7 +1336,6 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
             var(--right-rail-width) + var(--page-edge-gap) + var(--content-api-gap)
           );
           position: relative;
-          z-index: 10;
           min-height: 100vh;
           padding-top: 58px;
           padding-right: var(--content-right-pad);

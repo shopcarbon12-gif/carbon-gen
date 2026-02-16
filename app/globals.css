@@ -48,7 +48,7 @@ body {
 .app-bg-photo {
   position: fixed;
   inset: 0;
-  z-index: 0;
+  z-index: -2;
   pointer-events: none;
   background-color: #050505;
   background-image: url("/bg-template.jpg");
@@ -61,14 +61,37 @@ body {
 .app-bg-fade {
   position: fixed;
   inset: 0;
-  z-index: 1;
+  z-index: -1;
   pointer-events: none;
+  background: rgba(0, 0, 0, 0.62);
+}
+
+.app-bg-top-photo,
+.app-bg-top-fade {
+  --app-bg-top-cut: 189px;
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  clip-path: inset(0 0 calc(100% - var(--app-bg-top-cut)) 0);
+}
+
+.app-bg-top-photo {
+  z-index: 2;
+  background-color: #050505;
+  background-image: url("/bg-template.jpg");
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: cover;
+  filter: saturate(1.12) contrast(1.06) brightness(1.04);
+}
+
+.app-bg-top-fade {
+  z-index: 3;
   background: rgba(0, 0, 0, 0.62);
 }
 
 .app-root-content {
   position: relative;
-  z-index: 2;
   min-height: 100vh;
 }
 
