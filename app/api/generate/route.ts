@@ -377,6 +377,7 @@ function normalizePanelQa(value: any): PanelQaInput {
 function buildServerIdentityLockPrompt(panelQa: PanelQaInput) {
   const modelName = panelQa.modelName || "locked model";
   const modelGender = panelQa.modelGender || "model";
+  const lockedItemType = panelQa.itemType || "apparel item";
   const backLockActive =
     isBackFacingPose(panelQa.modelGender, panelQa.poseA) ||
     isBackFacingPose(panelQa.modelGender, panelQa.poseB);
@@ -394,6 +395,9 @@ function buildServerIdentityLockPrompt(panelQa: PanelQaInput) {
     "- Keep the exact same white background tone and lighting across all generated panels.",
     "- Keep only a very faint neutral contact shadow on floor; no colored bounce light.",
     "SERVER-ENFORCED ITEM FIDELITY LOCK (NON-NEGOTIABLE):",
+    `- Locked item type from section 0.5: "${lockedItemType}".`,
+    "- Prioritize garment details that match this locked item type.",
+    "- If references contain mixed categories, ignore details from categories that do not match the locked item type.",
     "- Garment design must match item-reference photos exactly.",
     "- Never invent, replace, remove, recolor, or restyle logos/graphics/prints/embroidery/patches.",
     "- If an item ref shows a back graphic/print, preserve that exact back design (position, scale, colors, and style).",
@@ -516,13 +520,13 @@ async function runPanelComplianceCheck(args: {
           : []),
         "- Identity fidelity lock active: generated person must match MODEL refs for facial geometry and skin tone/undertone.",
         "- Background lock active: seamless pure white studio background only (#FFFFFF), no tint.",
-        "- 2:3 center-crop lock active: each left/right pose should be centered in its half so a center 2:3 crop keeps key subject details intact.",
+        "- 3:4 center-crop lock active: each left/right pose should be centered in its half so a center 3:4 crop keeps key subject details intact.",
       ].join("\n"),
     },
     { type: "input_text", text: "MODEL reference images (identity lock):" },
     ...args.modelRefs.slice(0, 4).map((url) => ({ type: "input_image", image_url: url })),
     { type: "input_text", text: "ITEM reference images (outfit lock):" },
-    ...args.itemRefs.slice(0, 4).map((url) => ({ type: "input_image", image_url: url })),
+    ...args.itemRefs.map((url) => ({ type: "input_image", image_url: url })),
     { type: "input_text", text: "Generated panel to audit:" },
     { type: "input_image", image_url: `data:image/png;base64,${args.imageBase64}` },
     {
@@ -538,7 +542,7 @@ async function runPanelComplianceCheck(args: {
           : "If any full-body pose appears barefoot or socks-only, set pass=false.",
         "If close-up subject lock is active and the right close-up clearly focuses on a different item type/category than the locked section 0.5 item type, set pass=false.",
         "If back-view strict lock is active and back-facing design does not clearly match item refs, set pass=false.",
-        "If either side appears significantly off-center such that a center 2:3 crop would cut key model/item content, set pass=false.",
+        "If either side appears significantly off-center such that a center 3:4 crop would cut key model/item content, set pass=false.",
         "If facial geometry or skin tone/undertone clearly drifts from MODEL refs, set pass=false.",
         "If background is not seamless pure white (any pink/warm/cream/gray tint, gradient, vignette, texture, or colored cast), set pass=false.",
         "Set pass=false only when you are clearly confident this output violates model/item/pose lock.",
@@ -721,9 +725,9 @@ export async function POST(req: NextRequest) {
         : []),
     ].join("\n");
 
-    // Keep refs bounded: model identity anchors first, then product anchors.
+    // Keep model identity anchors bounded; include all item refs provided by section 0.5.
     const modelAnchors = normalizedModelRefs.slice(0, 6);
-    const itemAnchors = normalizedItemRefs.slice(0, 4);
+    const itemAnchors = normalizedItemRefs;
 
     const allRefs = [...modelAnchors, ...itemAnchors];
     const downloaded = await Promise.allSettled(

@@ -1,12 +1,54 @@
 $ErrorActionPreference = "Stop"
 
 $repo = Split-Path -Parent $PSScriptRoot
-$cloudflared = "C:\Program Files (x86)\cloudflared\cloudflared.exe"
-$config = "C:\Windows\System32\config\systemprofile\.cloudflared\config.yml"
+$cloudflared = $null
+$config = $null
 $pidFile = "$repo\.tmp_local_stack_pids.json"
 $devLog = "$repo\.tmp_dev.log"
 $tunnelLog = "$repo\.tmp_tunnel.log"
 $tunnelErrLog = "$repo\.tmp_tunnel.err.log"
+
+function Resolve-CloudflaredExe {
+  $fromPath = Get-Command cloudflared -ErrorAction SilentlyContinue
+  if ($fromPath -and $fromPath.Source -and (Test-Path $fromPath.Source)) {
+    return $fromPath.Source
+  }
+
+  $candidates = @(
+    "C:\Program Files (x86)\cloudflared\cloudflared.exe",
+    "C:\Program Files\cloudflared\cloudflared.exe"
+  )
+  foreach ($candidate in $candidates) {
+    if (Test-Path $candidate) {
+      return $candidate
+    }
+  }
+
+  return $null
+}
+
+function Resolve-CloudflaredConfig {
+  param([string]$RepoPath)
+
+  $candidates = @(
+    $env:CLOUDFLARED_CONFIG,
+    $env:CF_TUNNEL_CONFIG,
+    "$RepoPath\.cloudflared\config.yml",
+    "$RepoPath\.cloudflare\config.yml",
+    "$env:USERPROFILE\.cloudflared\config.yml",
+    "$env:USERPROFILE\.cloudflare\config.yml",
+    "C:\Windows\System32\config\systemprofile\.cloudflared\config.yml",
+    "C:\Windows\System32\config\systemprofile\.cloudflare\config.yml"
+  ) | Where-Object { $_ -and $_.Trim() -ne "" }
+
+  foreach ($candidate in $candidates) {
+    if (Test-Path $candidate) {
+      return $candidate
+    }
+  }
+
+  return $null
+}
 
 function Get-DotEnvValue {
   param(
@@ -133,11 +175,14 @@ function Stop-ListenerOnPort {
   return -not (Is-PortListening -Port $Port)
 }
 
-if (!(Test-Path $cloudflared)) {
-  throw "cloudflared not found at: $cloudflared"
+$cloudflared = Resolve-CloudflaredExe
+if (-not $cloudflared) {
+  throw "cloudflared executable not found. Install cloudflared or add it to PATH."
 }
-if (!(Test-Path $config)) {
-  throw "cloudflared config not found at: $config"
+
+$config = Resolve-CloudflaredConfig -RepoPath $repo
+if (-not $config) {
+  throw "cloudflared config not found. Set CLOUDFLARED_CONFIG or CF_TUNNEL_CONFIG."
 }
 
 $appPort = Get-ConfiguredPort

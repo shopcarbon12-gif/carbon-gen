@@ -48,6 +48,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const messages = normalizeMessages(body?.messages);
     const contextError = normalizeText(body?.contextError).slice(0, 6000);
+    const contextSummary = normalizeText(body?.contextSummary).slice(0, 12000);
+    const contextScope = normalizeText(body?.contextScope).slice(0, 80);
 
     if (!messages.length) {
       return NextResponse.json({ error: "Missing dialog messages" }, { status: 400 });
@@ -69,9 +71,16 @@ export async function POST(req: NextRequest) {
       normalizeText(process.env.OPENAI_DIALOG_MODEL) ||
       normalizeText(process.env.OPENAI_CHAT_MODEL) ||
       "gpt-4o-mini";
-    const system =
-      "You are ChatGPT, a large language model trained by OpenAI. " +
-      "Be helpful, accurate, and concise.";
+    const system = [
+      "You are Carbon Studio Assistant inside a generation workspace.",
+      "Primary job: answer questions about generation failures, reference usage, and workflow behavior.",
+      "Use provided workspace context and latest generation error payload first.",
+      "When the user asks why an item was not used, troubleshoot with concrete checks: item type mismatch, missing saved refs, pending uploads, failed imports, conflicting refs, or moderation blocks.",
+      "Give short, actionable next steps.",
+      "Do not answer with generic capability disclaimers. If pixels are unavailable in chat, say you cannot directly inspect pixels here and continue with context-based diagnosis.",
+      "If needed, ask at most two focused follow-up questions.",
+      "Keep responses concise, technical, and practical.",
+    ].join(" ");
 
     let reply = "";
     try {
@@ -84,6 +93,32 @@ export async function POST(req: NextRequest) {
             role: "system",
             content: [{ type: "input_text", text: system }],
           },
+          ...(contextScope
+            ? [
+                {
+                  role: "system" as const,
+                  content: [
+                    {
+                      type: "input_text" as const,
+                      text: `Dialog scope: ${contextScope}`,
+                    },
+                  ],
+                },
+              ]
+            : []),
+          ...(contextSummary
+            ? [
+                {
+                  role: "system" as const,
+                  content: [
+                    {
+                      type: "input_text" as const,
+                      text: `Workspace generation context:\n${contextSummary}`,
+                    },
+                  ],
+                },
+              ]
+            : []),
           ...(contextError
             ? [
                 {
@@ -114,6 +149,22 @@ export async function POST(req: NextRequest) {
         temperature: 0.2,
         messages: [
           { role: "system", content: system },
+          ...(contextScope
+            ? [
+                {
+                  role: "system" as const,
+                  content: `Dialog scope: ${contextScope}`,
+                },
+              ]
+            : []),
+          ...(contextSummary
+            ? [
+                {
+                  role: "system" as const,
+                  content: `Workspace generation context:\n${contextSummary}`,
+                },
+              ]
+            : []),
           ...(contextError
             ? [
                 {

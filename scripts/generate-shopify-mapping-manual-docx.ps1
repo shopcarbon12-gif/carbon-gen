@@ -1,71 +1,33 @@
-$OutputPath = "D:\Projects\My project\carbon-gen\Today_Changes_Summary_2026-02-12_13.docx"
-$Title = "Carbon Gen - Changes Summary (Feb 12-13, 2026)"
-$NowLocal = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-$NowUtc = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-
-$lines = @(
-  $Title,
-  "",
-  "Scope",
-  "This document summarizes the key updates completed today across local and web app (Vercel production).",
-  "",
-  "1) Generation Reliability and Quality",
-  "- Added stricter back-view fidelity lock so back-facing outputs must match item-reference back design (no invented/replaced back graphics).",
-  "- Added clearer client handling for generation network failures: one automatic retry for /api/generate and improved error messages instead of generic 'Failed to fetch'.",
-  "- Enforced split-output normalization to target frame for 3:4 results (900 x 1200 per side), with preview consistency fixes.",
-  "- Added/kept strong white-background consistency guardrails in generation prompt/QA flow.",
-  "",
-  "2) Dropbox Barcode Search",
-  "- Fixed Dropbox search root handling: when configured root is invalid, API now resolves to a valid root and falls back correctly.",
-  "- Validated and aligned search root to /Carbon for this account context.",
-  "- Improved recursive/folder result handling so barcode search returns expected folder/image matches more reliably.",
-  "",
-  "3) Shopify Push and Variants Workflow",
-  "- Added color-level variant mapping model (main color cards).",
-  "- Implemented drag/drop assignment for generated images to color variants.",
-  "- Push behavior applies assigned image across variants of that color.",
-  "- Added mapping preview block for transparency before push.",
-  "- Added alt-text generation workflow improvements and missing-alt fill behavior.",
-  "",
-  "4) Studio UX and Flow Improvements",
-  "- Updated item reference picker behavior and catalog interactions (including separate file/folder picker variants where requested).",
-  "- Added pagination behavior for empty catalog search flows and status filtering logic updates in prior commits today.",
-  "- Added business rule: female + dress blocks panel 3 generation path.",
-  "",
-  "5) Local Runtime/Port Stabilization (Port 3000)",
-  "- Removed old auto-start background tasks from legacy C: setup (user-run in admin shell).",
-  "- Kept local app configured on port 3000 in .env.local.",
-  "- Improved start-local script logic to detect stale listeners and avoid false early startup failure.",
-  "- Added startup shortcut under current user Startup folder to launch the D: project local stack at login.",
-  "",
-  "6) Deployments",
-  "- Production alias updated multiple times today after fixes.",
-  "- Current production URL: https://carbon-gen-iota.vercel.app",
-  "",
-  "Key Commits (latest to earlier)",
-  "- 09cd358: Retry generate API once and improve failed-fetch error clarity",
-  "- 4651c09: Enforce strict back-design fidelity for back-facing panel poses",
-  "- 75f055f: Fix Dropbox barcode search root resolution fallback",
-  "- 7b9927b: Normalize split outputs to 900x1200 and fix split preview aspect",
-  "- d2a1859: Add push mapping preview for color to image assignments",
-  "- 3411bdc: Auto-load current Shopify media on search and color-level variant assignment",
-  "- 0f55609: Use color-main variant cards and apply assignments to all variants per color",
-  "- c1dd2e2: Split item references picker into separate files and folder buttons",
-  "- 9cf53e0: Add drag-drop variant image mapping and variant pull/order in Shopify Push",
-  "- c8cb0ba: Disable female panel 3 for dress item type",
-  "",
-  "Current Note",
-  "- scripts/start-local-stack.ps1 has local uncommitted changes for startup hardening on this machine.",
-  "",
-  "Generated: $NowLocal"
+param(
+  [string]$InputPath = "D:\Projects\My project\carbon-gen\docs\shopify-mapping-inventory-manual.md",
+  [string]$OutputPath = "D:\Projects\My project\carbon-gen\Shopify_Mapping_Inventory_Manual_v1.docx",
+  [string]$Title = "Shopify Mapping Inventory Operations Manual (Draft)"
 )
+
+if (-not (Test-Path -LiteralPath $InputPath)) {
+  throw "Input file not found: $InputPath"
+}
+
+$NowUtc = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
 
 function Escape-Xml([string]$s) {
   if ($null -eq $s) { return "" }
   return $s.Replace("&","&amp;").Replace("<","&lt;").Replace(">","&gt;").Replace('"',"&quot;").Replace("'","&apos;")
 }
 
-$paragraphs = ($lines | ForEach-Object { "<w:p><w:r><w:t xml:space=`"preserve`">$(Escape-Xml $_)</w:t></w:r></w:p>" }) -join "`n"
+function Build-ParagraphXml([string]$line) {
+  if ($line -match '^\s*#{1,6}\s+(.*)$') {
+    $text = $Matches[1].Trim()
+    return "<w:p><w:r><w:rPr><w:b/></w:rPr><w:t xml:space=`"preserve`">$(Escape-Xml $text)</w:t></w:r></w:p>"
+  }
+  return "<w:p><w:r><w:t xml:space=`"preserve`">$(Escape-Xml $line)</w:t></w:r></w:p>"
+}
+
+$raw = Get-Content -LiteralPath $InputPath -Raw -Encoding UTF8
+$raw = $raw -replace "^\uFEFF", ""
+$lines = $raw -split "`r?`n"
+
+$paragraphs = ($lines | ForEach-Object { Build-ParagraphXml $_ }) -join "`n"
 
 $documentXml = @"
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -123,7 +85,7 @@ $appXml = @"
 Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
-if (Test-Path $OutputPath) { Remove-Item $OutputPath -Force }
+if (Test-Path -LiteralPath $OutputPath) { Remove-Item -LiteralPath $OutputPath -Force }
 $fs = [System.IO.File]::Open($OutputPath, [System.IO.FileMode]::CreateNew)
 try {
   $zip = New-Object System.IO.Compression.ZipArchive($fs, [System.IO.Compression.ZipArchiveMode]::Create, $false)

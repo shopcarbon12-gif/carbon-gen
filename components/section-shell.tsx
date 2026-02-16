@@ -5,6 +5,9 @@ import Link from "next/link";
 const links = [
   { href: "/studio/images", label: "Image Studio" },
   { href: "/studio/seo", label: "SEO Manager" },
+  { href: "/studio/rfid-price-tag", label: "RFID Price Tag" },
+  { href: "/studio/lightspeed-catalog", label: "Lightspeed Catalog" },
+  { href: "/studio/shopify-mapping-inventory", label: "Shopify Mapping Inventory" },
   { href: "/studio/video", label: "Motion Studio" },
   { href: "/studio/social", label: "Ad Generator" },
   { href: "/ops/inventory", label: "Collection Mapper" },
@@ -63,6 +66,7 @@ export function SectionShell() {
           padding: 9px 14px;
           font-size: 0.84rem;
           font-weight: 700;
+          white-space: nowrap;
           transition: 150ms ease;
         }
         .nav-chip:hover {

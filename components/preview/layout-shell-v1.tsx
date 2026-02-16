@@ -60,7 +60,7 @@ function getWorkspaceCopy(key: PreviewKey) {
         title: "Image Studio",
         subtitle:
           "Model uploads, item references, panel generation, crop tools, and prompt troubleshooting.",
-        chips: ["Model Registry", "Panel 1-4", "2:3 Crop", "OpenAI Debug"],
+        chips: ["Model Registry", "Panel 1-4", "3:4 Crop", "OpenAI Debug"],
       };
     case "video":
       return {

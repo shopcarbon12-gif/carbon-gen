@@ -1,9 +1,53 @@
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 const root = process.cwd();
 const mapsRoot = path.join(root, ".next", "dev");
-const targetPrefix = "file:///C:/Users/Elior/Desktop/carbon-gen/";
+
+function withTrailingSlash(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  return text.endsWith("/") ? text : `${text}/`;
+}
+
+function prefixVariants(value) {
+  const base = withTrailingSlash(value);
+  if (!base) return [];
+  const out = [base];
+  try {
+    const decoded = withTrailingSlash(decodeURI(base));
+    if (decoded && !out.includes(decoded)) out.push(decoded);
+  } catch {
+    // ignore malformed URI sequences
+  }
+  return out;
+}
+
+const envPrefixes = String(process.env.RECOVER_MAP_SOURCE_PREFIXES || "")
+  .split(",")
+  .map((item) => item.trim())
+  .filter(Boolean);
+
+const targetPrefixes = Array.from(
+  new Set(
+    [
+      pathToFileURL(root).href,
+      // legacy fallback from previous workspace location
+      "file:///C:/Users/Elior/Desktop/carbon-gen/",
+      ...envPrefixes,
+    ].flatMap(prefixVariants)
+  )
+);
+
+function matchSourcePrefix(src) {
+  for (const prefix of targetPrefixes) {
+    if (src.startsWith(prefix)) {
+      return prefix;
+    }
+  }
+  return null;
+}
 
 function walk(dir, out = []) {
   for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -24,12 +68,13 @@ function pushEntries(mapObj, acc) {
     for (let i = 0; i < mapObj.sources.length; i++) {
       const src = mapObj.sources[i];
       const content = mapObj.sourcesContent[i];
+      const prefix = typeof src === "string" ? matchSourcePrefix(src) : null;
       if (
         typeof src === "string" &&
-        src.startsWith(targetPrefix) &&
+        prefix &&
         typeof content === "string"
       ) {
-        acc.push({ src, content });
+        acc.push({ src, content, prefix });
       }
     }
   }
@@ -41,8 +86,8 @@ function pushEntries(mapObj, acc) {
   }
 }
 
-function normalizeRel(src) {
-  let rel = src.slice(targetPrefix.length);
+function normalizeRel(hit) {
+  let rel = hit.src.slice(hit.prefix.length);
   rel = rel.split("?")[0].split("#")[0];
   rel = decodeURIComponent(rel).replace(/\\/g, "/").replace(/^\/+/, "");
   rel = rel.replace(/\u0000/g, "").trim();
@@ -83,7 +128,7 @@ for (const file of files) {
   pushEntries(obj, hits);
 
   for (const hit of hits) {
-    const rel = normalizeRel(hit.src);
+    const rel = normalizeRel(hit);
     if (!rel || rel.endsWith("/")) continue;
     if (rel.includes("/__nextjs-internal-proxy.mjs")) continue;
     if (/\.(tsx|ts|js|mjs|css)\/.+/.test(rel)) continue;

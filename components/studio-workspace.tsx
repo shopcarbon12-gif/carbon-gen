@@ -19,8 +19,8 @@ import {
 const panels = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }];
 
 const CATALOG_PAGE_SIZE = 10;
-const SPLIT_TARGET_WIDTH = 770;
-const SPLIT_TARGET_HEIGHT = 1155;
+const SPLIT_TARGET_WIDTH = 900;
+const SPLIT_TARGET_HEIGHT = 1200;
 const FLAT_SPLIT_TARGET_WIDTH = 900;
 const FLAT_SPLIT_TARGET_HEIGHT = 1200;
 const PUSH_TRANSFER_STORAGE_KEY = "cg_push_transfer_v1";
@@ -124,6 +124,16 @@ type PushVariant = {
   variantCount: number;
 };
 
+type BarcodeDetectionLike = {
+  rawValue?: string;
+};
+
+type BarcodeDetectorLike = {
+  detect: (source: CanvasImageSource) => Promise<BarcodeDetectionLike[]>;
+};
+
+type BarcodeDetectorCtorLike = new (options?: { formats?: string[] }) => BarcodeDetectorLike;
+
 const IMAGE_FILE_EXT_RE = /\.(avif|bmp|gif|heic|heif|jpeg|jpg|png|tif|tiff|webp)$/i;
 
 function isImageLikeFile(file: File) {
@@ -177,6 +187,13 @@ function sanitizeBarcodeInput(value: string) {
     .toLowerCase()
     .replace(/[^c0-9]/g, "")
     .slice(0, 9);
+}
+
+function normalizePromptInstruction(value: unknown, maxLen = 1200) {
+  return String(value || "")
+    .replace(/\r/g, "")
+    .trim()
+    .slice(0, maxLen);
 }
 
 function fileToDataUrl(file: File) {
@@ -332,9 +349,12 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   const [modelFiles, setModelFiles] = useState<File[]>([]);
   const [itemFiles, setItemFiles] = useState<File[]>([]);
   const [itemType, setItemType] = useState("");
-  const [itemTypeDetecting, setItemTypeDetecting] = useState(false);
+  const [, setItemTypeDetecting] = useState(false);
   const [itemBarcode, setItemBarcode] = useState("");
   const [itemBarcodeSaved, setItemBarcodeSaved] = useState("");
+  const [barcodeScannerOpen, setBarcodeScannerOpen] = useState(false);
+  const [barcodeScannerBusy, setBarcodeScannerBusy] = useState(false);
+  const [barcodeScannerError, setBarcodeScannerError] = useState<string | null>(null);
   const [dropboxSearching, setDropboxSearching] = useState(false);
   const [dropboxResults, setDropboxResults] = useState<DropboxImageResult[]>([]);
   const [dropboxFolderResults, setDropboxFolderResults] = useState<DropboxFolderResult[]>([]);
@@ -405,6 +425,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   >([]);
   const [selectedModelId, setSelectedModelId] = useState("");
   const [itemReferenceUrls, setItemReferenceUrls] = useState<string[]>([]);
+  const [itemStyleInstructions, setItemStyleInstructions] = useState("");
+  const [regenerationComments, setRegenerationComments] = useState("");
   const [itemFlatCompositeBase64, setItemFlatCompositeBase64] = useState<string | null>(null);
   const [itemFlatSplitImages, setItemFlatSplitImages] = useState<ItemFlatSplitImage[]>([]);
   const [addingFlatSplitIds, setAddingFlatSplitIds] = useState<string[]>([]);
@@ -413,6 +435,10 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   const modelFolderRef = useRef<HTMLInputElement | null>(null);
   const itemPickerRef = useRef<HTMLInputElement | null>(null);
   const itemFolderRef = useRef<HTMLInputElement | null>(null);
+  const itemCameraRef = useRef<HTMLInputElement | null>(null);
+  const barcodeScannerVideoRef = useRef<HTMLVideoElement | null>(null);
+  const barcodeScannerRafRef = useRef<number | null>(null);
+  const barcodeScannerStreamRef = useRef<MediaStream | null>(null);
   const finalResultPickerRef = useRef<HTMLInputElement | null>(null);
   const finalResultFolderRef = useRef<HTMLInputElement | null>(null);
   const pushPickerRef = useRef<HTMLInputElement | null>(null);
@@ -482,6 +508,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   const [pickerMaskVisible, setPickerMaskVisible] = useState(false);
   const pickerMaskTimerRef = useRef<number | null>(null);
   const [workspaceHydrated, setWorkspaceHydrated] = useState(false);
+  const [modelRegistryCollapsed, setModelRegistryCollapsed] = useState(true);
+  const modelRegistryDefaultAppliedRef = useRef(false);
   const itemTypeDetectionSourceRef = useRef("");
   const itemTypeDetectionRequestRef = useRef(0);
 
@@ -569,6 +597,142 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     },
     [hidePickerMask]
   );
+
+  const stopBarcodeScannerSession = useCallback(() => {
+    if (typeof window !== "undefined" && barcodeScannerRafRef.current !== null) {
+      window.cancelAnimationFrame(barcodeScannerRafRef.current);
+      barcodeScannerRafRef.current = null;
+    }
+    const stream = barcodeScannerStreamRef.current;
+    if (stream) {
+      stream.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch {
+          // Ignore track stop errors during cleanup.
+        }
+      });
+      barcodeScannerStreamRef.current = null;
+    }
+    const video = barcodeScannerVideoRef.current;
+    if (video) {
+      video.srcObject = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!barcodeScannerOpen) {
+      stopBarcodeScannerSession();
+      return;
+    }
+    if (typeof window === "undefined" || typeof navigator === "undefined") {
+      const message = "Camera scanning is not available in this environment.";
+      setBarcodeScannerError(message);
+      setError(message);
+      setBarcodeScannerOpen(false);
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      const message = "Camera access is not available in this browser.";
+      setBarcodeScannerError(message);
+      setError(message);
+      setBarcodeScannerOpen(false);
+      return;
+    }
+    const BarcodeDetectorCtor = (window as Window & { BarcodeDetector?: BarcodeDetectorCtorLike })
+      .BarcodeDetector;
+    if (!BarcodeDetectorCtor) {
+      const message = "Live barcode scan is not supported on this browser. Use Chrome/Edge mobile.";
+      setBarcodeScannerError(message);
+      setError(message);
+      setBarcodeScannerOpen(false);
+      return;
+    }
+
+    let cancelled = false;
+    let detectorBusy = false;
+    const detector = new BarcodeDetectorCtor({
+      formats: ["code_128", "ean_13", "ean_8", "upc_a", "upc_e"],
+    });
+
+    const scanFrame = async () => {
+      if (cancelled) return;
+      const video = barcodeScannerVideoRef.current;
+      if (
+        video &&
+        video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+        !detectorBusy
+      ) {
+        detectorBusy = true;
+        try {
+          const detections = await detector.detect(video);
+          const raw = String(
+            detections.find((row) => String(row?.rawValue || "").trim())?.rawValue || ""
+          ).trim();
+          if (raw) {
+            const normalized = sanitizeBarcodeInput(raw);
+            if (normalized) {
+              setItemBarcode(normalized);
+              setStatus(`Scanned barcode: ${normalized}`);
+              setError(null);
+              setBarcodeScannerError(null);
+              setBarcodeScannerOpen(false);
+              return;
+            }
+          }
+        } catch {
+          // Ignore per-frame detect errors while the stream is warming up.
+        } finally {
+          detectorBusy = false;
+        }
+      }
+      barcodeScannerRafRef.current = window.requestAnimationFrame(() => {
+        void scanFrame();
+      });
+    };
+
+    const start = async () => {
+      setBarcodeScannerBusy(true);
+      setBarcodeScannerError(null);
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: "environment" },
+          },
+          audio: false,
+        });
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        barcodeScannerStreamRef.current = stream;
+        const video = barcodeScannerVideoRef.current;
+        if (!video) throw new Error("Camera preview is unavailable.");
+        video.srcObject = stream;
+        await video.play().catch(() => undefined);
+        barcodeScannerRafRef.current = window.requestAnimationFrame(() => {
+          void scanFrame();
+        });
+      } catch (e: any) {
+        const message =
+          e?.message
+            ? `Unable to start camera scanner: ${e.message}`
+            : "Unable to start camera scanner.";
+        setBarcodeScannerError(message);
+        setError(message);
+        setBarcodeScannerOpen(false);
+      } finally {
+        if (!cancelled) setBarcodeScannerBusy(false);
+      }
+    };
+
+    void start();
+    return () => {
+      cancelled = true;
+      setBarcodeScannerBusy(false);
+      stopBarcodeScannerSession();
+    };
+  }, [barcodeScannerOpen, stopBarcodeScannerSession]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -782,10 +946,28 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         return json;
       })
       .then((json) => {
-        if (json?.models) setModels(json.models);
+        const nextModels = Array.isArray(json?.models) ? json.models : [];
+        setModels(nextModels);
+
+        // Default behavior:
+        // - If there are registered models, start collapsed.
+        // - If there are no models, keep it open.
+        // Apply auto-collapse once, but always force open on empty.
+        if (nextModels.length === 0) {
+          setModelRegistryCollapsed(false);
+          return;
+        }
+        if (!modelRegistryDefaultAppliedRef.current) {
+          setModelRegistryCollapsed(true);
+          modelRegistryDefaultAppliedRef.current = true;
+        }
       })
       .catch((e: any) => {
         setError(e?.message || "Failed to load models");
+        if (!modelRegistryDefaultAppliedRef.current) {
+          setModelRegistryCollapsed(false);
+          modelRegistryDefaultAppliedRef.current = true;
+        }
       });
   }
 
@@ -1806,6 +1988,12 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     setStatus(`Saved barcode: ${normalized}`);
   }
 
+  function openBarcodeScanner() {
+    setError(null);
+    setBarcodeScannerError(null);
+    setBarcodeScannerOpen(true);
+  }
+
   function clearSavedItemBarcode() {
     setItemBarcodeSaved("");
     setStatus("Saved barcode removed.");
@@ -2751,6 +2939,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     modelRefs: string[];
     itemRefs: string[];
     itemType: string;
+    itemStyleInstructions?: string;
+    regenerationComments?: string;
   }) {
     const poseLibrary = getPoseLibraryForGender(args.modelGender);
     const fullPoseLibraries = [
@@ -2782,6 +2972,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     const closeUpSubjectLine = promptItemType
       ? `- CLOSE-UP SUBJECT LOCK: the close-up subject must match section 0.5 item type "${promptItemType}" exactly.`
       : "- CLOSE-UP SUBJECT LOCK: the close-up subject must match section 0.5 item type exactly.";
+    const styleInstructions = normalizePromptInstruction(args.itemStyleInstructions);
+    const regenNotes = normalizePromptInstruction(args.regenerationComments);
 
     return [
       "CHATGPT-ONLY EXECUTION HARD LOCK (embedded by app)",
@@ -2795,6 +2987,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       "- Forbidden from item-ref humans: face shape, eyes, nose, lips, jawline, skin tone, hair texture/color/style/hairline, age cues, body proportions, tattoos, jewelry.",
       "- If any item ref conflicts with model identity, ignore the human and keep only garment details.",
       "- Identity source priority is absolute: MODEL refs first and only for person identity; item refs are garment-only.",
+      `- LOCKED ITEM TYPE PRIORITY: section 0.5 item type is "${promptItemType || args.itemType || "apparel item"}".`,
+      "- When references include multiple garment categories, prioritize and render only details that match the locked item type.",
+      "- Ignore conflicting category cues that do not match the locked item type.",
       "- Use item refs only for product attributes: shape, color, material, construction, and details.",
       "- If a full-body outfit image is provided, treat it as a single full-look reference and preserve the whole look structure (top, bottom, shoes, accessories).",
       "- If full-look + separate item images are both provided, match each extra item to the corresponding part in the full look and replace only those matched parts.",
@@ -2803,6 +2998,20 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       closeUpSubjectLine,
       closeUpCategoryRule,
       "- If a set or multiple items are present, choose the most detailed item that still matches the locked section 0.5 item type.",
+      ...(styleInstructions
+        ? [
+            "ITEM STYLING INSTRUCTIONS (SECTION 0.5, APPLY WITH LOCKS):",
+            "- Apply these fit/silhouette/style instructions while preserving exact product identity/details from item refs.",
+            styleInstructions,
+          ]
+        : []),
+      ...(regenNotes
+        ? [
+            "REGENERATION FEEDBACK (APPLY FOR THIS PASS):",
+            "- Use these corrections to improve accuracy while preserving all hard locks above.",
+            regenNotes,
+          ]
+        : []),
       "POSE SET SELECTION (HARD LOCK):",
       "- If MODEL.gender == male: use MALE POSE SET definitions unchanged.",
       "- If MODEL.gender == female: use FEMALE POSE SET definitions unchanged.",
@@ -2819,7 +3028,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       "Generate exactly ONE 2-up panel image.",
       "Age requirement: the model must be an adult 18+ only.",
       `PANEL ${args.panelNumber} HARD AGE LOCK: the model is over 18+.`,
-      "Canvas 1540x1155; left frame 770x1155; right frame 770x1155; thin divider.",
+      "Canvas 1536x1024; left frame 768x1024; right frame 768x1024; thin divider.",
       "No collage, no extra poses, no extra panels.",
       "Identity anchor override: use ONLY MODEL refs for face/body identity.",
       "Run-level identity lock: across all selected panels in this run, preserve the same exact model face identity.",
@@ -2857,8 +3066,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       "All non-active poses are reference only and must not execute in this image.",
       "Full-body framing lock (male + female): whenever an active pose is full-body, include full head and both feet entirely in frame. No cropping of head, hair, chin, toes, or shoes.",
       "Full-body no-crop applies to: Male poses 1,2,4 and Female poses 1,2,3,6.",
-      "2:3 split centering hard lock: each panel half is center-cropped to a final 2:3 portrait. Keep each active pose centered in its own half.",
-      "2:3 safe-zone math lock (for 1536x1024 panel output): each half 768x1024 is center-cropped to 682x1023. Keep head/body/garment details inside this inner center-safe zone.",
+      "3:4 split centering hard lock: each panel half is center-cropped to a final 3:4 portrait. Keep each active pose centered in its own half.",
+      "3:4 safe-zone math lock (for 1536x1024 panel output): each half is 768x1024 (already 3:4). Keep head/body/garment details inside this center-safe zone.",
       swimwearActive
         ? "Swimwear footwear lock (full-body): use clean flip-flops/sandals/water-shoes, or naturally uncovered feet."
         : "Footwear hard lock (full-body): for every full-body active pose, the model must wear visible shoes. Barefoot and socks-only are forbidden.",
@@ -2916,6 +3125,10 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       }
       let effectiveItemRefs = itemReferenceUrls;
       let effectiveItemType = resolvedItemType;
+      const normalizedItemStyleInstructions = normalizePromptInstruction(itemStyleInstructions);
+      const normalizedRegenerationComments = isRegenerate
+        ? normalizePromptInstruction(regenerationComments)
+        : "";
 
       if (!effectiveItemType) {
         throw new Error(
@@ -2923,19 +3136,26 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         );
       }
 
-      if (!effectiveItemRefs.length) {
-        const hasPendingItemInputs =
-          Boolean(itemFiles.length) || Boolean(selectedCatalogImages.length);
-        if (hasPendingItemInputs) {
-          setStatus("Saving section 0.5 item references before generation...");
-          const saved = await persistItemReferences({ silentSuccess: true });
-          effectiveItemRefs = saved.merged;
-          // Capture current resolved custom value (especially for "Other Apparel Item").
-          effectiveItemType = saved.effectiveItemType || effectiveItemType;
-          setStatus(
-            `${actionWord} ${useAllSelected ? `selected panel(s): ${queue.join(", ")}` : `panel ${queue[0]}`}...`
-          );
-        }
+      const catalogUploadedUrls = selectedCatalogImagesRef.current
+        .map((img) => String(img.uploadedUrl || "").trim())
+        .filter((url) => url.length > 0);
+      const hasUnsavedCatalogRefs = catalogUploadedUrls.some(
+        (url) => !effectiveItemRefs.includes(url)
+      );
+      const hasPendingItemInputs =
+        Boolean(itemFiles.length) ||
+        selectedCatalogImagesRef.current.some((img) => img.uploading) ||
+        hasUnsavedCatalogRefs;
+
+      if (hasPendingItemInputs) {
+        setStatus("Saving section 0.5 item references before generation...");
+        const saved = await persistItemReferences({ silentSuccess: true });
+        effectiveItemRefs = saved.merged;
+        // Capture current resolved custom value (especially for "Other Apparel Item").
+        effectiveItemType = saved.effectiveItemType || effectiveItemType;
+        setStatus(
+          `${actionWord} ${useAllSelected ? `selected panel(s): ${queue.join(", ")}` : `panel ${queue[0]}`}...`
+        );
       }
 
       if (!effectiveItemRefs.length) {
@@ -2976,6 +3196,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             modelRefs: selectedModel.ref_image_urls,
             itemRefs: effectiveItemRefs,
             itemType: effectiveItemType,
+            itemStyleInstructions: normalizedItemStyleInstructions,
+            regenerationComments: normalizedRegenerationComments,
           });
 
           const { resp, json } = await fetchJsonWithRetry(
@@ -3282,20 +3504,29 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     });
   }
 
-  async function splitPanelToTwoByThree(panel: number, b64: string) {
+  async function splitPanelToThreeByFour(panel: number, b64: string) {
     const img = await loadBase64Image(b64);
     const halfW = Math.floor(img.width / 2);
     const halfH = img.height;
+    const targetRatio = SPLIT_TARGET_WIDTH / SPLIT_TARGET_HEIGHT;
 
     function cropForSide(side: "left" | "right") {
       const sideOffsetX = side === "left" ? 0 : img.width - halfW;
-      // Normalize every split to a strict 770x1155 output frame without cutting content.
-      // Fit source half into target canvas with centered letterboxing.
-      const scale = Math.min(SPLIT_TARGET_WIDTH / halfW, SPLIT_TARGET_HEIGHT / halfH);
-      const drawW = Math.round(halfW * scale);
-      const drawH = Math.round(halfH * scale);
-      const drawX = Math.floor((SPLIT_TARGET_WIDTH - drawW) / 2);
-      const drawY = Math.floor((SPLIT_TARGET_HEIGHT - drawH) / 2);
+      let srcX = sideOffsetX;
+      let srcY = 0;
+      let srcW = halfW;
+      let srcH = halfH;
+      const sourceRatio = halfW / halfH;
+
+      // Normalize each half to strict 3:4 portrait via centered crop.
+      if (sourceRatio > targetRatio) {
+        srcW = Math.max(1, Math.round(halfH * targetRatio));
+        srcX = sideOffsetX + Math.floor((halfW - srcW) / 2);
+      } else if (sourceRatio < targetRatio) {
+        srcH = Math.max(1, Math.round(halfW / targetRatio));
+        srcY = Math.floor((halfH - srcH) / 2);
+      }
+
       const canvas = document.createElement("canvas");
       canvas.width = SPLIT_TARGET_WIDTH;
       canvas.height = SPLIT_TARGET_HEIGHT;
@@ -3307,14 +3538,14 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       ctx.imageSmoothingQuality = "high";
       ctx.drawImage(
         img,
-        sideOffsetX,
+        srcX,
+        srcY,
+        srcW,
+        srcH,
         0,
-        halfW,
-        halfH,
-        drawX,
-        drawY,
-        drawW,
-        drawH
+        0,
+        SPLIT_TARGET_WIDTH,
+        SPLIT_TARGET_HEIGHT
       );
       const dataUrl = canvas.toDataURL("image/png");
       return dataUrl.replace(/^data:image\/png;base64,/, "");
@@ -3564,7 +3795,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     }
   }
 
-  async function splitToTwoByThree() {
+  async function splitToThreeByFour() {
     try {
       setError(null);
       const targetPanels = (approvedPanels.length ? approvedPanels : selectedPanels).filter(
@@ -3581,7 +3812,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       for (const panel of targetPanels.sort((a, b) => a - b)) {
         const b64 = generatedPanels[panel];
         if (!b64) continue;
-        const crops = await splitPanelToTwoByThree(panel, b64);
+        const crops = await splitPanelToThreeByFour(panel, b64);
         const leftMeta = buildSplitFileName(panel, "left", gender, barcode);
         const rightMeta = buildSplitFileName(panel, "right", gender, barcode);
         allCrops.push(
@@ -3667,7 +3898,14 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             previewUrl: row?.url ? String(row.url) : null,
           };
         })
-        .filter((row: FinalResultUpload) => row.path.startsWith("final-results/"));
+        .filter((row: FinalResultUpload) => row.path.startsWith("final-results/"))
+        .sort((a: FinalResultUpload, b: FinalResultUpload) => {
+          const ta = a.uploadedAt ? Date.parse(a.uploadedAt) : Number.NaN;
+          const tb = b.uploadedAt ? Date.parse(b.uploadedAt) : Number.NaN;
+          const safeA = Number.isFinite(ta) ? ta : 0;
+          const safeB = Number.isFinite(tb) ? tb : 0;
+          return safeB - safeA;
+        });
       setFinalResultUploads(mapped);
       setSelectedFinalResultUploadIds([]);
       setStatus(`Loaded ${mapped.length} previous final result item(s).`);
@@ -3676,6 +3914,14 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     } finally {
       setFinalResultsLoading(false);
     }
+  }
+
+  async function toggleFinalResultUploadsVisibility() {
+    if (finalResultsVisible) {
+      setFinalResultsVisible(false);
+      return;
+    }
+    await loadFinalResultUploads();
   }
 
   function toggleFinalResultUploadSelection(id: string) {
@@ -3839,6 +4085,41 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     });
   }
 
+  function buildDialogGenerationContextSummary() {
+    const selectedModel = models.find((m) => m.model_id === selectedModelId);
+    const selectedPanelsSorted = uniqueSortedPanels(selectedPanels);
+    const approvedPanelsSorted = uniqueSortedPanels(approvedPanels);
+    const generatedPanelNumbers = Object.keys(generatedPanels)
+      .map((k) => Number(k))
+      .filter((n) => Number.isFinite(n))
+      .sort((a, b) => a - b);
+    const catalogUploadingCount = selectedCatalogImages.filter((img) => img.uploading).length;
+    const catalogFailedCount = selectedCatalogImages.filter((img) => Boolean(img.uploadError)).length;
+    const recentItemRefs = itemReferenceUrls.slice(-10);
+    const normalizedStyleNotes = normalizePromptInstruction(itemStyleInstructions);
+    const normalizedRegenNotes = normalizePromptInstruction(regenerationComments);
+
+    return [
+      `Selected model: ${selectedModel ? `${selectedModel.name} (${selectedModel.gender})` : "none"}`,
+      `Item type (section 0.5): ${resolvedItemType || itemType || "not set"}`,
+      `Saved barcode: ${itemBarcodeSaved || "not set"}`,
+      `Saved item references count: ${itemReferenceUrls.length}`,
+      `Pending device item files: ${itemFiles.length}`,
+      `Selected cloud/catalog refs: ${selectedCatalogImages.length} (uploading: ${catalogUploadingCount}, failed: ${catalogFailedCount})`,
+      `Selected panels: ${selectedPanelsSorted.length ? selectedPanelsSorted.join(", ") : "none"}`,
+      `Panels currently generating: ${panelsInFlight.length ? panelsInFlight.join(", ") : "none"}`,
+      `Generated panels available: ${generatedPanelNumbers.length ? generatedPanelNumbers.join(", ") : "none"}`,
+      `Approved panels: ${approvedPanelsSorted.length ? approvedPanelsSorted.join(", ") : "none"}`,
+      status ? `Latest status: ${status}` : "",
+      error ? `Latest workspace error: ${error}` : "",
+      normalizedStyleNotes ? `Item style instructions: ${normalizedStyleNotes}` : "",
+      normalizedRegenNotes ? `Regeneration comments: ${normalizedRegenNotes}` : "",
+      recentItemRefs.length ? `Recent item ref URLs: ${recentItemRefs.join(" | ")}` : "",
+    ]
+      .filter((line) => Boolean(line))
+      .join("\n");
+  }
+
   async function sendDialogMessage() {
     const text = dialogInput.trim();
     if (!text || dialogLoading) return;
@@ -3855,6 +4136,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         body: JSON.stringify({
           messages: next,
           contextError: generateOpenAiResponse || "",
+          contextSummary: buildDialogGenerationContextSummary(),
+          contextScope: "studio_generation",
         }),
       });
       const json = await parseJsonResponse(resp);
@@ -4098,7 +4381,18 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         {showCreativeSections ? (
           <>
         <section className="card">
-          <div className="card-title">Model Registry</div>
+          <div className="model-registry-header">
+            <div className="card-title">Model Registry</div>
+            <button
+              className="ghost-btn"
+              type="button"
+              onClick={() => setModelRegistryCollapsed((prev) => !prev)}
+            >
+              {modelRegistryCollapsed ? "Show Registry" : "Done and Hide"}
+            </button>
+          </div>
+          {!modelRegistryCollapsed ? (
+            <>
           <p className="muted">Upload a model profile.</p>
           <div className="row">
             <input
@@ -4172,29 +4466,36 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               Choose folder
             </button>
           </div>
-          <div className="muted centered">
-            {modelPreviewItems.length
-              ? `${modelPreviewItems.length} files ready`
-              : "No files selected"}
-          </div>
-          {modelPreviewItems.length ? (
-            <div className="preview-grid model-registry-grid">
-              {modelPreviewItems.map((file) => (
-                <div className="preview-card model-registry-preview-card" key={file.id}>
-                  <img className="model-registry-preview-image" src={file.localUrl} alt={file.name} />
-                  {file.uploadedUrl ? (
-                    <button
-                      className="preview-remove"
-                      onClick={() => removeModelUpload(file)}
-                      type="button"
-                    >
-                      Remove
-                    </button>
-                  ) : null}
-                </div>
-              ))}
+          <div className="model-selected-area">
+            <div className="model-selected-header">
+              <div className="card-title">Selected Pictures</div>
+              <div className="muted">
+                {modelPreviewItems.length
+                  ? `${modelPreviewItems.length} files ready`
+                  : "No files selected"}
+              </div>
             </div>
-          ) : null}
+            {modelPreviewItems.length ? (
+              <div className="preview-grid model-registry-grid">
+                {modelPreviewItems.map((file) => (
+                  <div className="preview-card model-registry-preview-card" key={file.id}>
+                    <img className="model-registry-preview-image" src={file.localUrl} alt={file.name} />
+                    {file.uploadedUrl ? (
+                      <button
+                        className="preview-remove"
+                        onClick={() => removeModelUpload(file)}
+                        type="button"
+                      >
+                        Remove
+                      </button>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="muted centered">Selected pictures will appear here.</div>
+            )}
+          </div>
           <div className="row">
             <button className="btn ghost" type="button" onClick={onPreviousUploadsPrimaryAction}>
               {previousUploadsVisible
@@ -4210,9 +4511,11 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               {emptyingBucket ? "Emptying Storage..." : "Empty Storage"}
             </button>
           </div>
-          <button className="btn" onClick={createModel}>
-            Save Model
-          </button>
+          <div className="row">
+            <button className="btn" onClick={createModel}>
+              Save Model
+            </button>
+          </div>
           {(modelUploading || modelPreviewItems.some((p) => !p.uploadedUrl)) && (
             <div className="muted centered">
               Uploading{" "}
@@ -4220,10 +4523,14 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               {modelPreviewItems.length || modelUploadTotal}
             </div>
           )}
-          <div className="muted centered">
-            Registry: {models.length} model{models.length === 1 ? "" : "s"}
-          </div>
-          {previousUploadsVisible ? (
+            </>
+          ) : null}
+          {!modelRegistryCollapsed ? (
+            <div className="muted centered">
+              Registry: {models.length} model{models.length === 1 ? "" : "s"}
+            </div>
+          ) : null}
+          {!modelRegistryCollapsed && previousUploadsVisible ? (
             <div className="card">
               <div className="card-title">Previous Uploads (Model Registry)</div>
               <p className="muted">
@@ -4311,12 +4618,16 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                 </div>
               ))}
             </div>
+          ) : (
+            <div className="muted centered">No models yet.</div>
+          )}
+          {!modelRegistryCollapsed ? (
+            <div className="centered">
+              <button className="ghost-btn danger" type="button" onClick={resetModels}>
+                Reset all models
+              </button>
+            </div>
           ) : null}
-          <div className="centered">
-            <button className="ghost-btn danger" type="button" onClick={resetModels}>
-              Reset all models
-            </button>
-          </div>
         </section>
 
         <section className="card">
@@ -4329,13 +4640,13 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             <input
               value={itemType}
               onChange={(e) => setItemType(e.target.value)}
-              placeholder="Clothing type (auto-detected from selected image)"
+              placeholder="Clothing type"
             />
-          </div>
-          <div className="muted centered">
-            {itemTypeDetecting
-              ? "Scanning selected image to detect clothing type..."
-              : "Clothing type auto-fills when you select an image. You can edit it manually."}
+            <textarea
+              value={itemStyleInstructions}
+              onChange={(e) => setItemStyleInstructions(e.target.value)}
+              placeholder="Optional - extra styling instruction for accuracy"
+            />
           </div>
           <div className="row">
             <input
@@ -4343,6 +4654,29 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               onChange={(e) => setItemBarcode(sanitizeBarcodeInput(e.target.value))}
               placeholder="Item barcode (required: 7-9 digits, or C + 6-8 digits)"
             />
+            <button
+              className="btn ghost mobile-only-control mobile-camera-trigger"
+              type="button"
+              onClick={openBarcodeScanner}
+              disabled={barcodeScannerBusy}
+            >
+              <span className="camera-btn-inner">
+                <svg
+                  className="camera-btn-icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  <path d="M4 7h4l1.3-2h5.4L16 7h4v12H4z" />
+                  <circle cx="12" cy="13" r="4" />
+                </svg>
+                <span>{barcodeScannerBusy ? "Opening..." : "Scan"}</span>
+              </span>
+            </button>
             <button
               className="btn ghost"
               type="button"
@@ -4367,6 +4701,40 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                   : "Search Dropbox by Barcode"}
             </button>
           </div>
+          {barcodeScannerOpen ? (
+            <div className="barcode-scanner-overlay" role="dialog" aria-modal="true">
+              <div className="barcode-scanner-card">
+                <div className="barcode-scanner-head">
+                  <div className="card-title">Scan Barcode</div>
+                  <button
+                    className="ghost-btn"
+                    type="button"
+                    onClick={() => setBarcodeScannerOpen(false)}
+                  >
+                    Close
+                  </button>
+                </div>
+                <div className="barcode-scanner-frame">
+                  <video
+                    ref={barcodeScannerVideoRef}
+                    className="barcode-scanner-video"
+                    playsInline
+                    muted
+                    autoPlay
+                  />
+                  <div className="barcode-scanner-guide" aria-hidden>
+                    <div className="barcode-scanner-guide-box" />
+                  </div>
+                </div>
+                <div className="muted centered">
+                  Align Code128 barcode inside the frame.
+                </div>
+                {barcodeScannerError ? (
+                  <div className="barcode-scanner-error">{barcodeScannerError}</div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
           {itemBarcodeSaved ? (
             <div className="barcode-chip-row">
               <span className="barcode-chip">Saved barcode: {itemBarcodeSaved}</span>
@@ -4452,6 +4820,20 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               setItemFiles((prev) => mergeUniqueFiles(prev, filterImages(e.target.files || [])))
             }
           />
+          <input
+            ref={itemCameraRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const filtered = filterImages(e.target.files || []);
+              if (filtered.length) {
+                setItemFiles((prev) => mergeUniqueFiles(prev, filtered));
+              }
+              e.currentTarget.value = "";
+            }}
+          />
           <div className="picker-row">
             <button
               className="ghost-btn"
@@ -4467,6 +4849,99 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             >
               Choose folder
             </button>
+            <button
+              className="ghost-btn mobile-only-control mobile-camera-trigger"
+              type="button"
+              onClick={() => openInputPickerWithMask(itemCameraRef.current)}
+            >
+              <span className="camera-btn-inner">
+                <svg
+                  className="camera-btn-icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  <path d="M4 7h4l1.3-2h5.4L16 7h4v12H4z" />
+                  <circle cx="12" cy="13" r="4" />
+                </svg>
+                <span>Camera</span>
+              </span>
+            </button>
+          </div>
+          <div className="model-selected-area item-selected-area">
+            <div className="model-selected-header">
+              <div className="card-title">Selected Pictures</div>
+              <div className="muted">
+                {itemFiles.length ? `${itemFiles.length} device files ready` : "No device files selected"} |{" "}
+                {selectedCatalogImages.length
+                  ? `${selectedCatalogImages.length} cloud/catalog images selected`
+                  : "No cloud/catalog images selected"}
+                {selectedCatalogImages.some((img) => img.uploading)
+                  ? ` | ${selectedCatalogImages.filter((img) => img.uploading).length} uploading`
+                  : ""}
+                {itemUploadCount ? ` | Last upload: ${itemUploadCount} files` : ""}
+              </div>
+            </div>
+            {!itemPreviews.length && !selectedCatalogImages.length ? (
+              <div className="muted centered">Selected pictures will appear here.</div>
+            ) : null}
+            {itemPreviews.length ? (
+              <div className="preview-grid item-selected-grid">
+                {itemPreviews.map((file, idx) => (
+                  <div className="preview-card" key={file.url}>
+                    <button
+                      type="button"
+                      className="preview-remove-corner"
+                      onClick={() => removeItemFileAt(idx)}
+                      aria-label={`Remove ${file.name}`}
+                    >
+                      X
+                    </button>
+                    <img src={file.url} alt={file.name} />
+                    <div className="preview-name">{file.name}</div>
+                    <div className="preview-source">Source: Device upload</div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {selectedCatalogImages.length ? (
+              <div className="preview-grid item-selected-grid">
+                {selectedCatalogImages.map((img) => (
+                  <div className="preview-card item-catalog-selected-card" key={img.id}>
+                    <button
+                      type="button"
+                      className="preview-remove-corner"
+                      onClick={() => removeCatalogSelection(img.id)}
+                      aria-label={`Remove ${img.title}`}
+                    >
+                      X
+                    </button>
+                    <img className="item-catalog-selected-image" src={img.url} alt={img.title} />
+                    <div className="preview-name">
+                      {img.uploading
+                        ? "Uploading..."
+                        : img.uploadError
+                          ? "Upload failed (click product image to retry)"
+                          : "Ready"}
+                    </div>
+                    <div className="preview-source">
+                      Source:{" "}
+                      {img.source === "dropbox"
+                        ? "Dropbox"
+                        : img.source === "generated_flat"
+                          ? "Generated flat (3:4)"
+                          : img.source === "final_results_storage"
+                            ? "Final Results (storage)"
+                          : "Shopify catalog"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
           <div className="row">
             <button
@@ -4644,69 +5119,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                 </div>
               ) : null}
           </div>
-          <div className="muted centered">
-            {itemFiles.length ? `${itemFiles.length} device files ready` : "No device files selected"} |{" "}
-            {selectedCatalogImages.length
-              ? `${selectedCatalogImages.length} cloud/catalog images selected`
-              : "No cloud/catalog images selected"}
-            {selectedCatalogImages.some((img) => img.uploading)
-              ? ` | ${selectedCatalogImages.filter((img) => img.uploading).length} uploading`
-              : ""}
-            {itemUploadCount ? ` | Last upload: ${itemUploadCount} files` : ""}
-          </div>
-          {itemPreviews.length ? (
-            <div className="preview-grid item-selected-grid">
-              {itemPreviews.map((file, idx) => (
-                <div className="preview-card" key={file.url}>
-                  <button
-                    type="button"
-                    className="preview-remove-corner"
-                    onClick={() => removeItemFileAt(idx)}
-                    aria-label={`Remove ${file.name}`}
-                  >
-                    X
-                  </button>
-                  <img src={file.url} alt={file.name} />
-                  <div className="preview-name">{file.name}</div>
-                  <div className="preview-source">Source: Device upload</div>
-                </div>
-              ))}
-            </div>
-          ) : null}
-          {selectedCatalogImages.length ? (
-            <div className="preview-grid item-selected-grid">
-              {selectedCatalogImages.map((img) => (
-                <div className="preview-card item-catalog-selected-card" key={img.id}>
-                  <button
-                    type="button"
-                    className="preview-remove-corner"
-                    onClick={() => removeCatalogSelection(img.id)}
-                    aria-label={`Remove ${img.title}`}
-                  >
-                    X
-                  </button>
-                  <img className="item-catalog-selected-image" src={img.url} alt={img.title} />
-                  <div className="preview-name">
-                    {img.uploading
-                      ? "Uploading..."
-                      : img.uploadError
-                        ? "Upload failed (click product image to retry)"
-                        : "Ready"}
-                  </div>
-                  <div className="preview-source">
-                    Source:{" "}
-                    {img.source === "dropbox"
-                      ? "Dropbox"
-                      : img.source === "generated_flat"
-                        ? "Generated flat (3:4)"
-                        : img.source === "final_results_storage"
-                          ? "Final Results (storage)"
-                        : "Shopify catalog"}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : null}
           <div className="row">
             <button className="btn" type="button" onClick={uploadItems}>
               Save Item References + Type
@@ -4791,7 +5203,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         <section className="card">
           <div className="card-title">Image Generation</div>
           <p className="muted">
-            Select a panel and generate. Approve or regenerate. Split into 2:3 crops after approval.
+            Select a panel and generate. Approve or regenerate. Split into 3:4 crops after approval.
           </p>
           <div className="row">
             <select
@@ -4907,21 +5319,44 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               );
             })}
           </div>
+          <div className="generation-actions-layout">
+            <div className="generation-button-stack">
+              <button
+                className="btn"
+                onClick={() => generatePanels("generate_selected")}
+                disabled={panelGenerating}
+              >
+                {panelGenerating
+                  ? "Generating..."
+                  : `Generate Selected (${selectedPanels.length})`}
+              </button>
+              <button
+                className="btn ghost"
+                onClick={() => generatePanels("regenerate_selected")}
+                disabled={panelGenerating}
+              >
+                {panelGenerating
+                  ? "Generating..."
+                  : `Regenerate Selected (${selectedPanels.length})`}
+              </button>
+            </div>
+            <div className="generation-comments-wrap">
+              <textarea
+                value={regenerationComments}
+                onChange={(e) => setRegenerationComments(e.target.value)}
+                placeholder='Regeneration comments to improve accuracy (example: "make fit less oversized", "match logo placement exactly", "keep sleeves tighter").'
+              />
+              <div className="muted generation-comments-note">
+                This note is used when you click Regenerate Selected.
+              </div>
+            </div>
+          </div>
           <div className="row">
-            <button
-              className="btn"
-              onClick={() => generatePanels("generate_selected")}
-              disabled={panelGenerating}
-            >
-              {panelGenerating
-                ? "Generating..."
-                : `Generate Selected (${selectedPanels.length})`}
-            </button>
             <button className="btn ghost" onClick={approveSelectedPanels}>
               Approve Selected
             </button>
-            <button className="btn ghost" onClick={splitToTwoByThree}>
-              Split to 2:3
+            <button className="btn ghost" onClick={splitToThreeByFour}>
+              Split to 3:4
             </button>
           </div>
           <div className="card chat-inline-fallback">
@@ -4931,7 +5366,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                 {dialogLoading ? "WORKING" : "READY"}
               </span>
             </div>
-            <p className="chat-side-sub">Ask anything.</p>
+            <p className="chat-side-sub">Ask about generation issues, failures, or workflow.</p>
             <div ref={inlineChatLogRef} className="dialog-log">
               {dialogMessages.length ? (
                 dialogMessages.map((msg, idx) => (
@@ -5089,7 +5524,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                       <img
                         className="split-result-image"
                         src={`data:image/png;base64,${crop.imageBase64}`}
-                        alt={`Pose ${crop.poseNumber} 2:3`}
+                        alt={`Pose ${crop.poseNumber} 3:4`}
                       />
                       <div className="preview-name">{crop.fileName}</div>
                       {crop.uploadedUrl ? <div className="preview-source">Saved</div> : null}
@@ -5143,8 +5578,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               </button>
             </div>
             <div className="row">
-              <button className="btn ghost" type="button" onClick={loadFinalResultUploads}>
-                Load Previous Items
+              <button className="btn ghost" type="button" onClick={toggleFinalResultUploadsVisibility}>
+                {finalResultsVisible ? "Hide Previous Items" : "Load Previous Items"}
               </button>
               <button
                 className="btn ghost"
@@ -5524,7 +5959,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
 
       <style jsx>{`
         .page {
-          --page-inline-gap: clamp(16px, 2vw, 28px);
+          --page-inline-gap: 13px;
           padding: calc(var(--integration-panel-top, 89px) - 58px) 6vw 0;
           min-height: calc(100vh - 58px);
           min-height: calc(100dvh - 58px);
@@ -5771,6 +6206,12 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         .card-title {
           font-weight: 700;
         }
+        .model-registry-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+        }
         .grid {
           display: grid;
           gap: 16px;
@@ -5816,6 +6257,97 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           display: flex;
           justify-content: center;
           gap: 10px;
+        }
+        .mobile-only-control {
+          display: none;
+        }
+        .mobile-camera-trigger {
+          align-items: center;
+          justify-content: center;
+        }
+        .camera-btn-inner {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+        }
+        .camera-btn-icon {
+          width: 14px;
+          height: 14px;
+          display: block;
+          flex-shrink: 0;
+        }
+        .barcode-scanner-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 1100;
+          background: rgba(2, 6, 23, 0.8);
+          display: grid;
+          place-items: center;
+          padding: 14px;
+        }
+        .barcode-scanner-card {
+          width: min(460px, 94vw);
+          border: 1px solid rgba(255, 255, 255, 0.34);
+          border-radius: 14px;
+          background: rgba(15, 23, 42, 0.95);
+          color: #f8fafc;
+          padding: 12px;
+          display: grid;
+          gap: 10px;
+        }
+        .barcode-scanner-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+        }
+        .barcode-scanner-frame {
+          position: relative;
+          border-radius: 12px;
+          overflow: hidden;
+          background: #020617;
+          aspect-ratio: 3 / 4;
+        }
+        .barcode-scanner-video {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          display: block;
+        }
+        .barcode-scanner-guide {
+          position: absolute;
+          inset: 0;
+          display: grid;
+          place-items: center;
+          pointer-events: none;
+        }
+        .barcode-scanner-guide-box {
+          width: 76%;
+          height: 34%;
+          border: 2px solid rgba(52, 211, 153, 0.95);
+          border-radius: 10px;
+          box-shadow: 0 0 0 999px rgba(2, 6, 23, 0.32);
+        }
+        .barcode-scanner-error {
+          color: #fecaca;
+          font-size: 0.85rem;
+          text-align: center;
+        }
+        .model-selected-area {
+          border: 1px dashed #cbd5e1;
+          border-radius: 12px;
+          padding: 12px;
+          background: #0000001a;
+          display: grid;
+          gap: 10px;
+        }
+        .model-selected-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          flex-wrap: wrap;
         }
         .source-note {
           margin-top: 2px;
@@ -6298,6 +6830,29 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           display: grid;
           gap: 10px;
           grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        }
+        .generation-actions-layout {
+          display: grid;
+          gap: 10px;
+          grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+          align-items: start;
+        }
+        .generation-button-stack {
+          display: grid;
+          gap: 10px;
+        }
+        .generation-button-stack .btn {
+          width: 100%;
+        }
+        .generation-comments-wrap {
+          display: grid;
+          gap: 8px;
+        }
+        .generation-comments-wrap textarea {
+          min-height: 88px;
+        }
+        .generation-comments-note {
+          text-align: left;
         }
         .panel-row {
           display: flex;
@@ -6788,6 +7343,12 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           }
         }
         @media (max-width: 900px) {
+          .mobile-only-control {
+            display: inline-flex;
+          }
+          .generation-actions-layout {
+            grid-template-columns: 1fr;
+          }
           .status-bar {
             top: 78px;
             left: var(--page-inline-gap);

@@ -24,7 +24,12 @@ let endpointCache: EndpointCache | null = null;
 
 const ENDPOINT_CACHE_MS = 60_000;
 const ENDPOINT_PROBE_TIMEOUT_MS = 4500;
-const DEFAULT_INTEGRATION_ENDPOINTS = ["/api/health", "/api/dropbox/status", "/api/shopify/status"];
+const DEFAULT_INTEGRATION_ENDPOINTS = [
+  "/api/health",
+  "/api/dropbox/status",
+  "/api/shopify/status",
+  "/api/lightspeed/status",
+];
 
 function titleCase(value: string) {
   return value
@@ -36,6 +41,7 @@ function titleCase(value: string) {
 
 function endpointToName(endpoint: string) {
   if (endpoint === "/api/health") return "Core API";
+  if (endpoint === "/api/lightspeed/status") return "Lightspeed API";
 
   const segments = endpoint
     .replace(/^\/api\//, "")

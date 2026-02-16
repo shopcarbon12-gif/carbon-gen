@@ -94,7 +94,7 @@ export function buildMasterPanelPrompt(args: {
     mappingText,
     "Generate exactly ONE 2-up panel image.",
     "Age requirement: the model must be an adult 18+ only.",
-    "Canvas 1540x1155; left frame 770x1155; right frame 770x1155; thin divider.",
+    "Canvas 1536x1024; left frame 768x1024; right frame 768x1024; thin divider.",
     "No collage, no extra poses, no extra panels.",
     "Identity anchor override: use ONLY MODEL refs for face/body identity.",
     "Identity consistency lock: keep the same exact person identity across every generated panel in this run (same face structure, eyes, nose, lips, skin tone, and hairline).",

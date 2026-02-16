@@ -2,7 +2,15 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 
 type NavItem = {
   href: string;
@@ -20,6 +28,11 @@ type IntegrationItem = {
   label: string;
 };
 
+const SHOPIFY_MAPPING_INVENTORY_ROOT = "/studio/shopify-mapping-inventory";
+const SHOPIFY_MAPPING_CONFIG_ROOT = `${SHOPIFY_MAPPING_INVENTORY_ROOT}/configurations`;
+const SHOPIFY_MAPPING_CONFIG_POS = `${SHOPIFY_MAPPING_CONFIG_ROOT}/pos`;
+const SHOPIFY_MAPPING_CONFIG_CART = `${SHOPIFY_MAPPING_CONFIG_ROOT}/cart`;
+
 const ACTIVE_ITEM_STYLE: CSSProperties = {
   color: "#fff",
   fontWeight: 600,
@@ -35,26 +48,49 @@ const ACTIVE_ITEM_STYLE: CSSProperties = {
 const navItems: NavItem[] = [
   { href: "/studio/images", label: "Image Generator" },
   { href: "/studio/seo", label: "SEO Manager" },
+  { href: "/studio/rfid-price-tag", label: "RFID Price Tag" },
+  { href: "/studio/lightspeed-catalog", label: "Lightspeed Catalog" },
+  { href: SHOPIFY_MAPPING_INVENTORY_ROOT, label: "Shopify Mapping Inventory" },
   { href: "/studio/video", label: "Video Promos (Reels)" },
   { href: "/studio/social", label: "Social Ads & Meta" },
   { href: "/ops/inventory", label: "Collection Mapping" },
   { href: "/dashboard", label: "Workspace Dashboard" },
 ];
 
-function isActive(pathname: string, href: string) {
-  const normalize = (value: string) => {
-    const v = String(value || "").trim();
-    if (!v || v === "/") return "/";
-    return v.replace(/\/+$/, "");
-  };
+const shopifyMappingSubmenuItems: NavItem[] = [
+  { href: SHOPIFY_MAPPING_INVENTORY_ROOT, label: "Shopify Mapping Inventory" },
+  { href: `${SHOPIFY_MAPPING_INVENTORY_ROOT}/workset`, label: "Workset" },
+  { href: `${SHOPIFY_MAPPING_INVENTORY_ROOT}/sales`, label: "Sales" },
+  { href: `${SHOPIFY_MAPPING_INVENTORY_ROOT}/inventory`, label: "Inventory" },
+  { href: `${SHOPIFY_MAPPING_INVENTORY_ROOT}/carts-inventory`, label: "Carts Inventory" },
+  { href: SHOPIFY_MAPPING_CONFIG_ROOT, label: "Configurations" },
+];
 
-  const current = normalize(pathname);
-  const target = normalize(href);
+const shopifyMappingConfigurationItems: NavItem[] = [
+  { href: SHOPIFY_MAPPING_CONFIG_POS, label: "POS Configurations" },
+  { href: SHOPIFY_MAPPING_CONFIG_CART, label: "Cart Configurations" },
+];
+
+const titleItems: NavItem[] = [
+  ...navItems,
+  ...shopifyMappingSubmenuItems.filter((item) => item.href !== SHOPIFY_MAPPING_INVENTORY_ROOT),
+  ...shopifyMappingConfigurationItems,
+];
+
+function normalizePath(value: string) {
+  const v = String(value || "").trim();
+  if (!v || v === "/") return "/";
+  return v.replace(/\/+$/, "");
+}
+
+function isActive(pathname: string, href: string) {
+  const current = normalizePath(pathname);
+  const target = normalizePath(href);
   return current === target || current.startsWith(`${target}/`);
 }
 
 function getCurrentTitle(pathname: string) {
-  const active = [...navItems]
+  const active = [...titleItems]
     .sort((a, b) => b.href.length - a.href.length)
     .find((item) => isActive(pathname, item.href));
 
@@ -74,6 +110,8 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
   const showChatPanel = true;
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPinned, setMenuPinned] = useState(false);
+  const [shopifySubmenuOpen, setShopifySubmenuOpen] = useState(false);
+  const [shopifyConfigSubmenuOpen, setShopifyConfigSubmenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [integrations, setIntegrations] = useState<IntegrationItem[]>([]);
   const [integrationsLoading, setIntegrationsLoading] = useState(true);
@@ -86,6 +124,9 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
   const mountedRef = useRef(true);
   const currentTitle = getCurrentTitle(pathname);
   const drawerOpen = menuOpen || menuPinned;
+  const [shopifyParentItem, ...shopifyChildItems] = shopifyMappingSubmenuItems;
+  const shopifyParentActive = normalizePath(pathname) === SHOPIFY_MAPPING_INVENTORY_ROOT;
+  const configurationsActive = isActive(pathname, SHOPIFY_MAPPING_CONFIG_ROOT);
 
   useEffect(() => {
     try {
@@ -131,6 +172,26 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     setMenuOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!drawerOpen) {
+      setShopifySubmenuOpen(false);
+      setShopifyConfigSubmenuOpen(false);
+    }
+  }, [drawerOpen]);
+
+  useEffect(() => {
+    if (!isActive(pathname, SHOPIFY_MAPPING_INVENTORY_ROOT)) {
+      setShopifySubmenuOpen(false);
+      setShopifyConfigSubmenuOpen(false);
+    }
+  }, [pathname]);
+
+  useEffect(() => {
+    if (isActive(pathname, SHOPIFY_MAPPING_CONFIG_ROOT)) {
+      setShopifyConfigSubmenuOpen(true);
+    }
   }, [pathname]);
 
   useEffect(() => {
@@ -223,6 +284,11 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
       if (next) setMenuOpen(true);
       return next;
     });
+  }
+
+  function navigateTo(href: string) {
+    setMenuOpen(false);
+    router.push(href);
   }
 
   async function onLogout() {
@@ -323,27 +389,143 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
         <nav className="carbon-panel glass-panel" aria-label="Carbon menu">
           <div className="carbon-brand">MENU</div>
 
-          <div className="carbon-menu">
-            {navItems.map((item) => {
-              const active = isActive(pathname, item.href);
-              return (
+          <div className="carbon-main">
+            <div className="carbon-menu" aria-hidden={shopifySubmenuOpen ? "true" : undefined}>
+              {navItems.map((item) => {
+                const active = isActive(pathname, item.href);
+                return (
+                  <button
+                    suppressHydrationWarning
+                    key={item.href}
+                    type="button"
+                    onClick={() => {
+                      if (item.href === SHOPIFY_MAPPING_INVENTORY_ROOT) {
+                        setShopifyConfigSubmenuOpen(false);
+                        setShopifySubmenuOpen(true);
+                        return;
+                      }
+                      setShopifySubmenuOpen(false);
+                      setShopifyConfigSubmenuOpen(false);
+                      navigateTo(item.href);
+                    }}
+                    aria-current={active ? "page" : undefined}
+                    data-active={active ? "true" : "false"}
+                    className={`carbon-item ${active ? "active" : ""}`}
+                    style={active ? ACTIVE_ITEM_STYLE : undefined}
+                  >
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <section
+              className={`carbon-submenu ${shopifySubmenuOpen ? "open" : ""}`}
+              aria-label="Shopify Mapping Inventory submenu"
+            >
+              <button
+                suppressHydrationWarning
+                type="button"
+                className="carbon-submenu-back-icon"
+                onClick={() => {
+                  setShopifySubmenuOpen(false);
+                  setShopifyConfigSubmenuOpen(false);
+                }}
+                aria-label="Back to main menu"
+              >
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+                  <path
+                    d="M15 6L9 12L15 18"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+              <div className="carbon-submenu-list">
                 <button
                   suppressHydrationWarning
-                  key={item.href}
                   type="button"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    router.push(item.href);
-                  }}
-                  aria-current={active ? "page" : undefined}
-                  data-active={active ? "true" : "false"}
-                  className={`carbon-item ${active ? "active" : ""}`}
-                  style={active ? ACTIVE_ITEM_STYLE : undefined}
+                  onClick={() => navigateTo(shopifyParentItem.href)}
+                  aria-current={shopifyParentActive ? "page" : undefined}
+                  data-active={shopifyParentActive ? "true" : "false"}
+                  className={`carbon-submenu-item parent ${shopifyParentActive ? "active" : ""}`}
                 >
-                  {item.label}
+                  {shopifyParentItem.label}
                 </button>
-              );
-            })}
+                {shopifyChildItems.map((item) => {
+                  const active = isActive(pathname, item.href);
+                  const isConfigRoot = item.href === SHOPIFY_MAPPING_CONFIG_ROOT;
+                  if (!isConfigRoot) {
+                    return (
+                      <button
+                        suppressHydrationWarning
+                        key={item.href}
+                        type="button"
+                        onClick={() => navigateTo(item.href)}
+                        aria-current={active ? "page" : undefined}
+                        data-active={active ? "true" : "false"}
+                        className={`carbon-submenu-item child ${active ? "active" : ""}`}
+                      >
+                        {item.label}
+                      </button>
+                    );
+                  }
+
+                  return (
+                    <Fragment key={item.href}>
+                      <button
+                        suppressHydrationWarning
+                        type="button"
+                        onClick={() => {
+                          setShopifyConfigSubmenuOpen((prev) => !prev);
+                          navigateTo(item.href);
+                        }}
+                        aria-current={configurationsActive ? "page" : undefined}
+                        data-active={configurationsActive ? "true" : "false"}
+                        aria-expanded={shopifyConfigSubmenuOpen}
+                        className={`carbon-submenu-item child with-caret ${
+                          configurationsActive ? "active" : ""
+                        }`}
+                      >
+                        <span>{item.label}</span>
+                        <span className={`submenu-caret ${shopifyConfigSubmenuOpen ? "open" : ""}`}>
+                          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+                            <path
+                              d="M8 10L12 14L16 10"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </span>
+                      </button>
+
+                      <div className={`carbon-config-children ${shopifyConfigSubmenuOpen ? "open" : ""}`}>
+                        {shopifyMappingConfigurationItems.map((configItem) => {
+                          const configActive = isActive(pathname, configItem.href);
+                          return (
+                            <button
+                              suppressHydrationWarning
+                              key={configItem.href}
+                              type="button"
+                              onClick={() => navigateTo(configItem.href)}
+                              aria-current={configActive ? "page" : undefined}
+                              data-active={configActive ? "true" : "false"}
+                              className={`carbon-submenu-item grandchild ${configActive ? "active" : ""}`}
+                            >
+                              {configItem.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </Fragment>
+                  );
+                })}
+              </div>
+            </section>
           </div>
           <div className="menu-footer">
             <button
@@ -351,8 +533,9 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
               className="menu-settings-btn"
               type="button"
               onClick={() => {
-                setMenuOpen(false);
-                router.push("/settings");
+                setShopifySubmenuOpen(false);
+                setShopifyConfigSubmenuOpen(false);
+                navigateTo("/settings");
               }}
             >
               SETTINGS
@@ -1189,11 +1372,157 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           text-transform: uppercase;
         }
         .carbon-menu {
+          position: relative;
           display: flex;
           flex-direction: column;
           gap: 18px;
           padding-top: 6px;
           flex: 1;
+          min-height: 0;
+          overflow-y: auto;
+          padding-right: 2px;
+        }
+        .carbon-main {
+          position: relative;
+          flex: 1;
+          min-height: 0;
+          display: flex;
+          flex-direction: column;
+        }
+        .carbon-submenu {
+          position: absolute;
+          inset: 0;
+          z-index: 2;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          padding: 8px 8px 14px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+          border-radius: 16px;
+          background: #5f5468;
+          transform: translateX(108%);
+          opacity: 0;
+          pointer-events: none;
+          transition:
+            transform 300ms cubic-bezier(0.22, 1, 0.36, 1),
+            opacity 180ms ease;
+        }
+        .carbon-submenu.open {
+          transform: translateX(0);
+          opacity: 1;
+          pointer-events: auto;
+        }
+        .carbon-submenu-back-icon {
+          width: 30px;
+          height: 30px;
+          min-width: 30px;
+          min-height: 30px;
+          border-radius: 999px;
+          border: 1px solid rgba(255, 255, 255, 0.26);
+          background: rgba(255, 255, 255, 0.04);
+          color: #ffffff;
+          display: grid;
+          place-items: center;
+          align-self: flex-start;
+          margin-left: 2px;
+          padding: 0;
+          cursor: pointer;
+        }
+        .carbon-submenu-back-icon svg {
+          width: 18px;
+          height: 18px;
+          display: block;
+        }
+        .carbon-submenu-list {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          overflow-y: auto;
+          min-height: 0;
+          padding-right: 2px;
+          padding-top: 2px;
+        }
+        .carbon-submenu-item {
+          background: transparent;
+          display: flex;
+          align-items: center;
+          justify-content: flex-start;
+          gap: 8px;
+          font-size: 14px;
+          color: #aaaaaa;
+          font-family: "Inter", sans-serif;
+          font-weight: 600;
+          line-height: 1.35;
+          letter-spacing: 0;
+          padding: 12px 15px;
+          border-radius: 10px;
+          border: 1px solid transparent;
+          user-select: none;
+          cursor: pointer;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .carbon-submenu-item.parent {
+          font-weight: 700;
+          color: rgba(255, 255, 255, 0.96);
+          justify-content: flex-start;
+          text-align: left;
+        }
+        .carbon-submenu-item.child {
+          padding-left: 30px;
+        }
+        .carbon-submenu-item.with-caret {
+          justify-content: space-between;
+          gap: 10px;
+        }
+        .submenu-caret {
+          width: 18px;
+          height: 18px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          flex: 0 0 auto;
+          color: rgba(255, 255, 255, 0.8);
+          transition: transform 180ms ease;
+        }
+        .submenu-caret svg {
+          width: 16px;
+          height: 16px;
+          display: block;
+        }
+        .submenu-caret.open {
+          transform: rotate(180deg);
+        }
+        .carbon-config-children {
+          display: none;
+          flex-direction: column;
+          gap: 8px;
+        }
+        .carbon-config-children.open {
+          display: flex;
+        }
+        .carbon-submenu-item.grandchild {
+          padding-left: 50px;
+          font-size: 13px;
+          color: rgba(226, 232, 240, 0.9);
+        }
+        .carbon-submenu-item.active {
+          color: #fff;
+          background: rgba(255, 255, 255, 0.1);
+          border-color: rgba(255, 255, 255, 0.05);
+        }
+        .carbon-submenu-item:hover,
+        .carbon-submenu-item:focus-visible {
+          transform: none !important;
+          opacity: 1 !important;
+          color: #fff;
+          font-weight: 600;
+          text-shadow: none;
+          outline: none;
+          background: rgba(255, 255, 255, 0.05);
+          border-color: transparent;
+          box-shadow: none;
         }
         .carbon-item {
           background: transparent;
@@ -1213,6 +1542,9 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           border: 1px solid transparent;
           user-select: none;
           cursor: pointer;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
           opacity: 0;
           transform: translateX(-8px);
           transition: 0.2s;
@@ -1241,6 +1573,12 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
         }
         .carbon-panel-wrap.open .carbon-item:nth-child(7) {
           transition-delay: 155ms;
+        }
+        .carbon-panel-wrap.open .carbon-item:nth-child(8) {
+          transition-delay: 175ms;
+        }
+        .carbon-panel-wrap.open .carbon-item:nth-child(9) {
+          transition-delay: 195ms;
         }
         .carbon-item:hover,
         .carbon-item:focus-visible {
@@ -1338,6 +1676,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           position: relative;
           min-height: 100vh;
           padding-top: 58px;
+          padding-left: var(--page-edge-gap);
           padding-right: var(--content-right-pad);
           will-change: padding-right;
           transition:

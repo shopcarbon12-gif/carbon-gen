@@ -21,6 +21,28 @@ type DropboxStatusResponse = {
   error?: string;
 };
 
+type LightspeedStatusResponse = {
+  ok?: boolean;
+  connected?: boolean;
+  label?: string;
+  clientIdSet?: boolean;
+  clientSecretSet?: boolean;
+  refreshTokenSet?: boolean;
+  domainPrefix?: string;
+  accountId?: string;
+  redirectUri?: string;
+  apiBase?: string;
+  credentialsReady?: boolean;
+  probe?: {
+    attempted?: boolean;
+    success?: boolean;
+    endpoint?: string | null;
+    message?: string;
+  };
+  checkedAt?: string;
+  error?: string;
+};
+
 type SessionUser = {
   id: string | null;
   username: string | null;
@@ -70,6 +92,10 @@ export default function SettingsPage() {
   const [dropboxConnectedAt, setDropboxConnectedAt] = useState<string | null>(null);
   const [dropboxLoading, setDropboxLoading] = useState(true);
   const [dropboxBusy, setDropboxBusy] = useState(false);
+  const [lightspeedConnected, setLightspeedConnected] = useState<boolean | null>(null);
+  const [lightspeedLoading, setLightspeedLoading] = useState(true);
+  const [lightspeedBusy, setLightspeedBusy] = useState(false);
+  const [lightspeedStatusData, setLightspeedStatusData] = useState<LightspeedStatusResponse | null>(null);
 
   const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -161,6 +187,24 @@ export default function SettingsPage() {
     }
   }, []);
 
+  const refreshLightspeedStatus = useCallback(async (manual = false) => {
+    if (manual) setLightspeedBusy(true);
+    setLightspeedLoading(true);
+    try {
+      const resp = await fetch("/api/lightspeed/status", { cache: "no-store" });
+      const json = (await resp.json().catch(() => ({}))) as LightspeedStatusResponse;
+      const connectedFlag = Boolean(json?.connected);
+      setLightspeedConnected(connectedFlag);
+      setLightspeedStatusData(json || null);
+    } catch {
+      setLightspeedConnected(false);
+      setLightspeedStatusData(null);
+    } finally {
+      setLightspeedLoading(false);
+      if (manual) setLightspeedBusy(false);
+    }
+  }, []);
+
   const refreshSession = useCallback(async () => {
     setAdminLoading(true);
     setAdminError(null);
@@ -234,8 +278,9 @@ export default function SettingsPage() {
       setError(`Dropbox: ${dropboxError}`);
     }
     void refreshDropboxStatus();
+    void refreshLightspeedStatus();
     void refreshSession();
-  }, [refreshDropboxStatus, refreshSession, refreshStatus]);
+  }, [refreshDropboxStatus, refreshLightspeedStatus, refreshSession, refreshStatus]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -455,16 +500,6 @@ export default function SettingsPage() {
         )}
       </section>
 
-      <section id="integration-core-api" className="card">
-        <div className="card-title">Core API</div>
-        <p className="muted">Workspace health endpoint used by integration monitoring.</p>
-        <div className="actions">
-          <a className="btn ghost" href="/api/health" target="_blank" rel="noreferrer">
-            Open Health Endpoint
-          </a>
-        </div>
-      </section>
-
       <section id="integration-shopify" className="card">
         <div className="card-title">Shopify Connection</div>
         <p className="muted">Add your store domain once, then connect/reconnect or disconnect from here.</p>
@@ -548,6 +583,42 @@ export default function SettingsPage() {
           >
             Refresh Status
           </button>
+        </div>
+      </section>
+
+      <section id="integration-lightspeed" className="card">
+        <div className="card-title">Lightspeed API</div>
+        <p className="muted">
+          RFID Price Tag catalog search and EPC mapping use these Lightspeed credentials.
+        </p>
+        <div className="status-row">
+          <span className={`status-dot ${lightspeedConnected ? "on" : "off"}`} />
+          <span>
+            {lightspeedLoading
+              ? "Checking connection..."
+              : lightspeedConnected
+                ? "Connected"
+                : "Not connected"}
+            {lightspeedStatusData?.checkedAt ? (
+              <em> - Checked {new Date(lightspeedStatusData.checkedAt).toLocaleString()}</em>
+            ) : null}
+          </span>
+        </div>
+        {lightspeedStatusData?.probe?.message ? (
+          <p className={`muted ${lightspeedConnected ? "" : "warn"}`}>
+            Probe: {lightspeedStatusData.probe.message}
+          </p>
+        ) : null}
+        <div className="actions">
+          <button className="btn ghost" onClick={() => void refreshLightspeedStatus(true)} disabled={lightspeedBusy}>
+            {lightspeedBusy ? "Refreshing..." : "Refresh Status"}
+          </button>
+          <a className="btn ghost" href="/api/lightspeed/status" target="_blank" rel="noreferrer">
+            Open Status Endpoint
+          </a>
+          <Link className="btn primary" href="/studio/rfid-price-tag">
+            Open RFID Price Tag
+          </Link>
         </div>
       </section>
 
@@ -641,6 +712,16 @@ export default function SettingsPage() {
         </section>
       )}
 
+      <section id="integration-core-api" className="card">
+        <div className="card-title">Core API</div>
+        <p className="muted">Workspace health endpoint used by integration monitoring.</p>
+        <div className="actions">
+          <a className="btn ghost" href="/api/health" target="_blank" rel="noreferrer">
+            Open Health Endpoint
+          </a>
+        </div>
+      </section>
+
       {(error || status || adminError || adminStatus) && (
         <div className="banner">
           {error ? <span className="error">Error: {error}</span> : null}
@@ -658,6 +739,14 @@ export default function SettingsPage() {
           color: #f8fafc;
           display: grid;
           gap: 14px;
+          max-height: calc(100vh - 92px);
+          overflow-y: auto;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+        .page::-webkit-scrollbar {
+          width: 0;
+          height: 0;
         }
         .nav {
           display: flex;
@@ -695,6 +784,9 @@ export default function SettingsPage() {
         }
         .muted {
           color: rgba(226, 232, 240, 0.82);
+        }
+        .muted.warn {
+          color: #fca5a5;
         }
         .status-row {
           display: flex;
