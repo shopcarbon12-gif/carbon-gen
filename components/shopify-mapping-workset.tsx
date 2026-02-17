@@ -577,7 +577,7 @@ export default function ShopifyMappingWorkset() {
         }
         .quick-chip {
           text-decoration: none;
-          border-radius: 999px;
+          border-radius: 10px;
           border: 1px solid rgba(255, 255, 255, 0.22);
           background: rgba(255, 255, 255, 0.06);
           color: rgba(248, 250, 252, 0.9);
@@ -659,7 +659,7 @@ export default function ShopifyMappingWorkset() {
           text-align: right;
         }
         .status-pill {
-          border-radius: 999px;
+          border-radius: 10px;
           min-height: 24px;
           padding: 0 10px;
           font-size: 0.72rem;
@@ -753,7 +753,7 @@ export default function ShopifyMappingWorkset() {
           white-space: nowrap;
         }
         .bar-wrap {
-          border-radius: 999px;
+          border-radius: 4px;
           height: 7px;
           background: rgba(255, 255, 255, 0.1);
           overflow: hidden;
@@ -828,3 +828,4 @@ export default function ShopifyMappingWorkset() {
     </main>
   );
 }
+

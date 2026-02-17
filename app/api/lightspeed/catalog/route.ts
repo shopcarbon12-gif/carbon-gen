@@ -7,6 +7,10 @@ export const dynamic = "force-dynamic";
 const DEFAULT_LS_TOKEN_URL = "https://cloud.merchantos.com/oauth/access_token.php";
 const PREFERRED_DEFAULT_SHOP = "CARBON JEANS COMPANY";
 const MAX_EXPORT_ROWS = 20_000;
+const LS_ITEM_PAGE_LIMIT = 500;
+const LS_ITEM_PAGE_LIMIT_FALLBACK = 100;
+const LS_MIN_REQUEST_INTERVAL_MS = 1100;
+const LS_RATE_LIMIT_RETRY_ATTEMPTS = 3;
 const ALLOWED_PAGE_SIZES = [100, 500] as const;
 const ALLOWED_SORT_FIELDS = [
   "item",
@@ -32,6 +36,7 @@ const CACHE_MS = {
 type CatalogRow = {
   id: string;
   itemId: string;
+  itemMatrixId: string;
   systemSku: string;
   customSku: string;
   description: string;
@@ -77,6 +82,9 @@ const lightspeedCategoryCache: {
   expiresAt: 0,
 };
 
+let lightspeedRequestChain: Promise<void> = Promise.resolve();
+let lightspeedLastRequestAt = 0;
+
 function toArray<T>(value: T | T[] | null | undefined): T[] {
   if (Array.isArray(value)) return value;
   if (value === undefined || value === null) return [];
@@ -87,6 +95,28 @@ function normalizeText(value: unknown) {
   return String(value ?? "").trim();
 }
 
+function isLikelyHtmlPayload(value: string) {
+  return /<!doctype html|<html\b|<head\b|<body\b|<title\b/i.test(value);
+}
+
+function summarizeHtmlPayload(rawBody: string) {
+  const title = normalizeText(rawBody.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]);
+  if (title) return title;
+  const heading = normalizeText(rawBody.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1]);
+  if (heading) return heading;
+  return "Upstream service returned an HTML error page.";
+}
+
+function sanitizeErrorDetail(value: unknown) {
+  const text = normalizeText(value);
+  if (!text) return "";
+  if (isLikelyHtmlPayload(text)) {
+    const summary = summarizeHtmlPayload(text);
+    return normalizeText(summary).slice(0, 220);
+  }
+  return text.replace(/\s+/g, " ").slice(0, 500);
+}
+
 function normalizeLower(value: unknown) {
   return normalizeText(value).toLowerCase();
 }
@@ -94,6 +124,26 @@ function normalizeLower(value: unknown) {
 function toBoolean(value: unknown) {
   const normalized = normalizeLower(value);
   return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on";
+}
+
+function delay(ms: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, Math.max(0, ms));
+  });
+}
+
+async function waitForLightspeedRequestSlot() {
+  const next = lightspeedRequestChain.then(async () => {
+    const now = Date.now();
+    const waitMs = Math.max(0, LS_MIN_REQUEST_INTERVAL_MS - (now - lightspeedLastRequestAt));
+    if (waitMs > 0) {
+      await delay(waitMs);
+    }
+    lightspeedLastRequestAt = Date.now();
+  });
+
+  lightspeedRequestChain = next.catch(() => undefined);
+  await next;
 }
 
 function toNumber(value: unknown) {
@@ -162,10 +212,10 @@ function getRSeriesResourceEndpoint(resource: string) {
 
 function readResponseError(parsedBody: any, rawBody: string, fallback = "request failed") {
   return (
-    normalizeText(parsedBody?.message) ||
-    normalizeText(parsedBody?.error) ||
-    normalizeText(parsedBody?.error_description) ||
-    normalizeText(rawBody).slice(0, 500) ||
+    sanitizeErrorDetail(parsedBody?.message) ||
+    sanitizeErrorDetail(parsedBody?.error) ||
+    sanitizeErrorDetail(parsedBody?.error_description) ||
+    sanitizeErrorDetail(rawBody) ||
     fallback
   );
 }
@@ -263,34 +313,54 @@ async function requestRSeriesList<T>(params: {
     url.searchParams.set(key, strValue);
   }
 
-  const response = await fetch(url.toString(), {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      Accept: "application/json",
-    },
-    signal: AbortSignal.timeout(20_000),
-  });
+  let lastError = `Lightspeed ${resource} request failed.`;
 
-  const rawBody = await response.text();
-  let parsedBody: any = {};
-  try {
-    parsedBody = JSON.parse(rawBody);
-  } catch {
-    parsedBody = { raw: rawBody };
+  for (let attempt = 1; attempt <= LS_RATE_LIMIT_RETRY_ATTEMPTS; attempt += 1) {
+    await waitForLightspeedRequestSlot();
+
+    const response = await fetch(url.toString(), {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json",
+      },
+      signal: AbortSignal.timeout(20_000),
+    });
+
+    const rawBody = await response.text();
+    let parsedBody: any = {};
+    try {
+      parsedBody = JSON.parse(rawBody);
+    } catch {
+      parsedBody = { raw: rawBody };
+    }
+
+    if (response.ok) {
+      const list = toArray(parsedBody?.[resource]) as T[];
+      const total = Number.parseInt(normalizeText(parsedBody?.["@attributes"]?.count), 10);
+      return {
+        rows: list,
+        totalCount: Number.isFinite(total) ? total : list.length,
+      };
+    }
+
+    const detail = readResponseError(parsedBody, rawBody);
+    const isRateLimited =
+      response.status === 429 || /rate\s*limit/i.test(detail);
+    lastError = `Lightspeed ${resource} request failed: ${detail}`;
+
+    if (!isRateLimited || attempt >= LS_RATE_LIMIT_RETRY_ATTEMPTS) {
+      throw new Error(lastError);
+    }
+
+    const retryAfterRaw = normalizeText(response.headers.get("retry-after"));
+    const retryAfterSeconds = Number.parseFloat(retryAfterRaw);
+    const retryWaitMs = Number.isFinite(retryAfterSeconds)
+      ? Math.max(1000, Math.round(retryAfterSeconds * 1000))
+      : 1200 * attempt;
+    await delay(retryWaitMs);
   }
 
-  if (!response.ok) {
-    throw new Error(
-      `Lightspeed ${resource} request failed: ${readResponseError(parsedBody, rawBody)}`
-    );
-  }
-
-  const list = toArray(parsedBody?.[resource]) as T[];
-  const total = Number.parseInt(normalizeText(parsedBody?.["@attributes"]?.count), 10);
-  return {
-    rows: list,
-    totalCount: Number.isFinite(total) ? total : list.length,
-  };
+  throw new Error(lastError);
 }
 
 function compareText(a: string, b: string) {
@@ -456,6 +526,7 @@ function normalizeCatalogItem(
   categoryNameById: Record<string, string>
 ): CatalogRow {
   const itemId = normalizeText(item?.itemID);
+  const itemMatrixId = normalizeText(item?.itemMatrixID);
   const systemSku = normalizeText(item?.systemSku);
   const customSku = normalizeText(item?.customSku);
   const upc = normalizeText(item?.upc);
@@ -473,7 +544,8 @@ function normalizeCatalogItem(
   let hasQty = false;
   for (const entry of toArray(item?.ItemShops?.ItemShop)) {
     const shopId = normalizeText((entry as any)?.shopID);
-    const shopName = shopNameById[shopId] || (shopId ? `Shop ${shopId}` : "");
+    if (!shopId || shopId === "0") continue;
+    const shopName = normalizeText(shopNameById[shopId]);
     if (!shopName) continue;
     const qty = toNumber((entry as any)?.qoh);
     locations[shopName] = qty;
@@ -486,6 +558,7 @@ function normalizeCatalogItem(
   return {
     id: itemId || systemSku || customSku || upc || ean || `item-${index + 1}`,
     itemId,
+    itemMatrixId,
     systemSku,
     customSku,
     description,
@@ -518,22 +591,43 @@ async function loadCatalogSnapshot(
     return lightspeedCatalogSnapshotCache.rows;
   }
 
-  const baseQuery = {
-    limit: 100,
+  let pageLimit = LS_ITEM_PAGE_LIMIT;
+  const buildBaseQuery = (limit: number) => ({
+    limit,
     archived: "false",
     load_relations: '["ItemShops","ItemAttributes"]',
-  };
-
-  const firstPage = await requestRSeriesList<any>({
-    accessToken,
-    resource: "Item",
-    query: { ...baseQuery, offset: 0 },
   });
+
+  let firstPage: { rows: any[]; totalCount: number } | null = null;
+  try {
+    firstPage = await requestRSeriesList<any>({
+      accessToken,
+      resource: "Item",
+      query: { ...buildBaseQuery(pageLimit), offset: 0 },
+    });
+  } catch (error: any) {
+    const message = String(error?.message || "");
+    const likelyLimitError =
+      /limit|invalid|parameter|too\s+large|maximum/i.test(message);
+    if (!likelyLimitError || pageLimit === LS_ITEM_PAGE_LIMIT_FALLBACK) {
+      throw error;
+    }
+    pageLimit = LS_ITEM_PAGE_LIMIT_FALLBACK;
+    firstPage = await requestRSeriesList<any>({
+      accessToken,
+      resource: "Item",
+      query: { ...buildBaseQuery(pageLimit), offset: 0 },
+    });
+  }
+
+  if (!firstPage) {
+    throw new Error("Unable to load Lightspeed item catalog.");
+  }
 
   const rawItems: any[] = [...firstPage.rows];
   const totalCount = firstPage.totalCount;
   const offsets: number[] = [];
-  for (let offset = 100; offset < totalCount; offset += 100) {
+  for (let offset = pageLimit; offset < totalCount; offset += pageLimit) {
     offsets.push(offset);
   }
 
@@ -545,7 +639,7 @@ async function loadCatalogSnapshot(
         requestRSeriesList<any>({
           accessToken,
           resource: "Item",
-          query: { ...baseQuery, offset },
+          query: { ...buildBaseQuery(pageLimit), offset },
         })
       )
     );
@@ -820,6 +914,7 @@ export async function GET(req: NextRequest) {
             row.customSku,
             row.systemSku,
             row.itemId,
+            row.itemMatrixId,
             row.upc,
             row.ean,
             row.color,

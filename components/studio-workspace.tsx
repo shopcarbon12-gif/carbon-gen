@@ -4384,6 +4384,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           <div className="model-registry-header">
             <div className="card-title">Model Registry</div>
             <button
+              suppressHydrationWarning
               className="ghost-btn"
               type="button"
               onClick={() => setModelRegistryCollapsed((prev) => !prev)}
@@ -5986,7 +5987,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           -webkit-backdrop-filter: blur(3px);
         }
         .picker-transition-label {
-          border-radius: 999px;
+          border-radius: 10px;
           border: 1px solid rgba(255, 255, 255, 0.42);
           background: rgba(24, 12, 39, 0.72);
           color: rgba(255, 255, 255, 0.96);
@@ -6040,7 +6041,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         .status-bar {
           position: fixed;
           top: var(--integration-panel-top, 89px);
-          left: var(--page-inline-gap);
+          left: calc(var(--page-inline-gap) + var(--page-edge-gap, 13px));
           right: calc(
                 var(
                   --content-right-pad,
@@ -6054,10 +6055,10 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           gap: 8px;
           will-change: right, left;
           transition:
-            left var(--chat-expand-duration, 280ms)
-              var(--chat-expand-ease, cubic-bezier(0.2, 0.85, 0.2, 1)),
-            right var(--chat-expand-duration, 280ms)
-              var(--chat-expand-ease, cubic-bezier(0.2, 0.85, 0.2, 1));
+            left var(--chat-expand-duration, 220ms)
+              var(--chat-expand-ease, cubic-bezier(0.22, 1, 0.36, 1)),
+            right var(--chat-expand-duration, 220ms)
+              var(--chat-expand-ease, cubic-bezier(0.22, 1, 0.36, 1));
         }
         .status-bar.copy-ready {
           cursor: pointer;
@@ -6091,7 +6092,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         }
         .status-chip {
           border: 1px solid #e2e8f0;
-          border-radius: 999px;
+          border-radius: 10px;
           padding: 3px 9px;
           font-size: 0.72rem;
           font-weight: 700;
@@ -6188,7 +6189,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           font-size: 0.84rem;
           font-weight: 700;
           border: 1px solid #cbd5e1;
-          border-radius: 999px;
+          border-radius: 10px;
           padding: 4px 10px;
           white-space: nowrap;
         }
@@ -6229,19 +6230,23 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         }
         input,
         textarea {
-          border: 1px solid #e2e8f0;
-          border-radius: 10px;
-          padding: 10px 12px;
+          border: 1px solid rgba(255, 255, 255, 0.28);
+          border-radius: 12px;
+          padding: 10px 14px;
           font-size: 0.95rem;
           width: 100%;
+          min-height: 52px;
+          text-transform: none;
         }
         select {
-          border: 1px solid #e2e8f0;
-          border-radius: 10px;
-          padding: 10px 12px;
+          border: 1px solid rgba(255, 255, 255, 0.28);
+          border-radius: 12px;
+          padding: 10px 14px;
           font-size: 0.95rem;
           width: 100%;
+          min-height: 52px;
           background: #fff;
+          text-transform: none;
         }
         .dropzone {
           border: 1px dashed #cbd5f5;
@@ -6258,7 +6263,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           justify-content: center;
           gap: 10px;
         }
-        .mobile-only-control {
+        .mobile-only-control,
+        .btn.mobile-only-control,
+        .ghost-btn.mobile-only-control {
           display: none;
         }
         .mobile-camera-trigger {
@@ -6361,7 +6368,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         .barcode-chip {
           border: 1px solid #cbd5e1;
           background: #f8fafc;
-          border-radius: 999px;
+          border-radius: 10px;
           padding: 6px 10px;
           font-size: 0.85rem;
           color: #0f172a;
@@ -6370,7 +6377,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           border: 1px solid #fecaca;
           background: #fff;
           color: #b91c1c;
-          border-radius: 999px;
+          border-radius: 10px;
           width: 26px;
           height: 26px;
           line-height: 1;
@@ -6536,13 +6543,39 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           background: #f8fafc;
         }
         .ghost-btn {
-          border: 1px solid #e2e8f0;
-          background: #0000002a;
-          color: #ffffff;
-          border-radius: 999px;
-          padding: 6px 12px;
-          font-size: 0.85rem;
+          min-height: 44px;
+          border: 1px solid rgba(255, 255, 255, 0.28);
+          background: transparent;
+          color: #f8fafc;
+          border-radius: 10px;
+          padding: 0 14px;
+          font-size: 0.95rem;
+          font-weight: 700;
           cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          line-height: 1;
+          transition:
+            background-color 0.16s ease,
+            border-color 0.16s ease,
+            color 0.16s ease,
+            opacity 0.16s ease,
+            transform 0.16s ease,
+            box-shadow 0.16s ease;
+        }
+        .ghost-btn:hover:not(:disabled) {
+          background: rgba(255, 255, 255, 0.1);
+          border-color: rgba(255, 255, 255, 0.28);
+          transform: translateY(-1px);
+          box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
+        }
+        .ghost-btn:active:not(:disabled) {
+          transform: translateY(0);
+        }
+        .ghost-btn:disabled {
+          opacity: 0.66;
+          cursor: not-allowed;
         }
         .preview-grid {
           display: flex;
@@ -6675,7 +6708,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           width: 20px;
           height: 20px;
           border: 1px solid #cbd5e1;
-          border-radius: 999px;
+          border-radius: 6px;
           background: #ffffff;
           color: #b91c1c;
           font-size: 0.7rem;
@@ -6690,7 +6723,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           border: 1px solid #e2e8f0;
           background: #fff;
           color: #b91c1c;
-          border-radius: 999px;
+          border-radius: 10px;
           padding: 4px 8px;
           font-size: 0.75rem;
           cursor: pointer;
@@ -6764,8 +6797,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         }
         .model-pill {
           border: 1px solid #e2e8f0;
-          border-radius: 999px;
-          padding: 6px 10px;
+          border-radius: 10px;
+          min-height: 44px;
+          padding: 6px 12px;
           background: #f8fafc;
           display: inline-flex;
           gap: 10px;
@@ -6781,9 +6815,14 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           border: 1px solid #e2e8f0;
           background: #fff;
           color: #b91c1c;
-          border-radius: 999px;
-          padding: 2px 8px;
+          border-radius: 10px;
+          min-height: 34px;
+          padding: 0 10px;
           font-size: 0.75rem;
+          font-weight: 700;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
           cursor: pointer;
         }
         .ghost-btn.danger {
@@ -6805,21 +6844,51 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           text-align: center;
         }
         textarea {
-          min-height: 88px;
+          min-height: 120px;
           resize: vertical;
         }
         .btn {
-          border: 1px solid #ffffff;
-          background: #ffffff;
-          color: #000000;
-          padding: 10px 14px;
-          border-radius: 999px;
-          font-weight: 600;
+          min-height: 44px;
+          border: 1px solid #f3f4f6;
+          background: #f3f4f6;
+          color: #060606;
+          padding: 0 14px;
+          border-radius: 10px;
+          font-weight: 700;
           cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          line-height: 1;
+          transition:
+            background-color 0.16s ease,
+            border-color 0.16s ease,
+            color 0.16s ease,
+            opacity 0.16s ease,
+            transform 0.16s ease,
+            box-shadow 0.16s ease;
+        }
+        .btn:hover:not(:disabled) {
+          background: #d9dce1;
+          border-color: #d9dce1;
+          transform: translateY(-1px);
+          box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
+        }
+        .btn:active:not(:disabled) {
+          transform: translateY(0);
+        }
+        .btn:disabled {
+          opacity: 0.66;
+          cursor: not-allowed;
         }
         .btn.ghost {
           background: transparent;
-          color: #ffffff;
+          color: #f8fafc;
+          border-color: rgba(255, 255, 255, 0.28);
+        }
+        .btn.ghost:hover:not(:disabled) {
+          background: rgba(255, 255, 255, 0.1);
+          border-color: rgba(255, 255, 255, 0.28);
         }
         .btn.primary {
           display: inline-flex;
@@ -6862,30 +6931,62 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         .panel-selection-summary {
           font-size: 0.85rem;
           color: #475569;
-          padding: 6px 10px;
+          min-height: 44px;
+          padding: 10px 14px;
           border: 1px solid #e2e8f0;
-          border-radius: 999px;
+          border-radius: 10px;
           width: fit-content;
           background: #f8fafc;
+          display: inline-flex;
+          align-items: center;
         }
         .pill {
-          border: 1px solid #e2e8f0;
-          padding: 6px 10px;
-          border-radius: 999px;
-          background: #f8fafc;
+          min-height: 44px;
+          border: 1px solid rgba(255, 255, 255, 0.28);
+          padding: 0 14px;
+          border-radius: 10px;
+          background: transparent;
+          color: #f8fafc;
+          font-size: 0.95rem;
+          font-weight: 700;
           cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          line-height: 1;
+          transition:
+            background-color 0.16s ease,
+            border-color 0.16s ease,
+            color 0.16s ease,
+            opacity 0.16s ease,
+            transform 0.16s ease,
+            box-shadow 0.16s ease;
+        }
+        .pill:hover:not(:disabled):not(.unavailable) {
+          background: rgba(255, 255, 255, 0.1);
+          border-color: rgba(255, 255, 255, 0.28);
+          transform: translateY(-1px);
+          box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
+        }
+        .pill:active:not(:disabled):not(.unavailable) {
+          transform: translateY(0);
+        }
+        .pill:disabled {
+          opacity: 0.66;
+          cursor: not-allowed;
         }
         .pill.active {
-          border-color: #ffffff;
-          color: #ffffff;
-          background: rgba(0, 0, 0, 0.4);
+          border-color: #f3f4f6;
+          color: #060606;
+          background: #f3f4f6;
+          box-shadow: none;
         }
         .pill.unavailable {
           opacity: 0.55;
           cursor: not-allowed;
-          border-color: #e2e8f0;
+          border-color: rgba(255, 255, 255, 0.2);
           color: #64748b;
-          background: #f1f5f9;
+          background: rgba(241, 245, 249, 0.6);
         }
         .panel-preview {
           border: 1px solid #e2e8f0;
@@ -6944,7 +7045,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         .status-dot {
           width: 10px;
           height: 10px;
-          border-radius: 999px;
+          border-radius: 3px;
           background: #cbd5f5;
         }
         .status-dot.on {
@@ -7016,10 +7117,10 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           pointer-events: none;
           will-change: width, top;
           transition:
-            width var(--chat-expand-duration, 280ms)
-              var(--chat-expand-ease, cubic-bezier(0.2, 0.85, 0.2, 1)),
-            top var(--chat-expand-duration, 280ms)
-              var(--chat-expand-ease, cubic-bezier(0.2, 0.85, 0.2, 1));
+            width var(--chat-expand-duration, 220ms)
+              var(--chat-expand-ease, cubic-bezier(0.22, 1, 0.36, 1)),
+            top var(--chat-expand-duration, 220ms)
+              var(--chat-expand-ease, cubic-bezier(0.22, 1, 0.36, 1));
         }
         .chat-side-card {
           width: 100%;
@@ -7047,7 +7148,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           height: 24px;
           min-width: 24px;
           min-height: 24px;
-          border-radius: 999px;
+          border-radius: 10px;
           border: 1px solid rgba(255, 255, 255, 0.42);
           background: rgba(255, 255, 255, 0.12);
           color: rgba(255, 255, 255, 0.96);
@@ -7073,8 +7174,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           height: 14px;
           display: block;
           transition:
-            transform var(--chat-expand-duration, 280ms)
-              var(--chat-expand-ease, cubic-bezier(0.2, 0.85, 0.2, 1));
+            transform var(--chat-expand-duration, 220ms)
+              var(--chat-expand-ease, cubic-bezier(0.22, 1, 0.36, 1));
         }
         .chat-side-title {
           margin: 0;
@@ -7089,7 +7190,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         }
         .chat-side-status {
           border: 1px solid rgba(255, 255, 255, 0.55);
-          border-radius: 999px;
+          border-radius: 10px;
           padding: 3px 10px;
           font-size: 0.72rem;
           font-weight: 700;
@@ -7203,7 +7304,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           right: 8px;
           width: 28px;
           height: 28px;
-          border-radius: 999px;
+          border-radius: 10px;
           border: 1px solid #cbd5e1;
           background: #fff;
           color: #0f172a;
@@ -7287,6 +7388,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           border-radius: 12px;
           min-height: 52px;
           padding: 10px 14px;
+          text-transform: none;
         }
         input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
         textarea:focus,
@@ -7297,10 +7399,10 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         input:not([type="checkbox"]):not([type="radio"]):not([type="range"])::placeholder,
         textarea::placeholder {
           color: var(--cg-muted);
+          text-transform: none;
         }
         .barcode-chip,
         .panel-selection-summary,
-        .pill,
         .preview-remove-corner,
         .preview-remove,
         .model-remove,
@@ -7343,7 +7445,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           }
         }
         @media (max-width: 900px) {
-          .mobile-only-control {
+          .mobile-only-control,
+          .btn.mobile-only-control,
+          .ghost-btn.mobile-only-control {
             display: inline-flex;
           }
           .generation-actions-layout {
@@ -7417,4 +7521,5 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     </div>
   );
 }
+
 

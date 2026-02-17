@@ -28,6 +28,15 @@ type IntegrationItem = {
   label: string;
 };
 
+function integrationPriority(item: IntegrationItem) {
+  const key = `${item.id} ${item.name} ${item.endpoint}`.toLowerCase();
+  if (key.includes("shopify")) return 0;
+  if (key.includes("lightspeed") || key.includes(" ls ")) return 1;
+  if (key.includes("dropbox")) return 2;
+  if (key.includes("core") || key.includes("/api/health")) return 3;
+  return 9;
+}
+
 const SHOPIFY_MAPPING_INVENTORY_ROOT = "/studio/shopify-mapping-inventory";
 const SHOPIFY_MAPPING_CONFIG_ROOT = `${SHOPIFY_MAPPING_INVENTORY_ROOT}/configurations`;
 const SHOPIFY_MAPPING_CONFIG_POS = `${SHOPIFY_MAPPING_CONFIG_ROOT}/pos`;
@@ -51,7 +60,7 @@ const navItems: NavItem[] = [
   { href: "/studio/rfid-price-tag", label: "RFID Price Tag" },
   { href: "/studio/lightspeed-catalog", label: "Lightspeed Catalog" },
   { href: SHOPIFY_MAPPING_INVENTORY_ROOT, label: "Shopify Mapping Inventory" },
-  { href: "/studio/video", label: "Video Promos (Reels)" },
+  { href: "/studio/video", label: "create new items" },
   { href: "/studio/social", label: "Social Ads & Meta" },
   { href: "/ops/inventory", label: "Collection Mapping" },
   { href: "/dashboard", label: "Workspace Dashboard" },
@@ -178,21 +187,18 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
     if (!drawerOpen) {
       setShopifySubmenuOpen(false);
       setShopifyConfigSubmenuOpen(false);
+      return;
     }
-  }, [drawerOpen]);
 
-  useEffect(() => {
     if (!isActive(pathname, SHOPIFY_MAPPING_INVENTORY_ROOT)) {
       setShopifySubmenuOpen(false);
       setShopifyConfigSubmenuOpen(false);
+      return;
     }
-  }, [pathname]);
 
-  useEffect(() => {
-    if (isActive(pathname, SHOPIFY_MAPPING_CONFIG_ROOT)) {
-      setShopifyConfigSubmenuOpen(true);
-    }
-  }, [pathname]);
+    setShopifySubmenuOpen(true);
+    setShopifyConfigSubmenuOpen(isActive(pathname, SHOPIFY_MAPPING_CONFIG_ROOT));
+  }, [drawerOpen, pathname]);
 
   useEffect(() => {
     if (!drawerOpen || menuPinned) return;
@@ -240,7 +246,12 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           if (!id || !name) return null;
           return { id, name, endpoint, settingsHref, status, label };
         })
-        .filter((row: IntegrationItem | null): row is IntegrationItem => Boolean(row));
+        .filter((row: IntegrationItem | null): row is IntegrationItem => Boolean(row))
+        .sort((a, b) => {
+          const order = integrationPriority(a) - integrationPriority(b);
+          if (order !== 0) return order;
+          return a.name.localeCompare(b.name);
+        });
 
       if (!mountedRef.current) return;
       setIntegrations(next);
@@ -480,7 +491,6 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
                         type="button"
                         onClick={() => {
                           setShopifyConfigSubmenuOpen((prev) => !prev);
-                          navigateTo(item.href);
                         }}
                         aria-current={configurationsActive ? "page" : undefined}
                         data-active={configurationsActive ? "true" : "false"}
@@ -776,8 +786,8 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           --integration-panel-height: 214px;
           --chat-expanded-width: min(560px, calc(100vw - 26px));
           --content-api-gap: 13px;
-          --chat-expand-duration: 280ms;
-          --chat-expand-ease: cubic-bezier(0.2, 0.85, 0.2, 1);
+          --chat-expand-duration: 220ms;
+          --chat-expand-ease: cubic-bezier(0.22, 1, 0.36, 1);
           --right-rail-width: var(--integration-panel-width);
           min-height: 100vh;
           position: relative;
@@ -884,7 +894,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
         .menu-icon span {
           width: 100%;
           height: 2px;
-          border-radius: 999px;
+          border-radius: 1px;
           background: rgba(255, 255, 255, 0.92);
           transform-origin: center;
           transition: transform 220ms ease, opacity 220ms ease;
@@ -1001,7 +1011,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           height: 24px;
           min-width: 24px;
           min-height: 24px;
-          border-radius: 999px;
+          border-radius: 8px;
           border: 1px solid rgba(255, 255, 255, 0.5);
           background: rgba(255, 255, 255, 0.14);
           color: rgba(255, 255, 255, 0.95);
@@ -1034,10 +1044,10 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           min-width: 0;
         }
         .chat-title {
-          font-size: clamp(1.45rem, 2.6vw, 1.9rem);
-          font-weight: 800;
-          line-height: 1.1;
-          letter-spacing: 0.01em;
+          font-size: 14px;
+          font-weight: 700;
+          line-height: 1.2;
+          letter-spacing: 0.03em;
           text-transform: none;
           min-width: 0;
           overflow: hidden;
@@ -1046,7 +1056,8 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
         }
         .chat-status {
           border: 1px solid rgba(255, 255, 255, 0.55);
-          border-radius: 999px;
+          border-radius: 10px;
+          min-height: 24px;
           padding: 3px 10px;
           font-size: 0.72rem;
           font-weight: 700;
@@ -1054,6 +1065,8 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           text-transform: uppercase;
           white-space: nowrap;
           flex-shrink: 0;
+          display: inline-flex;
+          align-items: center;
         }
         .chat-status.ready {
           color: rgba(255, 255, 255, 0.95);
@@ -1113,13 +1126,24 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
         }
         .chat-actions input {
           width: 100%;
-          min-height: 44px;
+          min-height: 52px;
           border-radius: 12px;
-          border: 1px solid rgba(255, 255, 255, 0.35);
+          border: 1px solid rgba(255, 255, 255, 0.28);
           background: rgba(255, 255, 255, 0.14);
           color: rgba(255, 255, 255, 0.96);
-          padding: 10px 12px;
+          padding: 10px 14px;
+          font-size: 0.95rem;
+          line-height: 1.35;
+          text-transform: none;
           outline: none;
+          transition:
+            border-color 0.16s ease,
+            box-shadow 0.16s ease,
+            background-color 0.16s ease;
+        }
+        .chat-actions input:focus {
+          border-color: rgba(255, 255, 255, 0.5);
+          box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.28);
         }
         .chat-actions input::placeholder {
           color: rgba(226, 232, 240, 0.78);
@@ -1131,25 +1155,51 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
         }
         .chat-buttons button {
           min-height: 44px;
-          border-radius: 999px;
-          border: 1px solid rgba(255, 255, 255, 0.45);
+          border-radius: 10px;
+          border: 1px solid #f3f4f6;
+          padding: 0 14px;
           font-weight: 700;
+          line-height: 1;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
           cursor: pointer;
-          transition: none;
+          transition:
+            background-color 0.16s ease,
+            border-color 0.16s ease,
+            color 0.16s ease,
+            opacity 0.16s ease,
+            transform 0.16s ease,
+            box-shadow 0.16s ease;
+        }
+        .chat-buttons button:hover:not(:disabled) {
+          transform: translateY(-1px);
+          box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
+        }
+        .chat-buttons button:active:not(:disabled) {
+          transform: translateY(0);
         }
         .chat-buttons button:disabled {
           opacity: 0.65;
           cursor: not-allowed;
         }
         .chat-send-btn {
-          background: rgba(255, 255, 255, 0.72);
-          border-color: rgba(255, 255, 255, 0.72);
-          color: #16122b;
+          background: #f3f4f6;
+          border-color: #f3f4f6;
+          color: #060606;
+        }
+        .chat-send-btn:hover:not(:disabled) {
+          background: #d9dce1;
+          border-color: #d9dce1;
         }
         .chat-clear-btn {
           background: transparent;
-          border-color: rgba(255, 255, 255, 0.62);
-          color: rgba(255, 255, 255, 0.9);
+          border-color: rgba(255, 255, 255, 0.28);
+          color: #f8fafc;
+        }
+        .chat-clear-btn:hover:not(:disabled) {
+          background: rgba(255, 255, 255, 0.1);
+          border-color: rgba(255, 255, 255, 0.28);
         }
         .integration-panel {
           width: 100%;
@@ -1181,7 +1231,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           min-height: 28px;
           width: 28px;
           height: 28px;
-          border-radius: 50%;
+          border-radius: 8px;
           border: 1px solid rgba(255, 255, 255, 0.28);
           background: rgba(255, 255, 255, 0.08);
           color: rgba(255, 255, 255, 0.95);
@@ -1215,7 +1265,17 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           display: grid;
           gap: 10px;
           min-height: 0;
-          overflow: hidden;
+          flex: 1 1 auto;
+          overflow-y: auto;
+          overflow-x: hidden;
+          overscroll-behavior: contain;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+        .integration-list::-webkit-scrollbar {
+          width: 0;
+          height: 0;
+          display: none;
         }
         .integration-row,
         :global(a.integration-row) {
@@ -1312,7 +1372,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
         .integration-dot {
           width: 10px;
           height: 10px;
-          border-radius: 999px;
+          border-radius: 3px;
           flex-shrink: 0;
           justify-self: center;
         }
@@ -1400,7 +1460,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           border-bottom: 1px solid rgba(255, 255, 255, 0.16);
           border-radius: 16px;
           background: #5f5468;
-          transform: translateX(108%);
+          transform: translateX(-108%);
           opacity: 0;
           pointer-events: none;
           transition:
@@ -1417,7 +1477,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           height: 30px;
           min-width: 30px;
           min-height: 30px;
-          border-radius: 999px;
+          border-radius: 10px;
           border: 1px solid rgba(255, 255, 255, 0.26);
           background: rgba(255, 255, 255, 0.04);
           color: #ffffff;
@@ -1702,11 +1762,13 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           padding-right: var(--content-right-pad);
         }
         .content.menu-open {
-          padding-left: 280px;
+          padding-left: var(--page-edge-gap);
         }
-        :global(.content.menu-open .page) {
-          padding-left: 0 !important;
-          padding-right: 0 !important;
+        :global(.content .page) {
+          width: 100%;
+          max-width: none !important;
+          margin-left: 0 !important;
+          margin-right: 0 !important;
         }
         .backdrop {
           position: fixed;
@@ -1764,3 +1826,5 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
     </div>
   );
 }
+
+

@@ -1,5 +1,5 @@
-import ShopifyMappingConfigurations from "@/components/shopify-mapping-configurations";
+import { redirect } from "next/navigation";
 
 export default function StudioShopifyMappingInventoryConfigurationsPage() {
-  return <ShopifyMappingConfigurations section="overview" />;
+  redirect("/studio/shopify-mapping-inventory/configurations/pos");
 }

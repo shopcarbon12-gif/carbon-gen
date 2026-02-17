@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CatalogItem, LabelMapping, RfidSettings } from "@/lib/rfid";
 import { DEFAULT_RFID_SETTINGS } from "@/lib/rfid";
+import StudioStatusBar from "@/components/studio-status-bar";
 
 type SessionMeResponse = {
   user?: {
@@ -55,6 +56,23 @@ type LastBatch = {
 
 type ProgressTone = "idle" | "working" | "success" | "error";
 type ProgressTask = "settings" | "catalog" | "save" | "print" | "preview";
+type SortDirection = "asc" | "desc";
+type LogsSortField =
+  | "printedAt"
+  | "lightspeedSystemId"
+  | "itemName"
+  | "skuUpc"
+  | "epc"
+  | "serialNumber";
+type LogsSortState = {
+  field: LogsSortField;
+  direction: SortDirection;
+};
+type BatchSortField = "epc" | "serialNumber";
+type BatchSortState = {
+  field: BatchSortField;
+  direction: SortDirection;
+};
 
 type ProgressStage = {
   at: number;
@@ -268,6 +286,14 @@ export default function RfidPriceTagWorkspace() {
   const [logsTo, setLogsTo] = useState("");
   const [logsDetails, setLogsDetails] = useState("");
   const [selectedLogs, setSelectedLogs] = useState<Record<number, LabelMapping>>({});
+  const [logsSortState, setLogsSortState] = useState<LogsSortState>({
+    field: "printedAt",
+    direction: "desc",
+  });
+  const [batchSortState, setBatchSortState] = useState<BatchSortState>({
+    field: "serialNumber",
+    direction: "asc",
+  });
 
   const [progressTask, setProgressTask] = useState<ProgressTask | null>(null);
   const [progressTone, setProgressTone] = useState<ProgressTone>("idle");
@@ -703,9 +729,9 @@ export default function RfidPriceTagWorkspace() {
     setSelectedLogs((prev) => {
       const next = { ...prev };
       if (checked) {
-        for (const row of logsRows) next[row.id] = row;
+        for (const row of sortedLogsRows) next[row.id] = row;
       } else {
-        for (const row of logsRows) delete next[row.id];
+        for (const row of sortedLogsRows) delete next[row.id];
       }
       return next;
     });
@@ -762,40 +788,115 @@ export default function RfidPriceTagWorkspace() {
   }
 
   const selectedLogCount = useMemo(() => Object.keys(selectedLogs).length, [selectedLogs]);
+  const sortedBatchLabels = useMemo(() => {
+    if (!lastBatch?.labels?.length) return [];
+    const next = [...lastBatch.labels];
+    next.sort((a, b) => {
+      if (batchSortState.field === "serialNumber") {
+        return batchSortState.direction === "asc"
+          ? a.serialNumber - b.serialNumber
+          : b.serialNumber - a.serialNumber;
+      }
+      return batchSortState.direction === "asc"
+        ? String(a.epc || "").localeCompare(String(b.epc || ""), undefined, {
+            numeric: true,
+            sensitivity: "base",
+          })
+        : String(b.epc || "").localeCompare(String(a.epc || ""), undefined, {
+            numeric: true,
+            sensitivity: "base",
+          });
+    });
+    return next;
+  }, [batchSortState.direction, batchSortState.field, lastBatch?.labels]);
+
+  const sortedLogsRows = useMemo(() => {
+    if (!logsRows.length) return logsRows;
+    const next = [...logsRows];
+    next.sort((a, b) => {
+      if (logsSortState.field === "printedAt") {
+        const left = Date.parse(a.printedAt || "");
+        const right = Date.parse(b.printedAt || "");
+        const l = Number.isFinite(left) ? left : 0;
+        const r = Number.isFinite(right) ? right : 0;
+        return logsSortState.direction === "asc" ? l - r : r - l;
+      }
+      if (logsSortState.field === "serialNumber") {
+        return logsSortState.direction === "asc"
+          ? (a.serialNumber || 0) - (b.serialNumber || 0)
+          : (b.serialNumber || 0) - (a.serialNumber || 0);
+      }
+      if (logsSortState.field === "skuUpc") {
+        const left = `${a.customSku || ""} ${a.upc || ""}`.trim();
+        const right = `${b.customSku || ""} ${b.upc || ""}`.trim();
+        return logsSortState.direction === "asc"
+          ? left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" })
+          : right.localeCompare(left, undefined, { numeric: true, sensitivity: "base" });
+      }
+      if (logsSortState.field === "lightspeedSystemId") {
+        return logsSortState.direction === "asc"
+          ? String(a.lightspeedSystemId || "").localeCompare(String(b.lightspeedSystemId || ""), undefined, {
+              numeric: true,
+              sensitivity: "base",
+            })
+          : String(b.lightspeedSystemId || "").localeCompare(String(a.lightspeedSystemId || ""), undefined, {
+              numeric: true,
+              sensitivity: "base",
+            });
+      }
+      if (logsSortState.field === "itemName") {
+        return logsSortState.direction === "asc"
+          ? String(a.itemName || "").localeCompare(String(b.itemName || ""), undefined, {
+              numeric: true,
+              sensitivity: "base",
+            })
+          : String(b.itemName || "").localeCompare(String(a.itemName || ""), undefined, {
+              numeric: true,
+              sensitivity: "base",
+            });
+      }
+      return logsSortState.direction === "asc"
+        ? String(a.epc || "").localeCompare(String(b.epc || ""), undefined, {
+            numeric: true,
+            sensitivity: "base",
+          })
+        : String(b.epc || "").localeCompare(String(a.epc || ""), undefined, {
+            numeric: true,
+            sensitivity: "base",
+          });
+    });
+    return next;
+  }, [logsRows, logsSortState.direction, logsSortState.field]);
+
   const allVisibleSelected = useMemo(
-    () => logsRows.length > 0 && logsRows.every((row) => Boolean(selectedLogs[row.id])),
-    [logsRows, selectedLogs]
+    () => sortedLogsRows.length > 0 && sortedLogsRows.every((row) => Boolean(selectedLogs[row.id])),
+    [sortedLogsRows, selectedLogs]
   );
 
-  const progressToneLabel =
-    progressTone === "error"
-      ? "Error"
-      : progressTone === "working"
-        ? "Working"
-        : progressTone === "success"
-          ? "Done"
-          : "Idle";
+  function toggleLogsSort(field: LogsSortField) {
+    setLogsSortState((prev) => {
+      if (prev.field !== field) return { field, direction: "asc" };
+      return { field, direction: prev.direction === "asc" ? "desc" : "asc" };
+    });
+  }
+
+  function toggleBatchSort(field: BatchSortField) {
+    setBatchSortState((prev) => {
+      if (prev.field !== field) return { field, direction: "asc" };
+      return { field, direction: prev.direction === "asc" ? "desc" : "asc" };
+    });
+  }
+
   const progressTaskLabel = progressTask ? TASK_LABELS[progressTask] : "RFID task status";
   const progressElapsedLabel = formatElapsed(progressElapsedMs);
 
   return (
     <main className="page">
-      <section className={`glass-panel card progress-card ${progressTone}`} aria-live="polite" aria-atomic="true">
-        <div className="progress-head">
-          <div className="progress-title">Progress Bar</div>
-          <span className={`progress-chip ${progressTone}`}>{progressToneLabel}</span>
-        </div>
-        <div className="progress-task">{progressTaskLabel}</div>
-        <div className="progress-message">{progressTitle}</div>
-        <div className="progress-track" role="progressbar" aria-valuenow={Math.round(progressPct)} aria-valuemin={0} aria-valuemax={100}>
-          <div className={`progress-fill ${progressTone}`} style={{ width: `${progressPct}%` }} />
-        </div>
-        <div className="progress-meta">
-          <span>{Math.round(progressPct)}%</span>
-          <span>{progressSub}</span>
-          <span>{progressElapsedLabel}</span>
-        </div>
-      </section>
+      <StudioStatusBar
+        tone={progressTone}
+        message={progressTitle}
+        meta={`${progressTaskLabel} | ${Math.round(progressPct)}% | ${progressSub} | ${progressElapsedLabel}`}
+      />
 
       <fieldset className="lock-shell" disabled={editLocked}>
         <section className="glass-panel card">
@@ -884,12 +985,42 @@ export default function RfidPriceTagWorkspace() {
           <table>
             <thead>
               <tr>
-                <th>EPC</th>
-                <th>Serial</th>
+                <th>
+                  <button
+                    type="button"
+                    className={`table-sort-btn ${batchSortState.field === "epc" ? "active" : ""}`}
+                    onClick={() => toggleBatchSort("epc")}
+                  >
+                    <span>EPC</span>
+                    <span className="sort-mark">
+                      {batchSortState.field === "epc"
+                        ? batchSortState.direction === "asc"
+                          ? "↑"
+                          : "↓"
+                        : "↕"}
+                    </span>
+                  </button>
+                </th>
+                <th>
+                  <button
+                    type="button"
+                    className={`table-sort-btn ${batchSortState.field === "serialNumber" ? "active" : ""}`}
+                    onClick={() => toggleBatchSort("serialNumber")}
+                  >
+                    <span>Serial</span>
+                    <span className="sort-mark">
+                      {batchSortState.field === "serialNumber"
+                        ? batchSortState.direction === "asc"
+                          ? "↑"
+                          : "↓"
+                        : "↕"}
+                    </span>
+                  </button>
+                </th>
               </tr>
             </thead>
             <tbody>
-              {lastBatch.labels.map((label) => (
+              {sortedBatchLabels.map((label) => (
                 <tr key={`${label.epc}-${label.serialNumber}`}>
                   <td>
                     <code>{label.epc}</code>
@@ -1094,12 +1225,102 @@ export default function RfidPriceTagWorkspace() {
                         aria-label="Select all visible logs"
                       />
                     </th>
-                    <th>Printed At</th>
-                    <th>Lightspeed ID</th>
-                    <th>Item</th>
-                    <th>SKU / UPC</th>
-                    <th>EPC</th>
-                    <th>Serial</th>
+                    <th>
+                      <button
+                        type="button"
+                        className={`table-sort-btn ${logsSortState.field === "printedAt" ? "active" : ""}`}
+                        onClick={() => toggleLogsSort("printedAt")}
+                      >
+                        <span>Printed At</span>
+                        <span className="sort-mark">
+                          {logsSortState.field === "printedAt"
+                            ? logsSortState.direction === "asc"
+                              ? "↑"
+                              : "↓"
+                            : "↕"}
+                        </span>
+                      </button>
+                    </th>
+                    <th>
+                      <button
+                        type="button"
+                        className={`table-sort-btn ${logsSortState.field === "lightspeedSystemId" ? "active" : ""}`}
+                        onClick={() => toggleLogsSort("lightspeedSystemId")}
+                      >
+                        <span>Lightspeed ID</span>
+                        <span className="sort-mark">
+                          {logsSortState.field === "lightspeedSystemId"
+                            ? logsSortState.direction === "asc"
+                              ? "↑"
+                              : "↓"
+                            : "↕"}
+                        </span>
+                      </button>
+                    </th>
+                    <th>
+                      <button
+                        type="button"
+                        className={`table-sort-btn table-sort-left ${logsSortState.field === "itemName" ? "active" : ""}`}
+                        onClick={() => toggleLogsSort("itemName")}
+                      >
+                        <span>Item</span>
+                        <span className="sort-mark">
+                          {logsSortState.field === "itemName"
+                            ? logsSortState.direction === "asc"
+                              ? "↑"
+                              : "↓"
+                            : "↕"}
+                        </span>
+                      </button>
+                    </th>
+                    <th>
+                      <button
+                        type="button"
+                        className={`table-sort-btn ${logsSortState.field === "skuUpc" ? "active" : ""}`}
+                        onClick={() => toggleLogsSort("skuUpc")}
+                      >
+                        <span>SKU / UPC</span>
+                        <span className="sort-mark">
+                          {logsSortState.field === "skuUpc"
+                            ? logsSortState.direction === "asc"
+                              ? "↑"
+                              : "↓"
+                            : "↕"}
+                        </span>
+                      </button>
+                    </th>
+                    <th>
+                      <button
+                        type="button"
+                        className={`table-sort-btn ${logsSortState.field === "epc" ? "active" : ""}`}
+                        onClick={() => toggleLogsSort("epc")}
+                      >
+                        <span>EPC</span>
+                        <span className="sort-mark">
+                          {logsSortState.field === "epc"
+                            ? logsSortState.direction === "asc"
+                              ? "↑"
+                              : "↓"
+                            : "↕"}
+                        </span>
+                      </button>
+                    </th>
+                    <th>
+                      <button
+                        type="button"
+                        className={`table-sort-btn ${logsSortState.field === "serialNumber" ? "active" : ""}`}
+                        onClick={() => toggleLogsSort("serialNumber")}
+                      >
+                        <span>Serial</span>
+                        <span className="sort-mark">
+                          {logsSortState.field === "serialNumber"
+                            ? logsSortState.direction === "asc"
+                              ? "↑"
+                              : "↓"
+                            : "↕"}
+                        </span>
+                      </button>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1107,12 +1328,12 @@ export default function RfidPriceTagWorkspace() {
                     <tr>
                       <td colSpan={7}>Loading logs...</td>
                     </tr>
-                  ) : logsRows.length === 0 ? (
+                  ) : sortedLogsRows.length === 0 ? (
                     <tr>
                       <td colSpan={7}>No logs found for the selected filters.</td>
                     </tr>
                   ) : (
-                    logsRows.map((row) => (
+                    sortedLogsRows.map((row) => (
                       <tr key={`log-${row.id}-${row.epc}`}>
                         <td>
                           <input
@@ -1193,13 +1414,13 @@ export default function RfidPriceTagWorkspace() {
           margin: 0 auto;
           padding: 22px 8px 26px;
           display: grid;
-          gap: 14px;
+          gap: 12px;
           color: #f8fafc;
         }
         .card {
           padding: 18px;
           display: grid;
-          gap: 12px;
+          gap: 10px;
         }
         .lock-shell {
           border: 0;
@@ -1213,120 +1434,22 @@ export default function RfidPriceTagWorkspace() {
           cursor: not-allowed;
           opacity: 0.62;
         }
-        .progress-card {
-          position: sticky;
-          top: 78px;
-          z-index: 18;
-          gap: 8px;
-          border: 1px solid #dbe5f1;
-          background: #ffffff;
-        }
-        .progress-card.working {
-          border-color: #facc15;
-          box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.15), 0 8px 24px rgba(0, 0, 0, 0.24);
-        }
-        .progress-card.success {
-          border-color: #86efac;
-          box-shadow: 0 0 0 1px rgba(134, 239, 172, 0.14), 0 8px 24px rgba(0, 0, 0, 0.2);
-        }
-        .progress-card.error {
-          border-color: #fca5a5;
-          box-shadow: 0 0 0 1px rgba(252, 165, 165, 0.16), 0 8px 24px rgba(0, 0, 0, 0.22);
-        }
-        .progress-head {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 10px;
-        }
-        .progress-title {
-          font-weight: 700;
-          letter-spacing: 0.01em;
-          text-transform: uppercase;
-          font-size: 0.74rem;
-          color: #475569;
-        }
-        .progress-chip {
-          border-radius: 999px;
-          border: 1px solid #e2e8f0;
-          padding: 3px 9px;
-          font-size: 0.72rem;
-          font-weight: 700;
-          letter-spacing: 0.05em;
-          text-transform: uppercase;
-          white-space: nowrap;
-        }
-        .progress-chip.idle {
-          color: #94a3b8;
-          border-color: #cbd5e1;
-          background: #f1f5f9;
-        }
-        .progress-chip.working {
-          color: #7c2d12;
-          border-color: #fdba74;
-          background: #ffedd5;
-        }
-        .progress-chip.success {
-          color: #166534;
-          border-color: #86efac;
-          background: #dcfce7;
-        }
-        .progress-chip.error {
-          color: #991b1b;
-          border-color: #fca5a5;
-          background: #fee2e2;
-        }
-        .progress-task {
-          font-size: 0.83rem;
-          font-weight: 700;
-          color: #475569;
-          letter-spacing: 0.02em;
-        }
-        .progress-message {
-          font-size: 0.95rem;
-          font-weight: 600;
-          color: #0f172a;
-        }
-        .progress-track {
-          width: 100%;
-          height: 10px;
-          border-radius: 999px;
-          border: 1px solid #e2e8f0;
-          background: #f8fafc;
-          overflow: hidden;
-        }
-        .progress-fill {
-          height: 100%;
-          border-radius: inherit;
-          width: 0%;
-          transition: width 200ms ease;
-          background: #cbd5e1;
-        }
-        .progress-fill.working {
-          background: linear-gradient(90deg, #fdba74 0%, #f59e0b 100%);
-        }
-        .progress-fill.success {
-          background: #22c55e;
-        }
-        .progress-fill.error {
-          background: #ef4444;
-        }
-        .progress-meta {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 8px 12px;
-          align-items: center;
-          font-size: 0.8rem;
-          color: #475569;
-        }
-        .progress-meta span + span::before {
-          content: "|";
-          margin-right: 10px;
-          color: #94a3b8;
-        }
         h2,
         h3 {
           margin: 0;
+          font-size: 1.95rem;
+          font-weight: 700;
+          letter-spacing: 0.01em;
+          line-height: 1.15;
+        }
+        .page :global(input:not([type="checkbox"]):not([type="radio"]):not([type="range"])),
+        .page :global(textarea),
+        .page :global(select) {
+          text-transform: none;
+        }
+        .page :global(input:not([type="checkbox"]):not([type="radio"]):not([type="range"])::placeholder),
+        .page :global(textarea::placeholder) {
+          text-transform: none;
         }
         .grid {
           display: grid;
@@ -1447,6 +1570,40 @@ export default function RfidPriceTagWorkspace() {
           background: rgba(255, 255, 255, 0.12);
           font-weight: 700;
         }
+        .table-sort-btn {
+          min-height: 0;
+          border: 0;
+          background: transparent;
+          color: inherit;
+          font: inherit;
+          font-weight: inherit;
+          padding: 0;
+          width: 100%;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          cursor: pointer;
+        }
+        .table-sort-btn.table-sort-left {
+          justify-content: flex-start;
+        }
+        .table-sort-btn:hover,
+        .table-sort-btn:focus-visible {
+          transform: none !important;
+          box-shadow: none !important;
+          opacity: 1 !important;
+          color: #fff;
+          outline: none;
+        }
+        .table-sort-btn.active {
+          color: #f8fafc;
+        }
+        .sort-mark {
+          font-size: 0.72rem;
+          line-height: 1;
+          opacity: 0.9;
+        }
         code {
           font-family: var(--font-geist-mono), Consolas, Menlo, Monaco, monospace;
           font-size: 0.84rem;
@@ -1510,6 +1667,9 @@ export default function RfidPriceTagWorkspace() {
           justify-content: space-between;
           gap: 10px;
         }
+        .preview-header h3 {
+          font-size: 1.35rem;
+        }
         .close-btn {
           min-width: 96px;
         }
@@ -1535,8 +1695,9 @@ export default function RfidPriceTagWorkspace() {
             flex-direction: column;
             align-items: stretch;
           }
-          .progress-card {
-            top: 72px;
+          h2,
+          h3 {
+            font-size: 1.5rem;
           }
           .logs-filter-grid {
             grid-template-columns: 1fr;

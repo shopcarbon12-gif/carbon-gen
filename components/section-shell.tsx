@@ -8,7 +8,7 @@ const links = [
   { href: "/studio/rfid-price-tag", label: "RFID Price Tag" },
   { href: "/studio/lightspeed-catalog", label: "Lightspeed Catalog" },
   { href: "/studio/shopify-mapping-inventory", label: "Shopify Mapping Inventory" },
-  { href: "/studio/video", label: "Motion Studio" },
+  { href: "/studio/video", label: "create new items" },
   { href: "/studio/social", label: "Ad Generator" },
   { href: "/ops/inventory", label: "Collection Mapper" },
   { href: "/dashboard", label: "Workspace Dashboard" },
@@ -59,7 +59,7 @@ export function SectionShell() {
         }
         .nav-chip {
           text-decoration: none;
-          border-radius: 999px;
+          border-radius: 10px;
           border: 1px solid rgba(255, 255, 255, 0.24);
           background: rgba(255, 255, 255, 0.04);
           color: #f8fafc;
@@ -77,3 +77,4 @@ export function SectionShell() {
     </main>
   );
 }
+

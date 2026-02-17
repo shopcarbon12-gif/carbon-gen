@@ -1212,7 +1212,7 @@ export default function LightspeedCatalogWorkspace() {
         .pager-arrow-btn {
           width: 38px;
           height: 38px;
-          border-radius: 999px;
+          border-radius: 10px;
           border: 1px solid rgba(255, 255, 255, 0.28);
           background: rgba(255, 255, 255, 0.08);
           color: #f8fafc;
@@ -1296,3 +1296,4 @@ export default function LightspeedCatalogWorkspace() {
     </main>
   );
 }
+

@@ -158,7 +158,7 @@ export default function GeneratePage() {
         }
         .chip {
           text-decoration: none;
-          border-radius: 999px;
+          border-radius: 10px;
           border: 1px solid rgba(255, 255, 255, 0.24);
           background: rgba(255, 255, 255, 0.04);
           color: #f8fafc;
@@ -208,3 +208,4 @@ export default function GeneratePage() {
     </main>
   );
 }
+

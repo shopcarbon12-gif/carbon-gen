@@ -404,7 +404,7 @@ export default function LightspeedCatalogItemPage({ itemId }: { itemId: string }
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          border-radius: 999px;
+          border-radius: 10px;
           padding: 4px 10px;
           font-size: 0.74rem;
           text-transform: uppercase;
@@ -449,3 +449,4 @@ export default function LightspeedCatalogItemPage({ itemId }: { itemId: string }
     </main>
   );
 }
+

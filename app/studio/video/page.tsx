@@ -1,5 +1,5 @@
-import { SectionShell } from "@/components/section-shell";
+import CreateNewItemsWorkspace from "@/components/create-new-items-workspace";
 
 export default function StudioVideoPage() {
-  return <SectionShell />;
+  return <CreateNewItemsWorkspace />;
 }

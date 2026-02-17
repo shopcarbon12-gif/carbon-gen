@@ -53,7 +53,7 @@ export default function StudioError({
         .studio-error-btn {
           width: fit-content;
           min-height: 38px;
-          border-radius: 999px;
+          border-radius: 10px;
           border: 1px solid rgba(248, 250, 252, 0.9);
           background: rgba(255, 255, 255, 0.14);
           color: #fff;
@@ -65,3 +65,4 @@ export default function StudioError({
     </div>
   );
 }
+

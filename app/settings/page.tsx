@@ -759,7 +759,7 @@ export default function SettingsPage() {
         }
         .nav :global(a) {
           text-decoration: none;
-          border-radius: 999px;
+          border-radius: 10px;
           border: 1px solid rgba(255, 255, 255, 0.22);
           padding: 7px 12px;
           font-size: 0.82rem;
@@ -798,7 +798,7 @@ export default function SettingsPage() {
         .status-dot {
           width: 10px;
           height: 10px;
-          border-radius: 999px;
+          border-radius: 3px;
           background: #ef4444;
         }
         .status-dot.on {
@@ -888,3 +888,4 @@ export default function SettingsPage() {
     </main>
   );
 }
+

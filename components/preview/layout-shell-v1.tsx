@@ -346,7 +346,7 @@ export default function LayoutShellV1() {
         }
         .soon-pill {
           border: 1px solid rgba(255, 255, 255, 0.2);
-          border-radius: 999px;
+          border-radius: 10px;
           padding: 2px 8px;
           font-size: 10px;
           color: rgba(255, 255, 255, 0.85);
@@ -397,7 +397,7 @@ export default function LayoutShellV1() {
           font-size: 12px;
           border: 1px solid rgba(255, 255, 255, 0.2);
           background: rgba(255, 255, 255, 0.08);
-          border-radius: 999px;
+          border-radius: 10px;
           padding: 6px 10px;
         }
         .grid {
@@ -468,3 +468,4 @@ export default function LayoutShellV1() {
     </div>
   );
 }
+

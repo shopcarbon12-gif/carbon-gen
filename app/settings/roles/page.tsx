@@ -279,7 +279,7 @@ export default function RolesPage() {
         }
         .nav :global(a) {
           text-decoration: none;
-          border-radius: 999px;
+          border-radius: 10px;
           border: 1px solid rgba(255, 255, 255, 0.22);
           padding: 7px 12px;
           font-size: 0.82rem;
@@ -400,3 +400,4 @@ export default function RolesPage() {
     </main>
   );
 }
+

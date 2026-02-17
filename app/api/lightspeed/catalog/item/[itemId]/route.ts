@@ -24,6 +24,28 @@ function normalizeText(value: unknown) {
   return String(value ?? "").trim();
 }
 
+function isLikelyHtmlPayload(value: string) {
+  return /<!doctype html|<html\b|<head\b|<body\b|<title\b/i.test(value);
+}
+
+function summarizeHtmlPayload(rawBody: string) {
+  const title = normalizeText(rawBody.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]);
+  if (title) return title;
+  const heading = normalizeText(rawBody.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1]);
+  if (heading) return heading;
+  return "Upstream service returned an HTML error page.";
+}
+
+function sanitizeErrorDetail(value: unknown) {
+  const text = normalizeText(value);
+  if (!text) return "";
+  if (isLikelyHtmlPayload(text)) {
+    const summary = summarizeHtmlPayload(text);
+    return normalizeText(summary).slice(0, 220);
+  }
+  return text.replace(/\s+/g, " ").slice(0, 500);
+}
+
 function normalizeLower(value: unknown) {
   return normalizeText(value).toLowerCase();
 }
@@ -101,10 +123,10 @@ function getRSeriesResourceEndpoint(resource: string) {
 
 function readResponseError(parsedBody: any, rawBody: string, fallback = "request failed") {
   return (
-    normalizeText(parsedBody?.message) ||
-    normalizeText(parsedBody?.error) ||
-    normalizeText(parsedBody?.error_description) ||
-    normalizeText(rawBody).slice(0, 500) ||
+    sanitizeErrorDetail(parsedBody?.message) ||
+    sanitizeErrorDetail(parsedBody?.error) ||
+    sanitizeErrorDetail(parsedBody?.error_description) ||
+    sanitizeErrorDetail(rawBody) ||
     fallback
   );
 }

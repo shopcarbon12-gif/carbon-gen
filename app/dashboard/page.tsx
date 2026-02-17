@@ -290,7 +290,7 @@ export default function DashboardPage() {
         }
         .chip {
           text-decoration: none;
-          border-radius: 999px;
+          border-radius: 10px;
           border: 1px solid rgba(255, 255, 255, 0.24);
           background: rgba(255, 255, 255, 0.04);
           color: #f8fafc;
@@ -330,7 +330,7 @@ export default function DashboardPage() {
         }
         .result-pill {
           min-height: 46px;
-          border-radius: 999px;
+          border-radius: 10px;
           border: 1px solid rgba(255, 255, 255, 0.24);
           background: rgba(255, 255, 255, 0.06);
           padding: 10px 14px;
@@ -394,7 +394,7 @@ export default function DashboardPage() {
         .tile-delete {
           min-height: 0;
           width: fit-content;
-          border-radius: 999px;
+          border-radius: 10px;
           border: 1px solid rgba(248, 113, 113, 0.4);
           background: rgba(239, 68, 68, 0.14);
           color: #fecaca;
@@ -437,3 +437,4 @@ export default function DashboardPage() {
     </main>
   );
 }
+

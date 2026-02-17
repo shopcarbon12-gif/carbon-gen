@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import AutoCapitalizeFirstLetter from "@/components/auto-capitalize-first-letter";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -31,6 +32,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <AutoCapitalizeFirstLetter />
         <div className="app-bg-photo" aria-hidden />
         <div className="app-bg-fade" aria-hidden />
         <div className="app-bg-top-photo" aria-hidden />

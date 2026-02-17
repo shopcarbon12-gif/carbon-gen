@@ -19,5 +19,6 @@
     {
       "mode": "auto"
     }
-  ]
+  ],
+  "chatgpt.commentCodeLensEnabled": true
 }

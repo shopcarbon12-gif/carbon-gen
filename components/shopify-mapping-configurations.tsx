@@ -163,7 +163,7 @@ export default function ShopifyMappingConfigurations({ section = "overview" }: P
         }
         .quick-chip {
           text-decoration: none;
-          border-radius: 999px;
+          border-radius: 10px;
           border: 1px solid rgba(255, 255, 255, 0.22);
           background: rgba(255, 255, 255, 0.06);
           color: rgba(248, 250, 252, 0.9);
@@ -247,3 +247,4 @@ export default function ShopifyMappingConfigurations({ section = "overview" }: P
     </main>
   );
 }
+
