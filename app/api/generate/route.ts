@@ -848,14 +848,17 @@ export async function POST(req: NextRequest) {
           null;
         return NextResponse.json(
           {
-            error:
-              "Generation was blocked by safety moderation for this reference set. Try a less revealing crop/reference mix or use neutral front/back product shots.",
-            requestId,
-            code: retryErr?.code || err?.code || "moderation_blocked",
+            error: {
+              type: "policy_refusal",
+              code: retryErr?.code || err?.code || "moderation_blocked",
+              message:
+                "Generation was blocked by safety moderation for this reference set. Try a less revealing crop/reference mix or use neutral front/back product shots.",
+              requestId,
+            },
           },
-          { status: 400 }
+          { status: 403 }
         );
-      }
+}
     }
 
     if (!b64) {
