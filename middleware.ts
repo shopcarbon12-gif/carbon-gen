@@ -4,21 +4,23 @@ import type { NextRequest } from "next/server";
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const loginPreview = req.nextUrl.searchParams.get("preview") === "1";
-  const authBypass = (process.env.AUTH_BYPASS || "true").trim().toLowerCase() === "true";
+  const isProd = process.env.NODE_ENV === "production";
+  const authBypass =
+    !isProd && (process.env.AUTH_BYPASS || "false").trim().toLowerCase() === "true";
 
   if (authBypass) {
     const res = NextResponse.next();
     res.cookies.set({
       name: "carbon_gen_auth_v1",
       value: "true",
-      httpOnly: false,
+      httpOnly: true,
       sameSite: "lax",
       path: "/",
     });
     res.cookies.set({
       name: "carbon_gen_user_role",
       value: req.cookies.get("carbon_gen_user_role")?.value || "admin",
-      httpOnly: false,
+      httpOnly: true,
       sameSite: "lax",
       path: "/",
     });
@@ -26,7 +28,7 @@ export function middleware(req: NextRequest) {
       res.cookies.set({
         name: "carbon_gen_username",
         value: "guest",
-        httpOnly: false,
+        httpOnly: true,
         sameSite: "lax",
         path: "/",
       });
@@ -35,7 +37,7 @@ export function middleware(req: NextRequest) {
       res.cookies.set({
         name: "carbon_gen_user_id",
         value: "00000000-0000-0000-0000-000000000001",
-        httpOnly: false,
+        httpOnly: true,
         sameSite: "lax",
         path: "/",
       });

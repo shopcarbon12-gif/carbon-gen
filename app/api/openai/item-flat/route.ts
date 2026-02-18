@@ -4,6 +4,12 @@ import type { NextRequest } from "next/server";
 import { isRequestAuthed } from "@/lib/auth";
 import { checkGenerateRateLimit } from "@/lib/ratelimit";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import {
+  fetchRemoteImageBytes,
+  getImageFetchMaxBytes,
+  getImageFetchTimeoutMs,
+  normalizeRemoteImageUrl,
+} from "@/lib/remoteImage";
 
 function normalizeText(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -23,24 +29,19 @@ function extFromContentType(contentType: string) {
   return "png";
 }
 
-function sanitizeReferenceUrl(value: unknown) {
-  if (typeof value !== "string") return "";
-  let v = value.trim();
-  if (!v) return "";
-  v = v.replace(/%0d%0a/gi, "");
-  v = v.replace(/%0d/gi, "");
-  v = v.replace(/%0a/gi, "");
-  v = v.replace(/[\r\n]+/g, "");
-  return v.trim();
-}
-
-async function fetchReference(url: string) {
-  return fetch(url, {
-    headers: {
-      Accept: "image/*,*/*;q=0.8",
-      "User-Agent": "Mozilla/5.0",
-    },
+function normalizeReferenceUrls(values: unknown[], label: string) {
+  const urls: string[] = [];
+  const errors: string[] = [];
+  values.forEach((value, idx) => {
+    const raw = typeof value === "string" ? value : "";
+    if (!raw.trim()) return;
+    try {
+      urls.push(normalizeRemoteImageUrl(raw));
+    } catch (err: any) {
+      errors.push(`${label} ref ${idx + 1}: ${err?.message || "Invalid URL"}`);
+    }
   });
+  return { urls, errors };
 }
 
 async function downloadReferenceAsFile(url: string, index: number) {
@@ -48,15 +49,18 @@ async function downloadReferenceAsFile(url: string, index: number) {
   const encoded = encodeURI(url);
   if (encoded !== url) attempts.push(encoded);
 
-  let lastStatus = 0;
+  let lastError: string | null = null;
   for (const attempt of attempts) {
-    const resp = await fetchReference(attempt);
-    lastStatus = resp.status;
-    if (!resp.ok) continue;
-    const contentType = resp.headers.get("content-type") || "image/png";
-    const ext = extFromContentType(contentType);
-    const bytes = Buffer.from(await resp.arrayBuffer());
-    return toFile(bytes, `item-ref-${index + 1}.${ext}`, { type: contentType });
+    try {
+      const { bytes, contentType } = await fetchRemoteImageBytes(attempt, {
+        timeoutMs: getImageFetchTimeoutMs(),
+        maxBytes: getImageFetchMaxBytes(),
+      });
+      const ext = extFromContentType(contentType);
+      return toFile(bytes, `item-ref-${index + 1}.${ext}`, { type: contentType });
+    } catch (err: any) {
+      lastError = err?.message || "Image fetch failed";
+    }
   }
 
   try {
@@ -83,7 +87,11 @@ async function downloadReferenceAsFile(url: string, index: number) {
     // Keep original error below.
   }
 
-  throw new Error(`Item reference image fetch failed (${lastStatus || 0}) at index ${index + 1}`);
+  throw new Error(
+    `Item reference image fetch failed at index ${index + 1}${
+      lastError ? ` (${lastError})` : ""
+    }`
+  );
 }
 
 function isOpenAiAuthError(err: unknown) {
@@ -132,9 +140,18 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json().catch(() => ({}));
     const itemType = normalizeText(body?.itemType) || "apparel item";
-    const allRefs: string[] = Array.isArray(body?.itemRefs)
-      ? body.itemRefs.map((v: unknown) => sanitizeReferenceUrl(v)).filter(Boolean)
-      : [];
+    const itemRefs = Array.isArray(body?.itemRefs) ? body.itemRefs : [];
+    const normalization = normalizeReferenceUrls(itemRefs, "Item");
+    const allRefs = normalization.urls;
+    if (normalization.errors.length) {
+      return NextResponse.json(
+        {
+          error: "Invalid or blocked item reference URLs.",
+          details: normalization.errors.join(" | "),
+        },
+        { status: 400 }
+      );
+    }
 
     if (!allRefs.length) {
       return NextResponse.json(

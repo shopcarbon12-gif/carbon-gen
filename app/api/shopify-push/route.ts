@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isRequestAuthed } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { uploadBytesToStorage } from "@/lib/storageProvider";
 import {
   getShopifyAdminToken,
   normalizeShopDomain,
@@ -326,10 +327,6 @@ async function createProductImages(
   images: Array<{ url: string; altText?: string }>
 ) {
   const supabase = getSupabaseAdmin();
-  const bucket = norm(process.env.SUPABASE_STORAGE_BUCKET_ITEMS);
-  if (!bucket) {
-    throw new Error("Missing SUPABASE_STORAGE_BUCKET_ITEMS for image staging.");
-  }
   const preparedImages: Array<{ url: string; altText?: string }> = [];
   for (const image of images) {
     const sourceUrl = norm(image.url);
@@ -338,19 +335,15 @@ async function createProductImages(
       const parsed = parseDataImage(sourceUrl);
       if (!parsed) continue;
       const path = `items/push-staging/${Date.now()}-${crypto.randomUUID()}.${parsed.ext}`;
-      const { error: uploadError } = await supabase.storage
-        .from(bucket)
-        .upload(path, parsed.bytes, { contentType: parsed.contentType });
-      if (uploadError) throw new Error(uploadError.message || "Failed to stage image for Shopify push.");
-
-      const { data: signedData } = await supabase.storage.from(bucket).createSignedUrl(path, 60 * 60);
-      const stagedUrl = norm(signedData?.signedUrl || "");
+      const uploaded = await uploadBytesToStorage({
+        path,
+        bytes: parsed.bytes,
+        contentType: parsed.contentType,
+      });
+      const stagedUrl = norm(uploaded.url);
       if (stagedUrl) {
         preparedImages.push({ url: stagedUrl, altText: image.altText });
-        continue;
       }
-      const publicUrl = supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
-      preparedImages.push({ url: norm(publicUrl), altText: image.altText });
       continue;
     }
 

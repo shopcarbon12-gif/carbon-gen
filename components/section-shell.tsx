@@ -4,6 +4,7 @@ import Link from "next/link";
 
 const links = [
   { href: "/studio/images", label: "Image Studio" },
+  { href: "/studio/gemini-generator", label: "Gemini Generator" },
   { href: "/studio/seo", label: "SEO Manager" },
   { href: "/studio/rfid-price-tag", label: "RFID Price Tag" },
   { href: "/studio/lightspeed-catalog", label: "Lightspeed Catalog" },

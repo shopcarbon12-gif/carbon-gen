@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { uploadBytesToStorage } from "@/lib/storageProvider";
 
 const DEFAULT_SESSION_USER_ID = "00000000-0000-0000-0000-000000000001";
 
@@ -50,7 +51,8 @@ async function modelNameExistsForUser(userId: string, candidateName: string) {
 export async function POST(req: NextRequest) {
   try {
     const isAuthed =
-      (process.env.AUTH_BYPASS || "true").trim().toLowerCase() === "true" ||
+      (process.env.NODE_ENV !== "production" &&
+        (process.env.AUTH_BYPASS || "false").trim().toLowerCase() === "true") ||
       req.cookies.get("carbon_gen_auth_v1")?.value === "true";
     if (!isAuthed) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -115,15 +117,6 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const bucket = (process.env.SUPABASE_STORAGE_BUCKET_ITEMS || "").trim();
-      if (!bucket) {
-        return NextResponse.json(
-          { error: "Missing SUPABASE_STORAGE_BUCKET_ITEMS" },
-          { status: 500 }
-        );
-      }
-
-      const supabase = getSupabaseAdmin();
       const tempId = crypto.randomUUID();
       const uploadJobs = files.map(async (file) => {
         const arrayBuffer = await file.arrayBuffer();
@@ -131,15 +124,12 @@ export async function POST(req: NextRequest) {
         const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
         const path = `models/${tempId}/${Date.now()}-${safeName}`;
 
-        const { error: uploadError } = await supabase.storage
-          .from(bucket)
-          .upload(path, bytes, { contentType: file.type || "application/octet-stream" });
-
-        if (uploadError) {
-          throw new Error(uploadError.message);
-        }
-
-        return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
+        const uploaded = await uploadBytesToStorage({
+          path,
+          bytes,
+          contentType: file.type || "application/octet-stream",
+        });
+        return uploaded.url;
       });
 
       urls = (await Promise.all(uploadJobs))

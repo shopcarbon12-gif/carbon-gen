@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { uploadBytesToStorage } from "@/lib/storageProvider";
 
 function sanitizeFileName(input: string) {
   const base = input.replace(/[^a-zA-Z0-9.\-_]/g, "_");
@@ -30,6 +30,14 @@ function sanitizeFolderPrefix(input: unknown) {
 
 export async function POST(req: NextRequest) {
   try {
+    const isAuthed =
+      (process.env.NODE_ENV !== "production" &&
+        (process.env.AUTH_BYPASS || "false").trim().toLowerCase() === "true") ||
+      req.cookies.get("carbon_gen_auth_v1")?.value === "true";
+    if (!isAuthed) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const contentType = req.headers.get("content-type") || "";
     if (contentType.includes("application/json")) {
       const body = await req.json().catch(() => ({}));
@@ -44,12 +52,6 @@ export async function POST(req: NextRequest) {
       }
       const folderPrefix = sanitizeFolderPrefix(body?.folderPrefix);
 
-      const bucket = (process.env.SUPABASE_STORAGE_BUCKET_ITEMS || "").trim();
-      if (!bucket) {
-        return NextResponse.json({ error: "Missing SUPABASE_STORAGE_BUCKET_ITEMS" }, { status: 500 });
-      }
-
-      const supabase = getSupabaseAdmin();
       const batchId = crypto.randomUUID();
       const urls: string[] = [];
 
@@ -69,16 +71,12 @@ export async function POST(req: NextRequest) {
         const safeName = guessFileNameFromUrl(sourceUrl, i);
         const path = `${folderPrefix}/${batchId}/${Date.now()}-${crypto.randomUUID()}-${safeName}`;
 
-        const { error: uploadError } = await supabase.storage
-          .from(bucket)
-          .upload(path, bytes, { contentType: remoteContentType });
-
-        if (uploadError) {
-          return NextResponse.json({ error: uploadError.message }, { status: 500 });
-        }
-
-        const publicUrl = supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
-        urls.push(publicUrl);
+        const uploaded = await uploadBytesToStorage({
+          path,
+          bytes,
+          contentType: remoteContentType,
+        });
+        urls.push(uploaded.url);
       }
 
       return NextResponse.json({ urls });
@@ -92,12 +90,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No files uploaded." }, { status: 400 });
     }
 
-    const bucket = (process.env.SUPABASE_STORAGE_BUCKET_ITEMS || "").trim();
-    if (!bucket) {
-      return NextResponse.json({ error: "Missing SUPABASE_STORAGE_BUCKET_ITEMS" }, { status: 500 });
-    }
-
-    const supabase = getSupabaseAdmin();
     const batchId = crypto.randomUUID();
     const urls: string[] = [];
 
@@ -107,16 +99,12 @@ export async function POST(req: NextRequest) {
       const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
       const path = `${folderPrefix}/${batchId}/${Date.now()}-${crypto.randomUUID()}-${safeName}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from(bucket)
-        .upload(path, bytes, { contentType: file.type || "application/octet-stream" });
-
-      if (uploadError) {
-        return NextResponse.json({ error: uploadError.message }, { status: 500 });
-      }
-
-      const publicUrl = supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
-      urls.push(publicUrl);
+      const uploaded = await uploadBytesToStorage({
+        path,
+        bytes,
+        contentType: file.type || "application/octet-stream",
+      });
+      urls.push(uploaded.url);
     }
 
     return NextResponse.json({ urls });

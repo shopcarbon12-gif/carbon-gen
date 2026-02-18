@@ -2,6 +2,13 @@ import OpenAI from "openai";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isRequestAuthed } from "@/lib/auth";
+import {
+  assertDataUrlSize,
+  fetchRemoteImageBytes,
+  getImageFetchMaxBytes,
+  getImageFetchTimeoutMs,
+  normalizeRemoteImageUrl,
+} from "@/lib/remoteImage";
 
 function normalizeText(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -19,20 +26,17 @@ function sanitizeItemType(value: unknown) {
 async function toModelImageUrl(rawUrl: string) {
   const url = normalizeText(rawUrl);
   if (!url) return "";
-  if (url.startsWith("data:image/")) return url;
-  if (!/^https?:\/\//i.test(url)) return url;
-
-  try {
-    const resp = await fetch(url, {
-      headers: { Accept: "image/*,*/*;q=0.8", "User-Agent": "Mozilla/5.0" },
-    });
-    if (!resp.ok) return url;
-    const contentType = normalizeText(resp.headers.get("content-type")) || "image/png";
-    const bytes = Buffer.from(await resp.arrayBuffer());
-    return `data:${contentType};base64,${bytes.toString("base64")}`;
-  } catch {
+  if (url.startsWith("data:image/")) {
+    assertDataUrlSize(url, getImageFetchMaxBytes());
     return url;
   }
+
+  const safeUrl = normalizeRemoteImageUrl(url);
+  const { bytes, contentType } = await fetchRemoteImageBytes(safeUrl, {
+    timeoutMs: getImageFetchTimeoutMs(),
+    maxBytes: getImageFetchMaxBytes(),
+  });
+  return `data:${normalizeText(contentType) || "image/png"};base64,${bytes.toString("base64")}`;
 }
 
 export async function POST(req: NextRequest) {
@@ -54,7 +58,20 @@ export async function POST(req: NextRequest) {
     }
 
     const client = new OpenAI({ apiKey });
-    const sourceImage = imageDataUrl || (await toModelImageUrl(imageUrl));
+    let sourceImage = "";
+    try {
+      if (imageDataUrl) {
+        assertDataUrlSize(imageDataUrl, getImageFetchMaxBytes());
+        sourceImage = imageDataUrl;
+      } else {
+        sourceImage = await toModelImageUrl(imageUrl);
+      }
+    } catch (err: any) {
+      return NextResponse.json(
+        { error: err?.message || "Invalid or blocked image URL." },
+        { status: 400 }
+      );
+    }
     const prompt = [
       "You are a fashion ecommerce classifier.",
       "Identify the primary clothing product type in this image.",
@@ -112,4 +129,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import {
   useCallback,
@@ -4830,7 +4830,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           <div className="eyebrow">02 — References</div>
           <div className="section-header">
             <div className="card-title">Item References</div>
-            <button className="ghost-btn" type="button" onClick={() => setItemRefsCollapsed((p) => !p)}>
+            <button suppressHydrationWarning className="ghost-btn" type="button" onClick={() => setItemRefsCollapsed((p) => !p)}>
               {itemRefsCollapsed ? "Expand" : "Collapse"}
             </button>
           </div>
@@ -5753,7 +5753,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           <div className="eyebrow">05 — Publish</div>
           <div className="section-header">
             <div className="card-title">Shopify Push (Images)</div>
-            <button suppressHydrationWarning className="ghost-btn" type="button" onClick={() => setShopifyPushCollapsed((p) => !p)}>
+            <button className="ghost-btn" type="button" onClick={() => setShopifyPushCollapsed((p) => !p)}>
               {shopifyPushCollapsed ? "Expand" : "Collapse"}
             </button>
           </div>
@@ -6111,7 +6111,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           <div className="eyebrow">06 — SEO</div>
           <div className="section-header">
             <div className="card-title">Shopify Pull + SEO Studio</div>
-            <button suppressHydrationWarning className="ghost-btn" type="button" onClick={() => setSeoCollapsed((p) => !p)}>
+            <button className="ghost-btn" type="button" onClick={() => setSeoCollapsed((p) => !p)}>
               {seoCollapsed ? "Expand" : "Collapse"}
             </button>
           </div>

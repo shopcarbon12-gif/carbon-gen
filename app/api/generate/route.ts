@@ -3,6 +3,12 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { checkGenerateRateLimit } from "@/lib/ratelimit";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import {
+  fetchRemoteImageBytes,
+  getImageFetchMaxBytes,
+  getImageFetchTimeoutMs,
+  normalizeRemoteImageUrl,
+} from "@/lib/remoteImage";
 
 const FALLBACK_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAIAAAB7GkOtAAAFx0lEQVR42u3UwQkAIBDAMHX/nc8lBK4jUZBkn2tmdgDg53YHAH4MIAgQCBAECAQIAgQCBAECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIhD8eQ9JCmqo2AAAAAElFTkSuQmCC";
@@ -21,25 +27,19 @@ function extFromContentType(contentType: string) {
   return "png";
 }
 
-function sanitizeReferenceUrl(value: unknown) {
-  if (typeof value !== "string") return "";
-  let v = value.trim();
-  if (!v) return "";
-  // Strip hidden line-break characters that sometimes leak into stored URLs.
-  v = v.replace(/%0d%0a/gi, "");
-  v = v.replace(/%0d/gi, "");
-  v = v.replace(/%0a/gi, "");
-  v = v.replace(/[\r\n]+/g, "");
-  return v.trim();
-}
-
-async function fetchReference(url: string) {
-  return fetch(url, {
-    headers: {
-      Accept: "image/*,*/*;q=0.8",
-      "User-Agent": "Mozilla/5.0",
-    },
+function normalizeReferenceUrls(values: unknown[], label: string) {
+  const urls: string[] = [];
+  const errors: string[] = [];
+  values.forEach((value, idx) => {
+    const raw = typeof value === "string" ? value : "";
+    if (!raw.trim()) return;
+    try {
+      urls.push(normalizeRemoteImageUrl(raw));
+    } catch (err: any) {
+      errors.push(`${label} ref ${idx + 1}: ${err?.message || "Invalid URL"}`);
+    }
   });
+  return { urls, errors };
 }
 
 async function downloadReferenceAsFile(url: string, index: number) {
@@ -47,15 +47,18 @@ async function downloadReferenceAsFile(url: string, index: number) {
   const encoded = encodeURI(url);
   if (encoded !== url) attempts.push(encoded);
 
-  let lastStatus = 0;
+  let lastError: string | null = null;
   for (const attempt of attempts) {
-    const resp = await fetchReference(attempt);
-    lastStatus = resp.status;
-    if (!resp.ok) continue;
-    const contentType = resp.headers.get("content-type") || "image/png";
-    const ext = extFromContentType(contentType);
-    const bytes = Buffer.from(await resp.arrayBuffer());
-    return toFile(bytes, `ref-${index + 1}.${ext}`, { type: contentType });
+    try {
+      const { bytes, contentType } = await fetchRemoteImageBytes(attempt, {
+        timeoutMs: getImageFetchTimeoutMs(),
+        maxBytes: getImageFetchMaxBytes(),
+      });
+      const ext = extFromContentType(contentType);
+      return toFile(bytes, `ref-${index + 1}.${ext}`, { type: contentType });
+    } catch (err: any) {
+      lastError = err?.message || "Image fetch failed";
+    }
   }
   // Fallback for Supabase public URLs that may fail with 400 in this environment.
   try {
@@ -82,7 +85,11 @@ async function downloadReferenceAsFile(url: string, index: number) {
     // Keep original error below.
   }
 
-  throw new Error(`Reference image fetch failed (${lastStatus || 0}) at index ${index + 1}`);
+  throw new Error(
+    `Reference image fetch failed at index ${index + 1}${
+      lastError ? ` (${lastError})` : ""
+    }`
+  );
 }
 
 function buildReferenceDownloadErrorDetails(params: {
@@ -612,7 +619,8 @@ async function runPanelComplianceCheck(args: {
 export async function POST(req: NextRequest) {
   try {
     const isAuthed =
-      (process.env.AUTH_BYPASS || "true").trim().toLowerCase() === "true" ||
+      (process.env.NODE_ENV !== "production" &&
+        (process.env.AUTH_BYPASS || "false").trim().toLowerCase() === "true") ||
       req.cookies.get("carbon_gen_auth_v1")?.value === "true";
     if (!isAuthed) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -643,16 +651,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing prompt" }, { status: 400 });
     }
 
-    const normalizedModelRefs = Array.isArray(modelRefs)
-      ? modelRefs
-          .map((v) => sanitizeReferenceUrl(v))
-          .filter((v): v is string => v.length > 0)
-      : [];
-    const normalizedItemRefs = Array.isArray(itemRefs)
-      ? itemRefs
-          .map((v) => sanitizeReferenceUrl(v))
-          .filter((v): v is string => v.length > 0)
-      : [];
+    const modelRefValues = Array.isArray(modelRefs) ? modelRefs : [];
+    const itemRefValues = Array.isArray(itemRefs) ? itemRefs : [];
+    const modelRefNormalization = normalizeReferenceUrls(modelRefValues, "Model");
+    const itemRefNormalization = normalizeReferenceUrls(itemRefValues, "Item");
+    const normalizedModelRefs = modelRefNormalization.urls;
+    const normalizedItemRefs = itemRefNormalization.urls;
+    const refErrors = [...modelRefNormalization.errors, ...itemRefNormalization.errors];
+    if (refErrors.length) {
+      return NextResponse.json(
+        {
+          error: "Invalid or blocked reference image URLs.",
+          details: refErrors.join(" | "),
+        },
+        { status: 400 }
+      );
+    }
 
     if (!normalizedModelRefs.length) {
       return NextResponse.json(
@@ -843,20 +857,20 @@ export async function POST(req: NextRequest) {
           retryErr?.headers?.get?.("x-request-id") ||
           err?.headers?.get?.("x-request-id") ||
           null;
-            return NextResponse.json(
-      {
-        error: {
-          type: "policy_refusal",
-          code: retryErr?.code || err?.code || "moderation_blocked",
-          message:
-            "Generation was blocked by safety moderation for this reference set. Try a less revealing crop/reference mix or use neutral front/back product shots.",
-          requestId,
-        },
-      },
-      { status: 403 }
-    );
-  }
-}
+        return NextResponse.json(
+          {
+            error: {
+              type: "policy_refusal",
+              code: retryErr?.code || err?.code || "moderation_blocked",
+              message:
+                "Generation was blocked by safety moderation for this reference set. Try a less revealing crop/reference mix or use neutral front/back product shots.",
+              requestId,
+            },
+          },
+          { status: 403 }
+        );
+      }
+    }
 
 
     if (!b64) {

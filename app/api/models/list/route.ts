@@ -31,7 +31,8 @@ function isTemporaryReferenceUrl(raw: string) {
 export async function GET(req: NextRequest) {
   try {
     const isAuthed =
-      (process.env.AUTH_BYPASS || "true").trim().toLowerCase() === "true" ||
+      (process.env.NODE_ENV !== "production" &&
+        (process.env.AUTH_BYPASS || "false").trim().toLowerCase() === "true") ||
       req.cookies.get("carbon_gen_auth_v1")?.value === "true";
     if (!isAuthed) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

@@ -1,47 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
-
-type StorageEntry = {
-  name: string;
-  id: string | null;
-  metadata?: { size?: number } | null;
-  created_at?: string | null;
-  updated_at?: string | null;
-};
-
-async function listFilesRecursive(bucket: string, prefix: string) {
-  const supabase = getSupabaseAdmin();
-  const files: Array<{ path: string; created_at?: string | null; size?: number | null }> = [];
-  const queue: string[] = [prefix];
-
-  while (queue.length) {
-    const current = queue.shift() as string;
-    const { data, error } = await supabase.storage.from(bucket).list(current, {
-      limit: 1000,
-      sortBy: { column: "name", order: "asc" },
-    });
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    for (const entry of (data || []) as StorageEntry[]) {
-      const childPath = `${current}/${entry.name}`.replace(/^\/+/, "");
-      const isFolder = !entry.id;
-      if (isFolder) {
-        queue.push(childPath);
-      } else {
-        files.push({
-          path: childPath,
-          created_at: entry.created_at || entry.updated_at || null,
-          size: entry.metadata?.size ?? null,
-        });
-      }
-    }
-  }
-
-  return files;
-}
+import { getActiveStorageProvider, getStoragePublicUrl, listStorageFiles } from "@/lib/storageProvider";
 
 function parseTimestampFromPath(path: string) {
   const fileName = path.split("/").pop() || "";
@@ -53,6 +13,11 @@ function parseTimestampFromPath(path: string) {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+function shouldSignUrls() {
+  const provider = getActiveStorageProvider();
+  return provider.type === "supabase";
+}
+
 export async function GET(req: NextRequest) {
   try {
     const isAuthed = req.cookies.get("carbon_gen_auth_v1")?.value === "true";
@@ -60,38 +25,38 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const bucket = (process.env.SUPABASE_STORAGE_BUCKET_ITEMS || "").trim();
-    if (!bucket) {
-      return NextResponse.json(
-        { error: "Missing SUPABASE_STORAGE_BUCKET_ITEMS" },
-        { status: 500 }
-      );
-    }
-
     const prefix = String(req.nextUrl.searchParams.get("prefix") || "")
       .trim()
       .replace(/^\/+/, "")
       .replace(/\/+$/, "");
 
-    const targetPrefixes = prefix
-      ? [prefix]
-      : ["models", "items"];
+    const targetPrefixes = prefix ? [prefix] : ["models", "items"];
     const listedGroups = await Promise.all(
-      targetPrefixes.map((p) => listFilesRecursive(bucket, p))
+      targetPrefixes.map((p) => listStorageFiles(p))
     );
     const allFiles = listedGroups.flat();
 
-    const supabase = getSupabaseAdmin();
+    const useSigned = shouldSignUrls();
+    const supabase = useSigned ? getSupabaseAdmin() : null;
+    const bucket = useSigned ? (process.env.SUPABASE_STORAGE_BUCKET_ITEMS || "").trim() : "";
+
     const withUrls = await Promise.all(
       allFiles.map(async (f) => {
-        const signed = await supabase.storage.from(bucket).createSignedUrl(f.path, 60 * 60);
-        const uploadedAt = parseTimestampFromPath(f.path) || f.created_at || null;
+        let url: string | null = null;
+        if (useSigned && supabase && bucket) {
+          const signed = await supabase.storage.from(bucket).createSignedUrl(f.path, 60 * 60);
+          url = signed.data?.signedUrl || null;
+        } else {
+          url = getStoragePublicUrl(f.path);
+        }
+        const uploadedAt =
+          parseTimestampFromPath(f.path) || f.createdAt || f.updatedAt || null;
         return {
           path: f.path,
           type: f.path.startsWith("models/") ? "model" : "item",
           size: f.size ?? null,
           uploadedAt,
-          url: signed.data?.signedUrl || null,
+          url,
         };
       })
     );

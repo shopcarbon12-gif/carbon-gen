@@ -56,6 +56,7 @@ const ACTIVE_ITEM_STYLE: CSSProperties = {
 
 const navItems: NavItem[] = [
   { href: "/studio/images", label: "Image Generator" },
+  { href: "/studio/gemini-generator", label: "Gemini Generator" },
   { href: "/studio/seo", label: "SEO Manager" },
   { href: "/studio/rfid-price-tag", label: "RFID Price Tag" },
   { href: "/studio/lightspeed-catalog", label: "Lightspeed Catalog" },
@@ -369,29 +370,29 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
       </svg>
 
       <header className="topbar">
-        <button
-          suppressHydrationWarning
-          type="button"
-          className={`menu-toggle ${menuOpen ? "open" : ""}`}
-          onClick={toggleMenu}
-          aria-controls="workspace-menu"
-          aria-expanded={drawerOpen}
-          aria-label={drawerOpen ? "Close menu" : "Open menu"}
-        >
-          <span className="menu-icon" aria-hidden>
-            <span />
-            <span />
-            <span />
-          </span>
-        </button>
-        <div className="topbar-title">
-          <span className="topbar-brand-lock">
-            <img className="topbar-logo" src="/brand/carbon-long-white.png" alt="Carbon" />
-          </span>
-          <span className="topbar-sep"> / </span>
-          <span className="topbar-page-lock">{currentTitle}</span>
-        </div>
-      </header>
+            <button
+              suppressHydrationWarning
+              type="button"
+              className={`menu-toggle ${menuOpen ? "open" : ""}`}
+              onClick={toggleMenu}
+              aria-controls="workspace-menu"
+              aria-expanded={drawerOpen}
+              aria-label={drawerOpen ? "Close menu" : "Open menu"}
+            >
+              <span className="menu-icon" aria-hidden>
+                <span />
+                <span />
+                <span />
+              </span>
+            </button>
+            <div className="topbar-title">
+              <span className="topbar-brand-lock">
+                <img className="topbar-logo" src="/brand/carbon-long-white.png" alt="Carbon" />
+              </span>
+              <span className="topbar-sep"> / </span>
+            <span className="topbar-page-lock">{currentTitle}</span>
+          </div>
+        </header>
 
       <aside
         id="workspace-menu"
@@ -766,7 +767,9 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
       ) : null}
 
       <main
-        className={`content ${drawerOpen ? "menu-open" : ""} ${showIntegrationPanel ? "" : "no-integration-panel"}`}
+        className={`content ${drawerOpen ? "menu-open" : ""} ${
+          showIntegrationPanel ? "" : "no-integration-panel"
+        }`}
       >
         {children}
       </main>
