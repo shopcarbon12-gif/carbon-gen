@@ -4692,7 +4692,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               <div className="muted centered">Selected pictures will appear here.</div>
             )}
           </div>
-          <div className="row">
+          <div className="row" style={{ justifyContent: "center" }}>
             <button className="btn ghost" type="button" onClick={onPreviousUploadsPrimaryAction}>
               {previousUploadsVisible
                 ? "Hide Previous Uploads"
@@ -4707,7 +4707,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               {emptyingBucket ? "Emptying Storage..." : "Empty Storage"}
             </button>
           </div>
-          <div className="row">
+          <div className="row" style={{ justifyContent: "center" }}>
             <button className="btn primary" onClick={createModel}>
               Save Model
             </button>
@@ -5323,7 +5323,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               ) : null}
           </div>
           <div className="row">
-            <button className="btn" type="button" onClick={uploadItems}>
+            <button className="btn primary" type="button" onClick={uploadItems}>
               Save Item References + Type
             </button>
           </div>
@@ -5558,7 +5558,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             </div>
           </div>
           <div className="row">
-            <button className="btn ghost" onClick={approveSelectedPanels}>
+            <button className="btn primary" onClick={approveSelectedPanels}>
               Approve Selected
             </button>
             <button className="btn ghost" onClick={splitToThreeByFour}>
@@ -5652,7 +5652,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             </div>
             <div className="row">
               <button
-                className="btn ghost"
+                className="btn primary"
                 type="button"
                 onClick={saveFinalResultsToStorage}
                 disabled={savingFinalResults || (!splitCrops.length && !finalResultFiles.length)}
@@ -5753,7 +5753,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           <div className="eyebrow">05 — Publish</div>
           <div className="section-header">
             <div className="card-title">Shopify Push (Images)</div>
-            <button className="ghost-btn" type="button" onClick={() => setShopifyPushCollapsed((p) => !p)}>
+            <button suppressHydrationWarning className="ghost-btn" type="button" onClick={() => setShopifyPushCollapsed((p) => !p)}>
               {shopifyPushCollapsed ? "Expand" : "Collapse"}
             </button>
           </div>
@@ -6111,7 +6111,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           <div className="eyebrow">06 — SEO</div>
           <div className="section-header">
             <div className="card-title">Shopify Pull + SEO Studio</div>
-            <button className="ghost-btn" type="button" onClick={() => setSeoCollapsed((p) => !p)}>
+            <button suppressHydrationWarning className="ghost-btn" type="button" onClick={() => setSeoCollapsed((p) => !p)}>
               {seoCollapsed ? "Expand" : "Collapse"}
             </button>
           </div>
@@ -7145,15 +7145,21 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          background: linear-gradient(135deg, #6366f1, #818cf8);
+          background: linear-gradient(180deg, #4bc99a 0%, #3fb88b 50%, #38a87e 100%);
           color: #fff;
-          border-color: #6366f1;
+          border: 1px solid rgba(255, 255, 255, 0.35);
           font-weight: 700;
+          box-shadow: 0 1px 0 rgba(255, 255, 255, 0.2) inset, 0 1px 2px rgba(0, 0, 0, 0.08);
+          text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
         }
         .btn.primary:hover:not(:disabled) {
-          background: linear-gradient(135deg, #4f46e5, #6366f1);
-          border-color: #4f46e5;
-          box-shadow: 0 8px 24px rgba(99, 102, 241, 0.35);
+          background: linear-gradient(180deg, #52d1a3 0%, #45c494 50%, #3fb88b 100%);
+          border-color: rgba(255, 255, 255, 0.45);
+          box-shadow: 0 1px 0 rgba(255, 255, 255, 0.25) inset, 0 2px 6px rgba(0, 0, 0, 0.12);
+        }
+        .btn.primary:disabled {
+          background: linear-gradient(180deg, #6b9b8a 0%, #5a8a7a 100%);
+          opacity: 0.7;
         }
         .row {
           display: flex;

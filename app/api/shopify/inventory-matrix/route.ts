@@ -12,8 +12,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
-const SHOPIFY_PRODUCTS_PER_PAGE = 250;
-const MAX_SHOPIFY_SCAN_PAGES = 16;
+const SHOPIFY_PRODUCTS_PER_PAGE = 100;
+const MAX_SHOPIFY_SCAN_PAGES = 40;
 const SHOPIFY_VARIANTS_CACHE_MS = 5 * 60 * 1000;
 const ALLOWED_PAGE_SIZES = [20, 50, 75, 100, 200, 500] as const;
 
