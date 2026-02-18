@@ -3410,7 +3410,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               selectedModel.gender,
               fallbackFromPanel
             );
-            setPanelStatus(panelNumber, `generating (fallback from panel ${fallbackFromPanel})`);
+            setStatus(`Panel ${panelNumber}: generating (fallback from panel ${fallbackFromPanel})`);
 
             const fallback = await requestOnce({
               poseA: fallbackPoseA,
