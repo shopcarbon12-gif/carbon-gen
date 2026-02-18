@@ -771,7 +771,6 @@ export async function POST(req: NextRequest) {
           image: referenceFiles,
           prompt: lockedPrompt,
           size: finalSize,
-          quality: "high",
           input_fidelity: "high",
         }),
         imageTimeoutMs,
@@ -826,7 +825,6 @@ export async function POST(req: NextRequest) {
               image: referenceFiles,
               prompt: retryPrompts[i],
               size: finalSize,
-              quality: "high",
               input_fidelity: "high",
             }),
             imageTimeoutMs,
@@ -846,20 +844,21 @@ export async function POST(req: NextRequest) {
           retryErr?.headers?.get?.("x-request-id") ||
           err?.headers?.get?.("x-request-id") ||
           null;
-        return NextResponse.json(
-          {
-            error: {
-              type: "policy_refusal",
-              code: retryErr?.code || err?.code || "moderation_blocked",
-              message:
-                "Generation was blocked by safety moderation for this reference set. Try a less revealing crop/reference mix or use neutral front/back product shots.",
-              requestId,
-            },
-          },
-          { status: 403 }
-        );
+            return NextResponse.json(
+      {
+        error: {
+          type: "policy_refusal",
+          code: retryErr?.code || err?.code || "moderation_blocked",
+          message:
+            "Generation was blocked by safety moderation for this reference set. Try a less revealing crop/reference mix or use neutral front/back product shots.",
+          requestId,
+        },
+      },
+      { status: 403 }
+    );
+  }
 }
-    }
+
 
     if (!b64) {
       return fallbackGenerateResponse("No image returned from provider.");

@@ -557,6 +557,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   const pickerMaskTimerRef = useRef<number | null>(null);
   const [workspaceHydrated, setWorkspaceHydrated] = useState(false);
   const [modelRegistryCollapsed, setModelRegistryCollapsed] = useState(true);
+  const [itemRefsCollapsed, setItemRefsCollapsed] = useState(false);
+  const [shopifyPushCollapsed, setShopifyPushCollapsed] = useState(true);
+  const [seoCollapsed, setSeoCollapsed] = useState(true);
   const modelRegistryDefaultAppliedRef = useRef(false);
   const itemTypeDetectionSourceRef = useRef("");
   const itemTypeDetectionRequestRef = useRef(0);
@@ -1161,6 +1164,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   function isModerationBlockedErrorMessage(value: unknown) {
     const text = String(value || "");
     return (
+      /policy_refusal/i.test(text) ||
+      /content[_\s-]*policy/i.test(text) ||
       /blocked by safety moderation/i.test(text) ||
       /moderation[_\s-]*blocked/i.test(text) ||
       /safety_violations=\[sexual\]/i.test(text)
@@ -3371,6 +3376,17 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               if (openAiRelated) {
                 appendGenerateRawResponse(formatGenerateDebugPayload(json, panelNumber));
               }
+
+              // Prefer structured server errors when available (more reliable than message matching).
+              if (json?.error?.type === "policy_refusal") {
+                const msg =
+                  typeof json?.error?.message === "string" && json.error.message.trim()
+                    ? json.error.message.trim()
+                    : "Generation was blocked by safety moderation.";
+                // Include a stable marker so client-side fallback logic can reliably detect it.
+                throw new Error(`policy_refusal: ${msg}`);
+              }
+
               const details = shortErrorDetails(json?.details);
               const baseMsg = json?.error || `Panel ${panelNumber} generation failed`;
               throw new Error(details ? `${baseMsg}: ${details}` : baseMsg);
@@ -4515,7 +4531,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         }
       >
         <div className="status-bar-head">
-          <div className="status-bar-title">prgress bar</div>
+          <div className="status-bar-title">Progress</div>
           <span className={`status-chip ${statusTone}`}>
             {statusTone === "error"
               ? "Error"
@@ -4559,6 +4575,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         {showCreativeSections ? (
           <>
         <section className="card">
+          <div className="eyebrow">01 — Setup</div>
           <div className="model-registry-header">
             <div className="card-title">Model Registry</div>
             <button
@@ -4572,7 +4589,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           </div>
           {!modelRegistryCollapsed ? (
             <>
-          <p className="muted">Upload a model profile.</p>
+          <p className="muted">Upload model profile images.</p>
           <div className="row">
             <input
               value={modelName}
@@ -4604,8 +4621,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               }
             }}
           >
-            <div>Drag & drop a folder (or images) here</div>
-            <div className="muted">Click to select from your device. Only image files are used</div>
+            <div>Drop images or folder here</div>
+            <div className="muted">or click to browse</div>
           </div>
           <input
             ref={modelPickerRef}
@@ -4691,7 +4708,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             </button>
           </div>
           <div className="row">
-            <button className="btn" onClick={createModel}>
+            <button className="btn primary" onClick={createModel}>
               Save Model
             </button>
           </div>
@@ -4810,10 +4827,17 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         </section>
 
         <section className="card">
-          <div className="card-title">Item References</div>
+          <div className="eyebrow">02 — References</div>
+          <div className="section-header">
+            <div className="card-title">Item References</div>
+            <button className="ghost-btn" type="button" onClick={() => setItemRefsCollapsed((p) => !p)}>
+              {itemRefsCollapsed ? "Expand" : "Collapse"}
+            </button>
+          </div>
+          {!itemRefsCollapsed ? (
+          <>
           <p className="muted">
-            Choose image source: upload from device/cloud apps or import existing product images from
-            Shopify.
+            Upload from device/cloud or import from Shopify.
           </p>
           <div className="row">
             <input
@@ -4964,7 +4988,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             </div>
           ) : null}
           <div className="source-note muted">
-            You can combine both sources: upload from device and select from Shopify catalog.
+            Combine device uploads with Shopify catalog imports.
           </div>
           <div
             className="dropzone"
@@ -4978,8 +5002,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               if (filtered.length) setItemFiles((prev) => mergeUniqueFiles(prev, filtered));
             }}
           >
-            <div>Drag & drop a folder (or images) here</div>
-            <div className="muted">Click to select from your device. Only image files are used</div>
+            <div>Drop images or folder here</div>
+            <div className="muted">or click to browse</div>
           </div>
           <input
             ref={itemPickerRef}
@@ -5377,12 +5401,15 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               </div>
             </div>
           ) : null}
+          </>
+          ) : null}
         </section>
 
         <section className="card">
+          <div className="eyebrow">03 — Generate</div>
           <div className="card-title">Image Generation</div>
           <p className="muted">
-            Select a panel and generate. Approve or regenerate. Split into 3:4 crops after approval.
+            Select panels, generate, approve, then split into crops.
           </p>
           <div className="row">
             <select
@@ -5459,7 +5486,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             {[...selectedPanels].sort((a, b) => a - b).map((panelNumber) => {
               const b64 = generatedPanels[panelNumber];
               return (
-                <div className="panel-preview-card" key={panelNumber}>
+                <div className={`panel-preview-card ${b64 ? "has-image" : "empty"} ${panelsInFlight.includes(panelNumber) ? "generating" : ""} ${approvedPanels.includes(panelNumber) ? "approved" : ""}`} key={panelNumber}>
                   <div className="panel-preview-label">Panel {panelNumber}</div>
                   <div className="panel-preview">
                     {b64 ? (
@@ -5501,7 +5528,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           <div className="generation-actions-layout">
             <div className="generation-button-stack">
               <button
-                className="btn"
+                className="btn primary"
                 onClick={() => generatePanels("generate_selected")}
                 disabled={panelGenerating}
               >
@@ -5594,6 +5621,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             </div>
           </div>
           <div className="card">
+            <div className="eyebrow">04 — Results</div>
             <div className="card-title">Final Results</div>
             <div className="row">
               <button className="btn ghost" onClick={downloadAllSplitCrops} disabled={!splitCrops.length}>
@@ -5722,9 +5750,17 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         {showOpsSections ? (
           <>
         <section className="card">
-          <div className="card-title">3) Shopify Push (Images)</div>
+          <div className="eyebrow">05 — Publish</div>
+          <div className="section-header">
+            <div className="card-title">Shopify Push (Images)</div>
+            <button className="ghost-btn" type="button" onClick={() => setShopifyPushCollapsed((p) => !p)}>
+              {shopifyPushCollapsed ? "Expand" : "Collapse"}
+            </button>
+          </div>
+          {!shopifyPushCollapsed ? (
+          <>
           <p className="muted">
-            Search product once, manage all images (remove/reorder), edit or regenerate alt text, then push.
+            Search, manage images, edit alt text, then push.
           </p>
           <div className="catalog-wrap">
             <div className="row">
@@ -6063,16 +6099,26 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             >
               Fill Missing Alt
             </button>
-            <button className="btn" onClick={pushImageToShopify} disabled={!pushImages.length || pushingImages}>
+            <button className="btn primary" onClick={pushImageToShopify} disabled={!pushImages.length || pushingImages}>
               {pushingImages ? "Pushing..." : "Push Images (Replace Product Media)"}
             </button>
           </div>
+          </>
+          ) : null}
         </section>
 
         <section className="card">
-          <div className="card-title">2) Shopify Pull + SEO Studio</div>
+          <div className="eyebrow">06 — SEO</div>
+          <div className="section-header">
+            <div className="card-title">Shopify Pull + SEO Studio</div>
+            <button className="ghost-btn" type="button" onClick={() => setSeoCollapsed((p) => !p)}>
+              {seoCollapsed ? "Expand" : "Collapse"}
+            </button>
+          </div>
+          {!seoCollapsed ? (
+          <>
           <p className="muted">
-            Pull product data by handle or product ID, then edit SEO title/description and alt text.
+            Pull product data, edit SEO title/description and alt text.
           </p>
           <div className="row">
             <input
@@ -6110,6 +6156,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           <button className="btn" onClick={pushSeo}>
             Push SEO
           </button>
+          </>
+          ) : null}
         </section>
           </>
         ) : null}
@@ -6190,11 +6238,18 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           margin-bottom: 24px;
         }
         .eyebrow {
-          font-size: 0.75rem;
+          font-size: 0.7rem;
           text-transform: uppercase;
-          letter-spacing: 0.12em;
+          letter-spacing: 0.14em;
           color: #0b6b58;
-          font-weight: 700;
+          font-weight: 800;
+          margin-bottom: 2px;
+        }
+        .section-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
         }
         h1 {
           margin: 8px 0;
@@ -6209,12 +6264,15 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           gap: 12px;
         }
         .card {
-          border: 1px solid #e2e8f0;
+          border: 1px solid rgba(255, 255, 255, 0.12);
           border-radius: 16px;
-          padding: 16px;
-          background: #ffffff;
+          padding: 20px;
+          background: rgba(255, 255, 255, 0.06);
+          backdrop-filter: blur(16px) saturate(1.1);
+          -webkit-backdrop-filter: blur(16px) saturate(1.1);
           display: grid;
-          gap: 10px;
+          gap: 12px;
+          box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
         }
         .status-bar {
           position: fixed;
@@ -6384,6 +6442,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         }
         .card-title {
           font-weight: 700;
+          font-size: 1.1rem;
+          letter-spacing: 0.01em;
         }
         .model-registry-header {
           display: flex;
@@ -6721,19 +6781,20 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           background: #f8fafc;
         }
         .ghost-btn {
-          min-height: 44px;
-          border: 1px solid rgba(255, 255, 255, 0.28);
+          min-height: 38px;
+          border: 1px solid rgba(255, 255, 255, 0.18);
           background: transparent;
-          color: #f8fafc;
-          border-radius: 10px;
+          color: rgba(255, 255, 255, 0.75);
+          border-radius: 8px;
           padding: 0 14px;
-          font-size: 0.95rem;
-          font-weight: 700;
+          font-size: 0.84rem;
+          font-weight: 600;
           cursor: pointer;
           display: inline-flex;
           align-items: center;
           justify-content: center;
           line-height: 1;
+          white-space: nowrap;
           transition:
             background-color 0.16s ease,
             border-color 0.16s ease,
@@ -6743,10 +6804,11 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             box-shadow 0.16s ease;
         }
         .ghost-btn:hover:not(:disabled) {
-          background: rgba(255, 255, 255, 0.1);
-          border-color: rgba(255, 255, 255, 0.28);
+          background: rgba(255, 255, 255, 0.08);
+          border-color: rgba(255, 255, 255, 0.3);
+          color: #fff;
           transform: translateY(-1px);
-          box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         }
         .ghost-btn:active:not(:disabled) {
           transform: translateY(0);
@@ -7034,18 +7096,20 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           resize: vertical;
         }
         .btn {
-          min-height: 44px;
-          border: 1px solid #f3f4f6;
-          background: #f3f4f6;
-          color: #060606;
-          padding: 0 14px;
+          min-height: 42px;
+          border: 1.5px solid rgba(255, 255, 255, 0.22);
+          background: rgba(255, 255, 255, 0.1);
+          color: #f8fafc;
+          padding: 0 18px;
           border-radius: 10px;
-          font-weight: 700;
+          font-weight: 600;
+          font-size: 0.88rem;
           cursor: pointer;
           display: inline-flex;
           align-items: center;
           justify-content: center;
           line-height: 1;
+          white-space: nowrap;
           transition:
             background-color 0.16s ease,
             border-color 0.16s ease,
@@ -7055,36 +7119,58 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             box-shadow 0.16s ease;
         }
         .btn:hover:not(:disabled) {
-          background: #d9dce1;
-          border-color: #d9dce1;
+          background: rgba(255, 255, 255, 0.18);
+          border-color: rgba(255, 255, 255, 0.36);
           transform: translateY(-1px);
-          box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
+          box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
         }
         .btn:active:not(:disabled) {
           transform: translateY(0);
         }
         .btn:disabled {
-          opacity: 0.66;
+          opacity: 0.5;
           cursor: not-allowed;
         }
         .btn.ghost {
           background: transparent;
-          color: #f8fafc;
-          border-color: rgba(255, 255, 255, 0.28);
+          color: rgba(255, 255, 255, 0.8);
+          border-color: rgba(255, 255, 255, 0.18);
         }
         .btn.ghost:hover:not(:disabled) {
-          background: rgba(255, 255, 255, 0.1);
-          border-color: rgba(255, 255, 255, 0.28);
+          background: rgba(255, 255, 255, 0.08);
+          border-color: rgba(255, 255, 255, 0.3);
+          color: #fff;
         }
         .btn.primary {
           display: inline-flex;
           align-items: center;
           justify-content: center;
+          background: linear-gradient(135deg, #6366f1, #818cf8);
+          color: #fff;
+          border-color: #6366f1;
+          font-weight: 700;
+        }
+        .btn.primary:hover:not(:disabled) {
+          background: linear-gradient(135deg, #4f46e5, #6366f1);
+          border-color: #4f46e5;
+          box-shadow: 0 8px 24px rgba(99, 102, 241, 0.35);
         }
         .row {
-          display: grid;
+          display: flex;
+          flex-wrap: wrap;
           gap: 10px;
-          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          align-items: center;
+        }
+        .row > input,
+        .row > select,
+        .row > textarea {
+          flex: 1 1 220px;
+          min-width: 0;
+        }
+        .row > .btn,
+        .row > .ghost-btn,
+        .row > button {
+          flex: 0 0 auto;
         }
         .generation-actions-layout {
           display: grid;
@@ -7188,17 +7274,41 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
         }
         .panel-preview-card {
-          border: 1px solid #e2e8f0;
+          border: 1.5px solid #e2e8f0;
           border-radius: 12px;
           padding: 8px;
           background: #fff;
           display: grid;
           gap: 6px;
+          transition: border-color 0.25s, box-shadow 0.25s, opacity 0.25s;
+        }
+        .panel-preview-card.empty {
+          opacity: 0.6;
+          border-style: dashed;
+        }
+        .panel-preview-card.generating {
+          opacity: 1;
+          border-color: #facc15;
+          box-shadow: 0 0 16px rgba(250, 204, 21, 0.2);
+          animation: pulse-border 1.5s ease-in-out infinite;
+        }
+        .panel-preview-card.has-image {
+          opacity: 1;
+          border-color: #86efac;
+          box-shadow: 0 0 12px rgba(134, 239, 172, 0.18);
+        }
+        .panel-preview-card.approved {
+          border-color: #818cf8;
+          box-shadow: 0 0 16px rgba(129, 140, 248, 0.25);
+        }
+        @keyframes pulse-border {
+          0%, 100% { box-shadow: 0 0 16px rgba(250, 204, 21, 0.15); }
+          50% { box-shadow: 0 0 24px rgba(250, 204, 21, 0.35); }
         }
         .panel-preview-label {
           font-size: 0.8rem;
           font-weight: 700;
-          color: #0f172a;
+          color: #ffffff;
         }
         .panel-image {
           grid-column: 1 / -1;
@@ -7214,7 +7324,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           display: grid;
           place-items: center;
           background: #f8fafc;
-          color: #94a3b8;
+          color: #ffffff;
           font-weight: 700;
         }
         .divider {
