@@ -1,7 +1,6 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import StudioStatusBar from "@/components/studio-status-bar";
 
 type MatrixVariantRow = {
   id: string;
@@ -80,7 +79,6 @@ type LoadTaskConfig = {
   skipSuccess?: boolean;
 };
 
-type StudioTaskTone = "idle" | "working" | "success" | "error";
 type ParentSortField =
   | "title"
   | "category"
@@ -321,7 +319,6 @@ export default function ShopifyMappingInventory() {
     ? allCatalogSelectedCount
     : selectedParentIds.length;
 
-  const statusBarTone: StudioTaskTone = task.tone === "running" ? "working" : task.tone;
 
   const sortedRows = useMemo(() => {
     if (!sortState) return rows;
@@ -598,7 +595,7 @@ export default function ShopifyMappingInventory() {
         }
       }
       setStatus(
-        `Queued ${Number(upsertedTotal || selected.length)} item(s). Undo session: ${lastUndoId || "available"}`
+        `Queued ${Number(upsertedTotal || selected.length)} item(s).`
       );
       const refreshed = await loadInventory(page, pageSize, appliedFilters, {
         startLabel: "Refreshing inventory after queue...",
@@ -675,7 +672,7 @@ export default function ShopifyMappingInventory() {
         }
       }
       setStatus(
-        `Removed ${Number(removedTotal || parentIds.length)} item(s). Undo session: ${lastUndoId || "available"}`
+        `Removed ${Number(removedTotal || parentIds.length)} item(s).`
       );
       const refreshed = await loadInventory(page, pageSize, appliedFilters, {
         startLabel: "Refreshing inventory after remove...",
@@ -735,15 +732,23 @@ export default function ShopifyMappingInventory() {
 
   return (
     <main className="page">
-      <section className="task-strip">
-        <StudioStatusBar tone={statusBarTone} message={task.label} />
+      <section className={`card status-bar ${task.tone === "running" ? "working" : task.tone}`} aria-live="polite" aria-atomic="true">
+        <div className="status-bar-head">
+          <div className="status-bar-title">progress bar</div>
+          <span className={`status-chip ${task.tone === "running" ? "working" : task.tone}`}>
+            {task.tone === "error" ? "Error" : task.tone === "running" ? "Working" : task.tone === "success" ? "Done" : "Idle"}
+          </span>
+        </div>
+        <div className="status-bar-message">
+          {task.tone === "error" ? `Error: ${task.label}` : task.label}
+        </div>
+        {status ? <div className="status-bar-meta">{status}</div> : null}
       </section>
 
       <section className="glass-panel card filter-card">
         <div className="filters">
           <input value={filters.SKU} onChange={(e) => updateFilter("SKU", e.target.value)} placeholder="SKU or UPC (partial)" />
           <input value={filters.Name} onChange={(e) => updateFilter("Name", e.target.value)} placeholder="Product Name" />
-          <input value={filters.Brand} onChange={(e) => updateFilter("Brand", e.target.value)} placeholder="Brand" />
           <input value={filters.PriceFrom} onChange={(e) => updateFilter("PriceFrom", e.target.value)} placeholder="Price From" />
           <input value={filters.PriceTo} onChange={(e) => updateFilter("PriceTo", e.target.value)} placeholder="Price To" />
           <input value={filters.StockFrom} onChange={(e) => updateFilter("StockFrom", e.target.value)} placeholder="Stock From" />
@@ -762,7 +767,9 @@ export default function ShopifyMappingInventory() {
             <option value="Available">Available on Shopify</option>
             <option value="Missing">Missing on Shopify</option>
           </select>
-          <input value={filters.Keyword} onChange={(e) => updateFilter("Keyword", e.target.value)} placeholder="Keyword" />
+          <select className="page-size-select" value={String(pageSize)} onChange={(e) => { const n = Number.parseInt(e.target.value, 10); setPageSize(n); void loadInventory(1, n, appliedFilters, { startLabel: "Updating page size...", startProgress: 24, successLabel: "Page size updated" }); }} disabled={busy}>
+            {PAGE_SIZE_OPTIONS.map((size) => <option key={size} value={String(size)}>{size} / page</option>)}
+          </select>
         </div>
         <div className="row actions-row">
           <button className="btn-base search-btn" onClick={() => { setAppliedFilters(filters); void loadInventory(1, pageSize, filters, { startLabel: "Applying filters...", startProgress: 24, successLabel: "Filters applied" }); }} disabled={busy}>Search</button>
@@ -783,14 +790,9 @@ export default function ShopifyMappingInventory() {
           <button className="btn-base btn-outline" onClick={queueSelected} disabled={busy}>Queue Selected</button>
           <button className="btn-base btn-outline" onClick={removeSelected} disabled={busy}>Remove from Queue</button>
           <button className="btn-base btn-outline" onClick={undoLastSession} disabled={busy}>Undo Last Session</button>
-          <select className="page-size-select" value={String(pageSize)} onChange={(e) => { const n = Number.parseInt(e.target.value, 10); setPageSize(n); void loadInventory(1, n, appliedFilters, { startLabel: "Updating page size...", startProgress: 24, successLabel: "Page size updated" }); }} disabled={busy}>
-            {PAGE_SIZE_OPTIONS.map((size) => <option key={size} value={String(size)}>{size} / page</option>)}
-          </select>
-          <span className="selection-count">Selected products: {selectedProductsCount}</span>
         </div>
         <p className="mini">
-          Products {summary.totalProducts} | Items {summary.totalItems} | In Cart {summary.totalInCart} | On Shopify {summary.totalOnShopify} {shop ? `| Shop ${shop}` : ""}
-          | Selected {selectedProductsCount}
+          Products {summary.totalProducts} | Items {summary.totalItems} | In Cart {summary.totalInCart} | On Shopify {summary.totalOnShopify}
         </p>
       </section>
 
@@ -1155,10 +1157,10 @@ export default function ShopifyMappingInventory() {
       <style jsx>{`
         .page { --detail-thumb-w: 56px; --detail-thumb-h: 80px; --parent-thumb-w: 40px; --parent-thumb-h: 58px; max-width: 1220px; margin: 0 auto; padding: 134px 8px 26px; display: grid; gap: 12px; color: #f8fafc; }
         .card { padding: 18px; display: grid; gap: 10px; }
-        .task-strip {
+        .status-bar {
           position: fixed;
           top: 89px;
-          left: calc(var(--page-inline-gap, 13px) + 8px);
+          left: calc(var(--page-inline-gap, 13px) + var(--page-edge-gap, 13px));
           right: calc(
             var(
               --content-right-pad,
@@ -1166,12 +1168,70 @@ export default function ShopifyMappingInventory() {
             ) + 8px
           );
           z-index: 40;
+          display: grid;
+          gap: 4px;
+          padding: 10px 14px;
+          border-radius: 10px;
+          border: 1.5px solid #dbe5f1;
+          background: #f8fafc;
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.06);
+          transition: border-color 0.2s, box-shadow 0.2s;
         }
-        :global(.content.menu-open) .task-strip {
-          left: calc(280px + 8px);
+        :global(.content.menu-open) .status-bar {
+          left: 280px;
         }
-        :global(.content.no-integration-panel) .task-strip {
+        :global(.content.no-integration-panel) .status-bar {
           right: calc(var(--page-inline-gap, 13px) + 8px);
+        }
+        .status-bar-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+        }
+        .status-bar-title {
+          font-weight: 700;
+          letter-spacing: 0.01em;
+          text-transform: uppercase;
+          font-size: 0.78rem;
+          color: #64748b;
+        }
+        .status-chip {
+          font-size: 0.72rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          padding: 2px 10px;
+          border-radius: 999px;
+          background: #e2e8f0;
+          color: #475569;
+        }
+        .status-chip.working { background: #fef9c3; color: #854d0e; }
+        .status-chip.success { background: #dcfce7; color: #166534; border-color: #86efac; }
+        .status-chip.error { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+        .status-bar.idle { border-color: #dbe5f1; }
+        .status-bar.working {
+          border-color: #facc15;
+          box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.15), 0 8px 24px rgba(0, 0, 0, 0.24);
+        }
+        .status-bar.success {
+          border-color: #86efac;
+          box-shadow: 0 0 0 1px rgba(134, 239, 172, 0.14), 0 8px 24px rgba(0, 0, 0, 0.2);
+        }
+        .status-bar.error {
+          border-color: #fca5a5;
+          box-shadow: 0 0 0 1px rgba(252, 165, 165, 0.16), 0 8px 24px rgba(0, 0, 0, 0.22);
+        }
+        .status-bar-message {
+          font-size: 0.95rem;
+          font-weight: 600;
+          color: #0f172a;
+          line-height: 1.35;
+        }
+        .status-bar-meta {
+          font-size: 0.8rem;
+          color: #475569;
+          line-height: 1.25;
         }
         .filter-card {
           gap: 8px;
@@ -1495,7 +1555,7 @@ export default function ShopifyMappingInventory() {
           min-width: 48px;
         }
         @media (max-width: 1180px) {
-          .task-strip {
+          .status-bar {
             top: 89px;
             left: 8px;
             right: 8px;
