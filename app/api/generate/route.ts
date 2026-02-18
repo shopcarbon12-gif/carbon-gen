@@ -771,7 +771,6 @@ export async function POST(req: NextRequest) {
           image: referenceFiles,
           prompt: lockedPrompt,
           size: finalSize,
-          input_fidelity: "high",
         }),
         imageTimeoutMs,
         "OpenAI image generation"
@@ -825,7 +824,6 @@ export async function POST(req: NextRequest) {
               image: referenceFiles,
               prompt: retryPrompts[i],
               size: finalSize,
-              input_fidelity: "high",
             }),
             imageTimeoutMs,
             i === 0 ? "OpenAI safe retry" : "OpenAI swimwear retry"
