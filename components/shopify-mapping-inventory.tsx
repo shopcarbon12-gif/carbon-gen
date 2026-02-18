@@ -1019,8 +1019,8 @@ export default function ShopifyMappingInventory() {
                                 <th>Price</th>
                                 <th>Color</th>
                                 <th>Size</th>
-                                <th className="details-head">Details</th>
-                                <th className="picture-header-cell">Picture</th>
+                                <th className="details-head"><span className="variant-head-shifted">Details</span></th>
+                                <th className="picture-header-cell"><span className="variant-head-shifted">Picture</span></th>
                               </tr>
                             </thead>
                             <tbody>
@@ -1405,10 +1405,11 @@ export default function ShopifyMappingInventory() {
         .variant-table th:nth-child(2),
         .variant-table td:nth-child(2) { padding-left: 200px; text-align: left !important; }
         .variant-sku-cell { display: inline-flex; align-items: center; gap: 8px; }
-        .variant-table th:nth-child(9),
         .variant-table td:nth-child(9),
-        .variant-table th:nth-child(10),
         .variant-table td:nth-child(10) { text-align: center !important; }
+        .variant-table th:nth-child(9),
+        .variant-table th:nth-child(10) { text-align: center !important; }
+        .variant-head-shifted { display: inline-block; transform: translateX(-40px); }
         .variant-row td { vertical-align: top; background: rgba(15, 23, 42, 0.08); }
         .variant-row td.details-cell {
           vertical-align: middle !important;
@@ -1431,9 +1432,14 @@ export default function ShopifyMappingInventory() {
         }
         .variant-details-cell .details-availability-inline {
           margin: 0 auto;
+          transform: translateX(-40px);
         }
         .variant-row td.picture-cell {
           vertical-align: middle !important;
+        }
+        .variant-row td.picture-cell .thumb-btn,
+        .variant-row td.picture-cell > .muted {
+          transform: translateX(-40px);
         }
         .detail-cell-center {
           width: var(--detail-thumb-w);

@@ -690,10 +690,36 @@ export default function CreateNewItemsWorkspace() {
     );
   }
 
+  const hasFilledRows = rows.some(
+    (r) => r.barcodeNumber.trim() || r.systemId.trim() || r.description.trim()
+  );
+  const hasResults = purchaseRows.length > 0 || epcRows.length > 0 || lightspeedRows.length > 0;
+
+  const currentStep = hasResults ? 3 : hasFilledRows ? 1 : 0;
+
+  const steps = [
+    { label: "Paste / Enter Data" },
+    { label: "Review & Sync" },
+    { label: "Generate & Export" },
+  ];
+
   return (
     <main className="page">
+      <nav className="progress-bar">
+        {steps.map((step, i) => (
+          <div
+            key={step.label}
+            className={`progress-step ${i < currentStep ? "done" : ""} ${i === currentStep ? "active" : ""}`}
+          >
+            <span className="step-dot">{i < currentStep ? "✓" : i + 1}</span>
+            <span className="step-label">{step.label}</span>
+            {i < steps.length - 1 && <span className="step-line" />}
+          </div>
+        ))}
+      </nav>
+
       <section className="glass-panel card paste-card">
-        <h3>Paste Rows (Optional)</h3>
+        <h3></h3>
         <p className="hint">
           Excel-style tab rows: barcode, system ID, style, description, fabric, size ratio, color,
           SRP, size, PO qty, extra labels.
@@ -971,10 +997,78 @@ export default function CreateNewItemsWorkspace() {
         .page {
           max-width: 1220px;
           margin: 0 auto;
-          padding: 22px 8px 26px;
+          padding: 154px 8px 26px;
           display: grid;
           gap: 12px;
           color: #f8fafc;
+        }
+        .progress-bar {
+          display: flex;
+          align-items: center;
+          gap: 0;
+          width: 100%;
+        }
+        .progress-step {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex: 1;
+          position: relative;
+        }
+        .step-dot {
+          width: 30px;
+          height: 30px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 0.82rem;
+          font-weight: 700;
+          flex-shrink: 0;
+          background: rgba(255, 255, 255, 0.08);
+          border: 2px solid rgba(255, 255, 255, 0.18);
+          color: rgba(255, 255, 255, 0.4);
+          transition: all 0.25s ease;
+        }
+        .progress-step.active .step-dot {
+          background: rgba(99, 102, 241, 0.25);
+          border-color: #818cf8;
+          color: #c7d2fe;
+          box-shadow: 0 0 12px rgba(99, 102, 241, 0.35);
+        }
+        .progress-step.done .step-dot {
+          background: rgba(34, 197, 94, 0.2);
+          border-color: #4ade80;
+          color: #bbf7d0;
+        }
+        .step-label {
+          font-size: 0.78rem;
+          font-weight: 600;
+          letter-spacing: 0.02em;
+          color: rgba(255, 255, 255, 0.35);
+          white-space: nowrap;
+          transition: color 0.25s ease;
+        }
+        .progress-step.active .step-label {
+          color: rgba(255, 255, 255, 0.88);
+        }
+        .progress-step.done .step-label {
+          color: rgba(255, 255, 255, 0.6);
+        }
+        .step-line {
+          flex: 1;
+          height: 2px;
+          min-width: 20px;
+          background: rgba(255, 255, 255, 0.1);
+          border-radius: 1px;
+          margin-left: 8px;
+          transition: background 0.25s ease;
+        }
+        .progress-step.done .step-line {
+          background: rgba(74, 222, 128, 0.35);
+        }
+        .progress-step.active .step-line {
+          background: rgba(129, 140, 248, 0.3);
         }
         .card {
           padding: 18px;
@@ -1142,7 +1236,7 @@ export default function CreateNewItemsWorkspace() {
         }
         @media (max-width: 980px) {
           .page {
-            padding: 20px 6px 22px;
+            padding: 154px 6px 22px;
           }
           .card {
             padding: 14px;

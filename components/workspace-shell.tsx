@@ -60,7 +60,7 @@ const navItems: NavItem[] = [
   { href: "/studio/rfid-price-tag", label: "RFID Price Tag" },
   { href: "/studio/lightspeed-catalog", label: "Lightspeed Catalog" },
   { href: SHOPIFY_MAPPING_INVENTORY_ROOT, label: "Shopify Mapping Inventory" },
-  { href: "/studio/video", label: "create new items" },
+  { href: "/studio/video", label: "Create New Items" },
   { href: "/studio/social", label: "Social Ads & Meta" },
   { href: "/ops/inventory", label: "Collection Mapping" },
   { href: "/dashboard", label: "Workspace Dashboard" },

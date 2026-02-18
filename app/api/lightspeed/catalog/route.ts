@@ -7,8 +7,9 @@ export const dynamic = "force-dynamic";
 const DEFAULT_LS_TOKEN_URL = "https://cloud.merchantos.com/oauth/access_token.php";
 const PREFERRED_DEFAULT_SHOP = "CARBON JEANS COMPANY";
 const MAX_EXPORT_ROWS = 20_000;
-const LS_ITEM_PAGE_LIMIT = 500;
-const LS_ITEM_PAGE_LIMIT_FALLBACK = 100;
+const LS_ITEM_PAGE_LIMIT = 1000;
+const LS_ITEM_PAGE_LIMIT_FALLBACK = 500;
+const LS_ITEM_PAGE_LIMIT_LAST_RESORT = 100;
 const LS_MIN_REQUEST_INTERVAL_MS = 1100;
 const LS_RATE_LIMIT_RETRY_ATTEMPTS = 3;
 const ALLOWED_PAGE_SIZES = [100, 500] as const;
@@ -28,7 +29,7 @@ type CatalogSortDirection = (typeof ALLOWED_SORT_DIRECTIONS)[number];
 
 const CACHE_MS = {
   tokenFallback: 10 * 60 * 1000,
-  catalogSnapshot: 2 * 60 * 1000,
+  catalogSnapshot: 10 * 60 * 1000,
   shops: 15 * 60 * 1000,
   categories: 15 * 60 * 1000,
 };
@@ -297,21 +298,36 @@ async function refreshLightspeedAccessToken(forceRefresh = false) {
   throw new Error(lastError);
 }
 
+function buildRSeriesUrl(resource: string, query: Record<string, string | number> = {}) {
+  const endpoint = getRSeriesResourceEndpoint(resource);
+  const url = new URL(endpoint);
+  for (const [key, value] of Object.entries(query)) {
+    const strValue = normalizeText(value);
+    if (!strValue) continue;
+    url.searchParams.set(key, strValue);
+  }
+  return url;
+}
+
+function parseRSeriesListResponse<T>(
+  resource: string,
+  parsedBody: any
+) {
+  const list = toArray(parsedBody?.[resource]) as T[];
+  const total = Number.parseInt(normalizeText(parsedBody?.["@attributes"]?.count), 10);
+  return {
+    rows: list,
+    totalCount: Number.isFinite(total) ? total : list.length,
+  };
+}
+
 async function requestRSeriesList<T>(params: {
   accessToken: string;
   resource: string;
   query?: Record<string, string | number>;
 }) {
   const { accessToken, resource } = params;
-  const query = params.query || {};
-  const endpoint = getRSeriesResourceEndpoint(resource);
-  const url = new URL(endpoint);
-
-  for (const [key, value] of Object.entries(query)) {
-    const strValue = normalizeText(value);
-    if (!strValue) continue;
-    url.searchParams.set(key, strValue);
-  }
+  const url = buildRSeriesUrl(resource, params.query);
 
   let lastError = `Lightspeed ${resource} request failed.`;
 
@@ -335,12 +351,7 @@ async function requestRSeriesList<T>(params: {
     }
 
     if (response.ok) {
-      const list = toArray(parsedBody?.[resource]) as T[];
-      const total = Number.parseInt(normalizeText(parsedBody?.["@attributes"]?.count), 10);
-      return {
-        rows: list,
-        totalCount: Number.isFinite(total) ? total : list.length,
-      };
+      return parseRSeriesListResponse<T>(resource, parsedBody);
     }
 
     const detail = readResponseError(parsedBody, rawBody);
@@ -357,6 +368,57 @@ async function requestRSeriesList<T>(params: {
     const retryWaitMs = Number.isFinite(retryAfterSeconds)
       ? Math.max(1000, Math.round(retryAfterSeconds * 1000))
       : 1200 * attempt;
+    await delay(retryWaitMs);
+  }
+
+  throw new Error(lastError);
+}
+
+async function requestRSeriesParallel<T>(params: {
+  accessToken: string;
+  resource: string;
+  query: Record<string, string | number>;
+}) {
+  const { accessToken, resource } = params;
+  const url = buildRSeriesUrl(resource, params.query);
+
+  let lastError = `Lightspeed ${resource} request failed.`;
+
+  for (let attempt = 1; attempt <= LS_RATE_LIMIT_RETRY_ATTEMPTS; attempt += 1) {
+    const response = await fetch(url.toString(), {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json",
+      },
+      signal: AbortSignal.timeout(25_000),
+    });
+
+    const rawBody = await response.text();
+    let parsedBody: any = {};
+    try {
+      parsedBody = JSON.parse(rawBody);
+    } catch {
+      parsedBody = { raw: rawBody };
+    }
+
+    if (response.ok) {
+      return parseRSeriesListResponse<T>(resource, parsedBody);
+    }
+
+    const detail = readResponseError(parsedBody, rawBody);
+    const isRateLimited =
+      response.status === 429 || /rate\s*limit/i.test(detail);
+    lastError = `Lightspeed ${resource} request failed: ${detail}`;
+
+    if (!isRateLimited || attempt >= LS_RATE_LIMIT_RETRY_ATTEMPTS) {
+      throw new Error(lastError);
+    }
+
+    const retryAfterRaw = normalizeText(response.headers.get("retry-after"));
+    const retryAfterSeconds = Number.parseFloat(retryAfterRaw);
+    const retryWaitMs = Number.isFinite(retryAfterSeconds)
+      ? Math.max(1000, Math.round(retryAfterSeconds * 1000))
+      : 2000 * attempt;
     await delay(retryWaitMs);
   }
 
@@ -575,54 +637,48 @@ function normalizeCatalogItem(
   };
 }
 
-async function loadCatalogSnapshot(
+async function tryFirstPage(
   accessToken: string,
-  deps: {
-    shopNameById: Record<string, string>;
-    categoryNameById: Record<string, string>;
-  },
-  forceRefresh = false
+  pageLimit: number
 ) {
-  if (
-    !forceRefresh &&
-    lightspeedCatalogSnapshotCache.rows.length > 0 &&
-    lightspeedCatalogSnapshotCache.expiresAt > Date.now()
-  ) {
-    return lightspeedCatalogSnapshotCache.rows;
-  }
-
-  let pageLimit = LS_ITEM_PAGE_LIMIT;
   const buildBaseQuery = (limit: number) => ({
     limit,
     archived: "false",
     load_relations: '["ItemShops","ItemAttributes"]',
   });
 
-  let firstPage: { rows: any[]; totalCount: number } | null = null;
-  try {
-    firstPage = await requestRSeriesList<any>({
-      accessToken,
-      resource: "Item",
-      query: { ...buildBaseQuery(pageLimit), offset: 0 },
-    });
-  } catch (error: any) {
-    const message = String(error?.message || "");
-    const likelyLimitError =
-      /limit|invalid|parameter|too\s+large|maximum/i.test(message);
-    if (!likelyLimitError || pageLimit === LS_ITEM_PAGE_LIMIT_FALLBACK) {
-      throw error;
+  return requestRSeriesList<any>({
+    accessToken,
+    resource: "Item",
+    query: { ...buildBaseQuery(pageLimit), offset: 0 },
+  });
+}
+
+async function resolvePageLimit(accessToken: string) {
+  const limits = [LS_ITEM_PAGE_LIMIT, LS_ITEM_PAGE_LIMIT_FALLBACK, LS_ITEM_PAGE_LIMIT_LAST_RESORT];
+
+  for (let i = 0; i < limits.length; i++) {
+    try {
+      const firstPage = await tryFirstPage(accessToken, limits[i]);
+      return { firstPage, pageLimit: limits[i] };
+    } catch (error: any) {
+      const message = String(error?.message || "");
+      const likelyLimitError = /limit|invalid|parameter|too\s+large|maximum/i.test(message);
+      if (!likelyLimitError || i === limits.length - 1) throw error;
     }
-    pageLimit = LS_ITEM_PAGE_LIMIT_FALLBACK;
-    firstPage = await requestRSeriesList<any>({
-      accessToken,
-      resource: "Item",
-      query: { ...buildBaseQuery(pageLimit), offset: 0 },
-    });
   }
 
-  if (!firstPage) {
-    throw new Error("Unable to load Lightspeed item catalog.");
-  }
+  throw new Error("Unable to load Lightspeed item catalog.");
+}
+
+async function fetchRawCatalogItems(accessToken: string) {
+  const { firstPage, pageLimit } = await resolvePageLimit(accessToken);
+
+  const buildBaseQuery = (limit: number) => ({
+    limit,
+    archived: "false",
+    load_relations: '["ItemShops","ItemAttributes"]',
+  });
 
   const rawItems: any[] = [...firstPage.rows];
   const totalCount = firstPage.totalCount;
@@ -636,7 +692,7 @@ async function loadCatalogSnapshot(
     const chunk = offsets.slice(i, i + concurrency);
     const pages = await Promise.all(
       chunk.map((offset) =>
-        requestRSeriesList<any>({
+        requestRSeriesParallel<any>({
           accessToken,
           resource: "Item",
           query: { ...buildBaseQuery(pageLimit), offset },
@@ -648,6 +704,17 @@ async function loadCatalogSnapshot(
     }
   }
 
+  return rawItems;
+}
+
+async function loadCatalogSnapshot(
+  accessToken: string,
+  deps: {
+    shopNameById: Record<string, string>;
+    categoryNameById: Record<string, string>;
+  },
+  rawItems: any[]
+) {
   const rows = rawItems.map((item, index) =>
     normalizeCatalogItem(item, index, deps.shopNameById, deps.categoryNameById)
   );
@@ -838,10 +905,28 @@ export async function GET(req: NextRequest) {
     const page = Number.isFinite(requestedPage) ? Math.max(1, requestedPage) : 1;
 
     const accessToken = await refreshLightspeedAccessToken(refresh);
-    const [shopsData, categoriesData] = await Promise.all([
+
+    const cacheWarm =
+      !refresh &&
+      lightspeedCatalogSnapshotCache.rows.length > 0 &&
+      lightspeedCatalogSnapshotCache.expiresAt > Date.now();
+
+    const [shopsData, categoriesData, rawItems] = await Promise.all([
       loadShops(accessToken, refresh),
       loadCategories(accessToken, refresh),
+      cacheWarm ? null : fetchRawCatalogItems(accessToken),
     ]);
+
+    const snapshot = cacheWarm
+      ? lightspeedCatalogSnapshotCache.rows
+      : await loadCatalogSnapshot(
+          accessToken,
+          {
+            shopNameById: shopsData.shopNameById,
+            categoryNameById: categoriesData.categoryNameById,
+          },
+          rawItems!
+        );
 
     const defaultLocation = pickDefaultLocation(shopsData.shopNames);
     const availableShopNames = shopsData.shopNames;
@@ -892,15 +977,6 @@ export async function GET(req: NextRequest) {
       availableShopNames[0] ||
       defaultLocation;
     const effectiveShopFilters = effectiveShops.length > 0 ? effectiveShops : [fallbackShop];
-
-    const snapshot = await loadCatalogSnapshot(
-      accessToken,
-      {
-        shopNameById: shopsData.shopNameById,
-        categoryNameById: categoriesData.categoryNameById,
-      },
-      refresh
-    );
 
     const queryLower = normalizeLower(query);
     const categoryLower = normalizeLower(categoryFilter);

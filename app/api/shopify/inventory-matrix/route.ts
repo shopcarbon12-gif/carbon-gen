@@ -12,8 +12,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
-const SHOPIFY_PRODUCTS_PER_PAGE = 100;
-const MAX_SHOPIFY_SCAN_PAGES = 40;
+const SHOPIFY_PRODUCTS_PER_PAGE = 250;
+const MAX_SHOPIFY_SCAN_PAGES = 16;
+const SHOPIFY_VARIANTS_CACHE_MS = 5 * 60 * 1000;
 const ALLOWED_PAGE_SIZES = [20, 50, 75, 100, 200, 500] as const;
 
 type ShopifyTokenSource = "db" | "env_token";
@@ -478,6 +479,20 @@ async function getAvailableShops() {
   return Array.from(unique).sort(compareText);
 }
 
+const shopifyVariantsCache: {
+  shop: string;
+  variants: ShopifyVariant[];
+  source: ShopifyTokenSource | null;
+  truncated: boolean;
+  expiresAt: number;
+} = {
+  shop: "",
+  variants: [],
+  source: null,
+  truncated: false,
+  expiresAt: 0,
+};
+
 async function fetchLightspeedSnapshot(req: NextRequest, refresh: boolean) {
   const url = new URL("/api/lightspeed/catalog", req.nextUrl.origin);
   url.searchParams.set("all", "1");
@@ -824,6 +839,61 @@ function toPagedRows(rows: MatrixParentRow[], page: number, pageSize: number) {
   };
 }
 
+async function fetchShopifyVariantsCached(
+  shop: string,
+  refresh: boolean
+): Promise<{
+  variants: ShopifyVariant[];
+  source: ShopifyTokenSource | null;
+  truncated: boolean;
+  warning: string;
+}> {
+  if (
+    !refresh &&
+    shopifyVariantsCache.shop === shop &&
+    shopifyVariantsCache.variants.length > 0 &&
+    shopifyVariantsCache.expiresAt > Date.now()
+  ) {
+    return {
+      variants: shopifyVariantsCache.variants,
+      source: shopifyVariantsCache.source,
+      truncated: shopifyVariantsCache.truncated,
+      warning: "",
+    };
+  }
+
+  if (!shop) {
+    return { variants: [], source: null, truncated: false, warning: "No Shopify shop connected. Shopify availability is unavailable." };
+  }
+
+  const tokenCandidates = await getTokenCandidates(shop);
+  if (tokenCandidates.length === 0) {
+    return { variants: [], source: null, truncated: false, warning: `Shop ${shop} is not connected. Shopify availability is unavailable.` };
+  }
+
+  let lastError = "";
+  for (const candidate of tokenCandidates) {
+    const attempt = await fetchShopifyVariants(shop, candidate.token);
+    if (!attempt.ok) {
+      lastError = attempt.error;
+      continue;
+    }
+    shopifyVariantsCache.shop = shop;
+    shopifyVariantsCache.variants = attempt.variants;
+    shopifyVariantsCache.source = candidate.source;
+    shopifyVariantsCache.truncated = attempt.truncated;
+    shopifyVariantsCache.expiresAt = Date.now() + SHOPIFY_VARIANTS_CACHE_MS;
+    return {
+      variants: attempt.variants,
+      source: candidate.source,
+      truncated: attempt.truncated,
+      warning: "",
+    };
+  }
+
+  return { variants: [], source: null, truncated: false, warning: `Shopify availability comparison failed: ${lastError}` };
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -833,51 +903,20 @@ export async function GET(req: NextRequest) {
     const refresh = normalizeLower(searchParams.get("refresh")) === "1";
     const requestedShop = normalizeShopDomain(normalizeText(searchParams.get("shop")) || "") || "";
 
-    const availableShops = await getAvailableShops();
-    const fallbackShop =
-      normalizeShopDomain(normalizeText(process.env.SHOPIFY_SHOP_DOMAIN) || "") ||
-      availableShops[0] ||
-      "";
-    const resolvedShop = requestedShop || fallbackShop;
+    const configuredShop =
+      normalizeShopDomain(normalizeText(process.env.SHOPIFY_SHOP_DOMAIN) || "") || "";
+    const resolvedShop = requestedShop || configuredShop;
 
-    const lightspeedSnapshotPromise = fetchLightspeedSnapshot(req, refresh);
-    const stagedIdsPromise = listCartCatalogParentIds(resolvedShop);
-
-    let shopifyVariants: ShopifyVariant[] = [];
-    let source: ShopifyTokenSource | null = null;
-    let shopifyTruncated = false;
-    let warning = "";
-
-    if (resolvedShop) {
-      const tokenCandidates = await getTokenCandidates(resolvedShop);
-      if (tokenCandidates.length > 0) {
-        let lastError = "";
-        for (const candidate of tokenCandidates) {
-          const attempt = await fetchShopifyVariants(resolvedShop, candidate.token);
-          if (!attempt.ok) {
-            lastError = attempt.error;
-            continue;
-          }
-          source = candidate.source;
-          shopifyVariants = attempt.variants;
-          shopifyTruncated = attempt.truncated;
-          lastError = "";
-          break;
-        }
-        if (lastError) {
-          warning = `Shopify availability comparison failed: ${lastError}`;
-        }
-      } else {
-        warning = `Shop ${resolvedShop} is not connected. Shopify availability is unavailable.`;
-      }
-    } else {
-      warning = "No Shopify shop connected. Shopify availability is unavailable.";
-    }
-
-    const [lightspeedSnapshot, stagedIdsResult] = await Promise.all([
-      lightspeedSnapshotPromise,
-      stagedIdsPromise,
+    const [availableShops, lightspeedSnapshot, stagedIdsResult, shopifyResult] = await Promise.all([
+      getAvailableShops(),
+      fetchLightspeedSnapshot(req, refresh),
+      listCartCatalogParentIds(resolvedShop || configuredShop),
+      fetchShopifyVariantsCached(resolvedShop || configuredShop, refresh),
     ]);
+
+    const fallbackShop = configuredShop || availableShops[0] || "";
+    const finalShop = resolvedShop || fallbackShop;
+    const { variants: shopifyVariants, source, truncated: shopifyTruncated, warning } = shopifyResult;
     const lookups = buildShopifyVariantLookups(shopifyVariants);
     const parents = buildMatrixRows(
       lightspeedSnapshot.rows,
@@ -901,7 +940,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      shop: resolvedShop,
+      shop: finalShop,
       shops: availableShops,
       source,
       warning: [warning, stagedIdsResult.warning].filter(Boolean).join(" ").trim(),

@@ -196,6 +196,54 @@ function normalizePromptInstruction(value: unknown, maxLen = 1200) {
     .slice(0, maxLen);
 }
 
+function normalizeItemType(value: unknown): string {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isSensitiveItemType(itemType: unknown): boolean {
+  const t = normalizeItemType(itemType);
+  if (!t) return false;
+  // Anything that is commonly flagged when framed too tightly or posed suggestively.
+  return (
+    t.includes("swim") ||
+    t.includes("bikini") ||
+    t.includes("one-piece") ||
+    t.includes("lingerie") ||
+    t.includes("underwear") ||
+    t.includes("bra") ||
+    t.includes("sports bra") ||
+    t.includes("bodysuit") ||
+    t.includes("corset") ||
+    t.includes("bustier") ||
+    t.includes("tube top") ||
+    t.includes("crop top") ||
+    t.includes("mini dress") ||
+    t.includes("bodycon") ||
+    t.includes("slip dress") ||
+    t.includes("mini skirt") ||
+    t.includes("two-piece") ||
+    t.includes("2-piece") ||
+    t.includes("set")
+  );
+}
+
+function getNonSuggestiveCatalogLines(itemType: unknown): string[] {
+  const sensitive = isSensitiveItemType(itemType);
+  return [
+    "NON-SEXUAL ECOMMERCE CATALOG HARD LOCK:",
+    "- This is a neutral product catalog photo for an online fashion store.",
+    "- No lingerie/pornographic styling, no provocative framing, no suggestive mood.",
+    "- Camera framing must avoid erotic emphasis: no intentional cleavage/breast focus, no underboob, no see-through focus.",
+    "- No explicit nudity, no implied nudity, no wet look, no bedroom setting, no intimate context.",
+    ...(sensitive
+      ? [
+          "- SENSITIVE ITEM SAFETY MODE: keep posture neutral and upright; avoid bent-over or exaggerated hip/arch poses; keep camera at neutral catalog height.",
+          "- If the garment is revealing by design (e.g., mini dress), keep it strictly catalog: flat lighting, neutral expression, no sexualized styling.",
+        ]
+      : []),
+  ];
+}
+
 function fileToDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -2619,6 +2667,50 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     );
   }
 
+
+  type SensitivityTier = "low" | "medium" | "high";
+
+  function normalizeItemType(value: string) {
+    return String(value || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, " ");
+  }
+
+  // App-level safety categorization. This is separate from the prompt.
+  // Use it to block categories you never want the generator to attempt.
+  function getSensitivityTier(itemTypeValue: string, modelGender: string): SensitivityTier {
+    const t = normalizeItemType(itemTypeValue);
+    const g = String(modelGender || "").trim().toLowerCase();
+
+    // HIGH: true intimates/underwear categories (block by default)
+    // NOTE: keep this list *strictly* to products you never want to generate.
+    // (Fashion corsets/bustiers, sports bras, and swimwear are handled as "medium" instead.)
+    const highMatchers = [
+      "underwear",
+      "underwear set",
+      "briefs",
+      "brief",
+      "boxer briefs",
+      "boxers",
+      "lingerie",
+      "thong",
+      "bra",
+      "intimates",
+    ];
+
+    if (highMatchers.some((m) => t.includes(m))) return "high";
+
+    // MEDIUM: swimwear-like categories that can be legitimate catalog imagery but may be more likely to trigger refusals.
+    // Keep allowed by default.
+    if (isSwimwearItemType(t) || t.includes("swim trunks") || t.includes("swim trunk") || t.includes("swim shorts")) {
+      // If you ever decide to block female swimwear but allow male swim shorts, you can branch here by gender.
+      return "medium";
+    }
+
+    return "low";
+  }
+
   function getSwimwearStyleLockLines(gender: string, itemTypeValue: string) {
     if (!isSwimwearItemType(itemTypeValue)) return [] as string[];
     const g = String(gender || "").trim().toLowerCase();
@@ -2641,23 +2733,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     return lines;
   }
 
-  function isFemaleDressPanelBlocked(modelGender: string, itemTypeValue: string, panelNumber: number) {
-    return (
-      String(modelGender || "").trim().toLowerCase() === "female" &&
-      isDressItemType(itemTypeValue) &&
-      panelNumber === 3
-    );
+  function isFemaleDressPanelBlocked(_modelGender: string, _itemTypeValue: string, _panelNumber: number) {
+    return false;
   }
-
-  useEffect(() => {
-    const modelGender = String(selectedModelForGeneration?.gender || "").trim().toLowerCase();
-    const shouldBlockPanel3 = isFemaleDressPanelBlocked(modelGender, resolvedItemType, 3);
-    if (!shouldBlockPanel3) return;
-    setSelectedPanels((prev) => {
-      const next = prev.filter((panel) => panel !== 3);
-      return next.length ? next : [1];
-    });
-  }, [selectedModelForGeneration?.gender, resolvedItemType]);
 
   function getPanelPosePair(gender: string, panelNumber: number): [number, number] {
     const g = String(gender || "").toLowerCase();
@@ -2736,6 +2814,11 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     ) {
       return "top";
     }
+
+    // One-piece garments: treat as a full-look so the close-up can pick a safe, product-only hero detail.
+    if (has("dress", "jumpsuit", "romper", "overall", "overalls", "one-piece")) {
+      return "full-look";
+    }
     if (
       has(
         "pant",
@@ -2785,7 +2868,11 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   function getCloseUpCategoryRule(itemTypeValue: string) {
     const category = inferItemTypeCategory(itemTypeValue);
     if (category === "top") {
-      return "- Category lock: close-up must focus on TOP details only (not shorts/pants/shoes).";
+      return [
+        "- Category lock: close-up must focus on TOP details only (not shorts/pants/shoes).",
+        "- Close-up safety lock: do not emphasize cleavage/breasts or sexualized framing.",
+        "- Prefer safe conversion details: logo/patch/print edges, collar/neckline seam, shoulder seam, sleeve cuff, hem stitching, buttons/snaps/zips, fabric weave/texture in a non-revealing area.",
+      ].join("\n");
     }
     if (category === "bottom") {
       return "- Category lock: close-up must focus on BOTTOM details only (not tops/shoes).";
@@ -2800,7 +2887,10 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       return "- Category lock: close-up must focus on ACCESSORY details only.";
     }
     if (category === "full-look") {
-      return "- Category lock: choose the highest-detail hero component from the locked full look and keep the rest of the look unchanged.";
+      return [
+        "- Category lock: choose the highest-detail hero component from the locked full look and keep the rest of the look unchanged.",
+        "- Close-up safety lock: keep the crop product-only (fabric/hardware/branding/seams) and avoid any nude-skin emphasis (no cleavage focus).",
+      ].join("\n");
     }
     return "- Category lock: close-up must focus on the exact item type entered in section 0.5.";
   }
@@ -2931,9 +3021,11 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
 
   function buildMasterPanelPrompt(args: {
     panelNumber: number;
+    panelNumberForLocks?: number;
     panelLabel: string;
     poseA: number;
     poseB: number;
+    forceActivePoseOverride?: boolean;
     modelName: string;
     modelGender: string;
     modelRefs: string[];
@@ -2958,7 +3050,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     const poseBBlock = extractPoseBlock(poseLibrary, args.poseB);
     const criticalLockLines = getPanelCriticalLockLines(
       args.modelGender,
-      args.panelNumber,
+      args.panelNumberForLocks ?? args.panelNumber,
       args.itemType
     );
     const swimwearActive = isSwimwearItemType(args.itemType);
@@ -3018,6 +3110,11 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       "- IMPORTANT: only panel-to-pose pairing changes by gender. Pose definitions stay unchanged.",
       "GENDER-SPECIFIC PANEL MAPPING (IMMUTABLE PER GENDER):",
       "PANEL MAPPING IS IMMUTABLE. DO NOT REMAP.",
+      ...(args.forceActivePoseOverride
+        ? [
+            "FALLBACK OVERRIDE (THIS GENERATION ONLY): if mapping conflicts with the ACTIVE pose assignments below, ignore the mapping and execute the ACTIVE poses exactly as provided.",
+          ]
+        : []),
       mappingText,
       "PANEL OUTPUT HARD LOCK:",
       "- Generate exactly ONE panel image.",
@@ -3049,6 +3146,11 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       "- If item references include a clear back design, reproduce that exact back design only.",
       "- If item references do not include a clear back design, keep the back fully solid/clean in item color only.",
       "Photorealism hard lock: realistic human anatomy and skin texture. No CGI, no mannequin-like skin, no plastic look, no uncanny facial structure.",
+      "NON-SEXUAL PRODUCT CATALOG HARD LOCK:",
+      "- This is an ecommerce fashion catalog photo set.",
+      "- Keep the scene strictly non-sexual: no lingerie/underwear context, no erotic framing, no suggestive mood.",
+      "- No emphasis on breasts/cleavage/groin; no deliberate zoom on intimate body regions.",
+      "- Wardrobe presentation must be professional and storefront-safe (neutral posture, neutral camera angle).",
       `Panel request: Panel ${args.panelNumber} (${args.panelLabel}).`,
       `Active pose priority: LEFT Pose ${args.poseA}, RIGHT Pose ${args.poseB}.`,
       `LEFT ACTIVE POSE ${args.poseA} HARD AGE LOCK: the model is over 18+.`,
@@ -3158,6 +3260,26 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         );
       }
 
+      // Optional app policy: block categories you never want to attempt generating.
+      // This prevents wasting requests (and possible policy refusals) for categories you don't sell.
+      const sensitivityTier = getSensitivityTier(
+        effectiveItemType,
+        String(selectedModelForGeneration?.gender || "")
+      );
+      const BLOCK_HIGH_SENSITIVITY_ITEM_TYPES = true; // e.g., bras/underwear/lingerie/bikini
+      const BLOCK_MEDIUM_SENSITIVITY_ITEM_TYPES = false; // e.g., swimwear (set true only if you never want swim items)
+
+      if (sensitivityTier === "high" && BLOCK_HIGH_SENSITIVITY_ITEM_TYPES) {
+        throw new Error(
+          `Blocked itemType "${effectiveItemType}" (intimates) by app policy.`
+        );
+      }
+      if (sensitivityTier === "medium" && BLOCK_MEDIUM_SENSITIVITY_ITEM_TYPES) {
+        throw new Error(
+          `Blocked itemType "${effectiveItemType}" (swimwear) by app policy.`
+        );
+      }
+
       if (!effectiveItemRefs.length) {
         throw new Error(
           "Please upload/import item references first in section 0.5 before generating."
@@ -3185,69 +3307,125 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       const generateOnePanel = async (panelNumber: number) => {
         try {
           const panelButtonLabel = getPanelButtonLabel(selectedModel.gender, panelNumber);
-          const [poseA, poseB] = getPanelPosePair(selectedModel.gender, panelNumber);
-          const prompt = buildMasterPanelPrompt({
-            panelNumber,
-            panelLabel: panelButtonLabel,
-            poseA,
-            poseB,
-            modelName: selectedModel.name,
-            modelGender: selectedModel.gender,
-            modelRefs: selectedModel.ref_image_urls,
-            itemRefs: effectiveItemRefs,
-            itemType: effectiveItemType,
-            itemStyleInstructions: normalizedItemStyleInstructions,
-            regenerationComments: normalizedRegenerationComments,
-          });
+          const [defaultPoseA, defaultPoseB] = getPanelPosePair(selectedModel.gender, panelNumber);
 
-          const { resp, json } = await fetchJsonWithRetry(
-            "/api/generate",
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json", Accept: "application/json" },
-              body: JSON.stringify({
-                prompt,
-                // Keep requested panel ratio; quality is controlled by the API route.
-                size: "1536x1024",
-                modelRefs: selectedModel.ref_image_urls,
-                itemRefs: effectiveItemRefs,
-                panelQa: {
-                  panelNumber,
-                  panelLabel: panelButtonLabel,
-                  poseA,
-                  poseB,
-                  modelName: selectedModel.name,
-                  modelGender: selectedModel.gender,
-                  itemType: effectiveItemType,
-                },
-              }),
-            },
-            1
-          );
-          if (!resp.ok) {
-            const openAiRelated =
-              Boolean(json?.openaiRaw) ||
-              /openai|policy|safety|content/i.test(String(json?.error || ""));
-            if (openAiRelated) {
-              appendGenerateRawResponse(formatGenerateDebugPayload(json, panelNumber));
+          const requestOnce = async (overrides?: {
+            poseA?: number;
+            poseB?: number;
+            panelNumberForLocks?: number;
+            forceActivePoseOverride?: boolean;
+            panelLabelSuffix?: string;
+          }) => {
+            const poseA = typeof overrides?.poseA === "number" ? overrides.poseA : defaultPoseA;
+            const poseB = typeof overrides?.poseB === "number" ? overrides.poseB : defaultPoseB;
+
+            const panelLabel = overrides?.panelLabelSuffix
+              ? `${panelButtonLabel} ${overrides.panelLabelSuffix}`
+              : panelButtonLabel;
+
+            const prompt = buildMasterPanelPrompt({
+              panelNumber,
+              panelNumberForLocks: overrides?.panelNumberForLocks,
+              panelLabel,
+              poseA,
+              poseB,
+              forceActivePoseOverride: Boolean(overrides?.forceActivePoseOverride),
+              modelName: selectedModel.name,
+              modelGender: selectedModel.gender,
+              modelRefs: selectedModel.ref_image_urls,
+              itemRefs: effectiveItemRefs,
+              itemType: effectiveItemType,
+              itemStyleInstructions: normalizedItemStyleInstructions,
+              regenerationComments: normalizedRegenerationComments,
+            });
+
+            const { resp, json } = await fetchJsonWithRetry(
+              "/api/generate",
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Accept: "application/json" },
+                body: JSON.stringify({
+                  prompt,
+                  // Keep requested panel ratio; quality is controlled by the API route.
+                  size: "1536x1024",
+                  modelRefs: selectedModel.ref_image_urls,
+                  itemRefs: effectiveItemRefs,
+                  panelQa: {
+                    panelNumber,
+                    panelLabel,
+                    poseA,
+                    poseB,
+                    modelName: selectedModel.name,
+                    modelGender: selectedModel.gender,
+                    itemType: effectiveItemType,
+                  },
+                }),
+              },
+              1
+            );
+
+            if (!resp.ok) {
+              const openAiRelated =
+                Boolean(json?.openaiRaw) ||
+                /openai|policy|safety|content/i.test(String(json?.error || ""));
+              if (openAiRelated) {
+                appendGenerateRawResponse(formatGenerateDebugPayload(json, panelNumber));
+              }
+              const details = shortErrorDetails(json?.details);
+              const baseMsg = json?.error || `Panel ${panelNumber} generation failed`;
+              throw new Error(details ? `${baseMsg}: ${details}` : baseMsg);
             }
-            const details = shortErrorDetails(json?.details);
-            const baseMsg = json?.error || `Panel ${panelNumber} generation failed`;
-            throw new Error(details ? `${baseMsg}: ${details}` : baseMsg);
-          }
-          if (json?.degraded) {
-            const warning =
-              typeof json?.warning === "string" && json.warning.trim()
-                ? json.warning.trim()
-                : "Generation returned a degraded fallback image.";
-            throw new Error(`Panel ${panelNumber} generation failed: ${warning}`);
-          }
+            if (json?.degraded) {
+              const warning =
+                typeof json?.warning === "string" && json.warning.trim()
+                  ? json.warning.trim()
+                  : "Generation returned a degraded fallback image.";
+              throw new Error(`Panel ${panelNumber} generation failed: ${warning}`);
+            }
 
-          const b64 = json?.imageBase64 || null;
-          if (!b64) {
-            throw new Error(`No image returned for panel ${panelNumber}`);
+            const b64 = json?.imageBase64 || null;
+            if (!b64) {
+              throw new Error(`No image returned for panel ${panelNumber}`);
+            }
+
+            return { panelNumber, b64, json } as {
+              panelNumber: number;
+              b64: string;
+              json: any;
+            };
+          };
+
+          try {
+            const primary = await requestOnce();
+            return { panelNumber: primary.panelNumber, b64: primary.b64 };
+          } catch (err) {
+            const message = String((err as any)?.message || err || "");
+            const looksModeration = isModerationBlockedErrorMessage(message);
+            const fallbackEligible = looksModeration && (panelNumber === 3 || panelNumber === 4);
+
+            if (!fallbackEligible) throw err;
+
+            const fallbackFromPanel = panelNumber === 3 ? 1 : 2;
+            const [fallbackPoseA, fallbackPoseB] = getPanelPosePair(
+              selectedModel.gender,
+              fallbackFromPanel
+            );
+            setPanelStatus(panelNumber, `generating (fallback from panel ${fallbackFromPanel})`);
+
+            const fallback = await requestOnce({
+              poseA: fallbackPoseA,
+              poseB: fallbackPoseB,
+              panelNumberForLocks: fallbackFromPanel,
+              forceActivePoseOverride: true,
+              panelLabelSuffix: `(fallback from panel ${fallbackFromPanel})`,
+            });
+
+            return {
+              panelNumber: fallback.panelNumber,
+              b64: fallback.b64,
+              usedFallbackFromPanel: fallbackFromPanel,
+            };
           }
-          return { panelNumber, b64 };
         } finally {
           setPanelsInFlight((prev) => prev.filter((id) => id !== panelNumber));
         }
@@ -6826,6 +7004,14 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           cursor: pointer;
         }
         .ghost-btn.danger {
+          color: #ffffff;
+          background: rgba(255, 75, 75, 0.18);
+          border-color: #ffffff;
+        }
+        .ghost-btn.danger:hover:not(:disabled) {
+          background: rgba(255, 75, 75, 0.38);
+        }
+        .ghost-btn.danger-opaque {
           color: #ffffff;
           background: #ff4b4b62;
           border-color: #ffffff;
