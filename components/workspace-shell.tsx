@@ -56,7 +56,6 @@ const ACTIVE_ITEM_STYLE: CSSProperties = {
 
 const navItems: NavItem[] = [
   { href: "/studio/images", label: "Image Generator" },
-  { href: "/studio/gemini-generator", label: "Gemini Generator" },
   { href: "/studio/seo", label: "SEO Manager" },
   { href: "/studio/rfid-price-tag", label: "RFID Price Tag" },
   { href: "/studio/lightspeed-catalog", label: "Lightspeed Catalog" },

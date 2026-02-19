@@ -151,7 +151,7 @@ function buildSwimwearSafetyRetryPrompt(basePrompt: string) {
     "",
     "SWIMWEAR RETRY SAFETY MODE:",
     "- Professional ecommerce catalog image only.",
-    "- Adult model (18+) in standard commercial swimwear presentation.",
+    "- Adult model (25+) in standard commercial swimwear presentation.",
     "- Neutral pose, neutral expression, non-suggestive composition.",
     "- No erotic intent, no intimate framing, no provocative posture.",
     "- Focus on garment fit, color, and material details.",
@@ -732,7 +732,7 @@ export async function POST(req: NextRequest) {
         ? [
             "SWIMWEAR SAFETY LOCK (SERVER):",
             "Professional ecommerce swimwear catalog image only.",
-            "Adult model (18+), neutral posture, non-suggestive composition.",
+            "Adult model (25+), neutral posture, non-suggestive composition.",
             "No erotic context, no intimate framing, no sexual emphasis.",
             "Focus on garment fit, color, material, and product details.",
           ]

@@ -24,7 +24,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <link rel="preload" as="image" href="/bg-template.jpg" />
         <link rel="preload" as="image" href="/brand/carbon-long-white-cropped.png" />
@@ -35,8 +35,14 @@ export default function RootLayout({
         />
       </head>
       <body
+        suppressHydrationWarning
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `new MutationObserver(function(m){m.forEach(function(r){if(r.type==="attributes"&&r.attributeName==="fdprocessedid"){r.target.removeAttribute("fdprocessedid")}})}).observe(document.documentElement,{attributes:true,subtree:true,attributeFilter:["fdprocessedid"]});window.addEventListener("beforeunload",function(){window.scrollTo(0,0)})`,
+          }}
+        />
         <AutoCapitalizeFirstLetter />
         <div className="app-bg-photo" aria-hidden />
         <div className="app-bg-fade" aria-hidden />

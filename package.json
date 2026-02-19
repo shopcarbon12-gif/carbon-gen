@@ -26,7 +26,6 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.992.0",
-    "@google/genai": "^0.15.0",
     "@opennextjs/cloudflare": "^1.16.4",
     "@supabase/auth-helpers-nextjs": "^0.15.0",
     "@supabase/auth-helpers-react": "^0.15.0",

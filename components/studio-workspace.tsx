@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import {
   useCallback,
@@ -248,76 +248,9 @@ function fileToDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(new Error("Failed to read image for clothing type scan."));
+    reader.onerror = () => reject(new Error("Failed to read image for item type scan."));
     reader.readAsDataURL(file);
   });
-}
-
-async function fileToDetectionDataUrl(file: File, maxSide = 768) {
-  try {
-    const objectUrl = URL.createObjectURL(file);
-    try {
-      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-        const node = new Image();
-        node.onload = () => resolve(node);
-        node.onerror = () => reject(new Error("Failed to decode image."));
-        node.src = objectUrl;
-      });
-
-      const longest = Math.max(img.naturalWidth || 1, img.naturalHeight || 1);
-      const scale = Math.min(1, maxSide / longest);
-      const width = Math.max(1, Math.round((img.naturalWidth || 1) * scale));
-      const height = Math.max(1, Math.round((img.naturalHeight || 1) * scale));
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) throw new Error("Canvas unavailable");
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
-      ctx.drawImage(img, 0, 0, width, height);
-      const jpeg = canvas.toDataURL("image/jpeg", 0.82);
-      if (jpeg && jpeg.startsWith("data:image/")) return jpeg;
-    } finally {
-      URL.revokeObjectURL(objectUrl);
-    }
-  } catch {
-    // Fallback to original file encoding.
-  }
-  return fileToDataUrl(file);
-}
-
-function normalizeDetectedItemType(value: unknown) {
-  const text = String(value || "")
-    .trim()
-    .replace(/^"+|"+$/g, "")
-    .replace(/\s+/g, " ")
-    .replace(/[.;:!?]+$/g, "");
-  if (!text) return "";
-  return text.length > 60 ? text.slice(0, 60).trim() : text;
-}
-
-function inferItemTypeFromText(value: unknown) {
-  const text = String(value || "").toLowerCase();
-  if (!text) return "";
-  if (/\btank\b/.test(text)) return "tank top";
-  if (/\b(t[\s-]?shirt|tee)\b/.test(text)) return "t-shirt";
-  if (/\bhoodie\b/.test(text)) return "hoodie";
-  if (/\bsweatshirt\b/.test(text)) return "sweatshirt";
-  if (/\bsweater\b/.test(text)) return "sweater";
-  if (/\bjacket\b/.test(text)) return "jacket";
-  if (/\bcoat\b/.test(text)) return "coat";
-  if (/\bjeans?\b/.test(text)) return "jeans";
-  if (/\b(cargo|jogger|trouser|pants?)\b/.test(text)) return "pants";
-  if (/\bshorts?\b/.test(text)) return "shorts";
-  if (/\bskirt\b/.test(text)) return "skirt";
-  if (/\bdress\b/.test(text)) return "dress";
-  if (/\bjumpsuit\b/.test(text)) return "jumpsuit";
-  if (/\b(swim|trunk|bikini)\b/.test(text)) return "swimwear";
-  if (/\bshoe|sneaker|boot\b/.test(text)) return "shoes";
-  if (/\bbag\b/.test(text)) return "bag";
-  if (/\b(accessor|belt|hat|cap|scarf)\b/.test(text)) return "accessories";
-  return "";
 }
 
 function isValidBarcode(value: string) {
@@ -397,7 +330,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   const [modelFiles, setModelFiles] = useState<File[]>([]);
   const [itemFiles, setItemFiles] = useState<File[]>([]);
   const [itemType, setItemType] = useState("");
-  const [, setItemTypeDetecting] = useState(false);
   const [itemBarcode, setItemBarcode] = useState("");
   const [itemBarcodeSaved, setItemBarcodeSaved] = useState("");
   const [barcodeScannerOpen, setBarcodeScannerOpen] = useState(false);
@@ -500,6 +432,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   const [panelGenerating, setPanelGenerating] = useState(false);
   const [panelsInFlight, setPanelsInFlight] = useState<number[]>([]);
   const [generatedPanels, setGeneratedPanels] = useState<Record<number, string>>({});
+  const [panelFailReasons, setPanelFailReasons] = useState<Record<number, string>>({});
   const [generatedPanelHistoryByModel, setGeneratedPanelHistoryByModel] = useState<
     Record<string, number[]>
   >({});
@@ -557,12 +490,27 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   const pickerMaskTimerRef = useRef<number | null>(null);
   const [workspaceHydrated, setWorkspaceHydrated] = useState(false);
   const [modelRegistryCollapsed, setModelRegistryCollapsed] = useState(true);
-  const [itemRefsCollapsed, setItemRefsCollapsed] = useState(false);
+  const [itemRefsCollapsed, setItemRefsCollapsed] = useState(true);
   const [shopifyPushCollapsed, setShopifyPushCollapsed] = useState(true);
   const [seoCollapsed, setSeoCollapsed] = useState(true);
-  const modelRegistryDefaultAppliedRef = useRef(false);
-  const itemTypeDetectionSourceRef = useRef("");
-  const itemTypeDetectionRequestRef = useRef(0);
+  const [generateCollapsed, setGenerateCollapsed] = useState(true);
+  const [resultsCollapsed, setResultsCollapsed] = useState(true);
+
+  type PoseScanEntry = {
+    pose: number;
+    name: string;
+    status: "green" | "red";
+    issue: string;
+    suggestion: string;
+  };
+  type PoseScanResults = { male: PoseScanEntry[]; female: PoseScanEntry[] } | null;
+  const [poseScanResults, setPoseScanResults] = useState<PoseScanResults>(null);
+  const [poseScanLoading, setPoseScanLoading] = useState(false);
+  const [poseScanError, setPoseScanError] = useState<string | null>(null);
+  const [poseScanTab, setPoseScanTab] = useState<"male" | "female">("female");
+  const [poseScanManualGender, setPoseScanManualGender] = useState<"male" | "female">("female");
+  const poseScanAbortRef = useRef<AbortController | null>(null);
+  const [appliedPoseSuggestions, setAppliedPoseSuggestions] = useState<Record<string, string>>({});
 
   const lowestSelectedPanel = useMemo(() => {
     const sorted = [...selectedPanels].sort((a, b) => a - b);
@@ -571,61 +519,95 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
 
   const resolvedItemType = useMemo(() => itemType.trim(), [itemType]);
 
-  const detectItemTypeFromSource = useCallback(
-    async (input: { sourceSignature: string; file?: File; imageUrl?: string; hintText?: string }) => {
-      const sourceSignature = String(input.sourceSignature || "").trim();
-      if (!sourceSignature) return;
-      if (itemTypeDetectionSourceRef.current === sourceSignature) return;
-      itemTypeDetectionSourceRef.current = sourceSignature;
+  const POSE_SCAN_ITEM_TYPES = [
+    "dress",
+    "two-piece", "two piece", "2 piece", "2-piece",
+    "matching set", "co-ord", "co ord", "set",
+    "swimwear", "bikini", "swim trunks", "swim shorts", "one-piece swimsuit", "one piece swimsuit", "swimsuit",
+    "bodysuit",
+  ];
 
-      const fallbackType = inferItemTypeFromText(input.hintText);
-      const requestId = itemTypeDetectionRequestRef.current + 1;
-      itemTypeDetectionRequestRef.current = requestId;
-      setItemTypeDetecting(true);
+  function shouldAutoScanPoses(it: string) {
+    const t = it.trim().toLowerCase();
+    if (!t) return false;
+    return POSE_SCAN_ITEM_TYPES.some((m) => t.includes(m));
+  }
+
+  async function fileToScanDataUrl(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error("Failed to read file"));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  const runPoseScan = useCallback(
+    async (opts?: { genders?: Array<"male" | "female"> }) => {
+      if (!itemReferenceUrls.length && !itemFiles.length) return;
+
+      const genders = opts?.genders ?? [poseScanManualGender];
+
+      if (poseScanAbortRef.current) poseScanAbortRef.current.abort();
+      const controller = new AbortController();
+      poseScanAbortRef.current = controller;
+
+      setPoseScanLoading(true);
+      setPoseScanError(null);
+      setAppliedPoseSuggestions({});
 
       try {
-        let payload: Record<string, string> | null = null;
-        if (input.file) {
-          const imageDataUrl = await fileToDetectionDataUrl(input.file);
-          if (imageDataUrl) payload = { imageDataUrl };
-        } else if (input.imageUrl) {
-          payload = { imageUrl: input.imageUrl };
-        }
+        const imageUrls = itemReferenceUrls.slice(0, 4);
+        const imageDataUrls: string[] = [];
 
-        if (!payload) {
-          if (fallbackType && itemTypeDetectionRequestRef.current === requestId) {
-            setItemType(fallbackType);
+        if (imageUrls.length < 4 && itemFiles.length > 0) {
+          const needed = 4 - imageUrls.length;
+          for (const f of itemFiles.slice(0, needed)) {
+            try {
+              imageDataUrls.push(await fileToScanDataUrl(f));
+            } catch { /* skip unreadable */ }
           }
-          return;
         }
 
-        const resp = await fetch("/api/openai/item-type", {
+        if (controller.signal.aborted) return;
+
+        const resp = await fetch("/api/openai/item-scan", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            imageDataUrls,
+            imageUrls,
+            itemType: itemType.trim() || undefined,
+            genders,
+          }),
+          signal: controller.signal,
         });
-        const json = await parseJsonResponse(resp, "/api/openai/item-type");
+
+        const json = await resp.json().catch(() => ({}));
+        if (controller.signal.aborted) return;
+
         if (!resp.ok) {
-          throw new Error(json?.error || "Failed to detect clothing type.");
+          throw new Error(json?.error || "Pose scan failed.");
         }
-        const detected = normalizeDetectedItemType(json?.itemType);
-        if (itemTypeDetectionRequestRef.current !== requestId) return;
-        if (detected) {
-          setItemType(detected);
-          return;
-        }
-        if (fallbackType) setItemType(fallbackType);
-      } catch {
-        if (fallbackType && itemTypeDetectionRequestRef.current === requestId) {
-          setItemType(fallbackType);
-        }
+
+        setPoseScanResults({
+          male: Array.isArray(json.male) ? json.male : [],
+          female: Array.isArray(json.female) ? json.female : [],
+        });
+        setPoseScanError(null);
+
+        if (json.female?.length && !json.male?.length) setPoseScanTab("female");
+        else if (json.male?.length && !json.female?.length) setPoseScanTab("male");
+      } catch (err: any) {
+        if (err?.name === "AbortError") return;
+        setPoseScanError(err?.message || "Pose scan failed.");
       } finally {
-        if (itemTypeDetectionRequestRef.current === requestId) {
-          setItemTypeDetecting(false);
+        if (!controller.signal.aborted) {
+          setPoseScanLoading(false);
         }
       }
     },
-    []
+    [itemFiles, itemReferenceUrls, itemType, poseScanManualGender]
   );
 
   const hidePickerMask = useCallback((delayMs = 180) => {
@@ -999,26 +981,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       .then((json) => {
         const nextModels = Array.isArray(json?.models) ? json.models : [];
         setModels(nextModels);
-
-        // Default behavior:
-        // - If there are registered models, start collapsed.
-        // - If there are no models, keep it open.
-        // Apply auto-collapse once, but always force open on empty.
-        if (nextModels.length === 0) {
-          setModelRegistryCollapsed(false);
-          return;
-        }
-        if (!modelRegistryDefaultAppliedRef.current) {
-          setModelRegistryCollapsed(true);
-          modelRegistryDefaultAppliedRef.current = true;
-        }
       })
       .catch((e: any) => {
         setError(e?.message || "Failed to load models");
-        if (!modelRegistryDefaultAppliedRef.current) {
-          setModelRegistryCollapsed(false);
-          modelRegistryDefaultAppliedRef.current = true;
-        }
       });
   }
 
@@ -1084,17 +1049,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     };
   }, [hidePickerMask]);
 
-  useEffect(() => {
-    if (modelFolderRef.current) {
-      modelFolderRef.current.webkitdirectory = true;
-    }
-    if (itemFolderRef.current) {
-      itemFolderRef.current.webkitdirectory = true;
-    }
-    if (pushFolderRef.current) {
-      pushFolderRef.current.webkitdirectory = true;
-    }
-  }, []);
 
   useEffect(() => {
     modelPreviewRef.current = modelPreviewItems;
@@ -1359,11 +1313,18 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   async function persistItemReferences(options?: { silentSuccess?: boolean }) {
     const silentSuccess = Boolean(options?.silentSuccess);
     if (!itemType.trim()) {
-      throw new Error("Please enter clothing type.");
+      throw new Error("Please enter item type.");
     }
-    const activeBarcode = itemBarcodeSaved.trim();
+    let activeBarcode = itemBarcodeSaved.trim();
+    if (!activeBarcode && itemBarcode.trim()) {
+      const candidate = sanitizeBarcodeInput(itemBarcode.trim());
+      if (isValidBarcode(candidate)) {
+        setItemBarcodeSaved(candidate);
+        activeBarcode = candidate;
+      }
+    }
     if (!activeBarcode) {
-      throw new Error("Please save item barcode in section 0.5.");
+      throw new Error("Please enter a valid item barcode (7-9 digits, or C + 6-8 digits).");
     }
     if (!isValidBarcode(activeBarcode)) {
       throw new Error("Barcode must be 7-9 chars: digits only, or C + 6-8 digits.");
@@ -2147,7 +2108,28 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     const existing = selectedCatalogImages.find((img) => img.id === image.id);
     if (existing?.uploading) return;
 
-    if (image.barcode?.trim()) setItemBarcode(image.barcode.trim());
+    const scrollY = window.scrollY;
+    let scrollLockDone = false;
+    const cancelLock = () => { scrollLockDone = true; };
+    window.addEventListener("wheel", cancelLock, { once: true, passive: true });
+    window.addEventListener("touchmove", cancelLock, { once: true, passive: true });
+    const lockScroll = () => {
+      if (scrollLockDone) return;
+      if (window.scrollY !== scrollY) window.scrollTo(0, scrollY);
+      requestAnimationFrame(lockScroll);
+    };
+    requestAnimationFrame(lockScroll);
+    setTimeout(() => {
+      scrollLockDone = true;
+      window.removeEventListener("wheel", cancelLock);
+      window.removeEventListener("touchmove", cancelLock);
+    }, 1000);
+
+    if (image.barcode?.trim()) {
+      const bc = sanitizeBarcodeInput(image.barcode.trim());
+      setItemBarcode(bc);
+      if (isValidBarcode(bc)) setItemBarcodeSaved(bc);
+    }
 
     if (existing?.uploadError) {
       void importCatalogImageToBucket(image);
@@ -2172,13 +2154,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         uploadError: null,
       },
     ]);
-    if ((image.source || "shopify") !== "generated_flat") {
-      void detectItemTypeFromSource({
-        sourceSignature: `catalog:${image.id}:${image.url}`,
-        imageUrl: image.url,
-        hintText: `${image.title} ${image.url}`,
-      });
-    }
     void importCatalogImageToBucket(image);
   }
 
@@ -2901,7 +2876,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   }
 
   function getPanelCriticalLockLines(gender: string, panelNumber: number, itemTypeValue = "") {
-    const panelAdultLock = "- HARD AGE LOCK: the model is over 18+.";
+    const panelAdultLock = "- HARD AGE LOCK: the model is over 25+.";
     const lockedItemType = String(itemTypeValue || "").trim();
     const normalizedItemType =
       String(gender || "").trim().toLowerCase() === "female" && isSwimwearItemType(lockedItemType)
@@ -3038,6 +3013,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     itemType: string;
     itemStyleInstructions?: string;
     regenerationComments?: string;
+    poseSafetySuggestions?: string[];
   }) {
     const poseLibrary = getPoseLibraryForGender(args.modelGender);
     const fullPoseLibraries = [
@@ -3128,8 +3104,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       "POSE LIBRARIES (ORIGINAL, UNCHANGED) INCLUDED BELOW FOR REFERENCE:",
       fullPoseLibraries,
       "Generate exactly ONE 2-up panel image.",
-      "Age requirement: the model must be an adult 18+ only.",
-      `PANEL ${args.panelNumber} HARD AGE LOCK: the model is over 18+.`,
+      "Age requirement: the model must be an adult 25+ only.",
+      `PANEL ${args.panelNumber} HARD AGE LOCK: the model is over 25+.`,
       "Canvas 1536x1024; left frame 768x1024; right frame 768x1024; thin divider.",
       "No collage, no extra poses, no extra panels.",
       "Identity anchor override: use ONLY MODEL refs for face/body identity.",
@@ -3156,10 +3132,16 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       "- Keep the scene strictly non-sexual: no lingerie/underwear context, no erotic framing, no suggestive mood.",
       "- No emphasis on breasts/cleavage/groin; no deliberate zoom on intimate body regions.",
       "- Wardrobe presentation must be professional and storefront-safe (neutral posture, neutral camera angle).",
+      ...(args.poseSafetySuggestions && args.poseSafetySuggestions.length
+        ? [
+            "POSE SAFETY MODIFICATIONS (from pre-generation scan — apply strictly):",
+            ...args.poseSafetySuggestions,
+          ]
+        : []),
       `Panel request: Panel ${args.panelNumber} (${args.panelLabel}).`,
       `Active pose priority: LEFT Pose ${args.poseA}, RIGHT Pose ${args.poseB}.`,
-      `LEFT ACTIVE POSE ${args.poseA} HARD AGE LOCK: the model is over 18+.`,
-      `RIGHT ACTIVE POSE ${args.poseB} HARD AGE LOCK: the model is over 18+.`,
+      `LEFT ACTIVE POSE ${args.poseA} HARD AGE LOCK: the model is over 25+.`,
+      `RIGHT ACTIVE POSE ${args.poseB} HARD AGE LOCK: the model is over 25+.`,
       "POSE PROMPTING METHOD HARD LOCK:",
       "- Only two active poses are allowed in this generation call.",
       "- LEFT frame must execute ACTIVE Pose A only.",
@@ -3200,6 +3182,14 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   ) {
     setError(null);
     setGenerateOpenAiResponse(null);
+    setPanelFailReasons({});
+
+    if (!poseScanResults && shouldAutoScanPoses(resolvedItemType)) {
+      setStatus(
+        `Pose scan recommended for "${resolvedItemType}". Run "Scan Poses" in section 02 for best results.`
+      );
+    }
+
     const requestedPanels = uniqueSortedPanels(selectedPanels).filter(
       (panelNumber) =>
         !isFemaleDressPanelBlocked(
@@ -3328,6 +3318,13 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               ? `${panelButtonLabel} ${overrides.panelLabelSuffix}`
               : panelButtonLabel;
 
+            const genderForSuggestions = String(selectedModel.gender || "").toLowerCase() === "male" ? "male" : "female";
+            const poseSafetySuggestions: string[] = [];
+            const suggA = appliedPoseSuggestions[`${genderForSuggestions}-${poseA}`];
+            const suggB = appliedPoseSuggestions[`${genderForSuggestions}-${poseB}`];
+            if (suggA) poseSafetySuggestions.push(`- LEFT Pose ${poseA}: ${suggA}`);
+            if (suggB) poseSafetySuggestions.push(`- RIGHT Pose ${poseB}: ${suggB}`);
+
             const prompt = buildMasterPanelPrompt({
               panelNumber,
               panelNumberForLocks: overrides?.panelNumberForLocks,
@@ -3342,6 +3339,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               itemType: effectiveItemType,
               itemStyleInstructions: normalizedItemStyleInstructions,
               regenerationComments: normalizedRegenerationComments,
+              poseSafetySuggestions,
             });
 
             const { resp, json } = await fetchJsonWithRetry(
@@ -3488,6 +3486,15 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               .map((entry) => entry.panelNumber)
               .filter((value) => Number.isFinite(value))
           );
+
+          setPanelFailReasons((prev) => {
+            const next = { ...prev };
+            for (const entry of failed) {
+              next[entry.panelNumber] = entry.message;
+            }
+            return next;
+          });
+
           const moderationOnly = failed.every((entry) =>
             isModerationBlockedErrorMessage(entry.message)
           );
@@ -3523,8 +3530,12 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         setStatus(`${actionWord} completed: panel ${single.panelNumber}.`);
       }
     } catch (e: any) {
-      setError(e?.message || "Panel generation failed");
+      const errMsg = e?.message || "Panel generation failed";
+      setError(errMsg);
       setStatus(null);
+      if (queue.length === 1) {
+        setPanelFailReasons((prev) => ({ ...prev, [queue[0]]: errMsg }));
+      }
     } finally {
       setPanelsInFlight([]);
       setPanelGenerating(false);
@@ -3588,40 +3599,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   }, [itemFiles]);
 
   useEffect(() => {
-    const latestFile = itemFiles.length ? itemFiles[itemFiles.length - 1] : null;
-    const latestCatalogImage = selectedCatalogImages.length
-      ? selectedCatalogImages[selectedCatalogImages.length - 1]
-      : null;
-
-    let sourceSignature = "";
-    if (latestFile) {
-      sourceSignature = `file:${latestFile.name}:${latestFile.size}:${latestFile.lastModified}`;
-    } else if (latestCatalogImage && latestCatalogImage.source !== "generated_flat") {
-      sourceSignature = `catalog:${latestCatalogImage.id}:${latestCatalogImage.url}`;
-    }
-
-    if (!sourceSignature) {
-      itemTypeDetectionSourceRef.current = "";
-      return;
-    }
-    if (latestFile) {
-      void detectItemTypeFromSource({
-        sourceSignature,
-        file: latestFile,
-        hintText: latestFile.name,
-      });
-      return;
-    }
-    if (latestCatalogImage) {
-      void detectItemTypeFromSource({
-        sourceSignature,
-        imageUrl: latestCatalogImage.url,
-        hintText: `${latestCatalogImage.title} ${latestCatalogImage.url}`,
-      });
-    }
-  }, [itemFiles, selectedCatalogImages, detectItemTypeFromSource]);
-
-  useEffect(() => {
     const previews = finalResultFiles.map((file) => ({
       id: `${file.name}::${file.size}::${file.lastModified}`,
       name: file.name,
@@ -3634,17 +3611,33 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   }, [finalResultFiles]);
 
   function removeItemFileAt(index: number) {
+    const scrollY = window.scrollY;
     setItemFiles((prev) => prev.filter((_, i) => i !== index));
+    let done = false;
+    const stop = () => { done = true; };
+    window.addEventListener("wheel", stop, { once: true, passive: true });
+    window.addEventListener("touchmove", stop, { once: true, passive: true });
+    const hold = () => { if (done) return; if (window.scrollY !== scrollY) window.scrollTo(0, scrollY); requestAnimationFrame(hold); };
+    requestAnimationFrame(hold);
+    setTimeout(() => { done = true; window.removeEventListener("wheel", stop); window.removeEventListener("touchmove", stop); }, 1000);
   }
 
-  function removeCatalogSelection(id: string) {
+  function removeCatalogSelection(removeId: string) {
+    const scrollY = window.scrollY;
     setSelectedCatalogImages((prev) => {
-      const target = prev.find((img) => img.id === id);
+      const target = prev.find((img) => img.id === removeId);
       if (target?.uploadedUrl) {
         setItemReferenceUrls((urls) => urls.filter((url) => url !== target.uploadedUrl));
       }
-      return prev.filter((img) => img.id !== id);
+      return prev.filter((img) => img.id !== removeId);
     });
+    let done = false;
+    const stop = () => { done = true; };
+    window.addEventListener("wheel", stop, { once: true, passive: true });
+    window.addEventListener("touchmove", stop, { once: true, passive: true });
+    const hold = () => { if (done) return; if (window.scrollY !== scrollY) window.scrollTo(0, scrollY); requestAnimationFrame(hold); };
+    requestAnimationFrame(hold);
+    setTimeout(() => { done = true; window.removeEventListener("wheel", stop); window.removeEventListener("touchmove", stop); }, 1000);
   }
 
   useEffect(() => {
@@ -4578,13 +4571,36 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           <div className="eyebrow">01 — Setup</div>
           <div className="model-registry-header">
             <div className="card-title">Model Registry</div>
+            {modelRegistryCollapsed ? (
+              models.length ? (
+                <div className="registry-inline-models">
+                  {models.map((m) => (
+                    <div className="model-pill" key={m.model_id}>
+                      <div className="model-info">
+                        <span className="model-name">{m.name}</span>
+                        <span className="model-meta">{m.gender}</span>
+                      </div>
+                      <button
+                        className="model-remove"
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); removeModel(m.model_id); }}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <span className="muted registry-inline-summary">No models yet.</span>
+              )
+            ) : null}
             <button
               suppressHydrationWarning
               className="ghost-btn"
               type="button"
               onClick={() => setModelRegistryCollapsed((prev) => !prev)}
             >
-              {modelRegistryCollapsed ? "Show Registry" : "Done and Hide"}
+              {modelRegistryCollapsed ? "Expand" : "Collapse"}
             </button>
           </div>
           {!modelRegistryCollapsed ? (
@@ -4592,6 +4608,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           <p className="muted">Upload model profile images.</p>
           <div className="row">
             <input
+              suppressHydrationWarning
               value={modelName}
               onChange={(e) => setModelName(e.target.value)}
               placeholder="Model name (e.g., Sarah)"
@@ -4636,7 +4653,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             }}
           />
           <input
-            ref={modelFolderRef}
+            ref={(el) => { modelFolderRef.current = el; if (el) el.setAttribute("webkitdirectory", ""); }}
             type="file"
             multiple
             style={{ display: "none" }}
@@ -4647,18 +4664,10 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             }}
           />
           <div className="picker-row">
-            <button
-              className="ghost-btn"
-              type="button"
-              onClick={() => openInputPickerWithMask(modelPickerRef.current)}
-            >
+            <button className="ghost-btn" type="button" onClick={() => openInputPickerWithMask(modelPickerRef.current)}>
               Choose files
             </button>
-            <button
-              className="ghost-btn"
-              type="button"
-              onClick={() => openInputPickerWithMask(modelFolderRef.current)}
-            >
+            <button className="ghost-btn" type="button" onClick={() => openInputPickerWithMask(modelFolderRef.current)}>
               Choose folder
             </button>
           </div>
@@ -4796,27 +4805,29 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               )}
             </div>
           ) : null}
-          {models.length ? (
-            <div className="model-list">
-              {models.map((m) => (
-                <div className="model-pill" key={m.model_id}>
-                  <div className="model-info">
-                    <span className="model-name">{m.name}</span>
-                    <span className="model-meta">{m.gender}</span>
+          {!modelRegistryCollapsed ? (
+            models.length ? (
+              <div className="model-list">
+                {models.map((m) => (
+                  <div className="model-pill" key={m.model_id}>
+                    <div className="model-info">
+                      <span className="model-name">{m.name}</span>
+                      <span className="model-meta">{m.gender}</span>
+                    </div>
+                    <button
+                      className="model-remove"
+                      type="button"
+                      onClick={() => removeModel(m.model_id)}
+                    >
+                      Remove
+                    </button>
                   </div>
-                  <button
-                    className="model-remove"
-                    type="button"
-                    onClick={() => removeModel(m.model_id)}
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="muted centered">No models yet.</div>
-          )}
+                ))}
+              </div>
+            ) : (
+              <div className="muted centered">No models yet.</div>
+            )
+          ) : null}
           {!modelRegistryCollapsed ? (
             <div className="centered">
               <button className="ghost-btn danger" type="button" onClick={resetModels}>
@@ -4841,11 +4852,13 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           </p>
           <div className="row">
             <input
+              suppressHydrationWarning
               value={itemType}
               onChange={(e) => setItemType(e.target.value)}
-              placeholder="Clothing type"
+              placeholder="Item type"
             />
-            <textarea
+            <input
+              suppressHydrationWarning
               value={itemStyleInstructions}
               onChange={(e) => setItemStyleInstructions(e.target.value)}
               placeholder="Optional - extra styling instruction for accuracy"
@@ -4853,11 +4866,21 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           </div>
           <div className="row">
             <input
+              suppressHydrationWarning
               value={itemBarcode}
-              onChange={(e) => setItemBarcode(sanitizeBarcodeInput(e.target.value))}
+              onChange={(e) => {
+                const val = sanitizeBarcodeInput(e.target.value);
+                setItemBarcode(val);
+                if (isValidBarcode(val)) {
+                  setItemBarcodeSaved(val);
+                } else if (!val.trim()) {
+                  setItemBarcodeSaved("");
+                }
+              }}
               placeholder="Item barcode (required: 7-9 digits, or C + 6-8 digits)"
             />
             <button
+              suppressHydrationWarning
               className="btn ghost mobile-only-control mobile-camera-trigger"
               type="button"
               onClick={openBarcodeScanner}
@@ -4879,14 +4902,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                 </svg>
                 <span>{barcodeScannerBusy ? "Opening..." : "Scan"}</span>
               </span>
-            </button>
-            <button
-              className="btn ghost"
-              type="button"
-              onClick={saveItemBarcode}
-              disabled={!isValidBarcode(itemBarcode)}
-            >
-              Save Barcode
             </button>
             <button
               className="btn ghost"
@@ -4936,14 +4951,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                   <div className="barcode-scanner-error">{barcodeScannerError}</div>
                 ) : null}
               </div>
-            </div>
-          ) : null}
-          {itemBarcodeSaved ? (
-            <div className="barcode-chip-row">
-              <span className="barcode-chip">Saved barcode: {itemBarcodeSaved}</span>
-              <button className="barcode-chip-remove" type="button" onClick={clearSavedItemBarcode}>
-                X
-              </button>
             </div>
           ) : null}
           <div className="muted centered">
@@ -5015,15 +5022,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             }
           />
           <input
-            ref={itemFolderRef}
-            type="file"
-            multiple
-            style={{ display: "none" }}
-            onChange={(e) =>
-              setItemFiles((prev) => mergeUniqueFiles(prev, filterImages(e.target.files || [])))
-            }
-          />
-          <input
             ref={itemCameraRef}
             type="file"
             accept="image/*"
@@ -5037,19 +5035,20 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               e.currentTarget.value = "";
             }}
           />
+          <input
+            ref={(el) => { itemFolderRef.current = el; if (el) el.setAttribute("webkitdirectory", ""); }}
+            type="file"
+            multiple
+            style={{ display: "none" }}
+            onChange={(e) =>
+              setItemFiles((prev) => mergeUniqueFiles(prev, filterImages(e.target.files || [])))
+            }
+          />
           <div className="picker-row">
-            <button
-              className="ghost-btn"
-              type="button"
-              onClick={() => openInputPickerWithMask(itemPickerRef.current)}
-            >
+            <button className="ghost-btn" type="button" onClick={() => openInputPickerWithMask(itemPickerRef.current)}>
               Choose files
             </button>
-            <button
-              className="ghost-btn"
-              type="button"
-              onClick={() => openInputPickerWithMask(itemFolderRef.current)}
-            >
+            <button className="ghost-btn" type="button" onClick={() => openInputPickerWithMask(itemFolderRef.current)}>
               Choose folder
             </button>
             <button
@@ -5159,6 +5158,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           <div className="catalog-wrap">
               <div className="row">
                 <input
+                  suppressHydrationWarning
                   value={catalogQuery}
                   onChange={(e) => setCatalogQuery(e.target.value)}
                   onKeyDown={onCatalogSearchKeyDown}
@@ -5327,6 +5327,166 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               Save Item References + Type
             </button>
           </div>
+
+          {/* Pose Feasibility Scanner */}
+          <div className="pose-scan-section">
+            <div className="pose-scan-header">
+              <div className="card-title">Pose Feasibility</div>
+              <div className="pose-scan-controls">
+                <select
+                  suppressHydrationWarning
+                  className="pose-scan-gender-select"
+                  value={poseScanManualGender}
+                  onChange={(e) => setPoseScanManualGender(e.target.value as "male" | "female")}
+                >
+                  <option value="female">Female</option>
+                  <option value="male">Male</option>
+                </select>
+                <button
+                  className="ghost-btn"
+                  type="button"
+                  disabled={poseScanLoading || (!itemFiles.length && !itemReferenceUrls.length)}
+                  onClick={() => runPoseScan({ genders: [poseScanManualGender] })}
+                >
+                  {poseScanLoading ? "Scanning..." : "Scan Poses"}
+                </button>
+              </div>
+            </div>
+            {poseScanLoading ? (
+              <div className="pose-scan-loading">
+                <span className="pose-scan-spinner" />
+                <span className="muted">Analyzing item references against {poseScanManualGender} poses...</span>
+              </div>
+            ) : null}
+            {poseScanError ? (
+              <div className="pose-scan-error">Error: {poseScanError}</div>
+            ) : null}
+            {poseScanResults && !poseScanLoading ? (() => {
+              const hasMale = poseScanResults.male.length > 0;
+              const hasFemale = poseScanResults.female.length > 0;
+              const hasBoth = hasMale && hasFemale;
+              const activePoses = poseScanTab === "male" && hasMale
+                ? poseScanResults.male
+                : hasFemale
+                  ? poseScanResults.female
+                  : poseScanResults.male;
+              const activeLabel = poseScanTab === "male" && hasMale ? "Male" : hasFemale ? "Female" : "Male";
+              const greenCount = activePoses.filter((p) => p.status === "green").length;
+              const allGreen = greenCount === 8;
+              const redPosesWithSuggestion = activePoses.filter((p) => p.status === "red" && p.suggestion);
+              const genderKey = poseScanTab === "male" && hasMale ? "male" : "female";
+              const allRedApplied = redPosesWithSuggestion.length > 0 && redPosesWithSuggestion.every(
+                (p) => appliedPoseSuggestions[`${genderKey}-${p.pose}`]
+              );
+
+              return (
+                <div className="pose-scan-results">
+                  {hasBoth ? (
+                    <div className="pose-scan-tabs">
+                      <button
+                        className={`pose-scan-tab ${poseScanTab === "male" ? "active" : ""}`}
+                        type="button"
+                        onClick={() => setPoseScanTab("male")}
+                      >
+                        Male Poses ({poseScanResults.male.filter((p) => p.status === "green").length}/8)
+                      </button>
+                      <button
+                        className={`pose-scan-tab ${poseScanTab === "female" ? "active" : ""}`}
+                        type="button"
+                        onClick={() => setPoseScanTab("female")}
+                      >
+                        Female Poses ({poseScanResults.female.filter((p) => p.status === "green").length}/8)
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="pose-scan-single-label muted">{activeLabel} Poses</div>
+                  )}
+                  <div className={`pose-scan-summary ${allGreen ? "all-green" : "has-red"}`}>
+                    {allGreen
+                      ? `All 8 ${activeLabel.toLowerCase()} poses feasible — ready to generate.`
+                      : `${greenCount}/8 ${activeLabel.toLowerCase()} poses feasible — review issues below.`}
+                  </div>
+                  {!allGreen && redPosesWithSuggestion.length > 0 ? (
+                    <div className="pose-scan-apply-all-row">
+                      <button
+                        className={`ghost-btn ${allRedApplied ? "applied" : ""}`}
+                        type="button"
+                        onClick={() => {
+                          if (allRedApplied) {
+                            setAppliedPoseSuggestions((prev) => {
+                              const next = { ...prev };
+                              redPosesWithSuggestion.forEach((p) => {
+                                delete next[`${genderKey}-${p.pose}`];
+                              });
+                              return next;
+                            });
+                          } else {
+                            setAppliedPoseSuggestions((prev) => {
+                              const next = { ...prev };
+                              redPosesWithSuggestion.forEach((p) => {
+                                next[`${genderKey}-${p.pose}`] = p.suggestion;
+                              });
+                              return next;
+                            });
+                          }
+                        }}
+                      >
+                        {allRedApplied ? "Remove All Suggestions" : "Apply All Suggestions"}
+                      </button>
+                      {Object.keys(appliedPoseSuggestions).length > 0 ? (
+                        <span className="pose-applied-count">
+                          {Object.keys(appliedPoseSuggestions).length} suggestion{Object.keys(appliedPoseSuggestions).length !== 1 ? "s" : ""} applied — will be injected into generation prompts
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  <div className="pose-scan-list">
+                    {activePoses.map((p) => {
+                      const suggestionKey = `${genderKey}-${p.pose}`;
+                      const isApplied = Boolean(appliedPoseSuggestions[suggestionKey]);
+                      return (
+                        <div className={`pose-scan-row ${p.status}`} key={p.pose}>
+                          <span className={`pose-dot ${p.status}`} />
+                          <span className="pose-label">Pose {p.pose} — {p.name}</span>
+                          {p.status === "red" && p.issue ? (
+                            <div className="pose-issue">{p.issue}</div>
+                          ) : null}
+                          {p.status === "red" && p.suggestion ? (
+                            <div className={`pose-suggestion-row ${isApplied ? "applied" : ""}`}>
+                              <div className="pose-suggestion">Suggestion: {p.suggestion}</div>
+                              <button
+                                className={`pose-apply-btn ${isApplied ? "applied" : ""}`}
+                                type="button"
+                                onClick={() => {
+                                  setAppliedPoseSuggestions((prev) => {
+                                    const next = { ...prev };
+                                    if (next[suggestionKey]) {
+                                      delete next[suggestionKey];
+                                    } else {
+                                      next[suggestionKey] = p.suggestion;
+                                    }
+                                    return next;
+                                  });
+                                }}
+                              >
+                                {isApplied ? "Applied ✓" : "Apply"}
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })() : null}
+            {!poseScanResults && !poseScanLoading && !poseScanError ? (
+              <div className="muted centered">
+                Select gender and click &quot;Scan Poses&quot; to check feasibility before generating.
+              </div>
+            ) : null}
+          </div>
+
           {itemFlatSplitImages.length ? (
             <div className="card">
               <div className="card-title">Generated Flat 3:4 Split (Front + Back)</div>
@@ -5407,7 +5567,14 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
 
         <section className="card">
           <div className="eyebrow">03 — Generate</div>
-          <div className="card-title">Image Generation</div>
+          <div className="section-header">
+            <div className="card-title">Image Generation</div>
+            <button className="ghost-btn" type="button" onClick={() => setGenerateCollapsed((p) => !p)}>
+              {generateCollapsed ? "Expand" : "Collapse"}
+            </button>
+          </div>
+          {!generateCollapsed ? (
+          <>
           <p className="muted">
             Select panels, generate, approve, then split into crops.
           </p>
@@ -5521,6 +5688,11 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                       ? `Approved Panel ${panelNumber}`
                       : `Approve Panel ${panelNumber}`}
                   </button>
+                  {panelFailReasons[panelNumber] && !b64 ? (
+                    <div className="panel-fail-reason">
+                      <span className="panel-fail-label">Failed:</span> {panelFailReasons[panelNumber]}
+                    </div>
+                  ) : null}
                 </div>
               );
             })}
@@ -5586,6 +5758,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             </div>
             <div className="row">
               <input
+                suppressHydrationWarning
                 className={chatNeedsAttention ? "chat-input-attention" : ""}
                 value={dialogInput}
                 onChange={(e) => {
@@ -5620,10 +5793,21 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               </div>
             </div>
           </div>
-          <div className="card">
-            <div className="eyebrow">04 — Results</div>
+          </>
+          ) : null}
+        </section>
+
+        <section className="card">
+          <div className="eyebrow">04 — Results</div>
+          <div className="section-header">
             <div className="card-title">Final Results</div>
-            <div className="row">
+            <button className="ghost-btn" type="button" onClick={() => setResultsCollapsed((p) => !p)}>
+              {resultsCollapsed ? "Expand" : "Collapse"}
+            </button>
+          </div>
+          {!resultsCollapsed ? (
+          <>
+          <div className="row">
               <button className="btn ghost" onClick={downloadAllSplitCrops} disabled={!splitCrops.length}>
                 Download All Splits
               </button>
@@ -5685,7 +5869,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               onChange={(e) => void handleFinalResultFilesSelected(filterImages(e.target.files || []))}
             />
             <input
-              ref={finalResultFolderRef}
+              ref={(el) => { finalResultFolderRef.current = el; if (el) el.setAttribute("webkitdirectory", ""); }}
               type="file"
               multiple
               style={{ display: "none" }}
@@ -5740,9 +5924,10 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                 })}
               </div>
             ) : (
-              <div className="muted centered">No split results yet. Generate and split first.</div>
-            )}
-          </div>
+            <div className="muted centered">No split results yet. Generate and split first.</div>
+          )}
+          </>
+          ) : null}
         </section>
           </>
         ) : null}
@@ -5765,6 +5950,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           <div className="catalog-wrap">
             <div className="row">
               <input
+                suppressHydrationWarning
                 value={pushSearchQuery ?? ""}
                 onChange={(e) => setPushSearchQuery(e.target.value)}
                 onKeyDown={onPushCatalogSearchKeyDown}
@@ -5838,7 +6024,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               onChange={(e) => void handlePushFilesSelected(filterImages(e.target.files || []))}
             />
             <input
-              ref={pushFolderRef}
+              ref={(el) => { pushFolderRef.current = el; if (el) el.setAttribute("webkitdirectory", ""); }}
               type="file"
               multiple
               style={{ display: "none" }}
@@ -6122,11 +6308,13 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           </p>
           <div className="row">
             <input
+              suppressHydrationWarning
               value={handle}
               onChange={(e) => setHandle(e.target.value)}
               placeholder="Handle (vintage-wash-hoodie)"
             />
             <input
+              suppressHydrationWarning
               value={productId}
               onChange={(e) => setProductId(e.target.value)}
               placeholder="Product ID (gid://shopify/Product/...)"
@@ -6139,6 +6327,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             Generate or edit SEO title/description and accessibility alt text.
           </p>
           <input
+            suppressHydrationWarning
             value={seoTitle}
             onChange={(e) => setSeoTitle(e.target.value)}
             placeholder="SEO Title"
@@ -6273,6 +6462,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           display: grid;
           gap: 12px;
           box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+          min-width: 0;
+          overflow: hidden;
+          word-break: break-word;
         }
         .status-bar {
           position: fixed;
@@ -6448,11 +6640,35 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         .model-registry-header {
           display: flex;
           align-items: center;
-          justify-content: space-between;
           gap: 10px;
+        }
+        .model-registry-header .card-title {
+          white-space: nowrap;
+        }
+        .registry-inline-summary {
+          flex: 1;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          font-size: 0.85rem;
+          text-align: center;
+        }
+        .registry-inline-models {
+          flex: 1;
+          min-width: 0;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          justify-content: center;
+        }
+        .model-registry-header .ghost-btn {
+          margin-left: auto;
+          white-space: nowrap;
         }
         .grid {
           display: grid;
+          grid-template-columns: 1fr;
           gap: 16px;
           overflow: visible;
           overscroll-behavior: contain;
@@ -6825,17 +7041,20 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           margin: 0 auto;
           width: 100%;
           max-width: 900px;
+          min-width: 0;
         }
         .model-registry-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-          max-width: 900px;
-          justify-content: stretch;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 12px;
+          justify-content: center !important;
           align-items: stretch;
+          width: 100%;
+          margin: 0 !important;
+          max-width: none !important;
         }
-        :global(.content:not(.menu-open)) .model-registry-grid {
-          grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-          max-width: 1180px;
+        .model-registry-grid .preview-card {
+          width: 170px;
         }
         .item-catalog-grid {
           display: flex;
@@ -6975,7 +7194,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           border-radius: 8px;
         }
         .model-registry-preview-card {
-          width: 200px;
+          width: 170px;
         }
         .model-registry-preview-card img.model-registry-preview-image {
           width: 100%;
@@ -7166,6 +7385,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           flex-wrap: wrap;
           gap: 10px;
           align-items: center;
+          min-width: 0;
         }
         .row > input,
         .row > select,
@@ -7278,6 +7498,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           display: grid;
           gap: 10px;
           grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+          min-width: 0;
         }
         .panel-preview-card {
           border: 1.5px solid #e2e8f0;
@@ -7315,6 +7536,21 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           font-size: 0.8rem;
           font-weight: 700;
           color: #ffffff;
+        }
+        .panel-fail-reason {
+          grid-column: 1 / -1;
+          font-size: 0.75rem;
+          color: #fff;
+          background: rgba(239,68,68,0.1);
+          border: 1px solid rgba(239,68,68,0.25);
+          border-radius: 6px;
+          padding: 6px 8px;
+          line-height: 1.4;
+          word-break: break-word;
+        }
+        .panel-fail-label {
+          font-weight: 600;
+          color: #ef4444;
         }
         .panel-image {
           grid-column: 1 / -1;
@@ -7818,6 +8054,215 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           .previous-upload-grid {
             grid-template-columns: repeat(5, minmax(0, 1fr));
           }
+        }
+
+        /* Pose Feasibility Scanner */
+        .pose-scan-section {
+          margin-top: 16px;
+          padding: 14px;
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 10px;
+          background: rgba(255,255,255,0.03);
+        }
+        .pose-scan-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 10px;
+        }
+        .pose-scan-controls {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .pose-scan-gender-select {
+          padding: 5px 8px;
+          font-size: 0.82rem;
+          border-radius: 6px;
+          border: 1px solid rgba(255,255,255,0.15);
+          background: rgba(255,255,255,0.06);
+          color: #fff;
+          cursor: pointer;
+        }
+        .pose-scan-single-label {
+          font-size: 0.85rem;
+          margin-bottom: 8px;
+          font-weight: 500;
+        }
+        .pose-scan-loading {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 10px 0;
+        }
+        .pose-scan-spinner {
+          display: inline-block;
+          width: 16px;
+          height: 16px;
+          border: 2px solid rgba(255,255,255,0.15);
+          border-top-color: rgba(255,255,255,0.7);
+          border-radius: 50%;
+          animation: poseSpin 0.7s linear infinite;
+        }
+        @keyframes poseSpin {
+          to { transform: rotate(360deg); }
+        }
+        .pose-scan-error {
+          color: #fff;
+          font-size: 0.85rem;
+          padding: 6px 0;
+        }
+        .pose-scan-tabs {
+          display: flex;
+          gap: 0;
+          border-bottom: 1px solid rgba(255,255,255,0.1);
+          margin-bottom: 10px;
+        }
+        .pose-scan-tab {
+          flex: 1;
+          padding: 8px 0;
+          font-size: 0.85rem;
+          background: none;
+          border: none;
+          color: rgba(255,255,255,0.5);
+          cursor: pointer;
+          border-bottom: 2px solid transparent;
+          transition: color 0.15s, border-color 0.15s;
+          text-align: center;
+        }
+        .pose-scan-tab:hover {
+          color: rgba(255,255,255,0.8);
+        }
+        .pose-scan-tab.active {
+          color: #fff;
+          border-bottom-color: #fff;
+        }
+        .pose-scan-summary {
+          font-size: 0.85rem;
+          padding: 8px 10px;
+          border-radius: 6px;
+          margin-bottom: 10px;
+          font-weight: 500;
+        }
+        .pose-scan-summary.all-green {
+          background: rgba(34,197,94,0.12);
+          color: #fff;
+        }
+        .pose-scan-summary.has-red {
+          background: rgba(239,68,68,0.12);
+          color: #fff;
+        }
+        .pose-scan-list {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+        .pose-scan-row {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: flex-start;
+          gap: 8px;
+          padding: 8px 10px;
+          border-radius: 6px;
+          background: rgba(255,255,255,0.02);
+          border: 1px solid rgba(255,255,255,0.05);
+        }
+        .pose-scan-row.red {
+          border-color: rgba(239,68,68,0.2);
+          background: rgba(239,68,68,0.04);
+        }
+        .pose-scan-row.green {
+          border-color: rgba(34,197,94,0.15);
+        }
+        .pose-dot {
+          display: inline-block;
+          width: 10px;
+          height: 10px;
+          border-radius: 50%;
+          flex-shrink: 0;
+          margin-top: 3px;
+        }
+        .pose-dot.green {
+          background: #22c55e;
+          box-shadow: 0 0 6px rgba(34,197,94,0.4);
+        }
+        .pose-dot.red {
+          background: #ef4444;
+          box-shadow: 0 0 6px rgba(239,68,68,0.4);
+        }
+        .pose-label {
+          font-size: 0.85rem;
+          color: rgba(255,255,255,0.9);
+          flex: 1;
+          min-width: 0;
+        }
+        .pose-issue {
+          width: 100%;
+          font-size: 0.8rem;
+          color: #fff;
+          padding-left: 18px;
+          line-height: 1.4;
+        }
+        .pose-suggestion {
+          font-size: 0.8rem;
+          color: #fff;
+          line-height: 1.4;
+          font-style: italic;
+          flex: 1;
+          min-width: 0;
+        }
+        .pose-suggestion-row {
+          width: 100%;
+          display: flex;
+          align-items: flex-start;
+          gap: 10px;
+          padding-left: 18px;
+        }
+        .pose-suggestion-row.applied {
+          background: rgba(34,197,94,0.06);
+          border-radius: 6px;
+          padding: 6px 10px 6px 18px;
+        }
+        .pose-apply-btn {
+          flex-shrink: 0;
+          padding: 3px 10px;
+          font-size: 0.75rem;
+          border-radius: 4px;
+          border: 1px solid rgba(255,255,255,0.2);
+          background: rgba(255,255,255,0.06);
+          color: #fff;
+          cursor: pointer;
+          white-space: nowrap;
+          transition: all 0.15s ease;
+        }
+        .pose-apply-btn:hover {
+          background: rgba(255,255,255,0.12);
+          border-color: rgba(255,255,255,0.3);
+        }
+        .pose-apply-btn.applied {
+          background: rgba(34,197,94,0.15);
+          border-color: rgba(34,197,94,0.4);
+          color: #22c55e;
+        }
+        .pose-apply-btn.applied:hover {
+          background: rgba(239,68,68,0.12);
+          border-color: rgba(239,68,68,0.3);
+          color: #ef4444;
+        }
+        .pose-scan-apply-all-row {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          margin-bottom: 10px;
+        }
+        .pose-scan-apply-all-row .ghost-btn.applied {
+          border-color: rgba(34,197,94,0.4);
+          color: #22c55e;
+        }
+        .pose-applied-count {
+          font-size: 0.78rem;
+          color: rgba(255,255,255,0.5);
+          font-style: italic;
         }
       `}</style>
     </div>
