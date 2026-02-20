@@ -1,0 +1,23 @@
+---
+description: After every code change, save (git commit) and deploy to Vercel
+alwaysApply: true
+---
+
+# Save and Deploy After Every Change
+
+When you make code changes to this project:
+
+1. **Save** – Stage and commit changes:
+   ```
+   git add -A
+   git commit -m "Brief description of changes"
+   git push
+   ```
+
+2. **Deploy** – Deploy to Vercel production:
+   ```
+   npm run deploy:vercel
+   ```
+   Or: `npx vercel --prod`
+
+Do both after completing a change. Skip only if the user explicitly says not to (e.g. "don't deploy" or "just the code").
