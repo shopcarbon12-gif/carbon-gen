@@ -884,7 +884,7 @@ export default function ShopifyMappingInventory() {
               {" · "}
               LS: {lightspeedCatalog.totalLoaded.toLocaleString()} items
               {lightspeedCatalog.truncated ? (
-                <span className="truncated-badge" title="Lightspeed catalog capped at 20,000 rows. Some items may not be shown.">
+                <span className="truncated-badge" title="Catalog loaded in chunks (free plan). Some items may not be shown if catalog exceeds 80k items.">
                   (truncated)
                 </span>
               ) : null}

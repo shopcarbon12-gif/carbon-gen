@@ -4,6 +4,8 @@
 	"name": "carbon-gen",
 	"compatibility_date": "2026-02-13",
 	"compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+	// Uncomment when on Workers Paid for full Lightspeed catalog. Then set LS_MAX_CATALOG_PAGES=100 in Cloudflare env.
+	// "limits": { "subrequests": 1000 },
 	"assets": {
 		"directory": ".open-next/assets",
 		"binding": "ASSETS"

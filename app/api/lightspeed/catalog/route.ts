@@ -12,7 +12,12 @@ const LS_ITEM_PAGE_LIMIT = 1000;
 const LS_ITEM_PAGE_LIMIT_FALLBACK = 500;
 const LS_ITEM_PAGE_LIMIT_LAST_RESORT = 100;
 const LS_V3_PAGE_LIMIT = 100;
-const LS_V3_MAX_PAGES = 250;
+// Cap to stay under Cloudflare Workers free-plan subrequest limit (50/request).
+// Set LS_MAX_CATALOG_PAGES in Cloudflare env (e.g. 100) + limits.subrequests in wrangler when on Paid for full catalog.
+const LS_V3_MAX_PAGES = Math.min(
+  Number(process.env.LS_MAX_CATALOG_PAGES) || 42,
+  250
+);
 const LS_MIN_REQUEST_INTERVAL_MS = 400;
 const LS_RATE_LIMIT_RETRY_ATTEMPTS = 3;
 const ALLOWED_PAGE_SIZES = [100, 500] as const;
@@ -508,7 +513,7 @@ async function loadShops(accessToken: string, forceRefresh = false) {
   let totalCount = Number.POSITIVE_INFINITY;
   let guard = 0;
 
-  while (offset < totalCount && guard < 20) {
+  while (offset < totalCount && guard < 3) {
     const page = await requestRSeriesList<any>({
       accessToken,
       resource: "Shop",
@@ -560,7 +565,7 @@ async function loadCategories(accessToken: string, forceRefresh = false) {
   let totalCount = Number.POSITIVE_INFINITY;
   let guard = 0;
 
-  while (offset < totalCount && guard < 100) {
+  while (offset < totalCount && guard < 3) {
     const page = await requestRSeriesList<any>({
       accessToken,
       resource: "Category",
@@ -704,7 +709,7 @@ function resolveNextUrl(next: string, base: string): string | null {
  * Fetch Items via ItemMatrix - gets product groups with their variant Items.
  * Use when Item endpoint returns a low count (e.g. 212) but LS has many matrices.
  */
-async function fetchRawCatalogFromItemMatrix(accessToken: string): Promise<any[] | null> {
+async function fetchRawCatalogFromItemMatrix(accessToken: string): Promise<{ rawItems: any[]; nextCursor: string | null } | null> {
   const endpoint = getRSeriesV3ResourceEndpoint("ItemMatrix");
   const url = new URL(endpoint);
   url.searchParams.set("limit", String(LS_V3_PAGE_LIMIT));
@@ -716,6 +721,7 @@ async function fetchRawCatalogFromItemMatrix(accessToken: string): Promise<any[]
   let nextUrl: string | null = url.toString();
   let pages = 0;
   const maxPages = Math.min(LS_V3_MAX_PAGES, 120);
+  let lastNext: string | null = null;
 
   while (nextUrl && pages < maxPages) {
     await waitForLightspeedRequestSlot();
@@ -756,16 +762,17 @@ async function fetchRawCatalogFromItemMatrix(accessToken: string): Promise<any[]
     pages += 1;
 
     const next = resolveNextUrl(parsedBody?.["@attributes"]?.next, nextUrl);
+    lastNext = next;
     nextUrl = next;
   }
 
-  return rawItems.length > 0 ? rawItems : null;
+  return rawItems.length > 0 ? { rawItems, nextCursor: lastNext } : null;
 }
 
 /**
  * Fetch Items using V3 API with cursor-based pagination.
  */
-async function fetchRawCatalogItemsV3(accessToken: string): Promise<any[] | null> {
+async function fetchRawCatalogItemsV3(accessToken: string): Promise<{ rawItems: any[]; nextCursor: string | null } | null> {
   const endpoint = getRSeriesV3ResourceEndpoint("Item");
   const url = new URL(endpoint);
   url.searchParams.set("limit", String(LS_V3_PAGE_LIMIT));
@@ -776,6 +783,7 @@ async function fetchRawCatalogItemsV3(accessToken: string): Promise<any[] | null
   const rawItems: any[] = [];
   let nextUrl: string | null = url.toString();
   let pages = 0;
+  let lastNext: string | null = null;
 
   while (nextUrl && pages < LS_V3_MAX_PAGES) {
     await waitForLightspeedRequestSlot();
@@ -806,19 +814,93 @@ async function fetchRawCatalogItemsV3(accessToken: string): Promise<any[] | null
     pages += 1;
 
     const next = resolveNextUrl(parsedBody?.["@attributes"]?.next, nextUrl);
+    lastNext = next;
     nextUrl = next;
   }
 
-  return rawItems.length > 0 ? rawItems : null;
+  return rawItems.length > 0 ? { rawItems, nextCursor: lastNext } : null;
 }
 
-async function fetchRawCatalogItems(accessToken: string) {
+const CATALOG_CHUNK_PAGES = 40; // Stay under 50 subrequests with token+shops+categories
+
+/**
+ * Fetch a chunk of catalog starting from a cursor URL. Used for chunked loading on Workers Free.
+ */
+async function fetchRawCatalogChunkFromCursor(
+  accessToken: string,
+  startUrl: string,
+  maxPages: number
+): Promise<{ rawItems: any[]; nextCursor: string | null }> {
+  const rawItems: any[] = [];
+  let nextUrl: string | null = startUrl;
+  let pages = 0;
+
+  while (nextUrl && pages < maxPages) {
+    await waitForLightspeedRequestSlot();
+
+    const response = await fetch(nextUrl, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json",
+      },
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    const rawBody = await response.text();
+    let parsedBody: any = {};
+    try {
+      parsedBody = JSON.parse(rawBody);
+    } catch {
+      parsedBody = { raw: rawBody };
+    }
+
+    if (!response.ok) {
+      const detail = readResponseError(parsedBody, rawBody);
+      throw new Error(`Lightspeed catalog chunk failed: ${detail}`);
+    }
+
+    const matrices = toArray(parsedBody?.ItemMatrix) as any[];
+    const items = toArray(parsedBody?.Item) as any[];
+
+    if (matrices.length > 0) {
+      for (const matrix of matrices) {
+        const itemsRaw = matrix?.Items;
+        const matrixItems = Array.isArray(itemsRaw)
+          ? itemsRaw
+          : toArray(itemsRaw?.Item) as any[];
+        for (const it of matrixItems) {
+          if (it && typeof it === "object" && (it.itemID || it.systemSku || it.customSku)) {
+            rawItems.push(it);
+          }
+        }
+      }
+    } else {
+      for (const it of items) {
+        if (it && typeof it === "object" && (it.itemID || it.systemSku || it.customSku)) {
+          rawItems.push(it);
+        }
+      }
+    }
+    pages += 1;
+
+    const next = resolveNextUrl(parsedBody?.["@attributes"]?.next, nextUrl);
+    nextUrl = next;
+  }
+
+  return {
+    rawItems,
+    nextCursor: nextUrl,
+  };
+}
+
+async function fetchRawCatalogItems(accessToken: string): Promise<{ rawItems: any[]; nextCursor: string | null }> {
   let rawItems: any[] = [];
+  let nextCursor: string | null = null;
 
   try {
-    const matrixItems = await fetchRawCatalogFromItemMatrix(accessToken);
-    if (matrixItems && matrixItems.length > 0) {
-      return matrixItems;
+    const matrixResult = await fetchRawCatalogFromItemMatrix(accessToken);
+    if (matrixResult && matrixResult.rawItems.length > 0) {
+      return matrixResult;
     }
   } catch (e: any) {
     const msg = String(e?.message || "");
@@ -828,9 +910,9 @@ async function fetchRawCatalogItems(accessToken: string) {
   }
 
   try {
-    const v3Items = await fetchRawCatalogItemsV3(accessToken);
-    if (v3Items && v3Items.length > 0) {
-      return v3Items;
+    const v3Result = await fetchRawCatalogItemsV3(accessToken);
+    if (v3Result && v3Result.rawItems.length > 0) {
+      return v3Result;
     }
   } catch (e: any) {
     const msg = String(e?.message || "");
@@ -871,7 +953,7 @@ async function fetchRawCatalogItems(accessToken: string) {
     }
   }
 
-  return rawItems;
+  return { rawItems, nextCursor: null };
 }
 
 async function loadCatalogSnapshot(
@@ -880,14 +962,17 @@ async function loadCatalogSnapshot(
     shopNameById: Record<string, string>;
     categoryNameById: Record<string, string>;
   },
-  rawItems: any[]
+  rawItems: any[],
+  skipCacheUpdate?: boolean
 ) {
   const rows = rawItems.map((item, index) =>
     normalizeCatalogItem(item, index, deps.shopNameById, deps.categoryNameById)
   );
 
-  lightspeedCatalogSnapshotCache.rows = rows;
-  lightspeedCatalogSnapshotCache.expiresAt = Date.now() + CACHE_MS.catalogSnapshot;
+  if (!skipCacheUpdate) {
+    lightspeedCatalogSnapshotCache.rows = rows;
+    lightspeedCatalogSnapshotCache.expiresAt = Date.now() + CACHE_MS.catalogSnapshot;
+  }
   return rows;
 }
 
@@ -1045,6 +1130,9 @@ export async function GET(req: NextRequest) {
   ensureLightspeedEnvLoaded();
   try {
     const { searchParams } = new URL(req.url);
+    const catalogCursorRaw = normalizeText(searchParams.get("catalogCursor"));
+    const catalogCursor = catalogCursorRaw ? decodeURIComponent(catalogCursorRaw) : null;
+
     const query = normalizeText(searchParams.get("q"));
     const categoryFilter = normalizeText(searchParams.get("category")) || "all";
     const requestedShopsRaw = normalizeText(searchParams.get("shops"));
@@ -1075,16 +1163,42 @@ export async function GET(req: NextRequest) {
 
     const accessToken = await refreshLightspeedAccessToken(refresh);
 
+    // Chunked loading: fetch one chunk from cursor (stays under 50 subrequests on Workers Free)
+    if (catalogCursor && allRowsMode) {
+      const [shopsData, categoriesData, chunkResult] = await Promise.all([
+        loadShops(accessToken, refresh),
+        loadCategories(accessToken, refresh),
+        fetchRawCatalogChunkFromCursor(accessToken, catalogCursor, CATALOG_CHUNK_PAGES),
+      ]);
+      const chunkRows = await loadCatalogSnapshot(
+        accessToken,
+        { shopNameById: shopsData.shopNameById, categoryNameById: categoriesData.categoryNameById },
+        chunkResult.rawItems,
+        true
+      );
+      return NextResponse.json({
+        ok: true,
+        rows: chunkRows,
+        nextCatalogCursor: chunkResult.nextCursor,
+        hasMoreCatalog: Boolean(chunkResult.nextCursor),
+        options: { categories: [], shops: shopsData.shopNames },
+        truncated: Boolean(chunkResult.nextCursor),
+      });
+    }
+
     const cacheWarm =
       !refresh &&
       lightspeedCatalogSnapshotCache.rows.length > 0 &&
       lightspeedCatalogSnapshotCache.expiresAt > Date.now();
 
-    const [shopsData, categoriesData, rawItems] = await Promise.all([
+    const [shopsData, categoriesData, catalogResult] = await Promise.all([
       loadShops(accessToken, refresh),
       loadCategories(accessToken, refresh),
       cacheWarm ? null : fetchRawCatalogItems(accessToken),
     ]);
+
+    const rawItemsForSnapshot = cacheWarm ? [] : (catalogResult?.rawItems ?? []);
+    const nextCatalogCursor = cacheWarm ? null : (catalogResult?.nextCursor ?? null);
 
     const snapshot = cacheWarm
       ? lightspeedCatalogSnapshotCache.rows
@@ -1094,7 +1208,7 @@ export async function GET(req: NextRequest) {
             shopNameById: shopsData.shopNameById,
             categoryNameById: categoriesData.categoryNameById,
           },
-          rawItems!
+          rawItemsForSnapshot
         );
 
     const defaultLocation = pickDefaultLocation(shopsData.shopNames);
@@ -1204,7 +1318,7 @@ export async function GET(req: NextRequest) {
     const shopOptions = [...new Set(shopsData.shopNames.filter(Boolean))].sort(compareText);
     const itemTypeOptions = [...new Set(snapshot.map((row) => row.itemType).filter(Boolean))].sort(compareText);
 
-    return NextResponse.json({
+    const resp: Record<string, unknown> = {
       ok: true,
       page: currentPage,
       pageSize,
@@ -1229,7 +1343,12 @@ export async function GET(req: NextRequest) {
         itemTypes: itemTypeOptions,
       },
       rows: slicedRows,
-    });
+    };
+    if (allRowsMode && nextCatalogCursor) {
+      resp.nextCatalogCursor = nextCatalogCursor;
+      resp.hasMoreCatalog = true;
+    }
+    return NextResponse.json(resp);
   } catch (e: any) {
     return NextResponse.json(
       { error: String(e?.message || "Unable to load Lightspeed catalog.") },

@@ -13,7 +13,8 @@ export const dynamic = "force-dynamic";
 
 const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
 const SHOPIFY_PRODUCTS_PER_PAGE = 100;
-const MAX_SHOPIFY_SCAN_PAGES = 40;
+// Cap to stay under Cloudflare Workers free-plan subrequest limit (50)
+const MAX_SHOPIFY_SCAN_PAGES = 12;
 const SHOPIFY_VARIANTS_CACHE_MS = 5 * 60 * 1000;
 const ALLOWED_PAGE_SIZES = [50, 100, 200, 300, 500] as const;
 
@@ -506,7 +507,18 @@ const shopifyVariantsCache: {
   expiresAt: 0,
 };
 
-async function fetchLightspeedSnapshot(req: NextRequest, refresh: boolean) {
+type LightspeedSnapshotResult = {
+  rows: LightspeedCatalogRow[];
+  totalInLs: number;
+  options: { categories: string[]; shops: string[] };
+  truncated: boolean;
+};
+
+async function fetchLightspeedSnapshotChunk(
+  req: NextRequest,
+  refresh: boolean,
+  catalogCursor: string | null
+): Promise<LightspeedSnapshotResult & { nextCatalogCursor?: string | null }> {
   const url = new URL("/api/lightspeed/catalog", req.nextUrl.origin);
   url.searchParams.set("all", "1");
   url.searchParams.set("pageSize", "20000");
@@ -517,9 +529,15 @@ async function fetchLightspeedSnapshot(req: NextRequest, refresh: boolean) {
   if (refresh) {
     url.searchParams.set("refresh", "1");
   }
+  if (catalogCursor) {
+    url.searchParams.set("catalogCursor", catalogCursor);
+  }
 
   const response = await fetch(url.toString(), { cache: "no-store" });
-  const json = (await response.json().catch(() => ({}))) as LightspeedCatalogResponse;
+  const json = (await response.json().catch(() => ({}))) as LightspeedCatalogResponse & {
+    nextCatalogCursor?: string | null;
+    hasMoreCatalog?: boolean;
+  };
   if (!response.ok) {
     throw new Error(normalizeText(json?.error) || "Unable to load Lightspeed catalog.");
   }
@@ -538,6 +556,38 @@ async function fetchLightspeedSnapshot(req: NextRequest, refresh: boolean) {
       shops: Array.isArray(json.options?.shops) ? json.options?.shops : [],
     },
     truncated: Boolean(json.truncated),
+    nextCatalogCursor: json.nextCatalogCursor ?? null,
+  };
+}
+
+/** Fetch full Lightspeed catalog via chunked requests (stays under 50 subrequests/request on Workers Free) */
+async function fetchLightspeedSnapshot(req: NextRequest, refresh: boolean): Promise<LightspeedSnapshotResult> {
+  const allRows: LightspeedCatalogRow[] = [];
+  let cursor: string | null = null;
+  let options = { categories: [] as string[], shops: [] as string[] };
+  const maxChunks = 20;
+
+  for (let i = 0; i < maxChunks; i++) {
+    const chunk = await fetchLightspeedSnapshotChunk(req, refresh, cursor);
+    allRows.push(...chunk.rows);
+    if (chunk.options.categories.length > 0) options.categories = chunk.options.categories;
+    if (chunk.options.shops.length > 0) options.shops = chunk.options.shops;
+    if (!chunk.nextCatalogCursor) {
+      return {
+        rows: allRows,
+        totalInLs: allRows.length,
+        options,
+        truncated: false,
+      };
+    }
+    cursor = chunk.nextCatalogCursor;
+  }
+
+  return {
+    rows: allRows,
+    totalInLs: allRows.length,
+    options,
+    truncated: true,
   };
 }
 
