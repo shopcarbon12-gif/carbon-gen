@@ -19,7 +19,7 @@ const LS_V3_MAX_PAGES = Math.min(
   Number(process.env.LS_MAX_CATALOG_PAGES) || (IS_VERCEL ? 80 : 8),
   250
 );
-const LS_MIN_REQUEST_INTERVAL_MS = 400;
+const LS_MIN_REQUEST_INTERVAL_MS = IS_VERCEL ? 180 : 400;
 const LS_RATE_LIMIT_RETRY_ATTEMPTS = 3;
 const ALLOWED_PAGE_SIZES = [100, 500] as const;
 const ALLOWED_SORT_FIELDS = [
@@ -710,7 +710,10 @@ function resolveNextUrl(next: string, base: string): string | null {
  * Fetch Items via ItemMatrix - gets product groups with their variant Items.
  * Use when Item endpoint returns a low count (e.g. 212) but LS has many matrices.
  */
-async function fetchRawCatalogFromItemMatrix(accessToken: string): Promise<{ rawItems: any[]; nextCursor: string | null } | null> {
+async function fetchRawCatalogFromItemMatrix(
+  accessToken: string,
+  maxPagesOverride?: number
+): Promise<{ rawItems: any[]; nextCursor: string | null } | null> {
   const endpoint = getRSeriesV3ResourceEndpoint("ItemMatrix");
   const url = new URL(endpoint);
   url.searchParams.set("limit", String(LS_V3_PAGE_LIMIT));
@@ -721,7 +724,7 @@ async function fetchRawCatalogFromItemMatrix(accessToken: string): Promise<{ raw
   const rawItems: any[] = [];
   let nextUrl: string | null = url.toString();
   let pages = 0;
-  const maxPages = Math.min(LS_V3_MAX_PAGES, 120);
+  const maxPages = Math.min(maxPagesOverride ?? LS_V3_MAX_PAGES, 120);
   let lastNext: string | null = null;
 
   while (nextUrl && pages < maxPages) {
@@ -894,12 +897,15 @@ async function fetchRawCatalogChunkFromCursor(
   };
 }
 
-async function fetchRawCatalogItems(accessToken: string): Promise<{ rawItems: any[]; nextCursor: string | null }> {
+async function fetchRawCatalogItems(
+  accessToken: string,
+  maxPagesOverride?: number
+): Promise<{ rawItems: any[]; nextCursor: string | null }> {
   let rawItems: any[] = [];
   let nextCursor: string | null = null;
 
   try {
-    const matrixResult = await fetchRawCatalogFromItemMatrix(accessToken);
+    const matrixResult = await fetchRawCatalogFromItemMatrix(accessToken, maxPagesOverride);
     if (matrixResult && matrixResult.rawItems.length > 0) {
       return matrixResult;
     }
@@ -1144,6 +1150,7 @@ export async function GET(req: NextRequest) {
     const requestedSortDir = normalizeLower(searchParams.get("sortDir"));
     const refresh = toBoolean(searchParams.get("refresh"));
     const allRowsMode = toBoolean(searchParams.get("all"));
+    const maxPagesParam = Math.max(0, parseInt(normalizeText(searchParams.get("maxPages")), 10) || 0);
     const legacySort = parseLegacySortMode(requestedSort);
     const sortField: CatalogSortField = isSortField(requestedSortField)
       ? requestedSortField
@@ -1192,10 +1199,11 @@ export async function GET(req: NextRequest) {
       lightspeedCatalogSnapshotCache.rows.length > 0 &&
       lightspeedCatalogSnapshotCache.expiresAt > Date.now();
 
+    const maxPagesOverride = maxPagesParam > 0 ? Math.min(maxPagesParam, 120) : undefined;
     const [shopsData, categoriesData, catalogResult] = await Promise.all([
       loadShops(accessToken, refresh),
       loadCategories(accessToken, refresh),
-      cacheWarm ? null : fetchRawCatalogItems(accessToken),
+      cacheWarm ? null : fetchRawCatalogItems(accessToken, maxPagesOverride),
     ]);
 
     const rawItemsForSnapshot = cacheWarm ? [] : (catalogResult?.rawItems ?? []);

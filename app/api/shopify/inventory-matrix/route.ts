@@ -16,7 +16,7 @@ const SHOPIFY_PRODUCTS_PER_PAGE = 100;
 // Vercel has no subrequest/CPU limits; Cloudflare Free: 50 subrequests, 10ms CPU
 const IS_VERCEL = Boolean(process.env.VERCEL);
 const MAX_SHOPIFY_SCAN_PAGES = IS_VERCEL ? 25 : 5;
-const SHOPIFY_VARIANTS_CACHE_MS = 5 * 60 * 1000;
+const SHOPIFY_VARIANTS_CACHE_MS = 8 * 60 * 1000;
 const ALLOWED_PAGE_SIZES = [50, 100, 200, 300, 500] as const;
 
 type ShopifyTokenSource = "db" | "env_token";
@@ -515,6 +515,8 @@ type LightspeedSnapshotResult = {
   truncated: boolean;
 };
 
+const INITIAL_CATALOG_MAX_PAGES = 35;
+
 async function fetchLightspeedSnapshotChunk(
   req: NextRequest,
   refresh: boolean,
@@ -532,6 +534,8 @@ async function fetchLightspeedSnapshotChunk(
   }
   if (catalogCursor) {
     url.searchParams.set("catalogCursor", catalogCursor);
+  } else {
+    url.searchParams.set("maxPages", String(INITIAL_CATALOG_MAX_PAGES));
   }
 
   const response = await fetch(url.toString(), { cache: "no-store" });

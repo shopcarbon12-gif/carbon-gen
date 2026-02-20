@@ -1142,6 +1142,7 @@ export default function ShopifyMappingInventory() {
                             alt=""
                             width={40}
                             height={58}
+                            loading="lazy"
                           />
                         </button>
                       ) : (
@@ -1254,6 +1255,7 @@ export default function ShopifyMappingInventory() {
                                             alt=""
                                             width={72}
                                             height={104}
+                                            loading="lazy"
                                           />
                                         </button>
                                       ) : (
