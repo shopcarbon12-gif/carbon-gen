@@ -12,9 +12,15 @@ export function isRequestAuthed(req: NextRequest) {
 export function isCronAuthed(req: NextRequest) {
   const secret = (process.env.CRON_SECRET || "").trim();
   if (!secret) return false;
-  const auth = req.headers.get("authorization") || "";
+  const auth = (req.headers.get("authorization") || "").trim();
   if (auth === `Bearer ${secret}`) return true;
-  const url = new URL(req.url);
-  if (url.searchParams.get("secret") === secret) return true;
+  try {
+    const url = typeof req.url === "string" && req.url.startsWith("http")
+      ? new URL(req.url)
+      : new URL(req.url, "http://localhost");
+    if (url.searchParams.get("secret") === secret) return true;
+  } catch {
+    /* req.url may be malformed */
+  }
   return false;
 }

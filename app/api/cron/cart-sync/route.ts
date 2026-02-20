@@ -76,11 +76,13 @@ export async function GET(req: NextRequest) {
         { status: 500 }
       );
     }
-    const resp = await fetch(`${origin}/api/shopify/cart-inventory`, {
+    const secret = (process.env.CRON_SECRET || "").trim();
+    const cartInventoryUrl = `${origin}/api/shopify/cart-inventory?secret=${encodeURIComponent(secret)}`;
+    const resp = await fetch(cartInventoryUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${(process.env.CRON_SECRET || "").trim()}`,
+        Authorization: `Bearer ${secret}`,
       },
       body: JSON.stringify({
         action: "push-all",
