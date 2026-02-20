@@ -14,6 +14,8 @@ export function isCronAuthed(req: NextRequest) {
   if (!secret) return false;
   const auth = (req.headers.get("authorization") || "").trim();
   if (auth === `Bearer ${secret}`) return true;
+  const xCron = (req.headers.get("x-cron-secret") || "").trim();
+  if (xCron === secret) return true;
   try {
     const url = typeof req.url === "string" && req.url.startsWith("http")
       ? new URL(req.url)

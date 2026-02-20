@@ -83,6 +83,7 @@ export async function GET(req: NextRequest) {
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${secret}`,
+        "x-cron-secret": secret,
       },
       body: JSON.stringify({
         action: "push-all",
