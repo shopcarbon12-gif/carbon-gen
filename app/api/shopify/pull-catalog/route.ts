@@ -240,7 +240,7 @@ export async function POST(req: NextRequest) {
     let pagesFetched = 0;
 
     while (pagesFetched < MAX_PAGES) {
-      const resp = await fetch(
+      const resp: Response = await fetch(
         `https://${shop}/admin/api/${API_VERSION}/graphql.json`,
         {
           method: "POST",
