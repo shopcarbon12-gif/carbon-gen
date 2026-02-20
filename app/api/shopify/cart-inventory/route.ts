@@ -23,9 +23,11 @@ import {
   type UndoOperation,
 } from "@/lib/shopifySyncSessionUndo";
 import { logStageAdd } from "@/lib/shopifyCartSyncLog";
+import { sendPushNotificationEmail } from "@/lib/email";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 800;
 
 const ALLOWED_PAGE_SIZES = [20, 50, 75, 100, 200, 500] as const;
 
@@ -474,13 +476,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  let body: Record<string, unknown> = {};
+  let action = "";
+  let shop = "";
+
   try {
-    const body = await req.json().catch(() => ({}));
-    const action = normalizeLower(body?.action) || "stage-add";
+    body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+    action = normalizeLower(body?.action) || "stage-add";
 
     const availableShops = await getAvailableShops();
     const requestedShop = normalizeShopDomain(normalizeText(body?.shop) || "") || "";
-    const shop = requestedShop || resolveFallbackShop(availableShops) || "";
+    shop = requestedShop || resolveFallbackShop(availableShops) || "";
 
     if (action === "stage-add") {
       const incomingRaw = Array.isArray(body?.rows) ? body.rows : [];
@@ -669,6 +675,10 @@ export async function POST(req: NextRequest) {
 
     // Push to Shopify: Manual or via cron (/api/cron/cart-sync). Cron auth via CRON_SECRET.
     if (action === "push-selected" || action === "push-all") {
+      const notificationEmail = typeof body?.notificationEmail === "string" && body.notificationEmail.trim()
+        ? body.notificationEmail.trim()
+        : (process.env.PUSH_NOTIFICATION_EMAIL || "").trim() || null;
+
       const parentIds =
         action === "push-selected"
           ? parseIds(body?.parentIds)
@@ -681,11 +691,23 @@ export async function POST(req: NextRequest) {
         : [];
 
       if (parentIds.length < 1 && removeProductGids.length < 1) {
-        return NextResponse.json(
-          { error: "No items selected for push and no products to remove." },
-          { status: 400 }
-        );
+        const err = "No items selected for push and no products to remove.";
+        if (notificationEmail) {
+          void sendPushNotificationEmail({
+            to: notificationEmail,
+            shop,
+            success: false,
+            pushed: 0,
+            totalVariants: 0,
+            markedProcessed: 0,
+            removedFromShopify: 0,
+            error: err,
+            items: [],
+          }).catch(() => {});
+        }
+        return NextResponse.json({ error: err }, { status: 400 });
       }
+
 
       if (body?.background === true) {
         try {
@@ -693,18 +715,20 @@ export async function POST(req: NextRequest) {
           const { ctx } = getCloudflareContext();
           if (ctx?.waitUntil) {
             const origin = req.nextUrl.origin;
-            const pushPayload = {
+            const pushPayload: Record<string, unknown> = {
               action,
               shop,
               parentIds,
               removeProductGids,
               background: false,
             };
+            if (notificationEmail) pushPayload.notificationEmail = notificationEmail;
             const cookie = req.headers.get("cookie");
             const headers: Record<string, string> = {
               "Content-Type": "application/json",
             };
             if (cookie) headers.Cookie = cookie;
+            console.log("[cart-inventory] Background push started:", { shop, parentCount: parentIds.length, removalCount: removeProductGids.length });
             ctx.waitUntil(
               fetch(`${origin}/api/shopify/cart-inventory`, {
                 method: "POST",
@@ -735,10 +759,21 @@ export async function POST(req: NextRequest) {
         (await getTokenForShop(shop)) ||
         getShopifyAdminToken(shop);
       if (!token) {
-        return NextResponse.json(
-          { error: "Shopify access token not found for this shop." },
-          { status: 401 }
-        );
+        const err = "Shopify access token not found for this shop.";
+        if (notificationEmail) {
+          void sendPushNotificationEmail({
+            to: notificationEmail,
+            shop,
+            success: false,
+            pushed: 0,
+            totalVariants: 0,
+            markedProcessed: 0,
+            removedFromShopify: 0,
+            error: err,
+            items: [],
+          }).catch(() => {});
+        }
+        return NextResponse.json({ error: err }, { status: 401 });
       }
 
       const API_VERSION =
@@ -760,12 +795,21 @@ export async function POST(req: NextRequest) {
         const hint = !locRes.ok
           ? " (Check that SHOPIFY_SCOPES includes read_locations and re-authorize the app)"
           : "";
-        return NextResponse.json(
-          {
-            error: `No Shopify location found. Every store has a default location, but the app needs permission to read it. Add read_locations and write_inventory to SHOPIFY_SCOPES in .env, then re-authorize via Settings.${hint}`,
-          },
-          { status: 400 }
-        );
+        const err = `No Shopify location found. Every store has a default location, but the app needs permission to read it. Add read_locations and write_inventory to SHOPIFY_SCOPES in .env, then re-authorize via Settings.${hint}`;
+        if (notificationEmail) {
+          void sendPushNotificationEmail({
+            to: notificationEmail,
+            shop,
+            success: false,
+            pushed: 0,
+            totalVariants: 0,
+            markedProcessed: 0,
+            removedFromShopify: 0,
+            error: err,
+            items: [],
+          }).catch(() => {});
+        }
+        return NextResponse.json({ error: err }, { status: 400 });
       }
 
       const quantities: Array<{
@@ -955,6 +999,36 @@ export async function POST(req: NextRequest) {
       }
       removedFromShopify += archivedNotInCart;
 
+      const pushSummary = {
+        action,
+        shop,
+        pushed,
+        totalVariants: quantities.length,
+        productsProcessed: toMarkProcessed.length,
+        removedFromShopify,
+        archivedNotInCart,
+      };
+      console.log("[cart-inventory] Push complete:", JSON.stringify(pushSummary));
+
+      if (notificationEmail) {
+        void sendPushNotificationEmail({
+          to: notificationEmail,
+          shop,
+          success: true,
+          pushed,
+          totalVariants: quantities.length,
+          markedProcessed: toMarkProcessed.length,
+          removedFromShopify,
+          archivedNotInCart,
+          items: toPush.map((p) => ({
+            sku: normalizeText(p.sku),
+            title: normalizeText(p.title),
+            brand: normalizeText(p.brand),
+            variants: Array.isArray(p.variants) ? p.variants.length : 0,
+          })),
+        }).catch(() => {});
+      }
+
       return NextResponse.json({
         ok: true,
         action,
@@ -969,12 +1043,41 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ error: `Unsupported action: ${action}` }, { status: 400 });
   } catch (e: unknown) {
+    const err = e as Error & { code?: string };
+    const errMsg = normalizeText(err?.message) || "Unable to process cart inventory action.";
+    const logParts: string[] = [];
+    if (err?.name) logParts.push(err.name);
+    logParts.push(errMsg);
+    if (err?.code) logParts.push(`[code: ${err.code}]`);
+    if (err?.stack) {
+      const stackLines = err.stack.split("\n").slice(0, 6).join("\n");
+      logParts.push("\nStack:\n" + stackLines);
+    }
+    const logDetail = logParts.join(" ").trim() || String(e);
+    console.error("[cart-inventory] Error:", errMsg, e);
+
+    if ((action === "push-selected" || action === "push-all") && shop) {
+      const notificationEmail =
+        (typeof body?.notificationEmail === "string" && body.notificationEmail.trim()) ||
+        (process.env.PUSH_NOTIFICATION_EMAIL || "").trim() ||
+        null;
+      if (notificationEmail) {
+        void sendPushNotificationEmail({
+          to: notificationEmail,
+          shop,
+          success: false,
+          pushed: 0,
+          totalVariants: 0,
+          markedProcessed: 0,
+          removedFromShopify: 0,
+          error: logDetail,
+          items: [],
+        }).catch(() => {});
+      }
+    }
+
     return NextResponse.json(
-      {
-        error:
-          normalizeText((e as { message?: string } | null)?.message) ||
-          "Unable to process cart inventory action.",
-      },
+      { error: errMsg },
       { status: 500 }
     );
   }

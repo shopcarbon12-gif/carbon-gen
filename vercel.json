@@ -1,8 +1,6 @@
 {
   "crons": [
-    {
-      "path": "/api/cron/lightspeed-catalog-warm",
-      "schedule": "0 3 * * *"
-    }
+    { "path": "/api/cron/lightspeed-catalog-warm", "schedule": "0 3 * * *" },
+    { "path": "/api/cron/cart-sync", "schedule": "*/15 * * * *" }
   ]
 }

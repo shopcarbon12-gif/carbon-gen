@@ -5,7 +5,7 @@ import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { normalizeShopDomain } from "@/lib/shopify";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
+export const maxDuration = 800;
 
 function isAuthorized(req: NextRequest) {
   if (isRequestAuthed(req)) return true;
@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
         Authorization: `Bearer ${(process.env.CRON_SECRET || "").trim()}`,
       },
       body: JSON.stringify({ action: "push-all", shop }),
-      signal: AbortSignal.timeout(280_000),
+      signal: AbortSignal.timeout(780_000),
     });
 
     const json = (await resp.json().catch(() => ({}))) as {

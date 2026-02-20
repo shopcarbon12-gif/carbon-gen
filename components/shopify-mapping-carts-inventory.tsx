@@ -499,10 +499,23 @@ export default function ShopifyMappingCartsInventory() {
           parentIds: selectedParentIds,
           removeProductGids: hasRemove ? removeProductGids : undefined,
           background,
+          notificationEmail:
+            (typeof process.env.NEXT_PUBLIC_PUSH_NOTIFICATION_EMAIL === "string" &&
+              process.env.NEXT_PUBLIC_PUSH_NOTIFICATION_EMAIL.trim()) ||
+            "elior@carbonjeanscompany.com",
         }),
       });
       const json = (await resp.json().catch(() => ({}))) as { error?: string; message?: string; pushed?: number; removedFromShopify?: number; archivedNotInCart?: number };
-      if (!resp.ok) throw new Error(sanitizeUiErrorMessage(json.error, "Push to Shopify failed."));
+      const apiError = sanitizeUiErrorMessage(json.error, "");
+      const itemCount = selectedParentIds.length;
+      const fallback =
+        resp.status === 504
+          ? `Request timed out. ${itemCount} products may take 10+ min. Try batches of ~200 or wait for automatic sync (every 15 min).`
+          : resp.status === 502 || resp.status === 503
+            ? "Server overloaded or timeout. Try smaller batches (~200 items)."
+            : `Push to Shopify failed (${resp.status}).`;
+      const errMsg = apiError || fallback;
+      if (!resp.ok) throw new Error(errMsg);
       if (resp.status === 202) {
         if (hasRemove) {
           removalQueueRef.current.clear();

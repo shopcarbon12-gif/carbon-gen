@@ -38,10 +38,14 @@ async function loadConfig(shop: string): Promise<{ data: Record<string, unknown>
   } catch (e: unknown) {
     const mem = memoryConfigs.get(shop);
     const msg = normalizeText((e as { message?: string } | null)?.message);
+    const hint =
+      /does not exist|relation.*shopify_cart_config|undefined_table/i.test(msg)
+        ? " Run scripts/migrations/add_shopify_cart_config.sql in Supabase SQL editor."
+        : "";
     return {
       data: mem || {},
       backend: "memory",
-      warning: `Supabase unavailable (${msg}). Using in-memory config.`,
+      warning: `Supabase unavailable (${msg}). Using in-memory config.${hint}`,
     };
   }
 }
@@ -65,10 +69,14 @@ async function saveConfig(shop: string, section: string, values: Record<string, 
   } catch (e: unknown) {
     memoryConfigs.set(shop, merged);
     const msg = normalizeText((e as { message?: string } | null)?.message);
+    const hint =
+      /does not exist|relation.*shopify_cart_config|undefined_table/i.test(msg)
+        ? " Run scripts/migrations/add_shopify_cart_config.sql in Supabase SQL editor."
+        : "";
     return {
       ok: true,
       backend: "memory",
-      warning: `Supabase unavailable (${msg}). Saved in-memory only.`,
+      warning: `Supabase unavailable (${msg}). Saved in-memory only.${hint}`,
     };
   }
 }

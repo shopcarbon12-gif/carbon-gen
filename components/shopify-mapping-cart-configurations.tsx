@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 
 type Option = {
   value: string;
@@ -299,6 +299,9 @@ export default function ShopifyMappingCartConfigurations() {
   const [pulling, setPulling] = useState(false);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState("");
+  const [shop, setShop] = useState<string | null>(null);
+  const shopRef = useRef<string | null>(null);
+  const [persistenceWarning, setPersistenceWarning] = useState("");
 
   function patchMapping<K extends MappingKey>(key: K, value: NewProductMapping[K]) {
     setNewProductMapping((prev) => ({ ...prev, [key]: value }));
@@ -309,14 +312,48 @@ export default function ShopifyMappingCartConfigurations() {
   }
 
   useEffect(() => {
-    void loadConfig();
+    let cancelled = false;
+    (async () => {
+      try {
+        const statusResp = await fetch("/api/shopify/status", { cache: "no-store" });
+        const statusJson = (await statusResp.json().catch(() => ({}))) as { connected?: boolean; shop?: string };
+        const resolvedShop =
+          statusJson?.connected && typeof statusJson.shop === "string" && statusJson.shop.trim()
+            ? statusJson.shop.trim()
+            : null;
+        if (!cancelled) {
+          shopRef.current = resolvedShop;
+          setShop(resolvedShop);
+          await loadConfig(resolvedShop);
+        }
+      } catch {
+        if (!cancelled) {
+          shopRef.current = null;
+          await loadConfig(null);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  async function loadConfig() {
+  async function loadConfig(resolvedShop: string | null) {
     try {
-      const resp = await fetch("/api/shopify/cart-config", { cache: "no-store" });
+      const url =
+        resolvedShop && resolvedShop.length > 0
+          ? `/api/shopify/cart-config?shop=${encodeURIComponent(resolvedShop)}`
+          : "/api/shopify/cart-config";
+      const resp = await fetch(url, { cache: "no-store" });
       const json = await resp.json().catch(() => ({}));
       if (!json?.config || typeof json.config !== "object") return;
+      const backend = (json as { backend?: string })?.backend;
+      const loadWarning = typeof (json as { warning?: string })?.warning === "string" ? (json as { warning?: string }).warning : "";
+      if (backend === "memory" && loadWarning) {
+        setPersistenceWarning(
+          "Config is not persisted. Run scripts/migrations/add_shopify_cart_config.sql in your Supabase SQL editor to enable persistence."
+        );
+      }
       const cfg = json.config as Record<string, unknown>;
 
       if (cfg.basicSettings && typeof cfg.basicSettings === "object") {
@@ -369,17 +406,28 @@ export default function ShopifyMappingCartConfigurations() {
 
   async function saveSection(section: string, values: Record<string, unknown>) {
     setSaving(true);
+    setPersistenceWarning("");
     notify(`Saving ${section}...`);
     try {
+      const shopToUse = shopRef.current ?? shop;
+      const body: Record<string, unknown> = { section, values };
+      if (shopToUse) body.shop = shopToUse;
       const resp = await fetch("/api/shopify/cart-config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ section, values }),
+        body: JSON.stringify(body),
       });
       const json = await resp.json().catch(() => ({}));
       if (!resp.ok) {
         notify(`Error: ${json?.error || "Save failed."}`);
         return;
+      }
+      const warning = typeof json?.warning === "string" ? json.warning : "";
+      const backend = (json as { backend?: string })?.backend;
+      if (backend === "memory" || (warning && /memory|supabase|unavailable/i.test(warning))) {
+        setPersistenceWarning(
+          "Config was saved to memory only and will not persist across refreshes. Run scripts/supabase_schema.sql in your Supabase SQL editor to create the shopify_cart_config table."
+        );
       }
       const msg = `${section} saved.`;
       notify(json?.warning ? `${msg} ${json.warning}` : msg);
@@ -452,9 +500,14 @@ export default function ShopifyMappingCartConfigurations() {
 
   return (
     <main className="page cart-config-page">
+      {persistenceWarning ? (
+        <div className="glass-panel alert alert-warning" role="alert">
+          <strong>Persistence issue:</strong> {persistenceWarning}
+        </div>
+      ) : null}
       <section className="glass-panel hero">
         <p className="eyebrow">Shopify Mapping Inventory</p>
-        <h1>Cart (Shopify - 30e7d3.myshopify.com) Configurations</h1>
+        <h1>Cart (Shopify - {shop || "30e7d3.myshopify.com"}) Configurations</h1>
         <p>
           Do you have any questions or feel setup is complicated?{" "}
           <Link href="/settings" className="inline-link">
@@ -874,6 +927,10 @@ export default function ShopifyMappingCartConfigurations() {
           border: 1px solid rgba(125, 211, 252, 0.4);
           background: rgba(125, 211, 252, 0.2);
           border-radius: 10px;
+        }
+        .alert.alert-warning {
+          border-color: rgba(251, 191, 36, 0.6);
+          background: rgba(251, 191, 36, 0.15);
           padding: 10px 12px;
           color: #bae6fd;
           font-size: 0.79rem;
