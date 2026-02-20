@@ -1082,6 +1082,7 @@ export async function POST(req: NextRequest) {
           markedProcessed: toMarkProcessed.length,
           removedFromShopify,
           archivedNotInCart,
+          productsCreated,
           items: toPush.map((p) => ({
             sku: normalizeText(p.sku),
             title: normalizeText(p.title),

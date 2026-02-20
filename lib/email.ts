@@ -13,6 +13,7 @@ export type PushNotificationPayload = {
   markedProcessed: number;
   removedFromShopify: number;
   archivedNotInCart?: number;
+  productsCreated?: number;
   error?: string;
   items: Array<{ sku: string; title: string; brand: string; variants: number }>;
 };
@@ -42,6 +43,9 @@ export async function sendPushNotificationEmail(
           `Variants updated: ${payload.pushed}`,
           `Total variants processed: ${payload.totalVariants}`,
           `Products marked processed: ${payload.markedProcessed}`,
+          ...(payload.productsCreated && payload.productsCreated > 0
+            ? [`Products created: ${payload.productsCreated}`]
+            : []),
           ...(payload.removedFromShopify > 0
             ? [`Products archived/removed: ${payload.removedFromShopify}`]
             : []),
@@ -76,7 +80,7 @@ export async function sendPushNotificationEmail(
   <pre style="background: #f5f5f5; padding: 12px; border-radius: 6px; overflow-x: auto;">${escapeHtml(statusText)}</pre>
   ${errorLogHtml}
   ${itemsHtml}
-  <p style="margin-top: 24px; color: #666; font-size: 12px;">Sent by Carbon Cart Sync. Manual push notification.</p>
+  <p style="margin-top: 24px; color: #666; font-size: 12px;">Sent by Carbon Cart Sync.</p>
 </body>
 </html>`;
 

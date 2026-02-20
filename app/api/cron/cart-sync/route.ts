@@ -61,6 +61,8 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    const notificationEmail =
+      (process.env.PUSH_NOTIFICATION_EMAIL || "").trim() || null;
     const origin = req.nextUrl.origin;
     const resp = await fetch(`${origin}/api/shopify/cart-inventory`, {
       method: "POST",
@@ -68,7 +70,11 @@ export async function GET(req: NextRequest) {
         "Content-Type": "application/json",
         Authorization: `Bearer ${(process.env.CRON_SECRET || "").trim()}`,
       },
-      body: JSON.stringify({ action: "push-all", shop }),
+      body: JSON.stringify({
+        action: "push-all",
+        shop,
+        ...(notificationEmail ? { notificationEmail } : {}),
+      }),
       signal: AbortSignal.timeout(780_000),
     });
 
