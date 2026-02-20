@@ -238,6 +238,20 @@ using ranked r
 where s.ctid = r.ctid
   and r.rn > 1;
 
+-- Cart config (Shopify shop-level settings for cart mapping)
+create table if not exists shopify_cart_config (
+  shop text primary key,
+  config jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
+-- POS config (Lightspeed account-level settings for POS mapping)
+create table if not exists lightspeed_pos_config (
+  id text primary key,
+  config jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
 create unique index if not exists idx_shopify_cart_inventory_staging_shop_parent_id
   on shopify_cart_inventory_staging (shop, parent_id);
 
@@ -262,3 +276,15 @@ create trigger trg_shopify_cart_inventory_staging_touch_updated_at
 before update on shopify_cart_inventory_staging
 for each row
 execute function shopify_cart_inventory_staging_touch_updated_at();
+
+-- Cart sync log: persists stage-add batches so Compare works across server instances
+create table if not exists shopify_cart_sync_log (
+  id uuid primary key default gen_random_uuid(),
+  shop text not null,
+  action text not null default 'stage-add',
+  parent_ids jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_shopify_cart_sync_log_shop_created
+  on shopify_cart_sync_log (shop, created_at desc);

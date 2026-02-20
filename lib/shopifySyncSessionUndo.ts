@@ -102,3 +102,36 @@ export function listUndoSessions(shop: string, target?: SyncSessionTarget, limit
   return rows.filter((session) => session.target === target).slice(0, constrained);
 }
 
+export function getLastStageAddSession(shop: string): SyncUndoSession | null {
+  const rows = getBucket(shop);
+  return rows.find((s) => s.target === "cart_inventory" && s.action === "stage-add") || null;
+}
+
+export function getRecentStageAddSessions(
+  shop: string,
+  withinMinutes = 10
+): SyncUndoSession[] {
+  const rows = getBucket(shop).filter(
+    (s) => s.target === "cart_inventory" && s.action === "stage-add"
+  );
+  if (rows.length < 1) return [];
+  const mostRecent = rows[0];
+  const cutoff = new Date(mostRecent.createdAt).getTime() - withinMinutes * 60 * 1000;
+  return rows.filter((s) => new Date(s.createdAt).getTime() >= cutoff);
+}
+
+export function extractParentIdsFromStageAddSession(session: SyncUndoSession): Set<string> {
+  const ids = new Set<string>();
+  for (const op of session.operations) {
+    if (op.type === "remove_rows") {
+      for (const id of op.parentIds) ids.add(normalizeText(id).toLowerCase());
+    } else if (op.type === "restore_rows") {
+      for (const row of op.rows) {
+        const id = normalizeText(row.id);
+        if (id) ids.add(id.toLowerCase());
+      }
+    }
+  }
+  return ids;
+}
+

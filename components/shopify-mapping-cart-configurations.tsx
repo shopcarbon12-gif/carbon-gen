@@ -443,11 +443,10 @@ export default function ShopifyMappingCartConfigurations() {
   }
 
   function updateStoreMap(index: number, value: string) {
-    setStoreMapRows((prev) => {
-      const next = prev.map((row, i) => (i === index ? { ...row, posStore: value } : row));
-      return next;
-    });
-    const updated = storeMapRows.map((row, i) => (i === index ? { ...row, posStore: value } : row));
+    const updated = storeMapRows.map((row, i) =>
+      i === index ? { ...row, posStore: value } : row
+    );
+    setStoreMapRows(updated);
     void saveSection("storeMapping", { rows: updated });
   }
 

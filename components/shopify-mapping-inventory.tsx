@@ -71,10 +71,12 @@ type InventoryResponse = {
   rows?: MatrixParentRow[];
 };
 
-const PAGE_SIZE_OPTIONS = [20, 50, 75, 100, 200, 500] as const;
-const CATALOG_SELECT_PAGE_SIZE = 500;
-const STAGE_ADD_CHUNK_SIZE = 120;
+const PAGE_SIZE_OPTIONS = [50, 100, 200, 300, 500] as const;
+const CATALOG_SELECT_PAGE_SIZE = 1000;
+const CATALOG_SELECT_PARALLEL = 4;
+const STAGE_ADD_CHUNK_SIZE = 300;
 const STAGE_REMOVE_CHUNK_SIZE = 500;
+const STAGE_PARALLEL_CHUNKS = 3;
 type TaskTone = "idle" | "running" | "success" | "error";
 type LoadTaskConfig = {
   startLabel?: string;
@@ -82,6 +84,8 @@ type LoadTaskConfig = {
   successLabel?: string;
   successProgress?: number;
   skipSuccess?: boolean;
+  /** When true, does not touch busy state – caller controls UI blocking */
+  background?: boolean;
 };
 
 type ParentSortField =
@@ -168,7 +172,8 @@ function buildInventoryParams(
   nextPage: number,
   nextPageSize: number,
   nextFilters: InventoryFilters,
-  shopValue: string
+  shopValue: string,
+  forceRefresh?: boolean
 ) {
   const params = new URLSearchParams();
   params.set("page", String(nextPage));
@@ -178,16 +183,18 @@ function buildInventoryParams(
     if (text) params.set(key, text);
   }
   if (shopValue) params.set("shop", shopValue);
+  if (forceRefresh) params.set("refresh", "1");
   return params;
 }
 
 export default function ShopifyMappingInventory() {
+  const abortRef = useRef<AbortController | null>(null);
   const [filters, setFilters] = useState<InventoryFilters>(DEFAULT_FILTERS);
   const [appliedFilters, setAppliedFilters] = useState<InventoryFilters>(DEFAULT_FILTERS);
   const [rows, setRows] = useState<MatrixParentRow[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<number>(20);
+  const [pageSize, setPageSize] = useState<number>(100);
   const [totalPages, setTotalPages] = useState(1);
   const [shop, setShop] = useState("");
   const [summary, setSummary] = useState({
@@ -242,9 +249,13 @@ export default function ShopifyMappingInventory() {
     nextPage = page,
     nextPageSize = pageSize,
     nextFilters = appliedFilters,
-    taskConfig?: LoadTaskConfig
+    taskConfig?: LoadTaskConfig,
+    forceRefresh?: boolean
   ) {
-    const params = buildInventoryParams(nextPage, nextPageSize, nextFilters, shop);
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
+    const controller = abortRef.current;
+    const params = buildInventoryParams(nextPage, nextPageSize, nextFilters, shop, forceRefresh);
 
     const startProgressRaw = taskConfig?.startProgress;
     const startProgress =
@@ -258,13 +269,19 @@ export default function ShopifyMappingInventory() {
         : 100;
     const startLabel = normalizeText(taskConfig?.startLabel) || "Loading Lightspeed inventory...";
     const successLabel = normalizeText(taskConfig?.successLabel) || "Inventory loaded";
+    const isBackground = Boolean(taskConfig?.background);
 
-    setBusy(true);
-    setError("");
-    setWarning("");
-    setTask({ label: startLabel, progress: startProgress, tone: "running" });
+    if (!isBackground) {
+      setBusy(true);
+      setError("");
+      setWarning("");
+      setTask({ label: startLabel, progress: startProgress, tone: "running" });
+    }
     try {
-      const resp = await fetch(`/api/shopify/inventory-matrix?${params.toString()}`, { cache: "no-store" });
+      const resp = await fetch(`/api/shopify/inventory-matrix?${params.toString()}`, {
+        cache: "no-store",
+        signal: controller.signal,
+      });
       const json = (await resp.json().catch(() => ({}))) as InventoryResponse;
       if (!resp.ok || json.ok === false) {
         throw new Error(
@@ -299,25 +316,44 @@ export default function ShopifyMappingInventory() {
       }
       return true;
     } catch (e: unknown) {
+      if ((e as { name?: string })?.name === "AbortError") return false;
       const message = sanitizeUiErrorMessage(
         (e as { message?: string } | null)?.message,
         "Unable to load inventory."
       );
-      setError(message);
+      if (!isBackground) setError(message);
       setTask({ label: message, progress: 100, tone: "error" });
       return false;
     } finally {
-      setBusy(false);
+      if (!isBackground) setBusy(false);
     }
   }
 
+  const FILTER_DEBOUNCE_MS = 500;
+  const filtersSerial = JSON.stringify(filters);
+  const appliedFiltersSerial = JSON.stringify(appliedFilters);
+
   useEffect(() => {
-    void loadInventory(1, 20, DEFAULT_FILTERS, {
+    void loadInventory(1, pageSize, DEFAULT_FILTERS, {
       startLabel: "Loading inventory matrix...",
       startProgress: 18,
       successLabel: "Inventory ready",
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- initial load only
   }, []);
+
+  useEffect(() => {
+    if (filtersSerial === appliedFiltersSerial) return;
+    const t = setTimeout(() => {
+      setAppliedFilters(filters);
+      void loadInventory(1, pageSize, filters, {
+        startLabel: "Applying filters...",
+        startProgress: 24,
+        successLabel: "Filters applied",
+      });
+    }, FILTER_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [filtersSerial, appliedFiltersSerial, pageSize]);
 
   const selectedParentIds = useMemo(() => {
     const out = new Set<string>();
@@ -419,6 +455,25 @@ export default function ShopifyMappingInventory() {
     setFilters((prev) => ({ ...prev, [key]: value }));
   }
 
+  async function fetchPage(
+    pageNum: number,
+    pageSize: number,
+    filtersSnapshot: InventoryFilters,
+    shopContext: string
+  ): Promise<InventoryResponse> {
+    const params = buildInventoryParams(pageNum, pageSize, filtersSnapshot, shopContext);
+    const resp = await fetch(`/api/shopify/inventory-matrix?${params.toString()}`, {
+      cache: "no-store",
+    });
+    const json = (await resp.json().catch(() => ({}))) as InventoryResponse;
+    if (!resp.ok || json.ok === false) {
+      throw new Error(
+        sanitizeUiErrorMessage(json.error, `Inventory request failed (${resp.status})`)
+      );
+    }
+    return json;
+  }
+
   async function fetchAllFilteredCatalogRows(
     filtersSnapshot: InventoryFilters,
     progressLabel: string
@@ -427,46 +482,51 @@ export default function ShopifyMappingInventory() {
     if (!shopContext) return [];
 
     const byId = new Map<string, MatrixParentRow>();
-    let currentPage = 1;
-    let totalCatalogPages = 1;
 
-    while (currentPage <= totalCatalogPages) {
-      const params = buildInventoryParams(
-        currentPage,
-        CATALOG_SELECT_PAGE_SIZE,
-        filtersSnapshot,
-        shopContext
-      );
-      const resp = await fetch(`/api/shopify/inventory-matrix?${params.toString()}`, {
-        cache: "no-store",
-      });
-      const json = (await resp.json().catch(() => ({}))) as InventoryResponse;
-      if (!resp.ok || json.ok === false) {
-        throw new Error(
-          sanitizeUiErrorMessage(json.error, `Inventory request failed (${resp.status})`)
-        );
-      }
+    const first = await fetchPage(
+      1,
+      CATALOG_SELECT_PAGE_SIZE,
+      filtersSnapshot,
+      shopContext
+    );
+    const pageRows = Array.isArray(first.rows) ? first.rows : [];
+    for (const row of pageRows) {
+      if (!normalizeText(row.id)) continue;
+      byId.set(row.id, row);
+    }
+    const totalCatalogPages = Math.max(1, Number(first.totalPages || 1));
+    setTask({
+      label: `${progressLabel} (1/${totalCatalogPages})...`,
+      progress: Math.min(95, Math.max(8, Math.round((1 / totalCatalogPages) * 95))),
+      tone: "running",
+    });
 
-      const pageRows = Array.isArray(json.rows) ? json.rows : [];
-      for (const row of pageRows) {
-        if (!normalizeText(row.id)) continue;
-        byId.set(row.id, row);
-      }
+    if (totalCatalogPages <= 1) return Array.from(byId.values());
 
-      totalCatalogPages = Math.max(1, Number(json.totalPages || 1));
-      const progress = Math.min(
-        95,
-        Math.max(
-          8,
-          Math.round((currentPage / Math.max(totalCatalogPages, 1)) * 95)
+    const remainingPages = Array.from(
+      { length: totalCatalogPages - 1 },
+      (_, i) => i + 2
+    );
+    for (let i = 0; i < remainingPages.length; i += CATALOG_SELECT_PARALLEL) {
+      const batch = remainingPages.slice(i, i + CATALOG_SELECT_PARALLEL);
+      const results = await Promise.all(
+        batch.map((p) =>
+          fetchPage(p, CATALOG_SELECT_PAGE_SIZE, filtersSnapshot, shopContext)
         )
       );
+      for (const json of results) {
+        const rows = Array.isArray(json.rows) ? json.rows : [];
+        for (const row of rows) {
+          if (!normalizeText(row.id)) continue;
+          byId.set(row.id, row);
+        }
+      }
+      const done = Math.min(i + batch.length + 1, totalCatalogPages);
       setTask({
-        label: `${progressLabel} (${currentPage}/${totalCatalogPages})...`,
-        progress,
+        label: `${progressLabel} (${done}/${totalCatalogPages})...`,
+        progress: Math.min(95, Math.max(8, Math.round((done / totalCatalogPages) * 95))),
         tone: "running",
       });
-      currentPage += 1;
     }
 
     return Array.from(byId.values());
@@ -481,7 +541,7 @@ export default function ShopifyMappingInventory() {
     setError("");
     setStatus("");
     setTask({
-      label: "Selecting all catalog products...",
+      label: "Selecting all filtered catalog products...",
       progress: 12,
       tone: "running",
     });
@@ -489,7 +549,7 @@ export default function ShopifyMappingInventory() {
     try {
       const allRows = await fetchAllFilteredCatalogRows(
         filtersSnapshot,
-        "Selecting catalog products"
+        "Selecting filtered products"
       );
 
       if (allRows.length < 1) {
@@ -510,9 +570,9 @@ export default function ShopifyMappingInventory() {
       allCatalogRowsRef.current = allRows;
       setAllCatalogSelected(true);
       setAllCatalogSelectedCount(allRows.length);
-      setStatus(`Selected all catalog products (${allRows.length}).`);
+      setStatus(`Selected all ${allRows.length} filtered catalog products.`);
       setTask({
-        label: `Selected ${allRows.length} catalog products`,
+        label: `Selected ${allRows.length} filtered products`,
         progress: 100,
         tone: "success",
       });
@@ -586,41 +646,44 @@ export default function ShopifyMappingInventory() {
     try {
       let upsertedTotal = 0;
       let lastUndoId = "";
-      for (let index = 0; index < chunks.length; index += 1) {
-        const chunk = chunks[index];
-        const progress = 22 + Math.round(((index + 1) / chunks.length) * 58);
+      for (let i = 0; i < chunks.length; i += STAGE_PARALLEL_CHUNKS) {
+        const batch = chunks.slice(i, i + STAGE_PARALLEL_CHUNKS);
+        const progress = 22 + Math.round(((i + batch.length) / chunks.length) * 58);
         setTask({
-          label: `Queueing catalog chunk ${index + 1}/${chunks.length}...`,
+          label: `Queueing chunks ${i + 1}-${i + batch.length}/${chunks.length}...`,
           progress: Math.min(94, progress),
           tone: "running",
         });
-        const resp = await fetch("/api/shopify/cart-inventory", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "stage-add", shop: shopContext, rows: chunk }),
-        });
-        const json = (await resp.json().catch(() => ({}))) as {
-          error?: string;
-          upserted?: number;
-          undoSession?: { id?: string };
-        };
-        if (!resp.ok) throw new Error(sanitizeUiErrorMessage(json.error, "Unable to queue items."));
-        upsertedTotal += Number(json.upserted || chunk.length);
-        if (normalizeText(json.undoSession?.id)) {
-          lastUndoId = normalizeText(json.undoSession?.id);
+        const results = await Promise.all(
+          batch.map(async (chunk) => {
+            const resp = await fetch("/api/shopify/cart-inventory", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "stage-add", shop: shopContext, rows: chunk }),
+            });
+            const json = (await resp.json().catch(() => ({}))) as {
+              error?: string;
+              upserted?: number;
+              undoSession?: { id?: string };
+            };
+            if (!resp.ok) throw new Error(sanitizeUiErrorMessage(json.error, "Unable to queue items."));
+            return { json, chunk };
+          })
+        );
+        for (const { json, chunk } of results) {
+          upsertedTotal += Number(json.upserted ?? chunk.length ?? 0);
+          if (normalizeText(json.undoSession?.id)) {
+            lastUndoId = normalizeText(json.undoSession?.id);
+          }
         }
       }
-      setStatus(
-        `Queued ${Number(upsertedTotal || selected.length)} item(s).`
-      );
-      const refreshed = await loadInventory(page, pageSize, appliedFilters, {
-        startLabel: "Refreshing inventory after queue...",
-        startProgress: 74,
+      setStatus(`Queued ${Number(upsertedTotal || selected.length)} item(s).`);
+      setTask({ label: "Queue completed", progress: 100, tone: "success" });
+      void loadInventory(page, pageSize, appliedFilters, {
+        startLabel: "Refreshing inventory...",
         skipSuccess: true,
+        background: true,
       });
-      if (refreshed) {
-        setTask({ label: "Queue completed", progress: 100, tone: "success" });
-      }
     } catch (e: unknown) {
       const message = sanitizeUiErrorMessage(
         (e as { message?: string } | null)?.message,
@@ -659,45 +722,48 @@ export default function ShopifyMappingInventory() {
     try {
       let removedTotal = 0;
       let lastUndoId = "";
-      for (let index = 0; index < chunks.length; index += 1) {
-        const chunk = chunks[index];
-        const progress = 24 + Math.round(((index + 1) / chunks.length) * 58);
+      for (let i = 0; i < chunks.length; i += STAGE_PARALLEL_CHUNKS) {
+        const batch = chunks.slice(i, i + STAGE_PARALLEL_CHUNKS);
+        const progress = 24 + Math.round(((i + batch.length) / chunks.length) * 58);
         setTask({
-          label: `Removing catalog chunk ${index + 1}/${chunks.length}...`,
+          label: `Removing chunks ${i + 1}-${i + batch.length}/${chunks.length}...`,
           progress: Math.min(94, progress),
           tone: "running",
         });
-        const resp = await fetch("/api/shopify/cart-inventory", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "stage-remove",
-            shop: shopContext,
-            parentIds: chunk,
-          }),
-        });
-        const json = (await resp.json().catch(() => ({}))) as {
-          error?: string;
-          removed?: number;
-          undoSession?: { id?: string };
-        };
-        if (!resp.ok) throw new Error(sanitizeUiErrorMessage(json.error, "Unable to remove items."));
-        removedTotal += Number(json.removed || chunk.length);
-        if (normalizeText(json.undoSession?.id)) {
-          lastUndoId = normalizeText(json.undoSession?.id);
+        const results = await Promise.all(
+          batch.map(async (chunk) => {
+            const resp = await fetch("/api/shopify/cart-inventory", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                action: "stage-remove",
+                shop: shopContext,
+                parentIds: chunk,
+              }),
+            });
+            const json = (await resp.json().catch(() => ({}))) as {
+              error?: string;
+              removed?: number;
+              undoSession?: { id?: string };
+            };
+            if (!resp.ok) throw new Error(sanitizeUiErrorMessage(json.error, "Unable to remove items."));
+            return { json, chunk };
+          })
+        );
+        for (const { json, chunk } of results) {
+          removedTotal += Number(json.removed ?? chunk.length ?? 0);
+          if (normalizeText(json.undoSession?.id)) {
+            lastUndoId = normalizeText(json.undoSession?.id);
+          }
         }
       }
-      setStatus(
-        `Removed ${Number(removedTotal || parentIds.length)} item(s).`
-      );
-      const refreshed = await loadInventory(page, pageSize, appliedFilters, {
-        startLabel: "Refreshing inventory after remove...",
-        startProgress: 74,
+      setStatus(`Removed ${Number(removedTotal || parentIds.length)} item(s).`);
+      setTask({ label: "Remove completed", progress: 100, tone: "success" });
+      void loadInventory(page, pageSize, appliedFilters, {
+        startLabel: "Refreshing inventory...",
         skipSuccess: true,
+        background: true,
       });
-      if (refreshed) {
-        setTask({ label: "Remove completed", progress: 100, tone: "success" });
-      }
     } catch (e: unknown) {
       const message = sanitizeUiErrorMessage(
         (e as { message?: string } | null)?.message,
@@ -790,6 +856,9 @@ export default function ShopifyMappingInventory() {
         <div className="row actions-row">
           <button className="btn-base search-btn" onClick={() => { setAppliedFilters(filters); void loadInventory(1, pageSize, filters, { startLabel: "Applying filters...", startProgress: 24, successLabel: "Filters applied" }); }} disabled={busy}>Search</button>
           <button className="btn-base btn-outline" onClick={() => { setFilters(DEFAULT_FILTERS); setAppliedFilters(DEFAULT_FILTERS); void loadInventory(1, pageSize, DEFAULT_FILTERS, { startLabel: "Resetting filters...", startProgress: 24, successLabel: "Filters reset" }); }} disabled={busy}>Reset</button>
+          <button className="btn-base btn-outline" onClick={() => void loadInventory(1, pageSize, appliedFilters, { startLabel: "Refreshing from Lightspeed...", startProgress: 24, successLabel: "Inventory refreshed" }, true)} disabled={busy} title="Force fresh fetch from Lightspeed (bypasses cache)">
+            Refresh
+          </button>
           {allCatalogSelected ? (
             <button className="btn-base btn-outline" onClick={clearSelectedCatalogProducts} disabled={busy}>
               Clear Catalog Selection ({allCatalogSelectedCount})
@@ -799,6 +868,7 @@ export default function ShopifyMappingInventory() {
               className="btn-base btn-outline"
               onClick={selectAllCatalogProducts}
               disabled={busy || summary.totalProducts < 1}
+              title="Select all products matching current filters"
             >
               Select All Catalog Products
             </button>
@@ -1358,6 +1428,11 @@ export default function ShopifyMappingInventory() {
         .table-wrap {
           overflow-x: auto;
           border-radius: 12px;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+        .table-wrap::-webkit-scrollbar {
+          display: none;
         }
         .table-card {
           padding-top: 8px;
@@ -1499,7 +1574,15 @@ export default function ShopifyMappingInventory() {
         .shopify-logo { width: 30px; height: 30px; object-fit: contain; display: inline-block; }
         .parent-shopify-logo { width: 24px; height: 24px; object-fit: contain; display: block; margin: 0; }
         .expand-row td { padding: 0; border-bottom: 1px solid rgba(255,255,255,.12); }
-        .variant-wrap { overflow-x: auto; padding: 0; }
+        .variant-wrap {
+          overflow-x: auto;
+          padding: 0;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+        .variant-wrap::-webkit-scrollbar {
+          display: none;
+        }
         .variant-table { width: 100%; min-width: 1444px; border-collapse: collapse; table-layout: fixed; }
         .variant-table th, .variant-table td { white-space: nowrap; padding: 8px 10px; }
         .variant-table th:nth-child(2),

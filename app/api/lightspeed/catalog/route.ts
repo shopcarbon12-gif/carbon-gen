@@ -11,7 +11,9 @@ const MAX_EXPORT_ROWS = 20_000;
 const LS_ITEM_PAGE_LIMIT = 1000;
 const LS_ITEM_PAGE_LIMIT_FALLBACK = 500;
 const LS_ITEM_PAGE_LIMIT_LAST_RESORT = 100;
-const LS_MIN_REQUEST_INTERVAL_MS = 1100;
+const LS_V3_PAGE_LIMIT = 100;
+const LS_V3_MAX_PAGES = 250;
+const LS_MIN_REQUEST_INTERVAL_MS = 400;
 const LS_RATE_LIMIT_RETRY_ATTEMPTS = 3;
 const ALLOWED_PAGE_SIZES = [100, 500] as const;
 const ALLOWED_SORT_FIELDS = [
@@ -210,6 +212,20 @@ function getRSeriesResourceEndpoint(resource: string) {
     return `${base}/Account/${accountId}/${resource}.json`;
   }
   return `${base}/API/Account/${accountId}/${resource}.json`;
+}
+
+/** V3 API path - uses cursor-based pagination, recommended for full catalog fetch. */
+function getRSeriesV3ResourceEndpoint(resource: string) {
+  const accountId = normalizeText(process.env.LS_ACCOUNT_ID);
+  if (!accountId) {
+    throw new Error("LS_ACCOUNT_ID is missing. Configure Lightspeed account ID first.");
+  }
+  const base = normalizeText(process.env.LS_API_BASE || "https://api.lightspeedapp.com").replace(
+    /\/+$/,
+    ""
+  );
+  const apiPath = /\/API\/?V3$/i.test(base) ? base : `${base}/API/V3`;
+  return `${apiPath}/Account/${accountId}/${resource}.json`;
 }
 
 function readResponseError(parsedBody: any, rawBody: string, fallback = "request failed") {
@@ -672,7 +688,157 @@ async function resolvePageLimit(accessToken: string) {
   throw new Error("Unable to load Lightspeed item catalog.");
 }
 
+function resolveNextUrl(next: string, base: string): string | null {
+  const t = normalizeText(next);
+  if (!t) return null;
+  if (/^https?:/i.test(t)) return t;
+  try {
+    const baseUrl = new URL(base);
+    return new URL(t, baseUrl.origin).toString();
+  } catch {
+    return t.startsWith("/") ? `${(new URL(base)).origin}${t}` : null;
+  }
+}
+
+/**
+ * Fetch Items via ItemMatrix - gets product groups with their variant Items.
+ * Use when Item endpoint returns a low count (e.g. 212) but LS has many matrices.
+ */
+async function fetchRawCatalogFromItemMatrix(accessToken: string): Promise<any[] | null> {
+  const endpoint = getRSeriesV3ResourceEndpoint("ItemMatrix");
+  const url = new URL(endpoint);
+  url.searchParams.set("limit", String(LS_V3_PAGE_LIMIT));
+  url.searchParams.set("archived", "false");
+  url.searchParams.set("load_relations", '["Items","Items.ItemShops","Items.ItemAttributes"]');
+  url.searchParams.set("sort", "itemMatrixID");
+
+  const rawItems: any[] = [];
+  let nextUrl: string | null = url.toString();
+  let pages = 0;
+  const maxPages = Math.min(LS_V3_MAX_PAGES, 120);
+
+  while (nextUrl && pages < maxPages) {
+    await waitForLightspeedRequestSlot();
+
+    const response = await fetch(nextUrl, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json",
+      },
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    const rawBody = await response.text();
+    let parsedBody: any = {};
+    try {
+      parsedBody = JSON.parse(rawBody);
+    } catch {
+      parsedBody = { raw: rawBody };
+    }
+
+    if (!response.ok) {
+      const detail = readResponseError(parsedBody, rawBody);
+      throw new Error(`Lightspeed ItemMatrix (V3) request failed: ${detail}`);
+    }
+
+    const matrices = toArray(parsedBody?.ItemMatrix) as any[];
+    for (const matrix of matrices) {
+      const itemsRaw = matrix?.Items;
+      const items = Array.isArray(itemsRaw)
+        ? itemsRaw
+        : toArray(itemsRaw?.Item) as any[];
+      for (const it of items) {
+        if (it && typeof it === "object" && (it.itemID || it.systemSku || it.customSku)) {
+          rawItems.push(it);
+        }
+      }
+    }
+    pages += 1;
+
+    const next = resolveNextUrl(parsedBody?.["@attributes"]?.next, nextUrl);
+    nextUrl = next;
+  }
+
+  return rawItems.length > 0 ? rawItems : null;
+}
+
+/**
+ * Fetch Items using V3 API with cursor-based pagination.
+ */
+async function fetchRawCatalogItemsV3(accessToken: string): Promise<any[] | null> {
+  const endpoint = getRSeriesV3ResourceEndpoint("Item");
+  const url = new URL(endpoint);
+  url.searchParams.set("limit", String(LS_V3_PAGE_LIMIT));
+  url.searchParams.set("archived", "false");
+  url.searchParams.set("load_relations", '["ItemShops","ItemAttributes"]');
+  url.searchParams.set("sort", "itemID");
+
+  const rawItems: any[] = [];
+  let nextUrl: string | null = url.toString();
+  let pages = 0;
+
+  while (nextUrl && pages < LS_V3_MAX_PAGES) {
+    await waitForLightspeedRequestSlot();
+
+    const response = await fetch(nextUrl, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json",
+      },
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    const rawBody = await response.text();
+    let parsedBody: any = {};
+    try {
+      parsedBody = JSON.parse(rawBody);
+    } catch {
+      parsedBody = { raw: rawBody };
+    }
+
+    if (!response.ok) {
+      const detail = readResponseError(parsedBody, rawBody);
+      throw new Error(`Lightspeed Item (V3) request failed: ${detail}`);
+    }
+
+    const list = toArray(parsedBody?.Item) as any[];
+    rawItems.push(...list);
+    pages += 1;
+
+    const next = resolveNextUrl(parsedBody?.["@attributes"]?.next, nextUrl);
+    nextUrl = next;
+  }
+
+  return rawItems.length > 0 ? rawItems : null;
+}
+
 async function fetchRawCatalogItems(accessToken: string) {
+  let rawItems: any[] = [];
+
+  try {
+    const matrixItems = await fetchRawCatalogFromItemMatrix(accessToken);
+    if (matrixItems && matrixItems.length > 0) {
+      return matrixItems;
+    }
+  } catch (e: any) {
+    const msg = String(e?.message || "");
+    if (!/v3|version|not found|404|ItemMatrix/i.test(msg)) {
+      console.warn("[Lightspeed catalog] ItemMatrix fetch failed, trying Item:", msg);
+    }
+  }
+
+  try {
+    const v3Items = await fetchRawCatalogItemsV3(accessToken);
+    if (v3Items && v3Items.length > 0) {
+      return v3Items;
+    }
+  } catch (e: any) {
+    const msg = String(e?.message || "");
+    if (!/v3|version|not found|404/i.test(msg)) {
+      console.warn("[Lightspeed catalog] V3 Item fetch failed, falling back to legacy:", msg);
+    }
+  }
+
   const { firstPage, pageLimit } = await resolvePageLimit(accessToken);
 
   const buildBaseQuery = (limit: number) => ({
@@ -681,7 +847,7 @@ async function fetchRawCatalogItems(accessToken: string) {
     load_relations: '["ItemShops","ItemAttributes"]',
   });
 
-  const rawItems: any[] = [...firstPage.rows];
+  rawItems = [...firstPage.rows];
   const totalCount = firstPage.totalCount;
   const offsets: number[] = [];
   for (let offset = pageLimit; offset < totalCount; offset += pageLimit) {

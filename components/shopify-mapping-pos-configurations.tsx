@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 type BasicSettings = {
   syncStatus: boolean;
@@ -204,34 +204,130 @@ export default function ShopifyMappingPosConfigurations() {
 
   const [status, setStatus] = useState("");
   const [pulling, setPulling] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   function notify(message: string) {
     setStatus(message);
   }
 
+  useEffect(() => {
+    void loadConfig();
+  }, []);
+
+  async function loadConfig() {
+    try {
+      const resp = await fetch("/api/lightspeed/pos-config", { cache: "no-store" });
+      const json = await resp.json().catch(() => ({}));
+      if (!json?.config || typeof json.config !== "object") return;
+      const cfg = json.config as Record<string, unknown>;
+
+      if (cfg.basicSettings && typeof cfg.basicSettings === "object") {
+        const bs = cfg.basicSettings as Partial<BasicSettings>;
+        setBasic((prev) => ({ ...prev, ...bs }));
+      }
+      if (cfg.productMapping && typeof cfg.productMapping === "object") {
+        const pm = cfg.productMapping as Partial<ProductMapping>;
+        setProductMapping((prev) => ({ ...prev, ...pm }));
+      }
+      if (cfg.downloadSettings && typeof cfg.downloadSettings === "object") {
+        const ds = cfg.downloadSettings as Partial<DownloadOrderSettings>;
+        setDownloadSettings((prev) => ({ ...prev, ...ds }));
+      }
+      const shopRows = Array.isArray(cfg.shopConfigurations)
+        ? cfg.shopConfigurations
+        : Array.isArray((cfg.shopConfigurations as { rows?: unknown })?.rows)
+          ? (cfg.shopConfigurations as { rows: unknown[] }).rows
+          : [];
+      if (shopRows.length > 0) {
+        setShopConfigurations(
+          shopRows.map((r: unknown) => {
+            const row = (r || {}) as Partial<ShopOrderConfig>;
+            return {
+              shopId: String(row.shopId ?? ""),
+              shopName: String(row.shopName ?? ""),
+              register: String(row.register ?? ""),
+              employee: String(row.employee ?? ""),
+            };
+          })
+        );
+      }
+    } catch {
+      // Config not loaded — use defaults.
+    }
+  }
+
+  async function saveSection(section: string, values: Record<string, unknown>) {
+    setSaving(true);
+    notify(`Saving ${section}...`);
+    try {
+      const resp = await fetch("/api/lightspeed/pos-config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ section, values }),
+      });
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        notify(`Error: ${json?.error || "Save failed."}`);
+        return;
+      }
+      const msg = `${section} saved.`;
+      notify(json?.warning ? `${msg} ${json.warning}` : msg);
+    } catch (e: unknown) {
+      notify(`Error: ${String((e as { message?: string } | null)?.message || "Save failed.").trim()}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   function saveBasic() {
-    notify("Basic Settings saved.");
+    void saveSection("basicSettings", basic);
   }
 
   function saveProductMapping() {
-    notify("Product Related Mapping saved.");
+    void saveSection("productMapping", productMapping);
   }
 
   function saveDownloadSettings() {
-    notify("Download Orders Settings (Default) saved.");
+    void saveSection("downloadSettings", downloadSettings);
   }
 
-  function saveShopConfig(shopName: string) {
-    notify(`Order Configurations saved for ${shopName}.`);
+  function saveShopConfig() {
+    void saveSection("shopConfigurations", { rows: shopConfigurations });
   }
 
   async function pullMappingData() {
     if (pulling) return;
     setPulling(true);
-    notify("Pulling mapping data from Lightspeed POS...");
-    await new Promise((resolve) => setTimeout(resolve, 900));
-    setPulling(false);
-    notify("Mapping data pull completed.");
+    notify("Pulling inventory from Lightspeed POS...");
+    try {
+      const params = new URLSearchParams({
+        all: "1",
+        pageSize: "20000",
+        shops: "all",
+        includeNoStock: "1",
+        refresh: "1",
+      });
+      const resp = await fetch(`/api/lightspeed/catalog?${params.toString()}`, {
+        cache: "no-store",
+      });
+      const json = (await resp.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        total?: number;
+        rows?: unknown[];
+      };
+      if (!resp.ok || json.ok === false) {
+        notify(`Error: ${json?.error || "Pull failed."}`);
+        return;
+      }
+      const total = Number(json?.total ?? json?.rows?.length ?? 0);
+      notify(`Pulled ${total.toLocaleString()} items from Lightspeed. Go to Inventory to view.`);
+    } catch (e: unknown) {
+      const msg = String((e as { message?: string } | null)?.message || "Pull failed.");
+      notify(`Error: ${msg}`);
+    } finally {
+      setPulling(false);
+    }
   }
 
   return (
@@ -287,6 +383,9 @@ export default function ShopifyMappingPosConfigurations() {
         >
           {pulling ? "Pulling..." : "Pull Mapping Data from Lightspeed POS"}
         </button>
+        <p className="pull-card-note">
+          Use once for initial setup. Inventory syncs automatically every 30 minutes.
+        </p>
       </section>
 
       <section className="two-col">
@@ -344,8 +443,8 @@ export default function ShopifyMappingPosConfigurations() {
           </div>
 
           <div className="actions">
-            <button suppressHydrationWarning type="button" className="btn-base btn-primary" onClick={saveBasic}>
-              Save
+            <button suppressHydrationWarning type="button" className="btn-base btn-primary" onClick={saveBasic} disabled={saving}>
+              {saving ? "Saving..." : "Save"}
             </button>
           </div>
         </section>
@@ -495,8 +594,9 @@ export default function ShopifyMappingPosConfigurations() {
               type="button"
               className="btn-base btn-primary"
               onClick={saveProductMapping}
+              disabled={saving}
             >
-              Save
+              {saving ? "Saving..." : "Save"}
             </button>
           </div>
         </section>
@@ -560,8 +660,9 @@ export default function ShopifyMappingPosConfigurations() {
             type="button"
             className="btn-base btn-primary"
             onClick={saveDownloadSettings}
+            disabled={saving}
           >
-            Save
+            {saving ? "Saving..." : "Save"}
           </button>
         </div>
       </section>
@@ -618,9 +719,10 @@ export default function ShopifyMappingPosConfigurations() {
               suppressHydrationWarning
               type="button"
               className="btn-base btn-primary"
-              onClick={() => saveShopConfig(shopConfig.shopName)}
+              onClick={() => saveShopConfig()}
+              disabled={saving}
             >
-              Save
+              {saving ? "Saving..." : "Save"}
             </button>
           </div>
         </section>
@@ -697,6 +799,14 @@ export default function ShopifyMappingPosConfigurations() {
         .pull-card {
           border-radius: 16px;
           padding: 14px;
+          display: grid;
+          gap: 8px;
+        }
+        .pull-card-note {
+          margin: 0;
+          font-size: 0.82rem;
+          color: rgba(226, 232, 240, 0.78);
+          line-height: 1.35;
         }
         .pull-btn {
           min-height: 44px;

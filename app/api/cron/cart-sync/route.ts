@@ -1,0 +1,108 @@
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import { isRequestAuthed } from "@/lib/auth";
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { normalizeShopDomain } from "@/lib/shopify";
+
+export const runtime = "nodejs";
+export const maxDuration = 300;
+
+function isAuthorized(req: NextRequest) {
+  if (isRequestAuthed(req)) return true;
+  const secret = (process.env.CRON_SECRET || "").trim();
+  if (!secret) return false;
+  const auth = req.headers.get("authorization") || "";
+  if (auth === `Bearer ${secret}`) return true;
+  const url = new URL(req.url);
+  if (url.searchParams.get("secret") === secret) return true;
+  return false;
+}
+
+async function getShopForSync(): Promise<string> {
+  const envShop = normalizeShopDomain(
+    (process.env.SHOPIFY_SHOP_DOMAIN || "").trim()
+  );
+  if (envShop) return envShop;
+
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from("shopify_tokens")
+      .select("shop")
+      .order("installed_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!error && data) {
+      const shop = (data as { shop?: string })?.shop;
+      if (shop) return normalizeShopDomain(shop) || shop;
+    }
+  } catch {
+    // fallback
+  }
+  return "";
+}
+
+/**
+ * Automatic Cart Inventory → Shopify sync. Run via cron every 15–30 min.
+ * Push all staged Cart Inventory items to Shopify; optionally sync LS later.
+ * Call: GET/POST /api/cron/cart-sync with Authorization: Bearer CRON_SECRET
+ */
+export async function GET(req: NextRequest) {
+  if (!isAuthorized(req)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const shop = await getShopForSync();
+    if (!shop) {
+      return NextResponse.json(
+        { ok: false, error: "No Shopify shop configured. Set SHOPIFY_SHOP_DOMAIN or connect a shop." },
+        { status: 400 }
+      );
+    }
+
+    const origin = req.nextUrl.origin;
+    const resp = await fetch(`${origin}/api/shopify/cart-inventory`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${(process.env.CRON_SECRET || "").trim()}`,
+      },
+      body: JSON.stringify({ action: "push-all", shop }),
+      signal: AbortSignal.timeout(280_000),
+    });
+
+    const json = (await resp.json().catch(() => ({}))) as {
+      ok?: boolean;
+      error?: string;
+      pushed?: number;
+      totalVariants?: number;
+      markedProcessed?: number;
+      removedFromShopify?: number;
+    };
+
+    if (!resp.ok || json.ok === false) {
+      return NextResponse.json(
+        { ok: false, error: json?.error || "Cart sync failed", status: resp.status },
+        { status: resp.status >= 400 ? resp.status : 500 }
+      );
+    }
+
+    return NextResponse.json({
+      ok: true,
+      shop,
+      pushed: json.pushed ?? 0,
+      totalVariants: json.totalVariants ?? 0,
+      markedProcessed: json.markedProcessed ?? 0,
+      removedFromShopify: json.removedFromShopify ?? 0,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (e: unknown) {
+    const msg = (e as { message?: string })?.message || "Cart sync failed";
+    return NextResponse.json({ ok: false, error: msg }, { status: 500 });
+  }
+}
+
+export async function POST(req: NextRequest) {
+  return GET(req);
+}

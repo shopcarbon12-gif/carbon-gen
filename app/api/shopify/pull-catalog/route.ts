@@ -16,8 +16,8 @@ export const maxDuration = 120;
 
 const API_VERSION =
   (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
-const MAX_PAGES = 40;
-const PAGE_SIZE = 50;
+const MAX_PAGES = 60;
+const PAGE_SIZE = 100;
 
 function normalizeText(value: unknown) {
   return String(value ?? "").trim();
