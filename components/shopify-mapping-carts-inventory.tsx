@@ -510,7 +510,7 @@ export default function ShopifyMappingCartsInventory() {
         }
         setStatus("Sync started in background. You can close this page.");
         setTask({ label: "Sync running in background", progress: 100, tone: "success" });
-        await loadCart(page, pageSize, appliedFilters, { startLabel: "Refreshing catalog...", background: true });
+        await loadCart(page, pageSize, appliedFilters, { startLabel: "Refreshing catalog..." });
         return;
       }
       if (hasRemove) {

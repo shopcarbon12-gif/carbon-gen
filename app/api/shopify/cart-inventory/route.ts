@@ -47,6 +47,19 @@ type CartFilters = {
   lsSource: string;
 };
 
+type ProductsPageNode = { id: string; variants?: { nodes?: Array<{ id: string }> } };
+type ProductsPageEdges = Array<{ node?: ProductsPageNode }>;
+type ProductsPageResponse = {
+  products?: {
+    edges?: ProductsPageEdges;
+    pageInfo?: { hasNextPage?: boolean; endCursor?: string };
+  };
+};
+type ProductUpdateResponse = {
+  productUpdate?: { product?: { id: string }; userErrors?: Array<{ message: string }> };
+};
+type ShopifyGraphqlResult<T> = { ok: boolean; data?: T | null; errors?: unknown };
+
 function normalizeText(value: unknown) {
   return String(value ?? "").trim();
 }
@@ -486,7 +499,7 @@ export async function POST(req: NextRequest) {
       const undoOps = buildUndoForStageAdd(current.data, incoming);
       const saved = await upsertCartCatalogParents(shop, incoming);
 
-      const parentIds = incoming.map((row) => row.id).filter(Boolean);
+      const parentIds = incoming.map((row: StagingParent) => row.id).filter(Boolean);
       await logStageAdd(shop, parentIds);
 
       const session =
@@ -687,15 +700,15 @@ export async function POST(req: NextRequest) {
               removeProductGids,
               background: false,
             };
+            const cookie = req.headers.get("cookie");
+            const headers: Record<string, string> = {
+              "Content-Type": "application/json",
+            };
+            if (cookie) headers.Cookie = cookie;
             ctx.waitUntil(
               fetch(`${origin}/api/shopify/cart-inventory`, {
                 method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  ...(req.headers.get("cookie")
-                    ? { Cookie: req.headers.get("cookie") }
-                    : {}),
-                },
+                headers,
                 body: JSON.stringify(pushPayload),
               })
             );
@@ -893,14 +906,8 @@ export async function POST(req: NextRequest) {
       const PRODUCTS_PER_PAGE = 50;
       const MAX_ARCHIVE_PAGES = 100;
       for (let page = 0; page < MAX_ARCHIVE_PAGES; page++) {
-        const prodRes = await runShopifyGraphql<{
-          products?: {
-            edges?: Array<{
-              node?: { id: string; variants?: { nodes?: Array<{ id: string }> } };
-            }>;
-            pageInfo?: { hasNextPage?: boolean; endCursor?: string };
-          }>;
-        }>({
+        const prodRes: ShopifyGraphqlResult<ProductsPageResponse> =
+          await runShopifyGraphql<ProductsPageResponse>({
           shop,
           token,
           query: `query($first: Int!, $after: String) {
@@ -923,9 +930,7 @@ export async function POST(req: NextRequest) {
             cartVariantGids.has(normalizeText(vn?.id).toLowerCase())
           );
           if (variantNodes.length > 0 && !hasVariantInCart) {
-            const updRes = await runShopifyGraphql<{
-              productUpdate?: { product?: { id: string }; userErrors?: Array<{ message: string }> };
-            }>({
+            const updRes = await runShopifyGraphql<ProductUpdateResponse>({
               shop,
               token,
               query: `mutation productUpdate($product: ProductUpdateInput!) {
