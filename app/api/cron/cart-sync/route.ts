@@ -97,13 +97,14 @@ export async function GET(req: NextRequest) {
       totalVariants?: number;
       markedProcessed?: number;
       removedFromShopify?: number;
+      debug?: unknown;
     };
 
     if (!resp.ok || json.ok === false) {
       const errMsg = json?.error || "Cart sync failed";
       console.error("[cart-sync] Cart inventory failed:", resp.status, errMsg);
       return NextResponse.json(
-        { ok: false, error: errMsg, status: resp.status, detail: json?.debug },
+        { ok: false, error: errMsg, status: resp.status, detail: json.debug },
         { status: resp.status >= 400 && resp.status < 600 ? resp.status : 500 }
       );
     }
