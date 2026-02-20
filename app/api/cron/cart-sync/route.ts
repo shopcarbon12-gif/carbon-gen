@@ -11,10 +11,14 @@ function isAuthorized(req: NextRequest) {
   if (isRequestAuthed(req)) return true;
   const secret = (process.env.CRON_SECRET || "").trim();
   if (!secret) return false;
-  const auth = req.headers.get("authorization") || "";
+  const auth = (req.headers.get("authorization") || "").trim();
   if (auth === `Bearer ${secret}`) return true;
-  const url = new URL(req.url);
-  if (url.searchParams.get("secret") === secret) return true;
+  try {
+    const url = new URL(req.url);
+    if (url.searchParams.get("secret") === secret) return true;
+  } catch {
+    /* req.url may be relative in some runtimes */
+  }
   return false;
 }
 
@@ -63,7 +67,15 @@ export async function GET(req: NextRequest) {
 
     const notificationEmail =
       (process.env.PUSH_NOTIFICATION_EMAIL || "").trim() || null;
-    const origin = req.nextUrl.origin;
+    const vercelUrl = (process.env.VERCEL_URL || "").trim().replace(/^https?:\/\//, "") || "";
+    const origin =
+      req.nextUrl?.origin || (vercelUrl ? `https://${vercelUrl}` : "");
+    if (!origin) {
+      return NextResponse.json(
+        { ok: false, error: "Could not resolve API origin (missing VERCEL_URL)." },
+        { status: 500 }
+      );
+    }
     const resp = await fetch(`${origin}/api/shopify/cart-inventory`, {
       method: "POST",
       headers: {
@@ -88,9 +100,11 @@ export async function GET(req: NextRequest) {
     };
 
     if (!resp.ok || json.ok === false) {
+      const errMsg = json?.error || "Cart sync failed";
+      console.error("[cart-sync] Cart inventory failed:", resp.status, errMsg);
       return NextResponse.json(
-        { ok: false, error: json?.error || "Cart sync failed", status: resp.status },
-        { status: resp.status >= 400 ? resp.status : 500 }
+        { ok: false, error: errMsg, status: resp.status, detail: json?.debug },
+        { status: resp.status >= 400 && resp.status < 600 ? resp.status : 500 }
       );
     }
 
@@ -104,8 +118,13 @@ export async function GET(req: NextRequest) {
       timestamp: new Date().toISOString(),
     });
   } catch (e: unknown) {
-    const msg = (e as { message?: string })?.message || "Cart sync failed";
-    return NextResponse.json({ ok: false, error: msg }, { status: 500 });
+    const err = e as Error & { cause?: unknown };
+    const msg = err?.message || "Cart sync failed";
+    console.error("[cart-sync] Error:", msg, err);
+    return NextResponse.json(
+      { ok: false, error: msg, detail: String(err?.cause ?? "") },
+      { status: 500 }
+    );
   }
 }
 
