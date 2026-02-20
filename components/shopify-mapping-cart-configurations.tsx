@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 
 type Option = {
   value: string;
@@ -244,7 +244,7 @@ function SelectControl(props: {
 }
 
 export default function ShopifyMappingCartConfigurations() {
-  const syncApproved = false;
+  const syncApproved = true;
   const [basic, setBasic] = useState<BasicSettings>({
     syncStatus: true,
     liveUpload: true,
@@ -297,6 +297,7 @@ export default function ShopifyMappingCartConfigurations() {
     },
   ]);
   const [pulling, setPulling] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState("");
 
   function patchMapping<K extends MappingKey>(key: K, value: NewProductMapping[K]) {
@@ -307,6 +308,88 @@ export default function ShopifyMappingCartConfigurations() {
     setStatus(message);
   }
 
+  useEffect(() => {
+    void loadConfig();
+  }, []);
+
+  async function loadConfig() {
+    try {
+      const resp = await fetch("/api/shopify/cart-config", { cache: "no-store" });
+      const json = await resp.json().catch(() => ({}));
+      if (!json?.config || typeof json.config !== "object") return;
+      const cfg = json.config as Record<string, unknown>;
+
+      if (cfg.basicSettings && typeof cfg.basicSettings === "object") {
+        const bs = cfg.basicSettings as Partial<BasicSettings>;
+        setBasic((prev) => ({ ...prev, ...bs }));
+      }
+      if (cfg.newProductMapping && typeof cfg.newProductMapping === "object") {
+        const npm = cfg.newProductMapping as Partial<NewProductMapping>;
+        setNewProductMapping((prev) => ({ ...prev, ...npm }));
+      }
+      if (cfg.newProductRules && typeof cfg.newProductRules === "object") {
+        const npr = cfg.newProductRules as Partial<NewProductRules>;
+        setNewProductRules((prev) => ({ ...prev, ...npr }));
+      }
+      if (cfg.productUpdateRules && typeof cfg.productUpdateRules === "object") {
+        const pur = cfg.productUpdateRules as Partial<ProductUpdateRules>;
+        setProductUpdateRules((prev) => ({ ...prev, ...pur }));
+      }
+      if (cfg.orderStatus && typeof cfg.orderStatus === "object") {
+        const os = cfg.orderStatus as Partial<OrderStatus>;
+        setOrderStatus((prev) => ({ ...prev, ...os }));
+      }
+      if (cfg.taxSettings && typeof cfg.taxSettings === "object") {
+        const ts = cfg.taxSettings as Record<string, unknown>;
+        if (typeof ts.priceInclusiveTax === "boolean") setPriceInclusiveTax(ts.priceInclusiveTax);
+      }
+      if (cfg.reserveStock && typeof cfg.reserveStock === "object") {
+        const rs = cfg.reserveStock as Record<string, unknown>;
+        if (typeof rs.value === "string") setReserveStock(rs.value);
+        else if (typeof rs.value === "number") setReserveStock(String(rs.value));
+      }
+      if (cfg.storeMapping && typeof cfg.storeMapping === "object") {
+        const sm = cfg.storeMapping as Record<string, unknown>;
+        if (Array.isArray(sm.rows)) {
+          setStoreMapRows(
+            sm.rows.map((r: unknown) => {
+              const row = (r || {}) as Partial<StoreMappingRow>;
+              return {
+                shopifyStore: String(row.shopifyStore || ""),
+                posStore: String(row.posStore || "0"),
+              };
+            })
+          );
+        }
+      }
+    } catch {
+      // Config not loaded yet — use defaults.
+    }
+  }
+
+  async function saveSection(section: string, values: Record<string, unknown>) {
+    setSaving(true);
+    notify(`Saving ${section}...`);
+    try {
+      const resp = await fetch("/api/shopify/cart-config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ section, values }),
+      });
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        notify(`Error: ${json?.error || "Save failed."}`);
+        return;
+      }
+      const msg = `${section} saved.`;
+      notify(json?.warning ? `${msg} ${json.warning}` : msg);
+    } catch (e: unknown) {
+      notify(`Error: ${String((e as { message?: string } | null)?.message || "Save failed.").trim()}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function pullMappingData() {
     if (!syncApproved) {
       notify("Sync is locked. Waiting for your app approval.");
@@ -314,35 +397,58 @@ export default function ShopifyMappingCartConfigurations() {
     }
     if (pulling) return;
     setPulling(true);
-    notify("Pulling mapping data from Shopify...");
-    await new Promise((resolve) => setTimeout(resolve, 900));
-    setPulling(false);
-    notify("Mapping data pull completed.");
-  }
-
-  function save(section: string) {
-    notify(`${section} saved.`);
+    notify("Pulling catalog from Shopify... This may take a moment.");
+    try {
+      const resp = await fetch("/api/shopify/pull-catalog", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const json = (await resp.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        pulled?: number;
+        totalVariants?: number;
+        message?: string;
+        warning?: string;
+      };
+      if (!resp.ok || json.ok === false) {
+        notify(`Error: ${json.error || "Pull failed."}`);
+        return;
+      }
+      const msg = json.message || `Pulled ${json.pulled ?? 0} products.`;
+      notify(json.warning ? `${msg} Warning: ${json.warning}` : msg);
+    } catch (e: unknown) {
+      const message =
+        String((e as { message?: string } | null)?.message || "").trim() ||
+        "Pull failed unexpectedly.";
+      notify(`Error: ${message}`);
+    } finally {
+      setPulling(false);
+    }
   }
 
   function saveReserveStock() {
     const value = reserveStock.trim();
     if (!value) {
       setReserveStock("0");
-      notify("Reserve Stock saved: 0.");
+      void saveSection("reserveStock", { value: "0" });
       return;
     }
     if (!/^\d+$/.test(value)) {
       notify("Reserve Stock must be a non-negative whole number.");
       return;
     }
-    notify(`Reserve Stock saved: ${value}.`);
+    void saveSection("reserveStock", { value });
   }
 
   function updateStoreMap(index: number, value: string) {
-    setStoreMapRows((prev) =>
-      prev.map((row, i) => (i === index ? { ...row, posStore: value } : row))
-    );
-    notify("Store mapping updated.");
+    setStoreMapRows((prev) => {
+      const next = prev.map((row, i) => (i === index ? { ...row, posStore: value } : row));
+      return next;
+    });
+    const updated = storeMapRows.map((row, i) => (i === index ? { ...row, posStore: value } : row));
+    void saveSection("storeMapping", { rows: updated });
   }
 
   return (
@@ -437,8 +543,8 @@ export default function ShopifyMappingCartConfigurations() {
               </div>
             </div>
             <div className="actions">
-              <button suppressHydrationWarning type="button" className="btn-base btn-primary" onClick={() => save("Basic Settings")}>
-                Save
+              <button suppressHydrationWarning type="button" className="btn-base btn-primary" disabled={saving} onClick={() => void saveSection("basicSettings", basic)}>
+                {saving ? "Saving..." : "Save"}
               </button>
             </div>
           </section>
@@ -497,8 +603,8 @@ export default function ShopifyMappingCartConfigurations() {
               })}
             </div>
             <div className="actions">
-              <button suppressHydrationWarning type="button" className="btn-base btn-primary" onClick={() => save("Mapping For New Products")}>
-                Save
+              <button suppressHydrationWarning type="button" className="btn-base btn-primary" disabled={saving} onClick={() => void saveSection("newProductMapping", newProductMapping)}>
+                {saving ? "Saving..." : "Save"}
               </button>
             </div>
           </section>
@@ -520,8 +626,8 @@ export default function ShopifyMappingCartConfigurations() {
               ))}
             </div>
             <div className="actions">
-              <button suppressHydrationWarning type="button" className="btn-base btn-primary" onClick={() => save("Rules for new products")}>
-                Save
+              <button suppressHydrationWarning type="button" className="btn-base btn-primary" disabled={saving} onClick={() => void saveSection("newProductRules", newProductRules)}>
+                {saving ? "Saving..." : "Save"}
               </button>
             </div>
           </section>
@@ -585,8 +691,8 @@ export default function ShopifyMappingCartConfigurations() {
               ))}
             </div>
             <div className="actions">
-              <button suppressHydrationWarning type="button" className="btn-base btn-primary" onClick={() => save("Rules for product update")}>
-                Save
+              <button suppressHydrationWarning type="button" className="btn-base btn-primary" disabled={saving} onClick={() => void saveSection("productUpdateRules", productUpdateRules)}>
+                {saving ? "Saving..." : "Save"}
               </button>
             </div>
           </section>
@@ -609,8 +715,8 @@ export default function ShopifyMappingCartConfigurations() {
               ))}
             </div>
             <div className="actions">
-              <button suppressHydrationWarning type="button" className="btn-base btn-primary" onClick={() => save("Order status")}>
-                Save
+              <button suppressHydrationWarning type="button" className="btn-base btn-primary" disabled={saving} onClick={() => void saveSection("orderStatus", orderStatus)}>
+                {saving ? "Saving..." : "Save"}
               </button>
             </div>
           </section>
@@ -632,8 +738,8 @@ export default function ShopifyMappingCartConfigurations() {
               />
             </div>
             <div className="actions">
-              <button suppressHydrationWarning type="button" className="btn-base btn-primary" onClick={() => save("Tax Settings")}>
-                Save
+              <button suppressHydrationWarning type="button" className="btn-base btn-primary" disabled={saving} onClick={() => void saveSection("taxSettings", { priceInclusiveTax })}>
+                {saving ? "Saving..." : "Save"}
               </button>
             </div>
           </section>
@@ -661,8 +767,8 @@ export default function ShopifyMappingCartConfigurations() {
               </div>
             </div>
             <div className="actions">
-              <button suppressHydrationWarning type="button" className="btn-base btn-primary" onClick={saveReserveStock}>
-                Save
+              <button suppressHydrationWarning type="button" className="btn-base btn-primary" disabled={saving} onClick={saveReserveStock}>
+                {saving ? "Saving..." : "Save"}
               </button>
             </div>
           </section>

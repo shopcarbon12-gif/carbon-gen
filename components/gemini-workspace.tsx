@@ -7860,7 +7860,7 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
             right: var(--page-inline-gap);
           }
           :global(.content.menu-open) .status-bar {
-            left: var(--page-inline-gap);
+            left: 280px;
           }
           .chat-side-panel {
             display: none;
@@ -7881,7 +7881,7 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
             right: var(--page-inline-gap);
           }
           :global(.content.menu-open) .status-bar {
-            left: var(--page-inline-gap);
+            left: 280px;
           }
           .hero {
             grid-template-columns: 1fr;

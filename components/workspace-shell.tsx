@@ -820,6 +820,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
         className={`content ${drawerOpen ? "menu-open" : ""} ${
           showIntegrationPanel ? "" : "no-integration-panel"
         }`}
+        style={drawerOpen ? { paddingLeft: "calc(13px + 255px + 13px)" } : undefined}
       >
         {children}
       </main>
@@ -1149,10 +1150,17 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
             );
           min-height: 0;
           overflow: auto;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
           display: grid;
           align-content: start;
           gap: 8px;
           padding: 10px;
+        }
+        .chat-log::-webkit-scrollbar {
+          width: 0;
+          height: 0;
+          display: none;
         }
         .chat-msg {
           font-size: 0.86rem;
@@ -1272,6 +1280,13 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           font-family: "Inter", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
           pointer-events: auto;
           overflow-y: auto;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+        .integration-panel::-webkit-scrollbar {
+          width: 0;
+          height: 0;
+          display: none;
         }
         .integration-header {
           display: flex;
@@ -1458,9 +1473,16 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
             inset 0 1px 0 rgba(255, 255, 255, 0.1);
           padding: 28px 22px;
           overflow-y: auto;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
           display: flex;
           flex-direction: column;
           font-family: "Inter", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+        }
+        .carbon-panel::-webkit-scrollbar {
+          width: 0;
+          height: 0;
+          display: none;
         }
         .carbon-panel button {
           transition: none !important;
@@ -1558,9 +1580,16 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           flex-direction: column;
           gap: 10px;
           overflow-y: auto;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
           min-height: 0;
           padding-right: 2px;
           padding-top: 2px;
+        }
+        .carbon-submenu-list::-webkit-scrollbar {
+          width: 0;
+          height: 0;
+          display: none;
         }
         .carbon-submenu-item {
           background: transparent;
@@ -1837,9 +1866,9 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           padding-top: 58px;
           padding-left: var(--page-edge-gap);
           padding-right: var(--content-right-pad);
-          will-change: padding-right;
+          will-change: padding-left, padding-right;
           transition:
-            padding-left var(--chat-expand-duration) var(--chat-expand-ease),
+            padding-left 360ms cubic-bezier(0.22, 1, 0.36, 1),
             padding-right var(--chat-expand-duration) var(--chat-expand-ease);
         }
         .shell.chat-expanded .content {
@@ -1859,9 +1888,6 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
             var(--chat-expanded-width) + var(--page-edge-gap) + var(--content-api-gap)
           );
           padding-right: var(--content-right-pad);
-        }
-        .content.menu-open {
-          padding-left: var(--page-edge-gap);
         }
         :global(.content .page) {
           width: 100%;
@@ -1893,10 +1919,6 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           .shell.chat-expanded .content,
           .shell.chat-expanded .content.no-integration-panel {
             --content-right-pad: 0px;
-            padding-right: 0;
-          }
-          .content.menu-open {
-            padding-left: 0;
             padding-right: 0;
           }
         }
