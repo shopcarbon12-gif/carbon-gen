@@ -63,7 +63,9 @@ type InventoryResponse = {
     totalLoaded?: number;
     totalInLs?: number;
     truncated?: boolean;
+    nextCatalogCursor?: string | null;
   };
+  nextCatalogCursor?: string | null;
   page?: number;
   pageSize?: number;
   total?: number;
@@ -86,6 +88,8 @@ type LoadTaskConfig = {
   skipSuccess?: boolean;
   /** When true, does not touch busy state – caller controls UI blocking */
   background?: boolean;
+  /** Load more catalog chunk (merges with existing) */
+  catalogCursor?: string | null;
 };
 
 type ParentSortField =
@@ -173,7 +177,8 @@ function buildInventoryParams(
   nextPageSize: number,
   nextFilters: InventoryFilters,
   shopValue: string,
-  forceRefresh?: boolean
+  forceRefresh?: boolean,
+  catalogCursor?: string | null
 ) {
   const params = new URLSearchParams();
   params.set("page", String(nextPage));
@@ -184,6 +189,7 @@ function buildInventoryParams(
   }
   if (shopValue) params.set("shop", shopValue);
   if (forceRefresh) params.set("refresh", "1");
+  if (catalogCursor) params.set("catalogCursor", catalogCursor);
   return params;
 }
 
@@ -207,7 +213,8 @@ export default function ShopifyMappingInventory() {
     totalLoaded: number;
     totalInLs: number;
     truncated: boolean;
-  }>({ totalLoaded: 0, totalInLs: 0, truncated: false });
+    nextCatalogCursor: string | null;
+  }>({ totalLoaded: 0, totalInLs: 0, truncated: false, nextCatalogCursor: null });
   const [selectedParents, setSelectedParents] = useState<Record<string, boolean>>({});
   const [selectedVariants, setSelectedVariants] = useState<Record<string, boolean>>({});
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
@@ -255,7 +262,14 @@ export default function ShopifyMappingInventory() {
     abortRef.current?.abort();
     abortRef.current = new AbortController();
     const controller = abortRef.current;
-    const params = buildInventoryParams(nextPage, nextPageSize, nextFilters, shop, forceRefresh);
+    const params = buildInventoryParams(
+      nextPage,
+      nextPageSize,
+      nextFilters,
+      shop,
+      forceRefresh,
+      taskConfig?.catalogCursor
+    );
 
     const startProgressRaw = taskConfig?.startProgress;
     const startProgress =
@@ -302,10 +316,12 @@ export default function ShopifyMappingInventory() {
         totalOnShopify: Number(json.summary?.totalOnShopify || 0),
       });
       const lc = json.lightspeedCatalog;
+      const nextCursor = json.nextCatalogCursor ?? lc?.nextCatalogCursor ?? null;
       setLightspeedCatalog({
         totalLoaded: Number(lc?.totalLoaded ?? 0),
         totalInLs: Number(lc?.totalInLs ?? 0),
         truncated: Boolean(lc?.truncated),
+        nextCatalogCursor: nextCursor,
       });
       setSelectedParents({});
       setSelectedVariants({});
@@ -314,7 +330,7 @@ export default function ShopifyMappingInventory() {
       if (!taskConfig?.skipSuccess) {
         setTask({ label: successLabel, progress: successProgress, tone: "success" });
       }
-      return true;
+      return { ok: true as const, nextCatalogCursor: nextCursor };
     } catch (e: unknown) {
       if ((e as { name?: string })?.name === "AbortError") return false;
       const message = sanitizeUiErrorMessage(
@@ -859,6 +875,47 @@ export default function ShopifyMappingInventory() {
           <button className="btn-base btn-outline" onClick={() => void loadInventory(1, pageSize, appliedFilters, { startLabel: "Refreshing from Lightspeed...", startProgress: 24, successLabel: "Inventory refreshed" }, true)} disabled={busy} title="Force fresh fetch from Lightspeed (bypasses cache)">
             Refresh
           </button>
+          {lightspeedCatalog.truncated && lightspeedCatalog.nextCatalogCursor ? (
+            <>
+              <button
+                className="btn-base btn-outline"
+                onClick={() =>
+                  void loadInventory(1, pageSize, appliedFilters, {
+                    startLabel: "Loading more catalog...",
+                    startProgress: 40,
+                    successLabel: "Catalog updated",
+                    catalogCursor: lightspeedCatalog.nextCatalogCursor,
+                  })
+                }
+                disabled={busy}
+                title="Load next ~3.5k items"
+              >
+                Load more catalog
+              </button>
+              <button
+                className="btn-base btn-outline"
+                onClick={async () => {
+                  let cursor: string | null = lightspeedCatalog.nextCatalogCursor;
+                  while (cursor) {
+                    const result = await loadInventory(1, pageSize, appliedFilters, {
+                      startLabel: "Loading full catalog...",
+                      startProgress: 50,
+                      successLabel: "Catalog updated",
+                      catalogCursor: cursor,
+                      skipSuccess: true,
+                    });
+                    if (result === false) break;
+                    cursor = (typeof result === "object" && result?.ok ? result.nextCatalogCursor : null) ?? null;
+                  }
+                  setTask({ label: "Full catalog loaded", progress: 100, tone: "success" });
+                }}
+                disabled={busy}
+                title="Load all remaining items (may take a minute)"
+              >
+                Load all
+              </button>
+            </>
+          ) : null}
           {allCatalogSelected ? (
             <button className="btn-base btn-outline" onClick={clearSelectedCatalogProducts} disabled={busy}>
               Clear Catalog Selection ({allCatalogSelectedCount})
@@ -884,7 +941,7 @@ export default function ShopifyMappingInventory() {
               {" · "}
               LS: {lightspeedCatalog.totalLoaded.toLocaleString()} items
               {lightspeedCatalog.truncated ? (
-                <span className="truncated-badge" title="Catalog loaded in chunks (free plan). Some items may not be shown if catalog exceeds 80k items.">
+                <span className="truncated-badge" title="Click 'Load more catalog' to fetch remaining items (free plan, ~3.5k per load).">
                   (truncated)
                 </span>
               ) : null}

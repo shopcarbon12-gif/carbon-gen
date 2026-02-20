@@ -14,5 +14,11 @@
 		// Enable image optimization
 		// see https://opennext.js.org/cloudflare/howtos/image
 		"binding": "IMAGES"
-	}
+	},
+	"kv_namespaces": [
+		{
+			"binding": "INVENTORY_CATALOG_CACHE",
+			"id": "3c9685faca544bd2bf88e147413aac92"
+		}
+	]
 }

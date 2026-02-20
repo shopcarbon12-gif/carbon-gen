@@ -560,34 +560,60 @@ async function fetchLightspeedSnapshotChunk(
   };
 }
 
-/** Fetch full Lightspeed catalog via chunked requests (stays under 50 subrequests/request on Workers Free) */
-async function fetchLightspeedSnapshot(req: NextRequest, refresh: boolean): Promise<LightspeedSnapshotResult> {
-  const allRows: LightspeedCatalogRow[] = [];
-  let cursor: string | null = null;
-  let options = { categories: [] as string[], shops: [] as string[] };
-  const maxChunks = 20;
+type LightspeedSnapshotWithCursor = LightspeedSnapshotResult & { nextCatalogCursor?: string | null };
 
-  for (let i = 0; i < maxChunks; i++) {
-    const chunk = await fetchLightspeedSnapshotChunk(req, refresh, cursor);
-    allRows.push(...chunk.rows);
-    if (chunk.options.categories.length > 0) options.categories = chunk.options.categories;
-    if (chunk.options.shops.length > 0) options.shops = chunk.options.shops;
-    if (!chunk.nextCatalogCursor) {
+/** Fetch Lightspeed catalog - single request per call. Use catalogCursor + KV to accumulate for full catalog. */
+async function fetchLightspeedSnapshot(
+  req: NextRequest,
+  refresh: boolean,
+  catalogCursor: string | null,
+  shop: string
+): Promise<LightspeedSnapshotWithCursor> {
+  type KvBinding = { get: (k: string) => Promise<string | null>; put: (k: string, v: string, o?: { expirationTtl?: number }) => Promise<void> };
+  let kv: KvBinding | null = null;
+  try {
+    const { getCloudflareContext } = await import("@opennextjs/cloudflare");
+    const env = getCloudflareContext()?.env as { INVENTORY_CATALOG_CACHE?: KvBinding } | undefined;
+    kv = env?.INVENTORY_CATALOG_CACHE ?? null;
+  } catch {
+    /* KV not available in dev */
+  }
+
+  const kvKey = `inv-ls-${normalizeLower(shop) || "default"}`;
+
+  if (catalogCursor && kv && !refresh) {
+    const cached = await kv.get(kvKey);
+    if (cached) {
+      const prev = JSON.parse(cached) as { rows?: LightspeedCatalogRow[]; nextCursor?: string | null };
+      const prevRows = Array.isArray(prev?.rows) ? prev.rows : [];
+      const chunk = await fetchLightspeedSnapshotChunk(req, refresh, catalogCursor);
+      const allRows = [...prevRows, ...chunk.rows];
+      await kv.put(kvKey, JSON.stringify({ rows: allRows, nextCursor: chunk.nextCatalogCursor }), {
+        expirationTtl: 600,
+      });
       return {
         rows: allRows,
         totalInLs: allRows.length,
-        options,
-        truncated: false,
+        options: chunk.options,
+        truncated: Boolean(chunk.nextCatalogCursor),
+        nextCatalogCursor: chunk.nextCatalogCursor ?? null,
       };
     }
-    cursor = chunk.nextCatalogCursor;
   }
 
+  const chunk = await fetchLightspeedSnapshotChunk(req, refresh, catalogCursor);
+  const allRows = chunk.rows;
+  if (kv) {
+    await kv.put(kvKey, JSON.stringify({ rows: allRows, nextCursor: chunk.nextCatalogCursor }), {
+      expirationTtl: 600,
+    });
+  }
   return {
     rows: allRows,
     totalInLs: allRows.length,
-    options,
-    truncated: true,
+    options: chunk.options,
+    truncated: Boolean(chunk.nextCatalogCursor),
+    nextCatalogCursor: chunk.nextCatalogCursor ?? null,
   };
 }
 
@@ -991,9 +1017,12 @@ export async function GET(req: NextRequest) {
       normalizeShopDomain(normalizeText(process.env.SHOPIFY_SHOP_DOMAIN) || "") || "";
     const resolvedShop = requestedShop || configuredShop;
 
+    const catalogCursor = normalizeText(searchParams.get("catalogCursor")) || null;
+    const finalShopForLs = resolvedShop || configuredShop || "";
+
     const [availableShops, lightspeedSnapshot, stagedIdsResult, shopifyResult] = await Promise.all([
       getAvailableShops(),
-      fetchLightspeedSnapshot(req, refresh),
+      fetchLightspeedSnapshot(req, refresh, catalogCursor, finalShopForLs),
       listCartCatalogParentIds(resolvedShop || configuredShop),
       fetchShopifyVariantsCached(resolvedShop || configuredShop, refresh),
     ]);
@@ -1022,9 +1051,12 @@ export async function GET(req: NextRequest) {
       new Set(parents.map((row) => normalizeText(row.brand)).filter(Boolean))
     ).sort(compareText);
 
+    const nextCatalogCursor = (lightspeedSnapshot as LightspeedSnapshotWithCursor).nextCatalogCursor ?? null;
+
     return NextResponse.json({
       ok: true,
       shop: finalShop,
+      nextCatalogCursor: nextCatalogCursor || undefined,
       shops: availableShops,
       source,
       warning: [warning, stagedIdsResult.warning].filter(Boolean).join(" ").trim(),
@@ -1057,6 +1089,7 @@ export async function GET(req: NextRequest) {
         totalLoaded: lightspeedSnapshot.rows.length,
         totalInLs: lightspeedSnapshot.totalInLs,
         truncated: Boolean(lightspeedSnapshot.truncated),
+        nextCatalogCursor: (lightspeedSnapshot as LightspeedSnapshotWithCursor).nextCatalogCursor ?? null,
       },
       matchStats: {
         shopifyVariantsScanned: shopifyVariants.length,

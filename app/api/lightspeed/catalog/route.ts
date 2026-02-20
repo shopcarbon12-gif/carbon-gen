@@ -15,7 +15,7 @@ const LS_V3_PAGE_LIMIT = 100;
 // Cap to stay under Cloudflare Workers free-plan subrequest limit (50/request).
 // Set LS_MAX_CATALOG_PAGES in Cloudflare env (e.g. 100) + limits.subrequests in wrangler when on Paid for full catalog.
 const LS_V3_MAX_PAGES = Math.min(
-  Number(process.env.LS_MAX_CATALOG_PAGES) || 42,
+  Number(process.env.LS_MAX_CATALOG_PAGES) || 30,
   250
 );
 const LS_MIN_REQUEST_INTERVAL_MS = 400;
@@ -821,7 +821,7 @@ async function fetchRawCatalogItemsV3(accessToken: string): Promise<{ rawItems: 
   return rawItems.length > 0 ? { rawItems, nextCursor: lastNext } : null;
 }
 
-const CATALOG_CHUNK_PAGES = 40; // Stay under 50 subrequests with token+shops+categories
+const CATALOG_CHUNK_PAGES = 25; // Stay under 50 subrequests with token+shops+categories
 
 /**
  * Fetch a chunk of catalog starting from a cursor URL. Used for chunked loading on Workers Free.
