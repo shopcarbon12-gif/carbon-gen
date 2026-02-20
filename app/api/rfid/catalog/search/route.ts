@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import type { CatalogItem } from "@/lib/rfid";
+import { ensureLightspeedEnvLoaded } from "@/lib/loadLightspeedEnv";
 
 export const runtime = "nodejs";
 
@@ -341,6 +342,7 @@ async function searchLightspeedCatalog(query: string, limit = 20) {
 }
 
 export async function GET(req: NextRequest) {
+  ensureLightspeedEnvLoaded();
   try {
     const { searchParams } = new URL(req.url);
     const query = String(searchParams.get("q") || "").trim();

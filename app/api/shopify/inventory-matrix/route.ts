@@ -47,6 +47,7 @@ type LightspeedCatalogResponse = {
   ok?: boolean;
   error?: string;
   rows?: LightspeedCatalogRow[];
+  total?: number;
   options?: CatalogOptions;
   truncated?: boolean;
 };
@@ -394,10 +395,13 @@ function buildShopifyVariantLookups(variants: ShopifyVariant[]) {
   return { bySku, byBarcode };
 }
 
+type MatchType = "exact_sku" | "fuzzy_sku" | "barcode" | null;
+type MatchResult = { variant: ShopifyVariant | null; matchType: MatchType };
+
 function pickShopifyVariantForRow(
   row: LightspeedCatalogRow,
   lookups: ReturnType<typeof buildShopifyVariantLookups>
-) {
+): MatchResult {
   const skuCandidates = [
     normalizeText(row.customSku),
     normalizeText(row.systemSku),
@@ -409,12 +413,21 @@ function pickShopifyVariantForRow(
     if (!key) continue;
 
     const exact = lookups.bySku.get(key) || [];
-    if (exact.length > 0) return exact[0];
+    if (exact.length > 0) return { variant: exact[0], matchType: "exact_sku" };
 
-    const fallback = [...lookups.bySku.entries()].find(([entryKey]) =>
-      skuMatches(entryKey, key)
-    );
-    if (fallback?.[1]?.[0]) return fallback[1][0];
+    if (key.length >= 4) {
+      const strippedKey = stripLeadingC(key);
+      if (strippedKey !== key && strippedKey.length >= 3) {
+        const fallback = lookups.bySku.get(strippedKey);
+        if (fallback && fallback.length > 0) return { variant: fallback[0], matchType: "fuzzy_sku" };
+
+        const reverseFallback = [...lookups.bySku.entries()].find(([entryKey]) => {
+          const strippedEntry = stripLeadingC(entryKey);
+          return strippedEntry === strippedKey || strippedEntry === key;
+        });
+        if (reverseFallback?.[1]?.[0]) return { variant: reverseFallback[1][0], matchType: "fuzzy_sku" };
+      }
+    }
   }
 
   const barcodeCandidates = [normalizeText(row.upc), normalizeText(row.ean)].filter(Boolean);
@@ -422,10 +435,10 @@ function pickShopifyVariantForRow(
     const key = normalizeSkuKey(candidate);
     if (!key) continue;
     const hits = lookups.byBarcode.get(key) || [];
-    if (hits.length > 0) return hits[0];
+    if (hits.length > 0) return { variant: hits[0], matchType: "barcode" };
   }
 
-  return null;
+  return { variant: null, matchType: null };
 }
 
 async function getTokenCandidates(shop: string) {
@@ -499,6 +512,8 @@ async function fetchLightspeedSnapshot(req: NextRequest, refresh: boolean) {
   url.searchParams.set("pageSize", "20000");
   url.searchParams.set("sortField", "customSku");
   url.searchParams.set("sortDir", "asc");
+  url.searchParams.set("shops", "all");
+  url.searchParams.set("includeNoStock", "1");
   if (refresh) {
     url.searchParams.set("refresh", "1");
   }
@@ -509,8 +524,15 @@ async function fetchLightspeedSnapshot(req: NextRequest, refresh: boolean) {
     throw new Error(normalizeText(json?.error) || "Unable to load Lightspeed catalog.");
   }
 
+  const rows = Array.isArray(json.rows) ? json.rows : [];
+  const totalInLs =
+    typeof json.total === "number" && Number.isFinite(json.total)
+      ? json.total
+      : rows.length;
+
   return {
-    rows: Array.isArray(json.rows) ? json.rows : [],
+    rows,
+    totalInLs,
     options: {
       categories: Array.isArray(json.options?.categories) ? json.options?.categories : [],
       shops: Array.isArray(json.options?.shops) ? json.options?.shops : [],
@@ -640,6 +662,13 @@ async function fetchShopifyVariants(shop: string, token: string) {
   };
 }
 
+type MatchStats = {
+  exactSku: number;
+  fuzzySku: number;
+  barcode: number;
+  unmatched: number;
+};
+
 function buildMatrixRows(
   lightspeedRows: LightspeedCatalogRow[],
   lookups: ReturnType<typeof buildShopifyVariantLookups>,
@@ -649,6 +678,7 @@ function buildMatrixRows(
   const knownLocationsLower = new Set(
     knownLocations.map((location) => normalizeLower(location)).filter(Boolean)
   );
+  const matchStats: MatchStats = { exactSku: 0, fuzzySku: 0, barcode: 0, unmatched: 0 };
   const grouped = new Map<
     string,
     {
@@ -672,7 +702,11 @@ function buildMatrixRows(
     const parentKey = resolveParentGroupKey(row);
     if (!parentKey) continue;
 
-    const matchedVariant = pickShopifyVariantForRow(row, lookups);
+    const { variant: matchedVariant, matchType } = pickShopifyVariantForRow(row, lookups);
+    if (matchType === "exact_sku") matchStats.exactSku++;
+    else if (matchType === "fuzzy_sku") matchStats.fuzzySku++;
+    else if (matchType === "barcode") matchStats.barcode++;
+    else matchStats.unmatched++;
     const variantSku = resolveVariantSku(row);
     const variantUpc = resolveVariantUpc(row);
     const normalizedLocationRows = normalizeLocationRows(row.locations || {}, knownLocationsLower);
@@ -773,7 +807,7 @@ function buildMatrixRows(
     });
   }
 
-  return parents.sort((a, b) => compareText(a.sku, b.sku));
+  return { parents: parents.sort((a, b) => compareText(a.sku, b.sku)), matchStats };
 }
 
 function parentMatchesFilters(parent: MatrixParentRow, filters: FilterState) {
@@ -918,7 +952,7 @@ export async function GET(req: NextRequest) {
     const finalShop = resolvedShop || fallbackShop;
     const { variants: shopifyVariants, source, truncated: shopifyTruncated, warning } = shopifyResult;
     const lookups = buildShopifyVariantLookups(shopifyVariants);
-    const parents = buildMatrixRows(
+    const { parents, matchStats } = buildMatrixRows(
       lightspeedSnapshot.rows,
       lookups,
       stagedIdsResult.data,
@@ -968,6 +1002,19 @@ export async function GET(req: NextRequest) {
         totalItems,
         totalInCart,
         totalOnShopify,
+      },
+      lightspeedCatalog: {
+        totalLoaded: lightspeedSnapshot.rows.length,
+        totalInLs: lightspeedSnapshot.totalInLs,
+        truncated: Boolean(lightspeedSnapshot.truncated),
+      },
+      matchStats: {
+        shopifyVariantsScanned: shopifyVariants.length,
+        lightspeedRowsProcessed: lightspeedSnapshot.rows.length,
+        exactSku: matchStats.exactSku,
+        fuzzySku: matchStats.fuzzySku,
+        barcode: matchStats.barcode,
+        unmatched: matchStats.unmatched,
       },
       page: paged.page,
       pageSize,

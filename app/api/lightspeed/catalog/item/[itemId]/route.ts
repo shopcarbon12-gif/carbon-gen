@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { ensureLightspeedEnvLoaded } from "@/lib/loadLightspeedEnv";
 import {
   getShopifyAdminToken,
   normalizeShopDomain,
@@ -586,6 +587,7 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ itemId: string }> }
 ) {
+  ensureLightspeedEnvLoaded();
   try {
     const { itemId } = await params;
     const lookup = normalizeText(itemId);

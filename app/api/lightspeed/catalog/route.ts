@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { ensureLightspeedEnvLoaded } from "@/lib/loadLightspeedEnv";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -875,6 +876,7 @@ function sortRows(
 }
 
 export async function GET(req: NextRequest) {
+  ensureLightspeedEnvLoaded();
   try {
     const { searchParams } = new URL(req.url);
     const query = normalizeText(searchParams.get("q"));
@@ -895,6 +897,7 @@ export async function GET(req: NextRequest) {
       ? requestedSortDir
       : legacySort.direction;
 
+    const includeNoStock = toBoolean(searchParams.get("includeNoStock"));
     const requestedPage = Number.parseInt(normalizeText(searchParams.get("page")), 10);
     const requestedPageSize = Number.parseInt(normalizeText(searchParams.get("pageSize")), 10);
     const pageSize = allRowsMode
@@ -1008,7 +1011,7 @@ export async function GET(req: NextRequest) {
           return false;
         }
 
-        if (effectiveShopFilters.length > 0) {
+        if (!includeNoStock && effectiveShopFilters.length > 0) {
           const hasSelectedQty = effectiveShopFilters.some(
             (shopName) => getLocationQty(row.locations, shopName) !== null
           );

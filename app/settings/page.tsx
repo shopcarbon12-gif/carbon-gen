@@ -191,7 +191,10 @@ export default function SettingsPage() {
     if (manual) setLightspeedBusy(true);
     setLightspeedLoading(true);
     try {
-      const resp = await fetch("/api/lightspeed/status", { cache: "no-store" });
+      const resp = await fetch(
+        `/api/lightspeed/status${manual ? "?refresh=1" : ""}`,
+        { cache: "no-store" }
+      );
       const json = (await resp.json().catch(() => ({}))) as LightspeedStatusResponse;
       const connectedFlag = Boolean(json?.connected);
       setLightspeedConnected(connectedFlag);

@@ -6,6 +6,7 @@ import {
   validateRfidSettings,
 } from "@/lib/rfid";
 import { getRfidSettings, setRfidSettings } from "@/lib/rfidStore";
+import { ensureLightspeedEnvLoaded } from "@/lib/loadLightspeedEnv";
 
 export const runtime = "nodejs";
 
@@ -21,6 +22,7 @@ function getLightspeedStatus() {
 }
 
 export async function GET() {
+  ensureLightspeedEnvLoaded();
   const settings = getRfidSettings();
   return NextResponse.json({
     settings,

@@ -59,6 +59,11 @@ type InventoryResponse = {
     totalInCart?: number;
     totalOnShopify?: number;
   };
+  lightspeedCatalog?: {
+    totalLoaded?: number;
+    totalInLs?: number;
+    truncated?: boolean;
+  };
   page?: number;
   pageSize?: number;
   total?: number;
@@ -191,6 +196,11 @@ export default function ShopifyMappingInventory() {
     totalInCart: 0,
     totalOnShopify: 0,
   });
+  const [lightspeedCatalog, setLightspeedCatalog] = useState<{
+    totalLoaded: number;
+    totalInLs: number;
+    truncated: boolean;
+  }>({ totalLoaded: 0, totalInLs: 0, truncated: false });
   const [selectedParents, setSelectedParents] = useState<Record<string, boolean>>({});
   const [selectedVariants, setSelectedVariants] = useState<Record<string, boolean>>({});
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
@@ -273,6 +283,12 @@ export default function ShopifyMappingInventory() {
         totalItems: Number(json.summary?.totalItems || 0),
         totalInCart: Number(json.summary?.totalInCart || 0),
         totalOnShopify: Number(json.summary?.totalOnShopify || 0),
+      });
+      const lc = json.lightspeedCatalog;
+      setLightspeedCatalog({
+        totalLoaded: Number(lc?.totalLoaded ?? 0),
+        totalInLs: Number(lc?.totalInLs ?? 0),
+        truncated: Boolean(lc?.truncated),
       });
       setSelectedParents({});
       setSelectedVariants({});
@@ -793,6 +809,17 @@ export default function ShopifyMappingInventory() {
         </div>
         <p className="mini">
           Products {summary.totalProducts} | Items {summary.totalItems} | In Cart {summary.totalInCart} | On Shopify {summary.totalOnShopify}
+          {lightspeedCatalog.totalLoaded > 0 ? (
+            <span className="ls-catalog-info">
+              {" · "}
+              LS: {lightspeedCatalog.totalLoaded.toLocaleString()} items
+              {lightspeedCatalog.truncated ? (
+                <span className="truncated-badge" title="Lightspeed catalog capped at 20,000 rows. Some items may not be shown.">
+                  (truncated)
+                </span>
+              ) : null}
+            </span>
+          ) : null}
         </p>
       </section>
 
@@ -1290,6 +1317,19 @@ export default function ShopifyMappingInventory() {
           margin: 0;
           font-size: 0.9rem;
           color: rgba(226, 232, 240, 0.9);
+          font-weight: 600;
+        }
+        .ls-catalog-info {
+          color: rgba(226, 232, 240, 0.75);
+          font-weight: 500;
+        }
+        .truncated-badge {
+          margin-left: 4px;
+          padding: 2px 6px;
+          border-radius: 6px;
+          background: rgba(245, 158, 11, 0.25);
+          color: #fde68a;
+          font-size: 0.8rem;
           font-weight: 600;
         }
         .status, .warn, .error {

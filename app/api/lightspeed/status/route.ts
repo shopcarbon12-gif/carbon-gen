@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ensureLightspeedEnvLoaded } from "@/lib/loadLightspeedEnv";
 
 type ProbeResult = {
   attempted: boolean;
@@ -155,9 +156,12 @@ async function probeLightspeedToken() {
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(req: Request) {
+  ensureLightspeedEnvLoaded();
   const now = Date.now();
-  if (statusCache && statusCache.expiresAt > now) {
+  const url = new URL(req.url);
+  const forceRefresh = /^(1|true|yes)$/i.test(String(url.searchParams.get("refresh") || "").trim());
+  if (!forceRefresh && statusCache && statusCache.expiresAt > now) {
     return NextResponse.json(statusCache.payload);
   }
 

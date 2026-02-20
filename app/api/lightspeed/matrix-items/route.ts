@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ensureLightspeedEnvLoaded } from "@/lib/loadLightspeedEnv";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -509,6 +510,7 @@ async function findExistingMatrixByDescription(accessToken: string, matrixDescri
 }
 
 export async function POST(req: Request) {
+  ensureLightspeedEnvLoaded();
   try {
     const body = (await req.json().catch(() => ({}))) as {
       rows?: RawRow[];
