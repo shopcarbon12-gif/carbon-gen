@@ -891,19 +891,8 @@ export async function POST(req: NextRequest) {
           timeoutMs: imageTimeoutMs,
         });
         if (qa.decisive && !qa.pass) {
-          const panelName =
-            normalizedPanelQa.panelLabel ||
-            (normalizedPanelQa.panelNumber
-              ? `Panel ${normalizedPanelQa.panelNumber}`
-              : "Panel");
-          return NextResponse.json(
-            {
-              error: `${panelName} blocked: locked model/item/pose check failed.`,
-              details: qa.reasons.join(" | "),
-              openaiRaw: qa.raw,
-            },
-            { status: 422 }
-          );
+          qaWarning = "QA check flagged: " + qa.reasons.join(" | ");
+          console.warn("Panel QA flagged (returning image with warning):", qa.raw);
         }
         if (!qa.decisive) {
           qaWarning = "Compliance check was inconclusive; generation was allowed.";

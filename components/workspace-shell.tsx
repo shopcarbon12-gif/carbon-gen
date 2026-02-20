@@ -54,8 +54,12 @@ const ACTIVE_ITEM_STYLE: CSSProperties = {
   opacity: 1,
 };
 
+const picturesGenSubItems: NavItem[] = [
+  { href: "/studio/images", label: "OpenAI Generator" },
+  { href: "/studio/gemini-generator", label: "Gemini Generator" },
+];
+
 const navItems: NavItem[] = [
-  { href: "/studio/images", label: "Image Generator" },
   { href: "/studio/seo", label: "SEO Manager" },
   { href: "/studio/rfid-price-tag", label: "RFID Price Tag" },
   { href: "/studio/lightspeed-catalog", label: "Lightspeed Catalog" },
@@ -81,6 +85,7 @@ const shopifyMappingConfigurationItems: NavItem[] = [
 ];
 
 const titleItems: NavItem[] = [
+  ...picturesGenSubItems,
   ...navItems,
   ...shopifyMappingSubmenuItems.filter((item) => item.href !== SHOPIFY_MAPPING_INVENTORY_ROOT),
   ...shopifyMappingConfigurationItems,
@@ -119,6 +124,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
   const showChatPanel = true;
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPinned, setMenuPinned] = useState(false);
+  const [picturesGenOpen, setPicturesGenOpen] = useState(false);
   const [shopifySubmenuOpen, setShopifySubmenuOpen] = useState(false);
   const [shopifyConfigSubmenuOpen, setShopifyConfigSubmenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -181,6 +187,11 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     setMenuOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    const onPicturesPage = picturesGenSubItems.some((item) => isActive(pathname, item.href));
+    if (onPicturesPage) setPicturesGenOpen(true);
   }, [pathname]);
 
   useEffect(() => {
@@ -402,6 +413,46 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
 
           <div className="carbon-main">
             <div className="carbon-menu" aria-hidden={shopifySubmenuOpen ? "true" : undefined}>
+              {/* Pictures Generator collapsible group */}
+              <button
+                suppressHydrationWarning
+                type="button"
+                onClick={() => setPicturesGenOpen((prev) => !prev)}
+                aria-expanded={picturesGenOpen}
+                className={`carbon-item pictures-gen-parent ${picturesGenSubItems.some((s) => isActive(pathname, s.href)) ? "active" : ""}`}
+                style={picturesGenSubItems.some((s) => isActive(pathname, s.href)) && !picturesGenOpen ? ACTIVE_ITEM_STYLE : undefined}
+              >
+                <span>Pictures Generator</span>
+                <span className={`pictures-gen-caret ${picturesGenOpen ? "open" : ""}`}>
+                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+                    <path d="M8 10L12 14L16 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </span>
+              </button>
+              <div className={`pictures-gen-children ${picturesGenOpen ? "open" : ""}`}>
+                {picturesGenSubItems.map((sub) => {
+                  const subActive = isActive(pathname, sub.href);
+                  return (
+                    <button
+                      suppressHydrationWarning
+                      key={sub.href}
+                      type="button"
+                      onClick={() => {
+                        setShopifySubmenuOpen(false);
+                        setShopifyConfigSubmenuOpen(false);
+                        navigateTo(sub.href);
+                      }}
+                      aria-current={subActive ? "page" : undefined}
+                      data-active={subActive ? "true" : "false"}
+                      className={`carbon-item pictures-gen-child ${subActive ? "active" : ""}`}
+                      style={subActive ? ACTIVE_ITEM_STYLE : undefined}
+                    >
+                      {sub.label}
+                    </button>
+                  );
+                })}
+              </div>
+
               {navItems.map((item) => {
                 const active = isActive(pathname, item.href);
                 return (
@@ -1443,6 +1494,13 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           min-height: 0;
           overflow-y: auto;
           padding-right: 2px;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+        .carbon-menu::-webkit-scrollbar {
+          width: 0;
+          height: 0;
+          display: none;
         }
         .carbon-main {
           position: relative;
@@ -1641,6 +1699,45 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
         }
         .carbon-panel-wrap.open .carbon-item:nth-child(9) {
           transition-delay: 195ms;
+        }
+        .carbon-panel-wrap.open .carbon-item:nth-child(10) {
+          transition-delay: 215ms;
+        }
+        .pictures-gen-parent {
+          justify-content: space-between;
+        }
+        .pictures-gen-caret {
+          width: 18px;
+          height: 18px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          flex: 0 0 auto;
+          color: rgba(255, 255, 255, 0.8);
+          transition: transform 180ms ease;
+        }
+        .pictures-gen-caret svg {
+          width: 16px;
+          height: 16px;
+          display: block;
+        }
+        .pictures-gen-caret.open {
+          transform: rotate(180deg);
+        }
+        .pictures-gen-children {
+          display: none;
+          flex-direction: column;
+          gap: 4px;
+          padding-left: 16px;
+          margin-top: -10px;
+        }
+        .pictures-gen-children.open {
+          display: flex;
+        }
+        .pictures-gen-child {
+          font-size: 13px !important;
+          padding: 10px 15px !important;
+          color: rgba(200, 200, 200, 0.9);
         }
         .carbon-item:hover,
         .carbon-item:focus-visible {
