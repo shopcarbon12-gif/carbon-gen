@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/lightspeed-catalog-warm",
-      "schedule": "*/30 * * * *"
+      "schedule": "0 3 * * *"
     }
   ]
 }

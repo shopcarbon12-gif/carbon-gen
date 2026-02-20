@@ -1,7 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  allowedDevOrigins: ["carbon-gen.shopcarbon.com", "carbon-gen.shopcarbon.co"],
+  allowedDevOrigins: [
+      "carbon-gen.shopcarbon.com",
+      "carbon-gen.shopcarbon.co",
+      "carbon-gen.shopcarbon12.workers.dev",
+      "carbon-gen-iota.vercel.app",
+    ],
   async headers() {
     const isProd = process.env.NODE_ENV === "production";
     const csp = [

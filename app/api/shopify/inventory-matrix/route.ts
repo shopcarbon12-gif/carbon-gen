@@ -13,8 +13,9 @@ export const dynamic = "force-dynamic";
 
 const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
 const SHOPIFY_PRODUCTS_PER_PAGE = 100;
-// Cap to stay under Cloudflare Workers free-plan subrequest limit (50)
-const MAX_SHOPIFY_SCAN_PAGES = 12;
+// Vercel has no subrequest/CPU limits; Cloudflare Free: 50 subrequests, 10ms CPU
+const IS_VERCEL = Boolean(process.env.VERCEL);
+const MAX_SHOPIFY_SCAN_PAGES = IS_VERCEL ? 25 : 5;
 const SHOPIFY_VARIANTS_CACHE_MS = 5 * 60 * 1000;
 const ALLOWED_PAGE_SIZES = [50, 100, 200, 300, 500] as const;
 
@@ -562,23 +563,49 @@ async function fetchLightspeedSnapshotChunk(
 
 type LightspeedSnapshotWithCursor = LightspeedSnapshotResult & { nextCatalogCursor?: string | null };
 
-/** Fetch Lightspeed catalog - single request per call. Use catalogCursor + KV to accumulate for full catalog. */
+type CacheAdapter = { get: (k: string) => Promise<string | null>; put: (k: string, v: string, o?: { expirationTtl?: number }) => Promise<void> };
+
+let _catalogCache: CacheAdapter | null | undefined = undefined;
+function getCatalogCache(): CacheAdapter | null {
+  if (_catalogCache !== undefined) return _catalogCache;
+  try {
+    const { getCloudflareContext } = require("@opennextjs/cloudflare");
+    const env = getCloudflareContext()?.env as { INVENTORY_CATALOG_CACHE?: CacheAdapter } | undefined;
+    if (env?.INVENTORY_CATALOG_CACHE) {
+      _catalogCache = env.INVENTORY_CATALOG_CACHE;
+      return _catalogCache;
+    }
+  } catch {
+    /* Cloudflare KV not available (e.g. Vercel) */
+  }
+  try {
+    const url = process.env.UPSTASH_REDIS_REST_URL;
+    const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+    if (url && token) {
+      const { Redis } = require("@upstash/redis");
+      const redis = new Redis({ url, token });
+      _catalogCache = {
+        get: (k: string) => redis.get(k),
+        put: (k: string, v: string, o?: { expirationTtl?: number }) =>
+          redis.set(k, v, { ex: o?.expirationTtl ?? 600 }),
+      };
+      return _catalogCache;
+    }
+  } catch {
+    /* Upstash not configured */
+  }
+  _catalogCache = null;
+  return null;
+}
+
+/** Fetch Lightspeed catalog - single request per call. Use catalogCursor + cache (KV or Redis) to accumulate. */
 async function fetchLightspeedSnapshot(
   req: NextRequest,
   refresh: boolean,
   catalogCursor: string | null,
   shop: string
 ): Promise<LightspeedSnapshotWithCursor> {
-  type KvBinding = { get: (k: string) => Promise<string | null>; put: (k: string, v: string, o?: { expirationTtl?: number }) => Promise<void> };
-  let kv: KvBinding | null = null;
-  try {
-    const { getCloudflareContext } = await import("@opennextjs/cloudflare");
-    const env = getCloudflareContext()?.env as { INVENTORY_CATALOG_CACHE?: KvBinding } | undefined;
-    kv = env?.INVENTORY_CATALOG_CACHE ?? null;
-  } catch {
-    /* KV not available in dev */
-  }
-
+  const kv = getCatalogCache();
   const kvKey = `inv-ls-${normalizeLower(shop) || "default"}`;
 
   if (catalogCursor && kv && !refresh) {
