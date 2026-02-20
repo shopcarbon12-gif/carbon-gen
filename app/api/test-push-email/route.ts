@@ -16,7 +16,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const toParam = req.nextUrl.searchParams.get("to")?.trim();
   const to =
+    toParam ||
     (process.env.PUSH_NOTIFICATION_EMAIL || "").trim() ||
     "elior@carbonjeanscompany.com";
 

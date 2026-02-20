@@ -24,6 +24,7 @@ import {
 } from "@/lib/shopifySyncSessionUndo";
 import { logStageAdd } from "@/lib/shopifyCartSyncLog";
 import { sendPushNotificationEmail } from "@/lib/email";
+import { createShopifyProductFromCart } from "@/lib/shopifyCartProductCreate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -755,6 +756,9 @@ export async function POST(req: NextRequest) {
       const idSet = new Set(parentIds.map((id) => normalizeLower(id)));
       const toPush = current.data.filter((p) => idSet.has(normalizeLower(p.id)));
 
+      let variantsSkippedNoCartId = 0;
+      let variantsSkippedNoInvItem = 0;
+
       const token =
         (await getTokenForShop(shop)) ||
         getShopifyAdminToken(shop);
@@ -812,6 +816,46 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: err }, { status: 400 });
       }
 
+      let productsCreated = 0;
+      const shopKey = normalizeShopDomain(shop) || shop;
+      try {
+        const supabase = getSupabaseAdmin();
+        const { data: configRow } = await supabase
+          .from("shopify_cart_config")
+          .select("config")
+          .eq("shop", shopKey)
+          .maybeSingle();
+        const config = (configRow?.config as Record<string, unknown>) || {};
+        const cartConfig = {
+          newProductMapping: (config.newProductMapping as Record<string, unknown>) || {},
+          newProductRules: (config.newProductRules as Record<string, unknown>) || {},
+        };
+
+        for (const parent of toPush) {
+          const hasUnlinked = parent.variants.some((v) => !normalizeText(v.cartId));
+          if (!hasUnlinked) continue;
+
+          const result = await createShopifyProductFromCart(shop, token, parent, cartConfig, locationId);
+          if (!result.ok || !result.productGid || !result.variantGids?.length) {
+            console.warn("[cart-inventory] Create product failed:", parent.sku, result.error);
+            continue;
+          }
+
+          const updatedVariants = parent.variants.map((v, i) => ({
+            ...v,
+            cartId: result.variantGids?.[i] || v.cartId,
+          }));
+          const updatedParent: StagingParent = { ...parent, variants: updatedVariants };
+          await upsertCartCatalogParents(shop, [updatedParent]);
+          for (let i = 0; i < parent.variants.length; i++) {
+            parent.variants[i].cartId = result.variantGids?.[i] || parent.variants[i].cartId;
+          }
+          productsCreated += 1;
+        }
+      } catch (createErr) {
+        console.warn("[cart-inventory] Product creation phase:", (createErr as Error)?.message);
+      }
+
       const quantities: Array<{
         inventoryItemId: string;
         locationId: string;
@@ -822,7 +866,10 @@ export async function POST(req: NextRequest) {
       for (const parent of toPush) {
         for (const v of parent.variants) {
           const cartId = normalizeText(v.cartId);
-          if (!cartId) continue;
+          if (!cartId) {
+            variantsSkippedNoCartId += 1;
+            continue;
+          }
           const variantGid = cartId.includes("~")
             ? `gid://shopify/ProductVariant/${cartId.split("~")[1] || cartId}`
             : cartId.startsWith("gid://")
@@ -842,7 +889,10 @@ export async function POST(req: NextRequest) {
             varRes.ok && varRes.data?.productVariant?.inventoryItem?.id
               ? varRes.data.productVariant.inventoryItem.id
               : "";
-          if (!invItemId) continue;
+          if (!invItemId) {
+            variantsSkippedNoInvItem += 1;
+            continue;
+          }
 
           const qty =
             typeof v.stock === "number" && Number.isFinite(v.stock)
@@ -946,24 +996,35 @@ export async function POST(req: NextRequest) {
       }
 
       let archivedNotInCart = 0;
-      let shopifyCursor: string | null = null;
-      const PRODUCTS_PER_PAGE = 50;
-      const MAX_ARCHIVE_PAGES = 100;
-      for (let page = 0; page < MAX_ARCHIVE_PAGES; page++) {
-        const prodRes: ShopifyGraphqlResult<ProductsPageResponse> =
-          await runShopifyGraphql<ProductsPageResponse>({
-          shop,
-          token,
-          query: `query($first: Int!, $after: String) {
-            products(first: $first, after: $after, query: "status:active", sortKey: UPDATED_AT, reverse: true) {
-              edges { node { id variants(first: 250) { nodes { id } } } }
-              pageInfo { hasNextPage endCursor }
-            }
-          }`,
-          variables: { first: PRODUCTS_PER_PAGE, after: shopifyCursor },
-          apiVersion: API_VERSION,
-        });
-        if (!prodRes.ok || !prodRes.data?.products?.edges) break;
+      const archiveQueries = ["status:active", "status:draft", "status:unlisted"] as const;
+      for (const statusQuery of archiveQueries) {
+        let shopifyCursor: string | null = null;
+        const PRODUCTS_PER_PAGE = 50;
+        const MAX_ARCHIVE_PAGES = 100;
+        for (let page = 0; page < MAX_ARCHIVE_PAGES; page++) {
+          let prodRes: ShopifyGraphqlResult<ProductsPageResponse>;
+          try {
+            prodRes = await runShopifyGraphql<ProductsPageResponse>({
+              shop,
+              token,
+              query: `query($first: Int!, $after: String, $query: String!) {
+                products(first: $first, after: $after, query: $query, sortKey: UPDATED_AT, reverse: true) {
+                  edges { node { id variants(first: 250) { nodes { id } } } }
+                  pageInfo { hasNextPage endCursor }
+                }
+              }`,
+              variables: {
+                first: PRODUCTS_PER_PAGE,
+                after: shopifyCursor,
+                query: statusQuery,
+              },
+              apiVersion: API_VERSION,
+            });
+          } catch (archiveErr) {
+            console.warn("[cart-inventory] Archive query failed for", statusQuery, (archiveErr as Error)?.message);
+            break;
+          }
+          if (!prodRes.ok || !prodRes.data?.products?.edges) break;
         const edges = prodRes.data.products.edges;
         const pageInfo = prodRes.data.products.pageInfo;
         for (const edge of edges) {
@@ -996,6 +1057,7 @@ export async function POST(req: NextRequest) {
         if (!pageInfo?.hasNextPage) break;
         shopifyCursor = pageInfo.endCursor || null;
         if (!shopifyCursor) break;
+      }
       }
       removedFromShopify += archivedNotInCart;
 
@@ -1034,10 +1096,26 @@ export async function POST(req: NextRequest) {
         action,
         shop,
         pushed,
+        productsCreated,
         totalVariants: quantities.length,
         markedProcessed: toMarkProcessed.length,
         removedFromShopify,
         archivedNotInCart,
+        debug:
+          pushed === 0 && (variantsSkippedNoCartId > 0 || variantsSkippedNoInvItem > 0)
+            ? {
+                parentsRequested: parentIds.length,
+                parentsMatched: toPush.length,
+                variantsSkippedNoCartId,
+                variantsSkippedNoInvItem,
+                hint:
+                  variantsSkippedNoCartId > 0
+                    ? "Variants are not linked to Shopify. Run a queue sync from Lightspeed or pull from Shopify catalog first."
+                    : variantsSkippedNoInvItem > 0
+                      ? "Variants could not be found in Shopify (deleted or ID mismatch)."
+                      : undefined,
+              }
+            : undefined,
       });
     }
 

@@ -505,7 +505,15 @@ export default function ShopifyMappingCartsInventory() {
             "elior@carbonjeanscompany.com",
         }),
       });
-      const json = (await resp.json().catch(() => ({}))) as { error?: string; message?: string; pushed?: number; removedFromShopify?: number; archivedNotInCart?: number };
+      const json = (await resp.json().catch(() => ({}))) as {
+        error?: string;
+        message?: string;
+        pushed?: number;
+        productsCreated?: number;
+        removedFromShopify?: number;
+        archivedNotInCart?: number;
+        debug?: { hint?: string; variantsSkippedNoCartId?: number; variantsSkippedNoInvItem?: number };
+      };
       const apiError = sanitizeUiErrorMessage(json.error, "");
       const itemCount = selectedParentIds.length;
       const fallback =
@@ -532,9 +540,12 @@ export default function ShopifyMappingCartsInventory() {
       }
       const parts: string[] = [];
       if (hasPush && json.pushed != null) parts.push(`Updated ${json.pushed} variant(s)`);
+      if (json.productsCreated != null && json.productsCreated > 0) parts.push(`Created ${json.productsCreated} product(s)`);
       if (hasRemove && json.removedFromShopify != null) parts.push(`Archived ${json.removedFromShopify} product(s) from catalog`);
       if (!hasRemove && json.archivedNotInCart != null && json.archivedNotInCart > 0) parts.push(`Archived ${json.archivedNotInCart} product(s) not in Cart`);
-      setStatus(parts.length ? parts.join(". ") : "Push to Shopify completed.");
+      if (json.debug?.hint) parts.push(json.debug.hint);
+      if (parts.length === 0) parts.push("Push completed. No inventory changes made.");
+      setStatus(parts.join(". "));
       setTask({ label: "Push to Shopify completed", progress: 100, tone: "success" });
       await loadCart(page, pageSize, appliedFilters, { startLabel: "Refreshing catalog..." });
     } catch (e: unknown) {
