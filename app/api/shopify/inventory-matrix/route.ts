@@ -7,9 +7,11 @@ import {
   runShopifyGraphql,
 } from "@/lib/shopify";
 import { listCartCatalogParentIds } from "@/lib/shopifyCartStaging";
+import { loadSyncToggles } from "@/lib/shopifyCartConfig";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 120;
 
 const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
 const SHOPIFY_PRODUCTS_PER_PAGE = 100;
@@ -17,7 +19,7 @@ const SHOPIFY_PRODUCTS_PER_PAGE = 100;
 const IS_VERCEL = Boolean(process.env.VERCEL);
 const MAX_SHOPIFY_SCAN_PAGES = IS_VERCEL ? 25 : 5;
 const SHOPIFY_VARIANTS_CACHE_MS = 8 * 60 * 1000;
-const ALLOWED_PAGE_SIZES = [50, 100, 200, 300, 500] as const;
+const ALLOWED_PAGE_SIZES = [20, 50, 100, 200, 300, 500] as const;
 
 type ShopifyTokenSource = "db" | "env_token";
 
@@ -40,9 +42,11 @@ type LightspeedCatalogRow = {
   retailPrice: string;
   retailPriceNumber: number | null;
   category: string;
+  brand?: string;
   itemType: string;
   qtyTotal: number | null;
   locations: Record<string, number | null>;
+  createTime?: string;
 };
 
 type LightspeedCatalogResponse = {
@@ -56,9 +60,10 @@ type LightspeedCatalogResponse = {
 
 type ShopifyProductEdge = {
   cursor?: string;
-  node?: {
+    node?: {
     id?: string;
     title?: string;
+    description?: string;
     featuredImage?: {
       url?: string | null;
     } | null;
@@ -95,6 +100,7 @@ type ShopifyVariant = {
   id: string;
   productId: string;
   productTitle: string;
+  productDescription: string;
   sku: string;
   barcode: string;
   price: number | null;
@@ -113,6 +119,7 @@ type MatrixVariantRow = {
   sellerSku: string;
   cartId: string;
   stock: number | null;
+  shopifyStock: number | null;
   stockByLocation: Array<{
     location: string;
     qty: number | null;
@@ -132,9 +139,14 @@ type MatrixParentRow = {
   brand: string;
   sku: string;
   stock: number | null;
+  shopifyStock: number | null;
+  stockGap: number | null;
   price: number | null;
   variations: number;
   image: string;
+  /** Shopify product description when product is matched */
+  description?: string;
+  createTime: string;
   availableAt: {
     shopify: boolean;
     cart: boolean;
@@ -144,7 +156,9 @@ type MatrixParentRow = {
 
 type FilterState = {
   sku: string;
+  groupSku: string;
   name: string;
+  brand: string;
   priceFrom: number | null;
   priceTo: number | null;
   stockFrom: number | null;
@@ -152,6 +166,9 @@ type FilterState = {
   categoryName: string;
   cartState: string;
   shopifyState: string;
+  productCreatedFrom: string;
+  productCreatedTo: string;
+  keyword: string;
 };
 
 function normalizeText(value: unknown) {
@@ -363,7 +380,9 @@ function normalizeLocationRows(
 function parseFilterState(searchParams: URLSearchParams): FilterState {
   return {
     sku: normalizeText(searchParams.get("SKU")),
+    groupSku: normalizeText(searchParams.get("GroupSKU")),
     name: normalizeText(searchParams.get("Name")),
+    brand: normalizeText(searchParams.get("Brand")),
     priceFrom: parseNumber(searchParams.get("PriceFrom")),
     priceTo: parseNumber(searchParams.get("PriceTo")),
     stockFrom: parseNumber(searchParams.get("StockFrom")),
@@ -371,6 +390,9 @@ function parseFilterState(searchParams: URLSearchParams): FilterState {
     categoryName: normalizeText(searchParams.get("CategoryName")),
     cartState: normalizeText(searchParams.get("CartState")) || "All",
     shopifyState: normalizeText(searchParams.get("ShopifyState")) || "All",
+    productCreatedFrom: normalizeText(searchParams.get("ProductCreatedFrom")),
+    productCreatedTo: normalizeText(searchParams.get("ProductCreatedTo")),
+    keyword: normalizeText(searchParams.get("Keyword")),
   };
 }
 
@@ -515,7 +537,7 @@ type LightspeedSnapshotResult = {
   truncated: boolean;
 };
 
-const INITIAL_CATALOG_MAX_PAGES = 35;
+const INITIAL_CATALOG_MAX_PAGES = 80;
 
 async function fetchLightspeedSnapshotChunk(
   req: NextRequest,
@@ -542,6 +564,8 @@ async function fetchLightspeedSnapshotChunk(
   const json = (await response.json().catch(() => ({}))) as LightspeedCatalogResponse & {
     nextCatalogCursor?: string | null;
     hasMoreCatalog?: boolean;
+    stale?: boolean;
+    staleCause?: string;
   };
   if (!response.ok) {
     throw new Error(normalizeText(json?.error) || "Unable to load Lightspeed catalog.");
@@ -612,32 +636,57 @@ async function fetchLightspeedSnapshot(
   const kv = getCatalogCache();
   const kvKey = `inv-ls-${normalizeLower(shop) || "default"}`;
 
-  if (catalogCursor && kv && !refresh) {
+  if (kv && !refresh) {
     const cached = await kv.get(kvKey);
     if (cached) {
-      const prev = JSON.parse(cached) as { rows?: LightspeedCatalogRow[]; nextCursor?: string | null };
+      const prev =
+        typeof cached === "string"
+          ? (JSON.parse(cached) as { rows?: LightspeedCatalogRow[]; nextCursor?: string | null; options?: { categories?: string[]; shops?: string[] } })
+          : (cached as { rows?: LightspeedCatalogRow[]; nextCursor?: string | null; options?: { categories?: string[]; shops?: string[] } });
       const prevRows = Array.isArray(prev?.rows) ? prev.rows : [];
-      const chunk = await fetchLightspeedSnapshotChunk(req, refresh, catalogCursor);
-      const allRows = [...prevRows, ...chunk.rows];
-      await kv.put(kvKey, JSON.stringify({ rows: allRows, nextCursor: chunk.nextCatalogCursor }), {
-        expirationTtl: 600,
-      });
-      return {
-        rows: allRows,
-        totalInLs: allRows.length,
-        options: chunk.options,
-        truncated: Boolean(chunk.nextCatalogCursor),
-        nextCatalogCursor: chunk.nextCatalogCursor ?? null,
-      };
+      const prevNext = prev?.nextCursor ?? null;
+
+      if (catalogCursor) {
+        const chunk = await fetchLightspeedSnapshotChunk(req, refresh, catalogCursor);
+        const allRows = [...prevRows, ...chunk.rows];
+        await kv.put(
+          kvKey,
+          JSON.stringify({ rows: allRows, nextCursor: chunk.nextCatalogCursor, options: chunk.options }),
+          { expirationTtl: 600 }
+        );
+        return {
+          rows: allRows,
+          totalInLs: allRows.length,
+          options: chunk.options,
+          truncated: Boolean(chunk.nextCatalogCursor),
+          nextCatalogCursor: chunk.nextCatalogCursor ?? null,
+        };
+      }
+
+      if (prevRows.length > 0 && !prevNext) {
+        const cachedOpts = (prev as { options?: { categories?: string[]; shops?: string[] } }).options;
+        return {
+          rows: prevRows,
+          totalInLs: prevRows.length,
+          options: {
+            categories: cachedOpts?.categories ?? [],
+            shops: cachedOpts?.shops ?? [],
+          },
+          truncated: false,
+          nextCatalogCursor: null,
+        };
+      }
     }
   }
 
   const chunk = await fetchLightspeedSnapshotChunk(req, refresh, catalogCursor);
   const allRows = chunk.rows;
   if (kv) {
-    await kv.put(kvKey, JSON.stringify({ rows: allRows, nextCursor: chunk.nextCatalogCursor }), {
-      expirationTtl: 600,
-    });
+    await kv.put(
+      kvKey,
+      JSON.stringify({ rows: allRows, nextCursor: chunk.nextCatalogCursor, options: chunk.options }),
+      { expirationTtl: 600 }
+    );
   }
   return {
     rows: allRows,
@@ -657,6 +706,7 @@ async function fetchShopifyVariants(shop: string, token: string) {
           node {
             id
             title
+            description
             featuredImage {
               url
             }
@@ -686,85 +736,103 @@ async function fetchShopifyVariants(shop: string, token: string) {
     }
   `;
 
-  const variants: ShopifyVariant[] = [];
-  let page = 0;
-  let cursor: string | null = null;
+  const seenIds = new Set<string>();
+  const allVariants: ShopifyVariant[] = [];
   let truncated = false;
 
-  while (page < MAX_SHOPIFY_SCAN_PAGES) {
-    const result = await runShopifyGraphql<ProductsPageData>({
-      shop,
-      token,
-      query,
-      variables: {
-        first: SHOPIFY_PRODUCTS_PER_PAGE,
-        after: cursor,
-        query: "status:active",
-      },
-      apiVersion: API_VERSION,
-    });
+  for (const statusQuery of ["status:active", "status:archived"] as const) {
+    const variants: ShopifyVariant[] = [];
+    let page = 0;
+    let cursor: string | null = null;
+    let statusTruncated = false;
 
-    if (!result.ok) {
-      return {
-        ok: false as const,
-        status: result.status,
-        error: JSON.stringify(result.errors || "Shopify catalog request failed."),
-      };
-    }
+    while (page < MAX_SHOPIFY_SCAN_PAGES) {
+      if (page > 0) await new Promise((r) => setTimeout(r, 250));
+      const result = await runShopifyGraphql<ProductsPageData>({
+        shop,
+        token,
+        query,
+        variables: {
+          first: SHOPIFY_PRODUCTS_PER_PAGE,
+          after: cursor,
+          query: statusQuery,
+        },
+        apiVersion: API_VERSION,
+      });
 
-    const edges = result.data?.products?.edges || [];
-    for (const edge of edges) {
-      const product = edge.node;
-      if (!product) continue;
-
-      const productId = normalizeText(product.id);
-      const productTitle = normalizeText(product.title);
-      const productImage = normalizeText(product.featuredImage?.url);
-      const variantNodes = product.variants?.nodes || [];
-
-      for (const variantNode of variantNodes) {
-        const optionRows = variantNode.selectedOptions || [];
-        const colorOption = optionRows.find((option) => {
-          const key = normalizeLower(option.name);
-          return key === "color" || key === "colour";
-        });
-        const sizeOption = optionRows.find((option) => normalizeLower(option.name) === "size");
-
-        variants.push({
-          id: normalizeText(variantNode.id),
-          productId,
-          productTitle,
-          sku: normalizeText(variantNode.sku),
-          barcode: normalizeText(variantNode.barcode),
-          price: parseNumber(variantNode.price),
-          inventoryQuantity:
-            typeof variantNode.inventoryQuantity === "number" &&
-            Number.isFinite(variantNode.inventoryQuantity)
-              ? variantNode.inventoryQuantity
-              : null,
-          color: normalizeText(colorOption?.value),
-          size: normalizeText(sizeOption?.value),
-          image: normalizeText(variantNode.image?.url),
-          productImage,
-        });
+      if (!result.ok) {
+        if (statusQuery === "status:archived") {
+          break;
+        }
+        return {
+          ok: false as const,
+          status: result.status,
+          error: JSON.stringify(result.errors || "Shopify catalog request failed."),
+        };
       }
+
+      const edges = result.data?.products?.edges || [];
+      for (const edge of edges) {
+        const product = edge.node;
+        if (!product) continue;
+
+        const productId = normalizeText(product.id);
+        const productTitle = normalizeText(product.title);
+        const productDescription = normalizeText((product as { description?: string }).description);
+        const productImage = normalizeText(product.featuredImage?.url);
+        const variantNodes = product.variants?.nodes || [];
+
+        for (const variantNode of variantNodes) {
+          const variantId = normalizeText(variantNode.id);
+          if (!variantId || seenIds.has(variantId)) continue;
+          seenIds.add(variantId);
+
+          const optionRows = variantNode.selectedOptions || [];
+          const colorOption = optionRows.find((option) => {
+            const key = normalizeLower(option.name);
+            return key === "color" || key === "colour";
+          });
+          const sizeOption = optionRows.find((option) => normalizeLower(option.name) === "size");
+
+          allVariants.push({
+            id: variantId,
+            productId,
+            productTitle,
+            productDescription,
+            sku: normalizeText(variantNode.sku),
+            barcode: normalizeText(variantNode.barcode),
+            price: parseNumber(variantNode.price),
+            inventoryQuantity:
+              typeof variantNode.inventoryQuantity === "number" &&
+              Number.isFinite(variantNode.inventoryQuantity)
+                ? variantNode.inventoryQuantity
+                : null,
+            color: normalizeText(colorOption?.value),
+            size: normalizeText(sizeOption?.value),
+            image: normalizeText(variantNode.image?.url),
+            productImage,
+          });
+        }
+      }
+
+      const hasNextPage = Boolean(result.data?.products?.pageInfo?.hasNextPage);
+      const endCursor = normalizeText(result.data?.products?.pageInfo?.endCursor);
+      page += 1;
+
+      if (!hasNextPage || !endCursor) break;
+      if (page >= MAX_SHOPIFY_SCAN_PAGES) {
+        statusTruncated = true;
+        break;
+      }
+      cursor = endCursor;
     }
 
-    const hasNextPage = Boolean(result.data?.products?.pageInfo?.hasNextPage);
-    const endCursor = normalizeText(result.data?.products?.pageInfo?.endCursor);
-    page += 1;
-
-    if (!hasNextPage || !endCursor) break;
-    if (page >= MAX_SHOPIFY_SCAN_PAGES) {
-      truncated = true;
-      break;
-    }
-    cursor = endCursor;
+    if (statusTruncated) truncated = true;
   }
 
   return {
     ok: true as const,
-    variants,
+    variants: allVariants,
     truncated,
   };
 }
@@ -795,9 +863,13 @@ function buildMatrixRows(
       brand: string;
       sku: string;
       image: string;
+      description?: string;
       price: number | null;
       stock: number;
+      shopifyStock: number;
       hasStock: boolean;
+      hasShopifyStock: boolean;
+      createTime: string;
       variants: MatrixVariantRow[];
     }
   >();
@@ -832,6 +904,13 @@ function buildMatrixRows(
     const stockByLocation = normalizedLocationRows.rows;
     const stagedInCart = stagedParentIds.has(normalizeLower(parentKey));
 
+    const shopifyQty =
+      matchedVariant &&
+      typeof matchedVariant.inventoryQuantity === "number" &&
+      Number.isFinite(matchedVariant.inventoryQuantity)
+        ? Math.max(0, Math.round(matchedVariant.inventoryQuantity))
+        : null;
+
     const variantRow: MatrixVariantRow = {
       id: normalizeText(row.id) || `${parentSku}-${variantSku}-${variantUpc}`,
       parentId: parentKey,
@@ -840,6 +919,7 @@ function buildMatrixRows(
       sellerSku: normalizeText(matchedVariant?.sku),
       cartId,
       stock: variantStock,
+      shopifyStock: shopifyQty,
       stockByLocation,
       price: variantPrice,
       color: normalizeText(row.color) || resolveVariantColor(matchedVariant),
@@ -849,7 +929,10 @@ function buildMatrixRows(
       stagedInCart,
     };
 
+    const rowCreateTime = normalizeText((row as LightspeedCatalogRow).createTime);
+
     const current = grouped.get(parentKey);
+    const variantShopifyQty = shopifyQty ?? 0;
     if (!current) {
       grouped.set(parentKey, {
         id: parentKey,
@@ -857,32 +940,47 @@ function buildMatrixRows(
           normalizeText(row.description) ||
           normalizeText(matchedVariant?.productTitle) ||
           parentSku,
-        category: normalizeText(row.category),
-        brand: normalizeText(row.itemType),
+        category: normalizeText(row.category).replace(/[\\\/]/g, " >> "),
+        brand: normalizeText(row.brand) || normalizeText(row.itemType),
         sku: parentSku,
         image: heroImage,
+        description: normalizeText(matchedVariant?.productDescription),
         price: variantPrice,
         stock: variantStock ?? 0,
+        shopifyStock: variantShopifyQty,
         hasStock: variantStock !== null,
+        hasShopifyStock: shopifyQty !== null,
+        createTime: rowCreateTime,
         variants: [variantRow],
       });
       continue;
     }
 
     current.variants.push(variantRow);
+    if (rowCreateTime) {
+      const curr = current.createTime;
+      if (!curr || (rowCreateTime < curr)) current.createTime = rowCreateTime;
+    }
     if (!current.image && heroImage) current.image = heroImage;
+    if (!current.description && matchedVariant?.productDescription) {
+      current.description = normalizeText(matchedVariant.productDescription);
+    }
     if (!current.title) {
       current.title =
         normalizeText(row.description) ||
         normalizeText(matchedVariant?.productTitle) ||
         parentSku;
     }
-    if (!current.category && row.category) current.category = normalizeText(row.category);
-    if (!current.brand && row.itemType) current.brand = normalizeText(row.itemType);
+    if (!current.category && row.category) current.category = normalizeText(row.category).replace(/[\\\/]/g, " >> ");
+    if (!current.brand && (row.brand || row.itemType)) current.brand = normalizeText(row.brand) || normalizeText(row.itemType);
     if (current.price === null && variantPrice !== null) current.price = variantPrice;
     if (variantStock !== null) {
       current.stock += variantStock;
       current.hasStock = true;
+    }
+    if (shopifyQty !== null) {
+      current.shopifyStock += shopifyQty;
+      current.hasShopifyStock = true;
     }
   }
 
@@ -896,16 +994,30 @@ function buildMatrixRows(
     const availableInShopify = variants.some((variant) => variant.availableInShopify);
     const stagedInCart = stagedParentIds.has(normalizeLower(group.id));
 
+    const parentStock = group.hasStock ? Number(group.stock.toFixed(2)) : null;
+    const parentShopifyStock = group.hasShopifyStock ? group.shopifyStock : null;
+    const stockGap =
+      parentStock !== null &&
+      parentShopifyStock !== null &&
+      Number.isFinite(parentStock) &&
+      Number.isFinite(parentShopifyStock)
+        ? Number((parentStock - parentShopifyStock).toFixed(2))
+        : null;
+
     parents.push({
       id: group.id,
       title: normalizeParentTitle(group.title, group.sku, variants),
       category: group.category,
       brand: group.brand,
       sku: group.sku,
-      stock: group.hasStock ? Number(group.stock.toFixed(2)) : null,
+      stock: parentStock,
+      shopifyStock: parentShopifyStock,
+      stockGap,
       price: group.price,
       variations: variants.length,
       image: group.image,
+      description: normalizeText(group.description),
+      createTime: group.createTime || "",
       availableAt: {
         shopify: availableInShopify,
         cart: stagedInCart,
@@ -942,12 +1054,35 @@ function parentMatchesFilters(parent: MatrixParentRow, filters: FilterState) {
     if (!parentHit && !variantHit) return false;
   }
 
+  const groupSkuNeedle = normalizeLower(filters.groupSku);
+  if (groupSkuNeedle && !includesText(parent.sku, groupSkuNeedle)) return false;
+
   const nameNeedle = normalizeLower(filters.name);
   if (nameNeedle && !includesText(parent.title, nameNeedle)) return false;
 
+  const brandNeedle = normalizeLower(filters.brand);
+  if (brandNeedle && !includesText(parent.brand, brandNeedle)) return false;
+
+  const keywordNeedle = normalizeLower(filters.keyword);
+  if (keywordNeedle) {
+    const matchesTitle = includesText(parent.title, keywordNeedle);
+    const matchesCategory = includesText(parent.category, keywordNeedle);
+    const matchesBrand = includesText(parent.brand, keywordNeedle);
+    const matchesSku = includesText(parent.sku, keywordNeedle);
+    const matchesVariant = parent.variants.some(
+      (v) =>
+        includesText(v.sku, keywordNeedle) ||
+        includesText(v.upc, keywordNeedle) ||
+        includesText(v.sellerSku, keywordNeedle)
+    );
+    if (!matchesTitle && !matchesCategory && !matchesBrand && !matchesSku && !matchesVariant) {
+      return false;
+    }
+  }
+
   const categoryNeedle = normalizeLower(filters.categoryName);
   if (categoryNeedle && categoryNeedle !== "all") {
-    if (normalizeLower(parent.category) !== categoryNeedle) return false;
+    if (normalizeLower(parent.category).replace(/[\\\/]/g, " >> ") !== categoryNeedle) return false;
   }
 
   if (filters.priceFrom !== null) {
@@ -962,6 +1097,23 @@ function parentMatchesFilters(parent: MatrixParentRow, filters: FilterState) {
   }
   if (filters.stockTo !== null) {
     if (parent.stock === null || parent.stock > filters.stockTo) return false;
+  }
+
+  const productCreatedFrom = normalizeText(filters.productCreatedFrom);
+  const productCreatedTo = normalizeText(filters.productCreatedTo);
+  if (productCreatedFrom || productCreatedTo) {
+    const parentCreateTime = normalizeText(parent.createTime);
+    if (!parentCreateTime) return false;
+    const parentDate = new Date(parentCreateTime);
+    if (Number.isNaN(parentDate.getTime())) return false;
+    if (productCreatedFrom) {
+      const fromDate = new Date(productCreatedFrom + "T00:00:00Z");
+      if (parentDate < fromDate) return false;
+    }
+    if (productCreatedTo) {
+      const toDate = new Date(productCreatedTo + "T23:59:59.999Z");
+      if (parentDate > toDate) return false;
+    }
   }
 
   return true;
@@ -1042,25 +1194,63 @@ export async function GET(req: NextRequest) {
     const page = parsePositiveInt(searchParams.get("page"), 1);
     const pageSize = parsePageSize(searchParams.get("pageSize"));
     const refresh = normalizeLower(searchParams.get("refresh")) === "1";
+    const selectAll = normalizeLower(searchParams.get("selectAll")) === "1";
     const requestedShop = normalizeShopDomain(normalizeText(searchParams.get("shop")) || "") || "";
 
     const configuredShop =
       normalizeShopDomain(normalizeText(process.env.SHOPIFY_SHOP_DOMAIN) || "") || "";
     const resolvedShop = requestedShop || configuredShop;
 
-    const catalogCursor = normalizeText(searchParams.get("catalogCursor")) || null;
+    let catalogCursor = normalizeText(searchParams.get("catalogCursor")) || null;
     const finalShopForLs = resolvedShop || configuredShop || "";
 
-    const [availableShops, lightspeedSnapshot, stagedIdsResult, shopifyResult] = await Promise.all([
+    const syncToggles = await loadSyncToggles(finalShopForLs || "__default__");
+    const lsSyncEnabled = syncToggles.lsSyncEnabled;
+
+    const emptyLsSnapshot: LightspeedSnapshotWithCursor = {
+      rows: [],
+      totalInLs: 0,
+      options: { categories: [], shops: [] },
+      truncated: false,
+      nextCatalogCursor: null,
+    };
+
+    const [availableShops, lsFromParallel, stagedIdsResult, shopifyResult] = await Promise.all([
       getAvailableShops(),
-      fetchLightspeedSnapshot(req, refresh, catalogCursor, finalShopForLs),
+      lsSyncEnabled && !selectAll ? fetchLightspeedSnapshot(req, refresh, catalogCursor, finalShopForLs) : Promise.resolve(null as LightspeedSnapshotWithCursor | null),
       listCartCatalogParentIds(resolvedShop || configuredShop),
       fetchShopifyVariantsCached(resolvedShop || configuredShop, refresh),
     ]);
 
+    let lightspeedSnapshot: LightspeedSnapshotWithCursor;
+    if (!lsSyncEnabled) {
+      lightspeedSnapshot = emptyLsSnapshot;
+    } else if (selectAll) {
+      const allLsRows: LightspeedCatalogRow[] = [];
+      let chunk: LightspeedSnapshotWithCursor;
+      let firstOpts = { categories: [] as string[], shops: [] as string[] };
+      do {
+        chunk = await fetchLightspeedSnapshot(req, refresh, catalogCursor, finalShopForLs);
+        allLsRows.push(...chunk.rows);
+        firstOpts = chunk.options;
+        catalogCursor = chunk.nextCatalogCursor ?? null;
+      } while (catalogCursor);
+      lightspeedSnapshot = {
+        rows: allLsRows,
+        totalInLs: allLsRows.length,
+        options: firstOpts,
+        truncated: false,
+        nextCatalogCursor: null,
+      };
+    } else {
+      lightspeedSnapshot = lsFromParallel!;
+    }
+
     const fallbackShop = configuredShop || availableShops[0] || "";
     const finalShop = resolvedShop || fallbackShop;
     const { variants: shopifyVariants, source, truncated: shopifyTruncated, warning } = shopifyResult;
+    const lsDisabledWarning = !lsSyncEnabled ? "Lightspeed sync is disabled for this module." : "";
+    const combinedWarning = [warning, stagedIdsResult.warning, lsDisabledWarning].filter(Boolean).join(" ").trim();
     const lookups = buildShopifyVariantLookups(shopifyVariants);
     const { parents, matchStats } = buildMatrixRows(
       lightspeedSnapshot.rows,
@@ -1069,14 +1259,16 @@ export async function GET(req: NextRequest) {
       lightspeedSnapshot.options.shops
     );
     const filtered = parents.filter((parent) => parentMatchesFilters(parent, filters));
-    const paged = toPagedRows(filtered, page, pageSize);
+    const paged = selectAll
+      ? { total: filtered.length, totalPages: 1, page: 1, rows: filtered }
+      : toPagedRows(filtered, page, pageSize);
 
     const totalItems = filtered.reduce((sum, row) => sum + row.variations, 0);
     const totalInCart = filtered.filter((row) => row.availableAt.cart).length;
     const totalOnShopify = filtered.filter((row) => row.availableAt.shopify).length;
 
     const categories = Array.from(
-      new Set(parents.map((row) => normalizeText(row.category)).filter(Boolean))
+      new Set(parents.map((row) => normalizeText(row.category).replace(/[\\\/]/g, " >> ")).filter(Boolean))
     ).sort(compareText);
     const brands = Array.from(
       new Set(parents.map((row) => normalizeText(row.brand)).filter(Boolean))
@@ -1090,11 +1282,13 @@ export async function GET(req: NextRequest) {
       nextCatalogCursor: nextCatalogCursor || undefined,
       shops: availableShops,
       source,
-      warning: [warning, stagedIdsResult.warning].filter(Boolean).join(" ").trim(),
+      warning: combinedWarning,
       truncated: Boolean(lightspeedSnapshot.truncated || shopifyTruncated),
       filters: {
         SKU: filters.sku,
+        GroupSKU: filters.groupSku,
         Name: filters.name,
+        Brand: filters.brand,
         PriceFrom: filters.priceFrom,
         PriceTo: filters.priceTo,
         StockFrom: filters.stockFrom,
@@ -1102,6 +1296,9 @@ export async function GET(req: NextRequest) {
         CategoryName: filters.categoryName,
         CartState: filters.cartState,
         ShopifyState: filters.shopifyState,
+        ProductCreatedFrom: filters.productCreatedFrom,
+        ProductCreatedTo: filters.productCreatedTo,
+        Keyword: filters.keyword,
       },
       options: {
         categories,

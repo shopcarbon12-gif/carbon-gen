@@ -4,6 +4,7 @@
  */
 import { runShopifyGraphql } from "@/lib/shopify";
 import type { StagingParent, StagingVariant } from "@/lib/shopifyCartStaging";
+import { sortSizes } from "@/lib/cartInventoryPush";
 
 const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
 
@@ -75,7 +76,7 @@ function collectOptions(variants: StagingVariant[]): { name: string; values: str
   }
   const options: { name: string; values: string[] }[] = [];
   if (colorSet.size > 0) options.push({ name: "Color", values: Array.from(colorSet) });
-  if (sizeSet.size > 0) options.push({ name: "Size", values: Array.from(sizeSet) });
+  if (sizeSet.size > 0) options.push({ name: "Size", values: sortSizes(Array.from(sizeSet)) });
   if (options.length === 0) options.push({ name: "Title", values: ["Default"] });
   return options;
 }
@@ -102,7 +103,7 @@ export async function createShopifyProductFromCart(
       ? norm(parent.title) || norm(parent.sku)
       : resolveField(mapping.productName, parent, firstVariant) || norm(parent.title) || norm(parent.sku);
   const vendor = resolveField(mapping.vendor || "Brand", parent, null) || "Unknown";
-  const handle =
+  const baseHandle =
     norm(mapping.urlAndHandle) === "SKU"
       ? slugify(parent.sku)
       : norm(mapping.urlAndHandle) === "TITLE"
@@ -123,39 +124,56 @@ export async function createShopifyProductFromCart(
     optionName: opt.name,
   }));
 
+  const productType = norm(parent.category).replace(/[\\\/]/g, " >> ");
+
   const productInput: Record<string, unknown> = {
     title,
     vendor,
     status: "ACTIVE",
     productOptions,
+    ...(productType ? { productType } : {}),
   };
-  if (handle) productInput.handle = handle;
 
-  const createRes = await runShopifyGraphql<{
-    productCreate?: {
-      userErrors?: Array<{ field?: string[]; message: string }>;
-      product?: {
-        id: string;
-        variants?: { nodes?: Array<{ id: string }> };
+  const createWithHandle = (h: string) =>
+    runShopifyGraphql<{
+      productCreate?: {
+        userErrors?: Array<{ field?: string[]; message: string }>;
+        product?: {
+          id: string;
+          variants?: { nodes?: Array<{ id: string }> };
+        };
       };
-    };
-  }>({
-    shop,
-    token,
-    query: `mutation productCreate($product: ProductCreateInput!) {
-      productCreate(product: $product) {
-        userErrors { field message }
-        product {
-          id
-          variants(first: 250) { nodes { id } }
+    }>({
+      shop,
+      token,
+      query: `mutation productCreate($product: ProductCreateInput!) {
+        productCreate(product: $product) {
+          userErrors { field message }
+          product {
+            id
+            variants(first: 250) { nodes { id } }
+          }
         }
-      }
-    }`,
-    variables: {
-      product: productInput,
-    },
-    apiVersion: API_VERSION,
-  });
+      }`,
+      variables: {
+        product: { ...productInput, ...(h ? { handle: h } : {}) },
+      },
+      apiVersion: API_VERSION,
+    });
+
+  let createRes = await createWithHandle(baseHandle);
+  const handleError = createRes.data?.productCreate?.userErrors?.find(
+    (e: { field?: string[]; message: string }) =>
+      /handle.*already|already.*in use/i.test(e.message) ||
+      (e.field && e.field.some((f) => /handle/i.test(String(f))))
+  );
+  if (handleError && baseHandle) {
+    const suffix = `-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    const uniqueHandle = (baseHandle.slice(0, 250 - suffix.length) + suffix)
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+    createRes = await createWithHandle(uniqueHandle);
+  }
 
   if (!createRes.ok) {
     return { ok: false, error: JSON.stringify(createRes.errors) };
@@ -170,72 +188,132 @@ export async function createShopifyProductFromCart(
   }
 
   const productGid = product.id;
-  const existingVariants = product.variants?.nodes || [];
-  const variantGids: string[] = existingVariants.map((v) => v.id).filter(Boolean);
+  const autoCreatedVariants = product.variants?.nodes || [];
+  let variantGids: string[] = autoCreatedVariants.map((v) => v.id).filter(Boolean);
 
-  if (variantGids[0] && firstVariant) {
-    await runShopifyGraphql({
-      shop,
-      token,
-      query: `mutation productVariantUpdate($input: ProductVariantInput!) {
-        productVariantUpdate(input: $input) {
-          userErrors { message }
-        }
-      }`,
-      variables: {
-        input: {
-          id: variantGids[0],
-          price: String(price),
-          ...(comparePrice != null && Number.isFinite(comparePrice) ? { compareAtPrice: String(comparePrice) } : {}),
-          sku: norm(firstVariant.sku) || undefined,
-          barcode: mapping.barcode === "UPC" ? norm(firstVariant.upc) || undefined : undefined,
-        },
-      },
-      apiVersion: API_VERSION,
-    });
-  }
+  console.log("[shopify-create] productCreate returned", autoCreatedVariants.length, "variant(s), need", parent.variants.length);
 
-  if (parent.variants.length > 1) {
-    const toCreate = parent.variants.slice(1).map((v) => {
-      const optValues = options.map((opt) => {
-        const val =
-          opt.name === "Color"
-            ? norm(v.color) || opt.values[0]
-            : opt.name === "Size"
-              ? norm(v.size) || opt.values[0]
-              : opt.values[0];
-        return { name: val, optionName: opt.name };
+  const buildBulkUpdateInput = (varGid: string, v: StagingVariant, priceVal: number) => {
+    const varSku = norm(v.sku) || undefined;
+    return {
+      id: varGid,
+      price: String(v.price != null ? v.price : priceVal),
+      ...(comparePrice != null && Number.isFinite(comparePrice) ? { compareAtPrice: String(comparePrice) } : {}),
+      barcode: norm(v.upc) || undefined,
+      ...(varSku ? { inventoryItem: { sku: varSku } } : {}),
+    };
+  };
+
+  if (autoCreatedVariants.length >= parent.variants.length) {
+    const updateInputs = parent.variants
+      .slice(0, variantGids.length)
+      .map((v, i) => buildBulkUpdateInput(variantGids[i], v, price));
+    if (updateInputs.length > 0) {
+      await runShopifyGraphql({
+        shop,
+        token,
+        query: `mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+          productVariantsBulkUpdate(productId: $productId, variants: $variants) { userErrors { message } }
+        }`,
+        variables: { productId: productGid, variants: updateInputs },
+        apiVersion: API_VERSION,
       });
-      return {
-        optionValues: optValues,
-        price: String(v.price != null ? v.price : price),
-        ...(comparePrice != null ? { compareAtPrice: String(comparePrice) } : {}),
-        sku: norm(v.sku) || undefined,
-        barcode: mapping.barcode === "UPC" ? norm(v.upc) || undefined : undefined,
-      };
-    });
+    }
+  } else {
+    if (variantGids[0] && firstVariant) {
+      await runShopifyGraphql({
+        shop,
+        token,
+        query: `mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+          productVariantsBulkUpdate(productId: $productId, variants: $variants) { userErrors { message } }
+        }`,
+        variables: { productId: productGid, variants: [buildBulkUpdateInput(variantGids[0], firstVariant, price)] },
+        apiVersion: API_VERSION,
+      });
+    }
 
-    const bulkRes = await runShopifyGraphql<{
-      productVariantsBulkCreate?: {
-        userErrors?: Array<{ message: string }>;
-        productVariants?: Array<{ id: string }>;
-      };
-    }>({
-      shop,
-      token,
-      query: `mutation productVariantsBulkCreate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
-        productVariantsBulkCreate(productId: $productId, variants: $variants) {
-          userErrors { message }
-          productVariants { id }
+    if (parent.variants.length > 1) {
+      const toCreate = parent.variants.slice(1).map((v) => {
+        const optValues = options.map((opt) => {
+          const val =
+            opt.name === "Color"
+              ? norm(v.color) || opt.values[0]
+              : opt.name === "Size"
+                ? norm(v.size) || opt.values[0]
+                : opt.values[0];
+          return { name: val, optionName: opt.name };
+        });
+        const varSku = norm(v.sku) || undefined;
+        return {
+          optionValues: optValues,
+          price: String(v.price != null ? v.price : price),
+          ...(comparePrice != null ? { compareAtPrice: String(comparePrice) } : {}),
+          barcode: norm(v.upc) || undefined,
+          ...(varSku ? { inventoryItem: { sku: varSku } } : {}),
+        };
+      });
+
+      const bulkRes = await runShopifyGraphql<{
+        productVariantsBulkCreate?: {
+          userErrors?: Array<{ message: string }>;
+          productVariants?: Array<{ id: string }>;
+        };
+      }>({
+        shop,
+        token,
+        query: `mutation productVariantsBulkCreate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+          productVariantsBulkCreate(productId: $productId, variants: $variants) {
+            userErrors { message }
+            productVariants { id }
+          }
+        }`,
+        variables: { productId: productGid, variants: toCreate },
+        apiVersion: API_VERSION,
+      });
+
+      const bulkErrors = bulkRes.data?.productVariantsBulkCreate?.userErrors || [];
+      if (bulkErrors.length > 0) {
+        console.warn("[shopify-create] productVariantsBulkCreate errors:", bulkErrors.map((e: { message: string }) => e.message));
+      }
+      if (bulkRes.ok && bulkRes.data?.productVariantsBulkCreate?.productVariants) {
+        for (const pv of bulkRes.data.productVariantsBulkCreate.productVariants) {
+          if (pv?.id) variantGids.push(pv.id);
         }
-      }`,
-      variables: { productId: productGid, variants: toCreate },
-      apiVersion: API_VERSION,
-    });
+      }
 
-    if (bulkRes.ok && bulkRes.data?.productVariantsBulkCreate?.productVariants) {
-      for (const pv of bulkRes.data.productVariantsBulkCreate.productVariants) {
-        if (pv?.id) variantGids.push(pv.id);
+      if (variantGids.length < parent.variants.length) {
+        console.log("[shopify-create] Re-fetching variants after bulk create...");
+        const refetchRes = await runShopifyGraphql<{
+          product?: { variants?: { nodes?: Array<{ id: string }> } };
+        }>({
+          shop,
+          token,
+          query: `query($id: ID!) { product(id: $id) { variants(first: 250) { nodes { id } } } }`,
+          variables: { id: productGid },
+          apiVersion: API_VERSION,
+        });
+        const allVars = refetchRes.ok ? refetchRes.data?.product?.variants?.nodes || [] : [];
+        if (allVars.length >= parent.variants.length) {
+          variantGids = allVars.map((v) => v.id).filter(Boolean);
+          const updateBatch = parent.variants
+            .slice(1)
+            .map((v, i) => {
+              const idx = i + 1;
+              return idx < variantGids.length ? buildBulkUpdateInput(variantGids[idx], v, price) : null;
+            })
+            .filter(Boolean) as Array<Record<string, unknown>>;
+          if (updateBatch.length > 0) {
+            await runShopifyGraphql({
+              shop,
+              token,
+              query: `mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+                productVariantsBulkUpdate(productId: $productId, variants: $variants) { userErrors { message } }
+              }`,
+              variables: { productId: productGid, variants: updateBatch },
+              apiVersion: API_VERSION,
+            });
+          }
+        }
       }
     }
   }
@@ -271,6 +349,17 @@ export async function createShopifyProductFromCart(
     });
     const invItemId = invRes.ok ? invRes.data?.productVariant?.inventoryItem?.id : null;
     if (invItemId) {
+      await runShopifyGraphql({
+        shop,
+        token,
+        query: `mutation inventoryItemUpdate($id: ID!, $input: InventoryItemInput!) {
+          inventoryItemUpdate(id: $id, input: $input) {
+            userErrors { message }
+          }
+        }`,
+        variables: { id: invItemId, input: { tracked: true } },
+        apiVersion: API_VERSION,
+      });
       const qty = typeof v.stock === "number" && Number.isFinite(v.stock) ? Math.max(0, Math.round(v.stock)) : 0;
       quantities.push({ inventoryItemId: invItemId, locationId, quantity: qty });
     }

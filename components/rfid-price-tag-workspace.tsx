@@ -1622,7 +1622,7 @@ export default function RfidPriceTagWorkspace() {
           top: 50%;
           left: 50%;
           transform: translate(-50%, -50%);
-          width: min(840px, calc(100vw - 24px));
+          width: min(624px, calc(100vw - 24px));
           max-height: calc(100vh - 28px);
           overflow: auto;
           background: rgba(5, 10, 25, 0.98);
@@ -1674,17 +1674,20 @@ export default function RfidPriceTagWorkspace() {
           min-width: 96px;
         }
         .preview-canvas {
-          min-height: 240px;
           border-radius: 12px;
           border: 1px solid rgba(255, 255, 255, 0.2);
           background: #f3f4f6;
           display: grid;
           place-items: center;
-          overflow: auto;
-          padding: 10px;
+          overflow: visible;
+          padding: 16px;
+          transform: rotate(90deg);
+          margin: 40px 0;
+          max-width: 452px;
+          justify-self: center;
         }
         .preview-canvas img {
-          max-width: 100%;
+          max-width: 320px;
           height: auto;
         }
         .search-btn {

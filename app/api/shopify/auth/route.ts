@@ -34,7 +34,9 @@ export async function GET(req: NextRequest) {
   }
 
   const clientId = (process.env.SHOPIFY_APP_CLIENT_ID || "").trim();
-  const scopes = (process.env.SHOPIFY_SCOPES || "").trim();
+  const scopes =
+    (process.env.SHOPIFY_SCOPES || "").trim() ||
+    "read_products,write_products,write_files,read_locations,write_inventory,read_orders";
   const redirectUri = (process.env.SHOPIFY_REDIRECT_URI || "").trim();
   const hasOauthConfig = Boolean(clientId && redirectUri);
 

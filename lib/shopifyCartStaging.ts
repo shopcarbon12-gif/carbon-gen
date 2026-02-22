@@ -36,6 +36,8 @@ export type StagingParent = {
   price: number | null;
   variations: number;
   image: string;
+  /** Shopify product description (empty if not from Shopify or no description) */
+  description?: string;
   status: SyncStatus;
   processedCount: number;
   pendingCount: number;
@@ -56,6 +58,7 @@ type PersistedRow = {
   stock: number | null;
   price: number | null;
   image: string;
+  description?: string;
   status: SyncStatus;
   error_message: string | null;
   variants: unknown;
@@ -148,6 +151,7 @@ function summarizeParent(input: StagingParent): StagingParent {
     price: typeof input.price === "number" ? input.price : toNumber(input.price),
     variations: variants.length,
     image: normalizeText(input.image),
+    description: normalizeText(input.description) || undefined,
     status: parentStatus,
     processedCount,
     pendingCount,
@@ -204,6 +208,7 @@ function parsePersistedRow(row: PersistedRow): StagingParent {
     price: toNumber(row.price),
     variations: variants.length,
     image: normalizeText(row.image),
+    description: normalizeText((row as PersistedRow).description) || undefined,
     status: toSyncStatus(row.status),
     processedCount: 0,
     pendingCount: 0,
@@ -228,6 +233,7 @@ function toPersistedRow(shopKey: string, parent: StagingParent): PersistedRow {
     stock: normalized.stock,
     price: normalized.price,
     image: normalized.image,
+    description: normalizeText(normalized.description) || undefined,
     status: normalized.status,
     error_message: normalized.error || null,
     variants: normalized.variants,
@@ -261,27 +267,40 @@ export async function listCartCatalogParents(shop: string): Promise<PersistResul
     };
   }
 
-  const { data, error } = await supabase
-    .from(TABLE)
-    .select(
-      "shop,parent_id,parent_sku,title,category,brand,stock,price,image,status,error_message,variants,created_at,updated_at"
-    )
-    .eq("shop", shopKey)
-    .order("updated_at", { ascending: false });
+  const rows: PersistedRow[] = [];
+  const pageSize = 1000;
+  let offset = 0;
+  let hasMore = true;
 
-  if (error) {
-    return {
-      ok: true,
-      backend: "memory",
-      warning: `Supabase staging table unavailable (${error.message}). Using in-memory staging instead.`,
-      data: toMemoryRows(shopKey),
-    };
+  while (hasMore) {
+    const { data: pageData, error } = await supabase
+      .from(TABLE)
+      .select(
+        "shop,parent_id,parent_sku,title,category,brand,stock,price,image,description,status,error_message,variants,created_at,updated_at"
+      )
+      .eq("shop", shopKey)
+      .order("updated_at", { ascending: false })
+      .range(offset, offset + pageSize - 1);
+
+    if (error) {
+      return {
+        ok: true,
+        backend: "memory",
+        warning: `Supabase staging table unavailable (${error.message}). Using in-memory staging instead.`,
+        data: toMemoryRows(shopKey),
+      };
+    }
+
+    const page = Array.isArray(pageData) ? pageData : [];
+    for (const row of page) {
+      rows.push(row as PersistedRow);
+    }
+    hasMore = page.length >= pageSize;
+    offset += pageSize;
   }
 
-  const rows = Array.isArray(data)
-    ? data.map((row) => parsePersistedRow(row as PersistedRow))
-    : [];
-  return { ok: true, backend: "supabase", data: rows };
+  const parsedRows = rows.map((row) => parsePersistedRow(row));
+  return { ok: true, backend: "supabase", data: parsedRows };
 }
 
 export async function listCartCatalogParentIds(
@@ -343,6 +362,41 @@ export async function upsertCartCatalogParents(
   return { ok: true, backend: "supabase", data: { upserted: sanitized.length } };
 }
 
+export async function clearCartCatalogForShop(shop: string): Promise<PersistResult<{ removed: number }>> {
+  const shopKey = normalizeShopKey(shop);
+  const supabase = tryGetSupabase();
+  if (!supabase) {
+    const bucket = getMemoryBucket(shopKey);
+    const count = bucket.size;
+    bucket.clear();
+    return {
+      ok: true,
+      backend: "memory",
+      warning:
+        "Supabase is not configured. Cleared in-memory staging for this shop.",
+      data: { removed: count },
+    };
+  }
+  const { data: deletedRows, error } = await supabase
+    .from(TABLE)
+    .delete()
+    .eq("shop", shopKey)
+    .select("parent_id");
+  if (error) {
+    console.error("[cart-staging] Clear failed:", error.message, { shopKey });
+    return {
+      ok: false,
+      backend: "supabase",
+      warning: `Failed to clear Carts Inventory: ${error.message}`,
+      data: { removed: 0 },
+    };
+  }
+  const removed = Array.isArray(deletedRows) ? deletedRows.length : 0;
+  return { ok: true, backend: "supabase", data: { removed } };
+}
+
+const REMOVE_BATCH_SIZE = 400;
+
 export async function removeCartCatalogParents(
   shop: string,
   parentIds: string[]
@@ -371,27 +425,31 @@ export async function removeCartCatalogParents(
     };
   }
 
-  const { error } = await supabase
-    .from(TABLE)
-    .delete()
-    .eq("shop", shopKey)
-    .in("parent_id", ids);
+  let removed = 0;
+  for (let i = 0; i < ids.length; i += REMOVE_BATCH_SIZE) {
+    const batch = ids.slice(i, i + REMOVE_BATCH_SIZE);
+    const { data: deletedRows, error } = await supabase
+      .from(TABLE)
+      .delete()
+      .eq("shop", shopKey)
+      .in("parent_id", batch)
+      .select("parent_id");
 
-  if (error) {
-    const bucket = getMemoryBucket(shopKey);
-    let removed = 0;
-    for (const id of ids) {
-      if (bucket.delete(normalizeLower(id))) removed += 1;
+    if (error) {
+      console.error("[cart-staging] Delete failed:", error.message, { shopKey, idsCount: batch.length });
+      return {
+        ok: false,
+        backend: "supabase",
+        warning: `Failed to remove from staging: ${error.message}`,
+        data: { removed },
+      };
     }
-    return {
-      ok: true,
-      backend: "memory",
-      warning: `Supabase delete unavailable (${error.message}). Using in-memory staging instead.`,
-      data: { removed },
-    };
+    removed += Array.isArray(deletedRows) ? deletedRows.length : 0;
   }
-
-  return { ok: true, backend: "supabase", data: { removed: ids.length } };
+  if (removed < ids.length && ids.length > 0) {
+    console.warn("[cart-staging] Delete partial:", { requested: ids.length, removed, shopKey });
+  }
+  return { ok: true, backend: "supabase", data: { removed } };
 }
 
 export async function updateCartCatalogStatus(
@@ -434,5 +492,64 @@ export async function updateCartCatalogStatus(
     warning: saved.warning,
     data: { updated: updatedRows.length },
   };
+}
+
+/**
+ * Update a cart catalog parent's id (parent_id) from old to new.
+ * Used when matching Shopify-pulled items to LS matrix (matrix:xxx or sku:xxx).
+ */
+export async function updateCartCatalogParentId(
+  shop: string,
+  oldParentId: string,
+  updatedParent: StagingParent
+): Promise<PersistResult<{ updated: number }>> {
+  const shopKey = normalizeShopKey(shop);
+  const oldId = normalizeText(oldParentId);
+  const newId = normalizeText(updatedParent.id);
+  if (!oldId || !newId || normalizeLower(oldId) === normalizeLower(newId)) {
+    return { ok: true, backend: "supabase", data: { updated: 0 } };
+  }
+
+  const supabase = tryGetSupabase();
+  if (!supabase) {
+    const bucket = getMemoryBucket(shopKey);
+    const existing = bucket.get(normalizeLower(oldId));
+    if (!existing) return { ok: true, backend: "memory", data: { updated: 0 } };
+    bucket.delete(normalizeLower(oldId));
+    bucket.set(normalizeLower(newId), summarizeParent(updatedParent));
+    return { ok: true, backend: "memory", data: { updated: 1 } };
+  }
+
+  const payload = toPersistedRow(shopKey, summarizeParent(updatedParent));
+  const { error } = await supabase
+    .from(TABLE)
+    .update({
+      parent_id: payload.parent_id,
+      parent_sku: payload.parent_sku,
+      title: payload.title,
+      category: payload.category,
+      brand: payload.brand,
+      stock: payload.stock,
+      price: payload.price,
+      image: payload.image,
+      description: payload.description,
+      status: payload.status,
+      error_message: payload.error_message,
+      variants: payload.variants,
+      updated_at: payload.updated_at,
+    })
+    .eq("shop", shopKey)
+    .eq("parent_id", oldId);
+
+  if (error) {
+    return {
+      ok: false,
+      backend: "supabase",
+      warning: `Failed to update parent_id: ${error.message}`,
+      data: { updated: 0 },
+    };
+  }
+
+  return { ok: true, backend: "supabase", data: { updated: 1 } };
 }
 

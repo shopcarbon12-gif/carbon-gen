@@ -4,6 +4,7 @@ import { ensureLightspeedEnvLoaded } from "@/lib/loadLightspeedEnv";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 120;
 
 const DEFAULT_LS_TOKEN_URL = "https://cloud.merchantos.com/oauth/access_token.php";
 const PREFERRED_DEFAULT_SHOP = "CARBON JEANS COMPANY";
@@ -57,9 +58,11 @@ type CatalogRow = {
   retailPrice: string;
   retailPriceNumber: number | null;
   category: string;
+  brand: string;
   itemType: string;
   qtyTotal: number | null;
   locations: Record<string, number | null>;
+  createTime: string;
 };
 
 const lightspeedAccessTokenCache: { token: string; expiresAt: number } = {
@@ -91,6 +94,62 @@ const lightspeedCategoryCache: {
   categoryNames: [],
   expiresAt: 0,
 };
+
+const lightspeedManufacturerCache: {
+  manufacturerNameById: Record<string, string>;
+  expiresAt: number;
+} = {
+  manufacturerNameById: {},
+  expiresAt: 0,
+};
+
+type RedisLike = {
+  get: (k: string) => Promise<string | null>;
+  set: (k: string, v: string, opts?: { ex?: number }) => Promise<unknown>;
+};
+
+let _redisSingleton: RedisLike | null | undefined = undefined;
+function getRedis(): RedisLike | null {
+  if (_redisSingleton !== undefined) return _redisSingleton;
+  try {
+    const url = process.env.UPSTASH_REDIS_REST_URL;
+    const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+    if (url && token) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { Redis } = require("@upstash/redis");
+      _redisSingleton = new Redis({ url, token }) as RedisLike;
+      return _redisSingleton;
+    }
+  } catch { /* Redis not available */ }
+  _redisSingleton = null;
+  return null;
+}
+
+const REDIS_CATALOG_KEY = "ls-catalog-snapshot";
+const REDIS_CATALOG_FALLBACK_KEY = "ls-catalog-snapshot-fallback";
+const REDIS_TOKEN_KEY = "ls-access-token";
+const REDIS_CATALOG_TTL = 1800;
+const REDIS_CATALOG_FALLBACK_TTL = 7200;
+const REDIS_TOKEN_TTL = 540;
+
+async function getRedisJson<T>(key: string): Promise<T | null> {
+  const redis = getRedis();
+  if (!redis) return null;
+  try {
+    const raw = await redis.get(key);
+    if (!raw) return null;
+    return typeof raw === "string" ? JSON.parse(raw) as T : raw as T;
+  } catch { return null; }
+}
+
+async function setRedisJson(key: string, value: unknown, ttl: number): Promise<void> {
+  const redis = getRedis();
+  if (!redis) return;
+  try {
+    const str = typeof value === "string" ? value : JSON.stringify(value);
+    await redis.set(key, str, { ex: ttl });
+  } catch { /* best-effort */ }
+}
 
 let lightspeedRequestChain: Promise<void> = Promise.resolve();
 let lightspeedLastRequestAt = 0;
@@ -140,6 +199,22 @@ function delay(ms: number) {
   return new Promise<void>((resolve) => {
     setTimeout(resolve, Math.max(0, ms));
   });
+}
+
+const LS_FETCH_MAX_RETRIES = 3;
+
+async function resilientFetch(url: string, opts: RequestInit, timeoutMs = 30_000): Promise<Response> {
+  for (let attempt = 1; attempt <= LS_FETCH_MAX_RETRIES; attempt++) {
+    try {
+      return await fetch(url, { ...opts, signal: AbortSignal.timeout(timeoutMs) });
+    } catch (err: any) {
+      const msg = String(err?.message || err);
+      const isRetryable = /timeout|abort|network|ECONNRESET|ENOTFOUND|socket hang up|fetch failed/i.test(msg);
+      if (!isRetryable || attempt >= LS_FETCH_MAX_RETRIES) throw err;
+      await delay(1500 * attempt);
+    }
+  }
+  throw new Error("resilientFetch: exhausted retries");
 }
 
 async function waitForLightspeedRequestSlot() {
@@ -253,6 +328,15 @@ async function refreshLightspeedAccessToken(forceRefresh = false) {
     return lightspeedAccessTokenCache.token;
   }
 
+  if (!forceRefresh) {
+    const cached = await getRedisJson<{ token: string }>(REDIS_TOKEN_KEY);
+    if (cached?.token) {
+      lightspeedAccessTokenCache.token = cached.token;
+      lightspeedAccessTokenCache.expiresAt = Date.now() + CACHE_MS.tokenFallback;
+      return cached.token;
+    }
+  }
+
   const clientId = normalizeText(process.env.LS_CLIENT_ID);
   const clientSecret = normalizeText(process.env.LS_CLIENT_SECRET);
   const refreshToken = normalizeText(process.env.LS_REFRESH_TOKEN);
@@ -276,15 +360,14 @@ async function refreshLightspeedAccessToken(forceRefresh = false) {
 
   for (const endpoint of endpoints) {
     try {
-      const tokenResponse = await fetch(endpoint, {
+      const tokenResponse = await resilientFetch(endpoint, {
         method: "POST",
         headers: {
           Accept: "application/json",
           "Content-Type": "application/x-www-form-urlencoded",
         },
         body: payload,
-        signal: AbortSignal.timeout(12_000),
-      });
+      }, 12_000);
 
       const tokenRawBody = await tokenResponse.text();
       const tokenBody = parseTokenResponseBody(tokenRawBody);
@@ -306,6 +389,7 @@ async function refreshLightspeedAccessToken(forceRefresh = false) {
         : CACHE_MS.tokenFallback;
       lightspeedAccessTokenCache.token = accessToken;
       lightspeedAccessTokenCache.expiresAt = Date.now() + ttlMs;
+      void setRedisJson(REDIS_TOKEN_KEY, { token: accessToken }, REDIS_TOKEN_TTL);
 
       const newRefreshToken = normalizeText(tokenBody.refresh_token);
       if (newRefreshToken && newRefreshToken !== refreshToken) {
@@ -357,13 +441,12 @@ async function requestRSeriesList<T>(params: {
   for (let attempt = 1; attempt <= LS_RATE_LIMIT_RETRY_ATTEMPTS; attempt += 1) {
     await waitForLightspeedRequestSlot();
 
-    const response = await fetch(url.toString(), {
+    const response = await resilientFetch(url.toString(), {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         Accept: "application/json",
       },
-      signal: AbortSignal.timeout(20_000),
-    });
+    }, 20_000);
 
     const rawBody = await response.text();
     let parsedBody: any = {};
@@ -408,13 +491,12 @@ async function requestRSeriesParallel<T>(params: {
   let lastError = `Lightspeed ${resource} request failed.`;
 
   for (let attempt = 1; attempt <= LS_RATE_LIMIT_RETRY_ATTEMPTS; attempt += 1) {
-    const response = await fetch(url.toString(), {
+    const response = await resilientFetch(url.toString(), {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         Accept: "application/json",
       },
-      signal: AbortSignal.timeout(25_000),
-    });
+    }, 25_000);
 
     const rawBody = await response.text();
     let parsedBody: any = {};
@@ -577,8 +659,9 @@ async function loadCategories(accessToken: string, forceRefresh = false) {
 
     for (const row of rows) {
       const id = normalizeText(row?.categoryID);
-      const label = normalizeText(row?.fullPathName || row?.name);
-      if (!id || !label) continue;
+      const rawLabel = normalizeText(row?.fullPathName || row?.name);
+      if (!id || !rawLabel) continue;
+      const label = rawLabel.replace(/[\\\/]/g, " >> ");
       categoryNameById[id] = label;
       if (!names.includes(label)) names.push(label);
     }
@@ -598,6 +681,47 @@ async function loadCategories(accessToken: string, forceRefresh = false) {
   };
 }
 
+async function loadManufacturers(accessToken: string, forceRefresh = false) {
+  if (
+    !forceRefresh &&
+    Object.keys(lightspeedManufacturerCache.manufacturerNameById).length > 0 &&
+    lightspeedManufacturerCache.expiresAt > Date.now()
+  ) {
+    return { manufacturerNameById: lightspeedManufacturerCache.manufacturerNameById };
+  }
+
+  const manufacturerNameById: Record<string, string> = {};
+  let offset = 0;
+  const limit = 100;
+  let totalCount = Number.POSITIVE_INFINITY;
+  let guard = 0;
+
+  while (offset < totalCount && guard < 3) {
+    const page = await requestRSeriesList<any>({
+      accessToken,
+      resource: "Manufacturer",
+      query: { limit, offset },
+    });
+    totalCount = page.totalCount;
+    const rows = page.rows;
+
+    for (const row of rows) {
+      const id = normalizeText(row?.manufacturerID);
+      const name = normalizeText(row?.name);
+      if (!id || !name) continue;
+      manufacturerNameById[id] = name;
+    }
+
+    if (rows.length === 0) break;
+    offset += limit;
+    guard += 1;
+  }
+
+  lightspeedManufacturerCache.manufacturerNameById = manufacturerNameById;
+  lightspeedManufacturerCache.expiresAt = Date.now() + CACHE_MS.categories;
+  return { manufacturerNameById };
+}
+
 function pickDefaultLocation(shopNames: string[]) {
   const preferred = shopNames.find((name) => normalizeLower(name) === normalizeLower(PREFERRED_DEFAULT_SHOP));
   if (preferred) return preferred;
@@ -608,7 +732,8 @@ function normalizeCatalogItem(
   item: any,
   index: number,
   shopNameById: Record<string, string>,
-  categoryNameById: Record<string, string>
+  categoryNameById: Record<string, string>,
+  manufacturerNameById?: Record<string, string>
 ): CatalogRow {
   const itemId = normalizeText(item?.itemID);
   const itemMatrixId = normalizeText(item?.itemMatrixID);
@@ -622,6 +747,10 @@ function normalizeCatalogItem(
   const retailPriceNumber = toNumber(retailPrice);
   const categoryId = normalizeText(item?.categoryID);
   const category = categoryNameById[categoryId] || (categoryId && categoryId !== "0" ? `Category ${categoryId}` : "Uncategorized");
+  const manufacturerId = normalizeText(item?.manufacturerID);
+  const brand = (manufacturerNameById && manufacturerId && manufacturerId !== "0"
+    ? manufacturerNameById[manufacturerId] || ""
+    : "") || normalizeItemType(item?.itemType);
   const itemType = normalizeItemType(item?.itemType);
 
   const locations: Record<string, number | null> = {};
@@ -640,6 +769,9 @@ function normalizeCatalogItem(
     }
   }
 
+  const createTimeRaw = normalizeText((item as any)?.createTime);
+  const createTime = createTimeRaw && !Number.isNaN(new Date(createTimeRaw).getTime()) ? createTimeRaw : "";
+
   return {
     id: itemId || systemSku || customSku || upc || ean || `item-${index + 1}`,
     itemId,
@@ -654,9 +786,11 @@ function normalizeCatalogItem(
     retailPrice,
     retailPriceNumber,
     category,
+    brand,
     itemType,
     qtyTotal: hasQty ? Number(qtyTotal.toFixed(2)) : null,
     locations,
+    createTime,
   };
 }
 
@@ -727,16 +861,23 @@ async function fetchRawCatalogFromItemMatrix(
   const maxPages = Math.min(maxPagesOverride ?? LS_V3_MAX_PAGES, 120);
   let lastNext: string | null = null;
 
+  let consecutiveErrors = 0;
   while (nextUrl && pages < maxPages) {
     await waitForLightspeedRequestSlot();
 
-    const response = await fetch(nextUrl, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        Accept: "application/json",
-      },
-      signal: AbortSignal.timeout(30_000),
-    });
+    let response: Response;
+    try {
+      response = await resilientFetch(nextUrl, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: "application/json",
+        },
+      }, 30_000);
+    } catch (err: any) {
+      consecutiveErrors++;
+      if (rawItems.length > 0 && consecutiveErrors >= 2) break;
+      throw err;
+    }
 
     const rawBody = await response.text();
     let parsedBody: any = {};
@@ -747,10 +888,18 @@ async function fetchRawCatalogFromItemMatrix(
     }
 
     if (!response.ok) {
+      consecutiveErrors++;
+      if (rawItems.length > 0 && consecutiveErrors >= 2) break;
+      if (response.status === 429) {
+        const retryAfter = Number.parseFloat(normalizeText(response.headers.get("retry-after")));
+        await delay(Number.isFinite(retryAfter) ? Math.max(1000, retryAfter * 1000) : 2000);
+        continue;
+      }
       const detail = readResponseError(parsedBody, rawBody);
       throw new Error(`Lightspeed ItemMatrix (V3) request failed: ${detail}`);
     }
 
+    consecutiveErrors = 0;
     const matrices = toArray(parsedBody?.ItemMatrix) as any[];
     for (const matrix of matrices) {
       const itemsRaw = matrix?.Items;
@@ -789,16 +938,23 @@ async function fetchRawCatalogItemsV3(accessToken: string): Promise<{ rawItems: 
   let pages = 0;
   let lastNext: string | null = null;
 
+  let consecutiveErrors = 0;
   while (nextUrl && pages < LS_V3_MAX_PAGES) {
     await waitForLightspeedRequestSlot();
 
-    const response = await fetch(nextUrl, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        Accept: "application/json",
-      },
-      signal: AbortSignal.timeout(30_000),
-    });
+    let response: Response;
+    try {
+      response = await resilientFetch(nextUrl, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: "application/json",
+        },
+      }, 30_000);
+    } catch (err: any) {
+      consecutiveErrors++;
+      if (rawItems.length > 0 && consecutiveErrors >= 2) break;
+      throw err;
+    }
 
     const rawBody = await response.text();
     let parsedBody: any = {};
@@ -809,10 +965,18 @@ async function fetchRawCatalogItemsV3(accessToken: string): Promise<{ rawItems: 
     }
 
     if (!response.ok) {
+      consecutiveErrors++;
+      if (rawItems.length > 0 && consecutiveErrors >= 2) break;
+      if (response.status === 429) {
+        const retryAfter = Number.parseFloat(normalizeText(response.headers.get("retry-after")));
+        await delay(Number.isFinite(retryAfter) ? Math.max(1000, retryAfter * 1000) : 2000);
+        continue;
+      }
       const detail = readResponseError(parsedBody, rawBody);
       throw new Error(`Lightspeed Item (V3) request failed: ${detail}`);
     }
 
+    consecutiveErrors = 0;
     const list = toArray(parsedBody?.Item) as any[];
     rawItems.push(...list);
     pages += 1;
@@ -842,13 +1006,12 @@ async function fetchRawCatalogChunkFromCursor(
   while (nextUrl && pages < maxPages) {
     await waitForLightspeedRequestSlot();
 
-    const response = await fetch(nextUrl, {
+    const response = await resilientFetch(nextUrl, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         Accept: "application/json",
       },
-      signal: AbortSignal.timeout(30_000),
-    });
+    }, 30_000);
 
     const rawBody = await response.text();
     let parsedBody: any = {};
@@ -968,19 +1131,49 @@ async function loadCatalogSnapshot(
   deps: {
     shopNameById: Record<string, string>;
     categoryNameById: Record<string, string>;
+    manufacturerNameById?: Record<string, string>;
   },
   rawItems: any[],
   skipCacheUpdate?: boolean
 ) {
   const rows = rawItems.map((item, index) =>
-    normalizeCatalogItem(item, index, deps.shopNameById, deps.categoryNameById)
+    normalizeCatalogItem(item, index, deps.shopNameById, deps.categoryNameById, deps.manufacturerNameById)
   );
 
   if (!skipCacheUpdate) {
     lightspeedCatalogSnapshotCache.rows = rows;
     lightspeedCatalogSnapshotCache.expiresAt = Date.now() + CACHE_MS.catalogSnapshot;
+    void setRedisJson(REDIS_CATALOG_KEY, rows, REDIS_CATALOG_TTL);
+    void setRedisJson(REDIS_CATALOG_FALLBACK_KEY, rows, REDIS_CATALOG_FALLBACK_TTL);
   }
   return rows;
+}
+
+async function getCachedCatalogRows(): Promise<CatalogRow[] | null> {
+  if (
+    lightspeedCatalogSnapshotCache.rows.length > 0 &&
+    lightspeedCatalogSnapshotCache.expiresAt > Date.now()
+  ) {
+    return lightspeedCatalogSnapshotCache.rows;
+  }
+  const fromRedis = await getRedisJson<CatalogRow[]>(REDIS_CATALOG_KEY);
+  if (fromRedis && fromRedis.length > 0) {
+    lightspeedCatalogSnapshotCache.rows = fromRedis;
+    lightspeedCatalogSnapshotCache.expiresAt = Date.now() + CACHE_MS.catalogSnapshot;
+    return fromRedis;
+  }
+  return null;
+}
+
+async function getStaleCatalogRows(): Promise<CatalogRow[] | null> {
+  if (lightspeedCatalogSnapshotCache.rows.length > 0) {
+    return lightspeedCatalogSnapshotCache.rows;
+  }
+  const fromRedis = await getRedisJson<CatalogRow[]>(REDIS_CATALOG_KEY);
+  if (fromRedis && fromRedis.length > 0) return fromRedis;
+  const fromFallback = await getRedisJson<CatalogRow[]>(REDIS_CATALOG_FALLBACK_KEY);
+  if (fromFallback && fromFallback.length > 0) return fromFallback;
+  return null;
 }
 
 function includesText(haystack: string, needleLower: string) {
@@ -1173,14 +1366,15 @@ export async function GET(req: NextRequest) {
 
     // Chunked loading: fetch one chunk from cursor (stays under 50 subrequests on Workers Free)
     if (catalogCursor && allRowsMode) {
-      const [shopsData, categoriesData, chunkResult] = await Promise.all([
+      const [shopsData, categoriesData, manufacturerData, chunkResult] = await Promise.all([
         loadShops(accessToken, refresh),
         loadCategories(accessToken, refresh),
+        loadManufacturers(accessToken, refresh),
         fetchRawCatalogChunkFromCursor(accessToken, catalogCursor, CATALOG_CHUNK_PAGES),
       ]);
       const chunkRows = await loadCatalogSnapshot(
         accessToken,
-        { shopNameById: shopsData.shopNameById, categoryNameById: categoriesData.categoryNameById },
+        { shopNameById: shopsData.shopNameById, categoryNameById: categoriesData.categoryNameById, manufacturerNameById: manufacturerData.manufacturerNameById },
         chunkResult.rawItems,
         true
       );
@@ -1194,15 +1388,14 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const cacheWarm =
-      !refresh &&
-      lightspeedCatalogSnapshotCache.rows.length > 0 &&
-      lightspeedCatalogSnapshotCache.expiresAt > Date.now();
+    const cachedRows = refresh ? null : await getCachedCatalogRows();
+    const cacheWarm = cachedRows !== null && cachedRows.length > 0;
 
     const maxPagesOverride = maxPagesParam > 0 ? Math.min(maxPagesParam, 120) : undefined;
-    const [shopsData, categoriesData, catalogResult] = await Promise.all([
+    const [shopsData, categoriesData, manufacturerData, catalogResult] = await Promise.all([
       loadShops(accessToken, refresh),
       loadCategories(accessToken, refresh),
+      loadManufacturers(accessToken, refresh),
       cacheWarm ? null : fetchRawCatalogItems(accessToken, maxPagesOverride),
     ]);
 
@@ -1210,12 +1403,13 @@ export async function GET(req: NextRequest) {
     const nextCatalogCursor = cacheWarm ? null : (catalogResult?.nextCursor ?? null);
 
     const snapshot = cacheWarm
-      ? lightspeedCatalogSnapshotCache.rows
+      ? cachedRows
       : await loadCatalogSnapshot(
           accessToken,
           {
             shopNameById: shopsData.shopNameById,
             categoryNameById: categoriesData.categoryNameById,
+            manufacturerNameById: manufacturerData.manufacturerNameById,
           },
           rawItemsForSnapshot
         );
@@ -1359,8 +1553,28 @@ export async function GET(req: NextRequest) {
     }
     return NextResponse.json(resp);
   } catch (e: any) {
+    const errorMsg = String(e?.message || "Unable to load Lightspeed catalog.");
+    const stale = await getStaleCatalogRows();
+    if (stale && stale.length > 0) {
+      const categoryOptions = [...new Set(stale.map((r) => r.category).filter(Boolean))].sort(compareText);
+      return NextResponse.json({
+        ok: true,
+        stale: true,
+        staleCause: errorMsg,
+        page: 1,
+        pageSize: 100,
+        total: stale.length,
+        totalPages: Math.ceil(stale.length / 100),
+        defaultLocation: PREFERRED_DEFAULT_SHOP,
+        truncated: false,
+        filters: { q: "", category: "all", shop: PREFERRED_DEFAULT_SHOP, shops: [], itemType: "all" },
+        sort: { field: "customSku", direction: "asc" },
+        options: { categories: categoryOptions, shops: [], itemTypes: [] },
+        rows: stale.slice(0, 100),
+      });
+    }
     return NextResponse.json(
-      { error: String(e?.message || "Unable to load Lightspeed catalog.") },
+      { error: errorMsg },
       { status: 400 }
     );
   }

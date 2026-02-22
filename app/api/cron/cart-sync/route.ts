@@ -3,6 +3,8 @@ import type { NextRequest } from "next/server";
 import { isRequestAuthed } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { normalizeShopDomain } from "@/lib/shopify";
+import { runCartPushAll } from "@/lib/cartInventoryPush";
+import { loadSyncToggles } from "@/lib/shopifyCartConfig";
 
 export const runtime = "nodejs";
 export const maxDuration = 800;
@@ -65,60 +67,50 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    const syncToggles = await loadSyncToggles(shop);
+    if (!syncToggles.shopifySyncEnabled) {
+      return NextResponse.json({
+        ok: true,
+        shop,
+        skipped: true,
+        message: "Shopify sync is disabled for this module. Skipped automatic sync.",
+        timestamp: new Date().toISOString(),
+      });
+    }
+    if (!syncToggles.shopifyAutoSyncEnabled) {
+      return NextResponse.json({
+        ok: true,
+        shop,
+        skipped: true,
+        message: "15-min auto sync is paused. Manual push/remove still work.",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     const notificationEmail =
       (process.env.PUSH_NOTIFICATION_EMAIL || "").trim() || null;
-    const vercelUrl = (process.env.VERCEL_URL || "").trim().replace(/^https?:\/\//, "") || "";
-    const origin =
-      req.nextUrl?.origin || (vercelUrl ? `https://${vercelUrl}` : "");
-    if (!origin) {
-      return NextResponse.json(
-        { ok: false, error: "Could not resolve API origin (missing VERCEL_URL)." },
-        { status: 500 }
-      );
-    }
-    const secret = (process.env.CRON_SECRET || "").trim();
-    const cartInventoryUrl = `${origin}/api/shopify/cart-inventory?secret=${encodeURIComponent(secret)}`;
-    const resp = await fetch(cartInventoryUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${secret}`,
-        "x-cron-secret": secret,
-      },
-      body: JSON.stringify({
-        action: "push-all",
-        shop,
-        ...(notificationEmail ? { notificationEmail } : {}),
-      }),
-      signal: AbortSignal.timeout(780_000),
+
+    const result = await runCartPushAll(shop, {
+      notificationEmail,
     });
 
-    const json = (await resp.json().catch(() => ({}))) as {
-      ok?: boolean;
-      error?: string;
-      pushed?: number;
-      totalVariants?: number;
-      markedProcessed?: number;
-      removedFromShopify?: number;
-      debug?: unknown;
-    };
-
-    if (!resp.ok || json.ok === false) {
-      const errMsg = json?.error || "Cart sync failed";
-      console.error("[cart-sync] Cart inventory failed:", resp.status, errMsg);
+    if (!result.ok) {
+      const errMsg = result.error || "Cart sync failed";
+      console.error("[cart-sync] Cart inventory failed:", errMsg);
       return NextResponse.json(
-        { ok: false, error: errMsg, status: resp.status, detail: json.debug },
-        { status: resp.status >= 400 && resp.status < 600 ? resp.status : 500 }
+        { ok: false, error: errMsg, detail: result.debug },
+        { status: 400 }
       );
     }
 
     return NextResponse.json({
       ok: true,
       shop,
-      pushed: json.pushed ?? 0,
-      totalVariants: json.totalVariants ?? 0,
-      markedProcessed: json.markedProcessed ?? 0,
-      removedFromShopify: json.removedFromShopify ?? 0,
+      pushed: result.pushed ?? 0,
+      totalVariants: result.totalVariants ?? 0,
+      markedProcessed: result.markedProcessed ?? 0,
+      removedFromShopify: result.removedFromShopify ?? 0,
+      productsCreated: result.productsCreated ?? 0,
       timestamp: new Date().toISOString(),
     });
   } catch (e: unknown) {

@@ -281,7 +281,8 @@ async function resolveCategoryName(accessToken: string, categoryId: string) {
     resource: "Category",
     query: { categoryID: key, limit: 1 },
   });
-  const name = normalizeText(rows[0]?.fullPathName || rows[0]?.name);
+  const rawName = normalizeText(rows[0]?.fullPathName || rows[0]?.name);
+  const name = rawName ? rawName.replace(/[\\\/]/g, " >> ") : "";
   categoryNameCache.set(key, name || `Category ${key}`);
   return categoryNameCache.get(key) || "";
 }

@@ -24,7 +24,9 @@ import {
 } from "@/lib/shopifySyncSessionUndo";
 import { logStageAdd } from "@/lib/shopifyCartSyncLog";
 import { sendPushNotificationEmail } from "@/lib/email";
-import { createShopifyProductFromCart } from "@/lib/shopifyCartProductCreate";
+import { runActivateArchivedInCart, runCartPushAll } from "@/lib/cartInventoryPush";
+import { runMatchToLSMatrix } from "@/lib/cartInventoryMatchToLS";
+import { loadSyncToggles } from "@/lib/shopifyCartConfig";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,6 +50,18 @@ type CartFilters = {
   keyword: string;
   /** "All" | "InLS" (from Lightspeed inventory) | "NotInLS" (manual/Shopify-only) */
   lsSource: string;
+  /** "All" | "Has" | "None" - filter by Shopify product description */
+  hasDescription: string;
+  /** "All" | "Has" | "None" - filter by product image */
+  hasImage: string;
+  /** Matrix filters: all variants must match (entire product) */
+  matrixStockFrom: number | null;
+  matrixStockTo: number | null;
+  matrixPriceFrom: number | null;
+  matrixPriceTo: number | null;
+  matrixSku: string;
+  matrixColor: string;
+  matrixSize: string;
 };
 
 type ProductsPageNode = { id: string; variants?: { nodes?: Array<{ id: string }> } };
@@ -133,12 +147,70 @@ function parseFilters(searchParams: URLSearchParams): CartFilters {
     categoryName: normalizeText(searchParams.get("CategoryName")),
     keyword: normalizeText(searchParams.get("Keyword")),
     lsSource: normalizeText(searchParams.get("LSSource")) || "All",
+    hasDescription: normalizeText(searchParams.get("HasDescription")) || "All",
+    hasImage: normalizeText(searchParams.get("HasImage")) || "All",
+    matrixStockFrom: parseNumber(searchParams.get("MatrixStockFrom")),
+    matrixStockTo: parseNumber(searchParams.get("MatrixStockTo")),
+    matrixPriceFrom: parseNumber(searchParams.get("MatrixPriceFrom")),
+    matrixPriceTo: parseNumber(searchParams.get("MatrixPriceTo")),
+    matrixSku: normalizeText(searchParams.get("MatrixSKU")),
+    matrixColor: normalizeText(searchParams.get("MatrixColor")),
+    matrixSize: normalizeText(searchParams.get("MatrixSize")),
   };
 }
 
 function isInLightspeedCatalog(parentId: string): boolean {
   const id = normalizeText(parentId).toLowerCase();
   return id.startsWith("matrix:") || id.startsWith("sku:");
+}
+
+/** Matrix filters: product passes only if ALL variants match each active filter. */
+function rowMatchesMatrixFilters(parent: StagingParent, filters: CartFilters): boolean {
+  const variants = parent.variants || [];
+  if (variants.length === 0) return true;
+
+  const hasMatrixStock = filters.matrixStockFrom !== null || filters.matrixStockTo !== null;
+  const hasMatrixPrice = filters.matrixPriceFrom !== null || filters.matrixPriceTo !== null;
+  const hasMatrixSku = Boolean(normalizeText(filters.matrixSku));
+  const hasMatrixColor = Boolean(normalizeText(filters.matrixColor));
+  const hasMatrixSize = Boolean(normalizeText(filters.matrixSize));
+  if (!hasMatrixStock && !hasMatrixPrice && !hasMatrixSku && !hasMatrixColor && !hasMatrixSize) {
+    return true;
+  }
+
+  for (const v of variants) {
+    if (hasMatrixStock) {
+      const vStock = typeof v.stock === "number" && Number.isFinite(v.stock) ? v.stock : null;
+      if (filters.matrixStockFrom !== null) {
+        if (vStock === null || vStock < filters.matrixStockFrom) return false;
+      }
+      if (filters.matrixStockTo !== null) {
+        if (vStock === null || vStock > filters.matrixStockTo) return false;
+      }
+    }
+    if (hasMatrixPrice) {
+      const vPrice = typeof v.price === "number" && Number.isFinite(v.price) ? v.price : null;
+      if (filters.matrixPriceFrom !== null) {
+        if (vPrice === null || vPrice < filters.matrixPriceFrom) return false;
+      }
+      if (filters.matrixPriceTo !== null) {
+        if (vPrice === null || vPrice > filters.matrixPriceTo) return false;
+      }
+    }
+    if (hasMatrixSku) {
+      const needle = normalizeLower(filters.matrixSku);
+      if (!includesText(v.sku, needle) && !includesText(v.upc, needle)) return false;
+    }
+    if (hasMatrixColor) {
+      const needle = normalizeLower(filters.matrixColor);
+      if (!includesText(v.color, needle)) return false;
+    }
+    if (hasMatrixSize) {
+      const needle = normalizeLower(filters.matrixSize);
+      if (!includesText(v.size, needle)) return false;
+    }
+  }
+  return true;
 }
 
 function rowMatchesFilters(parent: StagingParent, filters: CartFilters) {
@@ -174,7 +246,7 @@ function rowMatchesFilters(parent: StagingParent, filters: CartFilters) {
 
   const categoryNeedle = normalizeLower(filters.categoryName);
   if (categoryNeedle && categoryNeedle !== "all") {
-    if (normalizeLower(parent.category) !== categoryNeedle) return false;
+    if (normalizeLower(parent.category).replace(/[\\\/]/g, " >> ") !== categoryNeedle) return false;
   }
 
   if (filters.priceFrom !== null) {
@@ -215,7 +287,34 @@ function rowMatchesFilters(parent: StagingParent, filters: CartFilters) {
     }
   }
 
+  const hasDescFilter = normalizeLower(filters.hasDescription);
+  if (hasDescFilter && hasDescFilter !== "all") {
+    const rawDesc = normalizeText(parent.description);
+    const meaningfulDesc = rawDesc
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const hasMeaningfulDesc = meaningfulDesc.length > 0;
+    if (hasDescFilter === "has" && !hasMeaningfulDesc) return false;
+    if (hasDescFilter === "none" && hasMeaningfulDesc) return false;
+  }
+
+  const hasImgFilter = normalizeLower(filters.hasImage);
+  if (hasImgFilter && hasImgFilter !== "all") {
+    const hasImg =
+      Boolean(normalizeText(parent.image)) ||
+      parent.variants.some((v) => Boolean(normalizeText(v.image)));
+    if (hasImgFilter === "has" && !hasImg) return false;
+    if (hasImgFilter === "none" && hasImg) return false;
+  }
+
+  if (!rowMatchesMatrixFilters(parent, filters)) return false;
+
   return true;
+}
+
+function formatCategories<T extends { category?: string }>(rows: T[]): T[] {
+  return rows.map((r) => ({ ...r, category: normalizeText(r.category).replace(/[\\\/]/g, " >> ") }));
 }
 
 function toPagedRows(rows: StagingParent[], page: number, pageSize: number) {
@@ -293,13 +392,14 @@ function parseIncomingParent(raw: unknown, index: number): StagingParent | null 
   return {
     id,
     title: normalizeText(row.title) || sku,
-    category: normalizeText(row.category),
+    category: normalizeText(row.category).replace(/[\\\/]/g, " >> "),
     brand: normalizeText(row.brand),
     sku,
     stock: parseNumber(row.stock),
     price: parseNumber(row.price),
     variations: variants.length,
     image: normalizeText(row.image),
+    description: normalizeText(row.description) || undefined,
     status,
     processedCount: 0,
     pendingCount: 0,
@@ -419,7 +519,7 @@ export async function GET(req: NextRequest) {
     const paged = toPagedRows(filtered, page, pageSize);
 
     const categories = Array.from(
-      new Set(sorted.map((row) => normalizeText(row.category)).filter(Boolean))
+      new Set(sorted.map((row) => normalizeText(row.category).replace(/[\\\/]/g, " >> ")).filter(Boolean))
     ).sort(compareText);
     const brands = Array.from(
       new Set(sorted.map((row) => normalizeText(row.brand)).filter(Boolean))
@@ -457,7 +557,7 @@ export async function GET(req: NextRequest) {
       pageSize,
       total: paged.total,
       totalPages: paged.totalPages,
-      rows: paged.rows,
+      rows: formatCategories(paged.rows),
     });
   } catch (e: unknown) {
     return NextResponse.json(
@@ -473,16 +573,27 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!isRequestAuthed(req) && !isCronAuthed(req)) {
+  let body: Record<string, unknown> = {};
+  try {
+    body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+  } catch {
+    /* ignore */
+  }
+  const cronSecretFromBody =
+    typeof body?._cronSecret === "string" ? body._cronSecret.trim() : "";
+  const cronSecretEnv = (process.env.CRON_SECRET || "").trim();
+  const bodyCronAuth =
+    Boolean(cronSecretEnv && cronSecretFromBody === cronSecretEnv);
+  if (bodyCronAuth && "_cronSecret" in body) delete body._cronSecret;
+
+  if (!isRequestAuthed(req) && !isCronAuthed(req) && !bodyCronAuth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let body: Record<string, unknown> = {};
   let action = "";
   let shop = "";
 
   try {
-    body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
     action = normalizeLower(body?.action) || "stage-add";
 
     const availableShops = await getAvailableShops();
@@ -539,17 +650,78 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === "stage-remove") {
-      const parentIds = parseIds(body?.parentIds);
-      if (parentIds.length < 1) {
+      const syncToggles = await loadSyncToggles(shop || "__default__");
+      if (!syncToggles.shopifySyncEnabled) {
+        return NextResponse.json(
+          { error: "Shopify sync is disabled for this module. Enable it in the sync toggles to remove/archive products." },
+          { status: 403 }
+        );
+      }
+      const requestedIds = parseIds(body?.parentIds);
+      if (requestedIds.length < 1) {
         return NextResponse.json(
           { error: "parentIds[] is required for stage-remove action." },
           { status: 400 }
         );
       }
 
+      const removeProductGids = Array.isArray(body?.removeProductGids)
+        ? (body.removeProductGids as unknown[])
+            .map((v) => normalizeText(v))
+            .filter((gid) => gid && gid.startsWith("gid://shopify/Product/"))
+        : [];
+
       const current = await listCartCatalogParents(shop);
+      const requestedSet = new Set(requestedIds.map((id) => normalizeLower(id)));
+      const parentIds = current.data
+        .filter((p) => requestedSet.has(normalizeLower(p.id)))
+        .map((p) => p.id);
+
+      if (parentIds.length < 1) {
+        return NextResponse.json(
+          { error: "No matching items found in Cart for the selected IDs. The list may have changed." },
+          { status: 400 }
+        );
+      }
+
       const undoOps = buildUndoForStageRemove(current.data, parentIds);
       const removed = await removeCartCatalogParents(shop, parentIds);
+
+      if (!removed.ok || removed.data.removed < 1) {
+        const msg = removed.warning || "Failed to remove items from Carts Inventory staging.";
+        return NextResponse.json(
+          { error: msg, removed: removed.data.removed },
+          { status: 400 }
+        );
+      }
+
+      let archivedInShopify = 0;
+      if (removeProductGids.length > 0) {
+        const token =
+          (await getTokenForShop(shop)) || getShopifyAdminToken(shop);
+        const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
+        if (token) {
+          for (const productGid of removeProductGids) {
+            const updRes = await runShopifyGraphql<ProductUpdateResponse>({
+              shop,
+              token,
+              query: `mutation productUpdate($product: ProductUpdateInput!) {
+                productUpdate(product: $product) {
+                  product { id }
+                  userErrors { message }
+                }
+              }`,
+              variables: {
+                product: { id: productGid, status: "ARCHIVED" },
+              },
+              apiVersion: API_VERSION,
+            });
+            if (updRes.ok && !(updRes.data?.productUpdate?.userErrors?.length)) {
+              archivedInShopify += 1;
+            }
+          }
+        }
+      }
 
       const session =
         undoOps.length > 0
@@ -562,11 +734,48 @@ export async function POST(req: NextRequest) {
             })
           : null;
 
+      const freshListed = await listCartCatalogParents(shop);
+      const freshSorted = [...freshListed.data].sort((a, b) => compareText(a.sku, b.sku));
+      const f = (body?.filters as Record<string, unknown>) || {};
+      const filters: CartFilters = {
+        sku: normalizeText(f.SKU ?? f.sku),
+        parentSku: normalizeText(f.ParentSKU ?? f.parentSku),
+        name: normalizeText(f.Name ?? f.name),
+        brand: normalizeText(f.Brand ?? f.brand),
+        priceFrom: parseNumber(f.PriceFrom ?? f.priceFrom),
+        priceTo: parseNumber(f.PriceTo ?? f.priceTo),
+        stockFrom: parseNumber(f.StockFrom ?? f.stockFrom),
+        stockTo: parseNumber(f.StockTo ?? f.stockTo),
+        stockNull: normalizeText(f.StockNull ?? f.stockNull) || "all",
+        status: normalizeText(f.Orderby ?? f.status) || "All",
+        categoryName: normalizeText(f.CategoryName ?? f.categoryName),
+        keyword: normalizeText(f.Keyword ?? f.keyword),
+        lsSource: normalizeText(f.LSSource ?? f.lsSource) || "All",
+        hasDescription: normalizeText(f.HasDescription ?? f.hasDescription) || "All",
+        hasImage: normalizeText(f.HasImage ?? f.hasImage) || "All",
+        matrixStockFrom: parseNumber(f.MatrixStockFrom ?? f.matrixStockFrom),
+        matrixStockTo: parseNumber(f.MatrixStockTo ?? f.matrixStockTo),
+        matrixPriceFrom: parseNumber(f.MatrixPriceFrom ?? f.matrixPriceFrom),
+        matrixPriceTo: parseNumber(f.MatrixPriceTo ?? f.matrixPriceTo),
+        matrixSku: normalizeText(f.MatrixSKU ?? f.matrixSku),
+        matrixColor: normalizeText(f.MatrixColor ?? f.matrixColor),
+        matrixSize: normalizeText(f.MatrixSize ?? f.matrixSize),
+      };
+      const freshFiltered = freshSorted.filter((row) => rowMatchesFilters(row, filters));
+      const reqPage = parsePositiveInt(body?.page, 1);
+      const reqPageSize = parsePageSize(body?.pageSize);
+      const freshPaged = toPagedRows(freshFiltered, reqPage, reqPageSize);
+      const totalItems = freshFiltered.reduce((sum, row) => sum + row.variations, 0);
+      const totalProcessed = freshFiltered.reduce((sum, row) => sum + row.processedCount, 0);
+      const totalPending = freshFiltered.reduce((sum, row) => sum + row.pendingCount, 0);
+      const totalErrors = freshFiltered.reduce((sum, row) => sum + row.errorCount, 0);
+
       return NextResponse.json({
         ok: true,
         action,
         shop,
         removed: removed.data.removed,
+        archivedInShopify,
         warning: [removed.warning, current.warning].filter(Boolean).join(" ").trim(),
         undoSession: session
           ? {
@@ -577,6 +786,29 @@ export async function POST(req: NextRequest) {
               createdAt: session.createdAt,
             }
           : null,
+        rows: formatCategories(freshPaged.rows),
+        page: freshPaged.page,
+        pageSize: reqPageSize,
+        total: freshPaged.total,
+        totalPages: freshPaged.totalPages,
+        summary: {
+          totalProducts: freshFiltered.length,
+          totalItems,
+          totalProcessed,
+          totalPending,
+          totalErrors,
+        },
+        options: {
+          categories: Array.from(new Set(freshSorted.map((row) => normalizeText(row.category).replace(/[\\\/]/g, " >> ")).filter(Boolean))).sort(compareText),
+          brands: Array.from(new Set(freshSorted.map((row) => normalizeText(row.brand)).filter(Boolean))).sort(compareText),
+        },
+        undoSessions: listUndoSessions(shop, "cart_inventory", 8).map((s) => ({
+          id: s.id,
+          target: s.target,
+          action: s.action,
+          note: s.note,
+          createdAt: s.createdAt,
+        })),
       });
     }
 
@@ -674,8 +906,212 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    if (action === "archive-products") {
+      const gids = Array.isArray(body?.productGids) ? body.productGids as string[] : [];
+      if (gids.length < 1) {
+        return NextResponse.json({ error: "productGids[] required." }, { status: 400 });
+      }
+      const token = await getTokenForShop(shop);
+      if (!token) {
+        return NextResponse.json({ error: "No Shopify token." }, { status: 401 });
+      }
+      const apiVer = (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
+      let archived = 0;
+      for (const gid of gids) {
+        const res = await runShopifyGraphql<ProductUpdateResponse>({
+          shop, token,
+          query: `mutation productUpdate($product: ProductUpdateInput!) {
+            productUpdate(product: $product) { product { id } userErrors { message } }
+          }`,
+          variables: { product: { id: gid, status: "ARCHIVED" } },
+          apiVersion: apiVer,
+        });
+        if (res.ok && !(res.data?.productUpdate?.userErrors?.length)) archived += 1;
+      }
+      return NextResponse.json({ ok: true, action, shop, archived });
+    }
+
+    if (action === "activate-products") {
+      const gids = Array.isArray(body?.productGids) ? body.productGids as string[] : [];
+      if (gids.length < 1) {
+        return NextResponse.json({ error: "productGids[] required." }, { status: 400 });
+      }
+      const token = await getTokenForShop(shop);
+      if (!token) {
+        return NextResponse.json({ error: "No Shopify token." }, { status: 401 });
+      }
+      const apiVer = (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
+      let activated = 0;
+      for (const gid of gids) {
+        const res = await runShopifyGraphql<ProductUpdateResponse>({
+          shop, token,
+          query: `mutation productUpdate($product: ProductUpdateInput!) {
+            productUpdate(product: $product) { product { id } userErrors { message } }
+          }`,
+          variables: { product: { id: gid, status: "ACTIVE" } },
+          apiVersion: apiVer,
+        });
+        if (res.ok && !(res.data?.productUpdate?.userErrors?.length)) activated += 1;
+      }
+      return NextResponse.json({ ok: true, action, shop, activated });
+    }
+
+    if (action === "relink-products") {
+      const pairs = Array.isArray(body?.pairs) ? body.pairs as Array<{ goodProductId: string }> : [];
+      if (pairs.length < 1) {
+        return NextResponse.json({ error: "pairs[] required with goodProductId." }, { status: 400 });
+      }
+      const token = await getTokenForShop(shop);
+      if (!token) return NextResponse.json({ error: "No Shopify token." }, { status: 401 });
+      const apiVer = (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
+
+      const goodGids = pairs.map((p) => {
+        const id = String(p.goodProductId).trim();
+        return id.startsWith("gid://") ? id : `gid://shopify/Product/${id}`;
+      });
+
+      const BATCH = 50;
+      const skuToVariantGid = new Map<string, string>();
+      const barcodeToVariantGid = new Map<string, string>();
+      const titleToVariantGids = new Map<string, Array<{ gid: string; sku: string; barcode: string }>>();
+
+      for (let i = 0; i < goodGids.length; i += BATCH) {
+        const chunk = goodGids.slice(i, i + BATCH);
+        const gidList = chunk.map((g) => `"${g}"`).join(",");
+        const res = await runShopifyGraphql<{
+          nodes?: Array<{ id: string; title: string; status: string; variants?: { nodes: Array<{ id: string; sku?: string; barcode?: string }> } } | null>;
+        }>({
+          shop, token,
+          query: `query { nodes(ids: [${gidList}]) { ... on Product { id title status variants(first: 100) { nodes { id sku barcode } } } } }`,
+          variables: {},
+          apiVersion: apiVer,
+        });
+        for (const node of (res.data?.nodes || [])) {
+          if (!node?.id) continue;
+          const titleLower = (node.title || "").trim().toLowerCase();
+          const variants = node.variants?.nodes || [];
+          const varList: Array<{ gid: string; sku: string; barcode: string }> = [];
+          for (const v of variants) {
+            const sku = (v.sku || "").trim().toLowerCase();
+            const barcode = (v.barcode || "").trim().toLowerCase();
+            if (sku) skuToVariantGid.set(sku, v.id);
+            if (barcode) barcodeToVariantGid.set(barcode, v.id);
+            varList.push({ gid: v.id, sku, barcode });
+          }
+          if (titleLower) titleToVariantGids.set(titleLower, varList);
+        }
+      }
+
+      const goodVariantGidSet = new Set<string>();
+      for (const [, gid] of skuToVariantGid) goodVariantGidSet.add(gid);
+      for (const [, gid] of barcodeToVariantGid) goodVariantGidSet.add(gid);
+
+      const current = await listCartCatalogParents(shop);
+
+      let relinked = 0;
+      let variantsFixed = 0;
+      const updated: StagingParent[] = [];
+
+      for (const parent of current.data) {
+        let changed = false;
+        const titleLower = (parent.title || "").trim().toLowerCase();
+        const goodVars = titleToVariantGids.get(titleLower);
+        if (!goodVars) continue;
+
+        for (const variant of parent.variants) {
+          const currentCartId = (variant.cartId || "").trim();
+          const alreadyGood = goodVariantGidSet.has(currentCartId);
+          if (alreadyGood) continue;
+
+          const vSku = (variant.sku || "").trim().toLowerCase();
+          const vUpc = (variant.upc || "").trim().toLowerCase();
+
+          let newGid = "";
+          if (vSku) newGid = skuToVariantGid.get(vSku) || "";
+          if (!newGid && vUpc) newGid = barcodeToVariantGid.get(vUpc) || "";
+
+          if (newGid && newGid !== currentCartId) {
+            variant.cartId = newGid;
+            changed = true;
+            variantsFixed++;
+          }
+        }
+
+        if (changed) {
+          updated.push(parent);
+          relinked++;
+        }
+      }
+
+      if (updated.length > 0) {
+        await upsertCartCatalogParents(shop, updated);
+      }
+
+      return NextResponse.json({
+        ok: true,
+        action,
+        shop,
+        relinked,
+        variantsFixed,
+        skusAvailable: skuToVariantGid.size,
+        message: `Relinked ${relinked} product(s), fixed ${variantsFixed} variant cartId(s).`,
+      });
+    }
+
+    if (action === "activate-archived") {
+      const syncToggles = await loadSyncToggles(shop || "__default__");
+      if (!syncToggles.shopifySyncEnabled) {
+        return NextResponse.json(
+          { error: "Shopify sync is disabled for this module. Enable it in the sync toggles." },
+          { status: 403 }
+        );
+      }
+      const result = await runActivateArchivedInCart(shop);
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error }, { status: 400 });
+      }
+      return NextResponse.json({
+        ok: true,
+        action,
+        shop,
+        activated: result.activated ?? 0,
+        message: `Activated ${result.activated ?? 0} archived product(s) that are in Cart.`,
+      });
+    }
+
+    if (action === "match-to-ls-matrix") {
+      if (!shop) {
+        return NextResponse.json({ error: "Shop is required for match-to-ls-matrix." }, { status: 400 });
+      }
+      try {
+        const origin = req.nextUrl.origin;
+        const result = await runMatchToLSMatrix(shop, origin);
+        return NextResponse.json({
+          ok: true,
+          action,
+          shop,
+          matched: result.matched,
+          skipped: result.skipped,
+          enriched: result.enriched,
+          errors: result.errors,
+          warning: result.warning,
+          message: `Matched ${result.matched} product(s) to LS matrix. ${result.skipped} skipped (no LS match).${result.enriched ? ` Enriched ${result.enriched} existing product(s) with LS data.` : ""}`,
+        });
+      } catch (e) {
+        const message = (e as Error)?.message || "Match to LS matrix failed.";
+        return NextResponse.json({ error: message }, { status: 400 });
+      }
+    }
+
     // Push to Shopify: Manual or via cron (/api/cron/cart-sync). Cron auth via CRON_SECRET.
     if (action === "push-selected" || action === "push-all") {
+      const syncToggles = await loadSyncToggles(shop || "__default__");
+      if (!syncToggles.shopifySyncEnabled) {
+        return NextResponse.json(
+          { error: "Shopify sync is disabled for this module. Enable it in the sync toggles to push to Shopify." },
+          { status: 403 }
+        );
+      }
       const notificationEmail = typeof body?.notificationEmail === "string" && body.notificationEmail.trim()
         ? body.notificationEmail.trim()
         : (process.env.PUSH_NOTIFICATION_EMAIL || "").trim() || null;
@@ -685,13 +1121,7 @@ export async function POST(req: NextRequest) {
           ? parseIds(body?.parentIds)
           : (await listCartCatalogParents(shop)).data.map((p) => p.id);
 
-      const removeProductGids = Array.isArray(body?.removeProductGids)
-        ? (body.removeProductGids as unknown[])
-            .map((v) => normalizeText(v))
-            .filter((gid) => gid && gid.startsWith("gid://shopify/Product/"))
-        : [];
-
-      if (parentIds.length < 1 && removeProductGids.length < 1) {
+      if (parentIds.length < 1) {
         const err = "No items selected for push and no products to remove.";
         if (notificationEmail) {
           void sendPushNotificationEmail({
@@ -720,7 +1150,6 @@ export async function POST(req: NextRequest) {
               action,
               shop,
               parentIds,
-              removeProductGids,
               background: false,
             };
             if (notificationEmail) pushPayload.notificationEmail = notificationEmail;
@@ -729,7 +1158,7 @@ export async function POST(req: NextRequest) {
               "Content-Type": "application/json",
             };
             if (cookie) headers.Cookie = cookie;
-            console.log("[cart-inventory] Background push started:", { shop, parentCount: parentIds.length, removalCount: removeProductGids.length });
+            console.log("[cart-inventory] Background push started:", { shop, parentCount: parentIds.length });
             ctx.waitUntil(
               fetch(`${origin}/api/shopify/cart-inventory`, {
                 method: "POST",
@@ -752,371 +1181,27 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      const current = await listCartCatalogParents(shop);
-      const idSet = new Set(parentIds.map((id) => normalizeLower(id)));
-      const toPush = current.data.filter((p) => idSet.has(normalizeLower(p.id)));
-
-      let variantsSkippedNoCartId = 0;
-      let variantsSkippedNoInvItem = 0;
-
-      const token =
-        (await getTokenForShop(shop)) ||
-        getShopifyAdminToken(shop);
-      if (!token) {
-        const err = "Shopify access token not found for this shop.";
-        if (notificationEmail) {
-          void sendPushNotificationEmail({
-            to: notificationEmail,
-            shop,
-            success: false,
-            pushed: 0,
-            totalVariants: 0,
-            markedProcessed: 0,
-            removedFromShopify: 0,
-            error: err,
-            items: [],
-          }).catch(() => {});
-        }
-        return NextResponse.json({ error: err }, { status: 401 });
-      }
-
-      const API_VERSION =
-        (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
-
-      const locRes = await runShopifyGraphql<{
-        locations?: { nodes?: Array<{ id: string }> };
-      }>({
-        shop,
-        token,
-        query: `query { locations(first: 5) { nodes { id } } }`,
-        apiVersion: API_VERSION,
+      const result = await runCartPushAll(shop, {
+        notificationEmail,
+        parentIds,
       });
-      const locationId =
-        locRes.ok && locRes.data?.locations?.nodes?.[0]?.id
-          ? locRes.data.locations.nodes[0].id
-          : "";
-      if (!locationId) {
-        const hint = !locRes.ok
-          ? " (Check that SHOPIFY_SCOPES includes read_locations and re-authorize the app)"
-          : "";
-        const err = `No Shopify location found. Every store has a default location, but the app needs permission to read it. Add read_locations and write_inventory to SHOPIFY_SCOPES in .env, then re-authorize via Settings.${hint}`;
-        if (notificationEmail) {
-          void sendPushNotificationEmail({
-            to: notificationEmail,
-            shop,
-            success: false,
-            pushed: 0,
-            totalVariants: 0,
-            markedProcessed: 0,
-            removedFromShopify: 0,
-            error: err,
-            items: [],
-          }).catch(() => {});
-        }
-        return NextResponse.json({ error: err }, { status: 400 });
-      }
 
-      let productsCreated = 0;
-      const shopKey = normalizeShopDomain(shop) || shop;
-      try {
-        const supabase = getSupabaseAdmin();
-        const { data: configRow } = await supabase
-          .from("shopify_cart_config")
-          .select("config")
-          .eq("shop", shopKey)
-          .maybeSingle();
-        const config = (configRow?.config as Record<string, unknown>) || {};
-        const cartConfig = {
-          newProductMapping: (config.newProductMapping as Record<string, unknown>) || {},
-          newProductRules: (config.newProductRules as Record<string, unknown>) || {},
-        };
-
-        for (const parent of toPush) {
-          const hasUnlinked = parent.variants.some((v) => !normalizeText(v.cartId));
-          if (!hasUnlinked) continue;
-
-          const result = await createShopifyProductFromCart(shop, token, parent, cartConfig, locationId);
-          if (!result.ok || !result.productGid || !result.variantGids?.length) {
-            console.warn("[cart-inventory] Create product failed:", parent.sku, result.error);
-            continue;
-          }
-
-          const updatedVariants = parent.variants.map((v, i) => ({
-            ...v,
-            cartId: result.variantGids?.[i] || v.cartId,
-          }));
-          const updatedParent: StagingParent = { ...parent, variants: updatedVariants };
-          await upsertCartCatalogParents(shop, [updatedParent]);
-          for (let i = 0; i < parent.variants.length; i++) {
-            parent.variants[i].cartId = result.variantGids?.[i] || parent.variants[i].cartId;
-          }
-          productsCreated += 1;
-        }
-      } catch (createErr) {
-        console.warn("[cart-inventory] Product creation phase:", (createErr as Error)?.message);
-      }
-
-      const quantities: Array<{
-        inventoryItemId: string;
-        locationId: string;
-        quantity: number;
-        compareQuantity: number | null;
-      }> = [];
-
-      for (const parent of toPush) {
-        for (const v of parent.variants) {
-          const cartId = normalizeText(v.cartId);
-          if (!cartId) {
-            variantsSkippedNoCartId += 1;
-            continue;
-          }
-          const variantGid = cartId.includes("~")
-            ? `gid://shopify/ProductVariant/${cartId.split("~")[1] || cartId}`
-            : cartId.startsWith("gid://")
-              ? cartId
-              : `gid://shopify/ProductVariant/${cartId}`;
-
-          const varRes = await runShopifyGraphql<{
-            productVariant?: { inventoryItem?: { id: string } };
-          }>({
-            shop,
-            token,
-            query: `query($id: ID!) { productVariant(id: $id) { inventoryItem { id } } }`,
-            variables: { id: variantGid },
-            apiVersion: API_VERSION,
-          });
-          const invItemId =
-            varRes.ok && varRes.data?.productVariant?.inventoryItem?.id
-              ? varRes.data.productVariant.inventoryItem.id
-              : "";
-          if (!invItemId) {
-            variantsSkippedNoInvItem += 1;
-            continue;
-          }
-
-          const qty =
-            typeof v.stock === "number" && Number.isFinite(v.stock)
-              ? Math.max(0, Math.round(v.stock))
-              : 0;
-
-          quantities.push({
-            inventoryItemId: invItemId,
-            locationId,
-            quantity: qty,
-            compareQuantity: null,
-          });
-        }
-      }
-
-      let pushed = 0;
-      if (quantities.length > 0) {
-        const BATCH = 100;
-        for (let i = 0; i < quantities.length; i += BATCH) {
-          const batch = quantities.slice(i, i + BATCH);
-          const mutRes = await runShopifyGraphql<{
-            inventorySetQuantities?: {
-              userErrors?: Array<{ message: string }>;
-            };
-          }>({
-            shop,
-            token,
-            query: `mutation($input: InventorySetQuantitiesInput!) {
-              inventorySetQuantities(input: $input) {
-                userErrors { message }
-              }
-            }`,
-            variables: {
-              input: {
-                name: "available",
-                reason: "correction",
-                ignoreCompareQuantity: true,
-                quantities: batch.map((q) => ({
-                  inventoryItemId: q.inventoryItemId,
-                  locationId: q.locationId,
-                  quantity: q.quantity,
-                  compareQuantity: q.compareQuantity,
-                })),
-              },
-            },
-            apiVersion: API_VERSION,
-          });
-          if (mutRes.ok && !(mutRes.data?.inventorySetQuantities?.userErrors?.length)) {
-            pushed += batch.length;
-          }
-        }
-      }
-
-      const toMarkProcessed =
-        pushed > 0 ? parentIds : [];
-      if (toMarkProcessed.length > 0) {
-        await updateCartCatalogStatus(shop, toMarkProcessed, "PROCESSED");
-      }
-
-      let removedFromShopify = 0;
-      if (removeProductGids.length > 0) {
-        for (const productGid of removeProductGids) {
-          const updRes = await runShopifyGraphql<{
-            productUpdate?: { product?: { id: string }; userErrors?: Array<{ message: string }> };
-          }>({
-            shop,
-            token,
-            query: `mutation productUpdate($product: ProductUpdateInput!) {
-              productUpdate(product: $product) {
-                product { id }
-                userErrors { message }
-              }
-            }`,
-            variables: {
-              product: {
-                id: productGid,
-                status: "ARCHIVED",
-              },
-            },
-            apiVersion: API_VERSION,
-          });
-          if (updRes.ok && !(updRes.data?.productUpdate?.userErrors?.length)) {
-            removedFromShopify += 1;
-          }
-        }
-      }
-
-      const fullCart = await listCartCatalogParents(shop);
-      const cartVariantGids = new Set<string>();
-      for (const parent of fullCart.data) {
-        for (const v of parent.variants) {
-          const cartId = normalizeText(v.cartId);
-          if (!cartId) continue;
-          const gid = cartId.includes("~")
-            ? `gid://shopify/ProductVariant/${cartId.split("~")[1] || cartId}`
-            : cartId.startsWith("gid://")
-              ? cartId
-              : `gid://shopify/ProductVariant/${cartId}`;
-          cartVariantGids.add(gid.toLowerCase());
-        }
-      }
-
-      let archivedNotInCart = 0;
-      const archiveQueries = ["status:active", "status:draft", "status:unlisted"] as const;
-      for (const statusQuery of archiveQueries) {
-        let shopifyCursor: string | null = null;
-        const PRODUCTS_PER_PAGE = 50;
-        const MAX_ARCHIVE_PAGES = 100;
-        for (let page = 0; page < MAX_ARCHIVE_PAGES; page++) {
-          let prodRes: ShopifyGraphqlResult<ProductsPageResponse>;
-          try {
-            prodRes = await runShopifyGraphql<ProductsPageResponse>({
-              shop,
-              token,
-              query: `query($first: Int!, $after: String, $query: String!) {
-                products(first: $first, after: $after, query: $query, sortKey: UPDATED_AT, reverse: true) {
-                  edges { node { id variants(first: 250) { nodes { id } } } }
-                  pageInfo { hasNextPage endCursor }
-                }
-              }`,
-              variables: {
-                first: PRODUCTS_PER_PAGE,
-                after: shopifyCursor,
-                query: statusQuery,
-              },
-              apiVersion: API_VERSION,
-            });
-          } catch (archiveErr) {
-            console.warn("[cart-inventory] Archive query failed for", statusQuery, (archiveErr as Error)?.message);
-            break;
-          }
-          if (!prodRes.ok || !prodRes.data?.products?.edges) break;
-        const edges = prodRes.data.products.edges;
-        const pageInfo = prodRes.data.products.pageInfo;
-        for (const edge of edges) {
-          const product = edge?.node;
-          if (!product?.id) continue;
-          const variantNodes = product.variants?.nodes || [];
-          const hasVariantInCart = variantNodes.some((vn) =>
-            cartVariantGids.has(normalizeText(vn?.id).toLowerCase())
-          );
-          if (variantNodes.length > 0 && !hasVariantInCart) {
-            const updRes = await runShopifyGraphql<ProductUpdateResponse>({
-              shop,
-              token,
-              query: `mutation productUpdate($product: ProductUpdateInput!) {
-                productUpdate(product: $product) {
-                  product { id }
-                  userErrors { message }
-                }
-              }`,
-              variables: {
-                product: { id: product.id, status: "ARCHIVED" },
-              },
-              apiVersion: API_VERSION,
-            });
-            if (updRes.ok && !(updRes.data?.productUpdate?.userErrors?.length)) {
-              archivedNotInCart += 1;
-            }
-          }
-        }
-        if (!pageInfo?.hasNextPage) break;
-        shopifyCursor = pageInfo.endCursor || null;
-        if (!shopifyCursor) break;
-      }
-      }
-      removedFromShopify += archivedNotInCart;
-
-      const pushSummary = {
-        action,
-        shop,
-        pushed,
-        totalVariants: quantities.length,
-        productsProcessed: toMarkProcessed.length,
-        removedFromShopify,
-        archivedNotInCart,
-      };
-      console.log("[cart-inventory] Push complete:", JSON.stringify(pushSummary));
-
-      if (notificationEmail) {
-        void sendPushNotificationEmail({
-          to: notificationEmail,
-          shop,
-          success: true,
-          pushed,
-          totalVariants: quantities.length,
-          markedProcessed: toMarkProcessed.length,
-          removedFromShopify,
-          archivedNotInCart,
-          productsCreated,
-          items: toPush.map((p) => ({
-            sku: normalizeText(p.sku),
-            title: normalizeText(p.title),
-            brand: normalizeText(p.brand),
-            variants: Array.isArray(p.variants) ? p.variants.length : 0,
-          })),
-        }).catch(() => {});
+      if (!result.ok) {
+        const status = result.error?.toLowerCase().includes("token") ? 401 : 400;
+        return NextResponse.json({ error: result.error ?? "Push failed" }, { status });
       }
 
       return NextResponse.json({
         ok: true,
         action,
         shop,
-        pushed,
-        productsCreated,
-        totalVariants: quantities.length,
-        markedProcessed: toMarkProcessed.length,
-        removedFromShopify,
-        archivedNotInCart,
-        debug:
-          pushed === 0 && (variantsSkippedNoCartId > 0 || variantsSkippedNoInvItem > 0)
-            ? {
-                parentsRequested: parentIds.length,
-                parentsMatched: toPush.length,
-                variantsSkippedNoCartId,
-                variantsSkippedNoInvItem,
-                hint:
-                  variantsSkippedNoCartId > 0
-                    ? "Variants are not linked to Shopify. Run a queue sync from Lightspeed or pull from Shopify catalog first."
-                    : variantsSkippedNoInvItem > 0
-                      ? "Variants could not be found in Shopify (deleted or ID mismatch)."
-                      : undefined,
-              }
-            : undefined,
+        pushed: result.pushed ?? 0,
+        productsCreated: result.productsCreated ?? 0,
+        totalVariants: result.totalVariants ?? 0,
+        markedProcessed: result.markedProcessed ?? 0,
+        removedFromShopify: result.removedFromShopify ?? 0,
+        archivedNotInCart: result.archivedNotInCart ?? 0,
+        debug: result.debug,
       });
     }
 

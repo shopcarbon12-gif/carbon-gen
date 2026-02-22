@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { SyncTogglesBar } from "@/components/sync-toggles-bar";
 
 type CartInventoryVariantRow = {
   id: string;
@@ -51,6 +53,18 @@ type CartFilters = {
   Keyword: string;
   /** "All" | "InLS" (from LS inventory page) | "NotInLS" (manual/Shopify-only) */
   LSSource: "All" | "InLS" | "NotInLS";
+  /** "All" | "Has" | "None" - filter by Shopify product description */
+  HasDescription: "All" | "Has" | "None";
+  /** "All" | "Has" | "None" - filter by product image */
+  HasImage: "All" | "Has" | "None";
+  /** Matrix filters: all variants must match (entire product) */
+  MatrixStockFrom: string;
+  MatrixStockTo: string;
+  MatrixPriceFrom: string;
+  MatrixPriceTo: string;
+  MatrixSKU: string;
+  MatrixColor: string;
+  MatrixSize: string;
 };
 
 type CartInventoryResponse = {
@@ -89,6 +103,15 @@ const DEFAULT_FILTERS: CartFilters = {
   CategoryName: "",
   Keyword: "",
   LSSource: "All",
+  HasDescription: "All",
+  HasImage: "All",
+  MatrixStockFrom: "",
+  MatrixStockTo: "",
+  MatrixPriceFrom: "",
+  MatrixPriceTo: "",
+  MatrixSKU: "",
+  MatrixColor: "",
+  MatrixSize: "",
 };
 
 const PAGE_SIZE_OPTIONS = [20, 50, 75, 100, 200, 500] as const;
@@ -110,7 +133,7 @@ function formatQty(value: number | null) {
 
 function formatPrice(value: number | null) {
   if (value === null || value === undefined || Number.isNaN(value)) return "-";
-  return value.toFixed(2);
+  return value.toFixed(3);
 }
 
 function variantKey(parentId: string, variantId: string) {
@@ -157,6 +180,8 @@ function compareField(a: CartInventoryParentRow, b: CartInventoryParentRow, fiel
 export default function ShopifyMappingCartsInventory() {
   const [filters, setFilters] = useState<CartFilters>(DEFAULT_FILTERS);
   const [appliedFilters, setAppliedFilters] = useState<CartFilters>(DEFAULT_FILTERS);
+  const [generalFiltersOpen, setGeneralFiltersOpen] = useState(true);
+  const [matrixFiltersOpen, setMatrixFiltersOpen] = useState(false);
   const [rows, setRows] = useState<CartInventoryParentRow[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [shop, setShop] = useState("");
@@ -168,7 +193,7 @@ export default function ShopifyMappingCartsInventory() {
     totalErrors: 0,
   });
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<number>(50);
+  const [pageSize, setPageSize] = useState<number>(20);
   const [totalPages, setTotalPages] = useState(1);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
@@ -182,11 +207,10 @@ export default function ShopifyMappingCartsInventory() {
   const [comparePopupOpen, setComparePopupOpen] = useState(false);
   const [compareNotInLastSyncRows, setCompareNotInLastSyncRows] = useState<CartInventoryParentRow[]>([]);
   const [compareMeta, setCompareMeta] = useState<{ lastSyncCount: number; totalCartCount: number; hasLastSync: boolean } | null>(null);
+
   const [goToPageInput, setGoToPageInput] = useState("");
   const [allFilteredSelected, setAllFilteredSelected] = useState(false);
   const allFilteredRowsRef = useRef<CartInventoryParentRow[] | null>(null);
-  const removalQueueRef = useRef<Set<string>>(new Set());
-  const [removalQueueSize, setRemovalQueueSize] = useState(0);
   const statusBarRef = useRef<HTMLElement | null>(null);
   const [statusBarHeight, setStatusBarHeight] = useState(0);
   const [task, setTask] = useState<{
@@ -260,7 +284,7 @@ export default function ShopifyMappingCartsInventory() {
   }
 
   useEffect(() => {
-    void loadCart(1, 50, DEFAULT_FILTERS);
+    void loadCart(1, 20, DEFAULT_FILTERS);
   }, []);
 
   const SELECT_PAGE_SIZE = 500;
@@ -300,13 +324,20 @@ export default function ShopifyMappingCartsInventory() {
         });
         currentPage += 1;
       }
-      const next: Record<string, boolean> = {};
-      for (const row of allRows) next[row.id] = true;
-      setSelectedParents(next);
-      setSelectedVariants({});
+      const nextParents: Record<string, boolean> = {};
+      const nextVariants: Record<string, boolean> = {};
+      for (const row of allRows) {
+        nextParents[row.id] = true;
+        for (const v of row.variants ?? []) {
+          nextVariants[variantKey(row.id, v.id)] = true;
+        }
+      }
+      setSelectedParents(nextParents);
+      setSelectedVariants(nextVariants);
       allFilteredRowsRef.current = allRows;
       setAllFilteredSelected(true);
-      setStatus(`Selected all ${allRows.length} filtered products.`);
+      const totalItems = allRows.reduce((n, r) => n + (r.variants?.length ?? r.variations ?? 0), 0);
+      setStatus(`Selected all ${allRows.length} filtered products (${totalItems} variant${totalItems !== 1 ? "s" : ""}).`);
       setTask({ label: `Selected ${allRows.length} filtered products`, progress: 100, tone: "success" });
     } catch (e: unknown) {
       const msg = sanitizeUiErrorMessage((e as { message?: string } | null)?.message, "Unable to select all filtered products.");
@@ -447,27 +478,53 @@ export default function ShopifyMappingCartsInventory() {
     setStatus("");
     setTask({ label: `Running ${action}...`, progress: 35, tone: "running" });
     try {
+      let payload: Record<string, unknown> = { action, shop, ...extra };
       if (action === "stage-remove") {
         const ids = (extra?.parentIds as string[]) ?? [];
         const parentRows = getParentRowsForIds(ids);
-        for (const parent of parentRows) {
-          const gid = toProductGid(parent);
-          if (gid) removalQueueRef.current.add(gid);
+        const removeProductGids = parentRows.map((p) => toProductGid(p)).filter((g): g is string => Boolean(g));
+        if (removeProductGids.length > 0) {
+          payload = { ...payload, removeProductGids };
         }
-        setRemovalQueueSize(removalQueueRef.current.size);
+        payload = { ...payload, page, pageSize, filters: appliedFilters };
       }
       const resp = await fetch("/api/shopify/cart-inventory", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, shop, ...extra }),
+        body: JSON.stringify(payload),
       });
-      const json = (await resp.json().catch(() => ({}))) as { error?: string };
+      const json = (await resp.json().catch(() => ({}))) as CartInventoryResponse & { error?: string; removed?: number; archivedInShopify?: number };
       if (!resp.ok) throw new Error(sanitizeUiErrorMessage(json.error, `Action failed: ${action}`));
-      if (action === "stage-remove") setStatus("Selected rows removed from staging. Push to Shopify to remove from live catalog.");
+      if (action === "stage-remove") {
+        const archived = json.archivedInShopify ?? 0;
+        setStatus(archived > 0 ? `Removed from Carts Inventory and archived ${archived} product(s) in Shopify.` : "Selected rows removed from Carts Inventory.");
+        if (Array.isArray(json.rows) && json.summary != null) {
+          setRows(json.rows);
+          setPage(Number(json.page ?? page));
+          setPageSize(Number(json.pageSize ?? pageSize));
+          setTotalPages(Math.max(1, Number(json.totalPages ?? 1)));
+          setSummary({
+            totalProducts: Number(json.summary.totalProducts ?? 0),
+            totalItems: Number(json.summary.totalItems ?? 0),
+            totalProcessed: Number(json.summary.totalProcessed ?? 0),
+            totalPending: Number(json.summary.totalPending ?? 0),
+            totalErrors: Number(json.summary.totalErrors ?? 0),
+          });
+          if (Array.isArray(json.options?.categories)) setCategories(json.options.categories);
+          setSelectedParents({});
+          setSelectedVariants({});
+          setAllFilteredSelected(false);
+          allFilteredRowsRef.current = null;
+          setExpandedRows({});
+        } else {
+          await loadCart(page, pageSize, appliedFilters, { startLabel: "Refreshing catalog..." });
+        }
+      } else {
+        await loadCart(page, pageSize, appliedFilters, { startLabel: "Refreshing catalog..." });
+      }
       if (action === "set-status") setStatus("Status updated for selected rows.");
       if (action === "undo-session") setStatus("Undo completed.");
       setTask({ label: `${action} complete`, progress: 100, tone: "success" });
-      await loadCart(page, pageSize, appliedFilters, { startLabel: "Refreshing catalog..." });
     } catch (e: unknown) {
       const message = sanitizeUiErrorMessage((e as { message?: string } | null)?.message, "Action failed.");
       setError(message);
@@ -477,75 +534,182 @@ export default function ShopifyMappingCartsInventory() {
     }
   }
 
+  async function activateArchivedInCart() {
+    if (!shop) {
+      setError("No shop selected.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setStatus("");
+    setTask({ label: "Activating archived products...", progress: 35, tone: "running" });
+    try {
+      const resp = await fetch("/api/shopify/cart-inventory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "activate-archived", shop }),
+      });
+      const json = (await resp.json().catch(() => ({}))) as { error?: string; activated?: number };
+      if (!resp.ok) throw new Error(sanitizeUiErrorMessage(json.error, "Activate failed"));
+      const n = json.activated ?? 0;
+      setStatus(`Activated ${n} archived product(s) in Shopify.`);
+      setTask({ label: `Activated ${n} product(s)`, progress: 100, tone: "success" });
+      await loadCart(page, pageSize, appliedFilters, { startLabel: "Refreshing..." });
+    } catch (e: unknown) {
+      const message = sanitizeUiErrorMessage((e as { message?: string } | null)?.message, "Activate failed");
+      setError(message);
+      setTask({ label: message, progress: 100, tone: "error" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function matchToLSMatrix() {
+    if (!shop) {
+      setError("No shop selected.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setStatus("");
+    setTask({ label: "Matching Cart Inventory to LS matrix...", progress: 35, tone: "running" });
+    try {
+      const resp = await fetch("/api/shopify/cart-inventory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "match-to-ls-matrix", shop }),
+      });
+      const json = (await resp.json().catch(() => ({}))) as {
+        error?: string;
+        matched?: number;
+        skipped?: number;
+        enriched?: number;
+        errors?: string[];
+      };
+      if (!resp.ok) throw new Error(sanitizeUiErrorMessage(json.error, "Match to LS matrix failed"));
+      const matched = json.matched ?? 0;
+      const skipped = json.skipped ?? 0;
+      const enriched = json.enriched ?? 0;
+      setStatus(`Matched ${matched} product(s) to LS matrix. ${skipped} skipped (no LS match).${enriched ? ` Enriched ${enriched} existing product(s) with LS data.` : ""}`);
+      setTask({ label: `Matched ${matched} product(s)`, progress: 100, tone: "success" });
+      await loadCart(page, pageSize, appliedFilters, { startLabel: "Refreshing..." });
+    } catch (e: unknown) {
+      const message = sanitizeUiErrorMessage((e as { message?: string } | null)?.message, "Match to LS matrix failed");
+      setError(message);
+      setTask({ label: message, progress: 100, tone: "error" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const PUSH_BATCH_SIZE = 200;
+
   async function pushSelectedToShopify(background = false) {
-    const removeProductGids = Array.from(removalQueueRef.current);
     const hasPush = selectedParentIds.length > 0;
-    const hasRemove = removeProductGids.length > 0;
-    if (!hasPush && !hasRemove) {
+    if (!hasPush) {
       setError("Nothing to push. Select items to push, or remove items first to remove them from Shopify.");
       return;
     }
     setBusy(true);
     setError("");
     setStatus("");
-    setTask({ label: background ? "Starting sync in background..." : "Pushing to Shopify...", progress: 35, tone: "running" });
+    const useBatching = selectedParentIds.length > PUSH_BATCH_SIZE;
+    const batches = useBatching
+      ? (() => {
+          const b: string[][] = [];
+          for (let i = 0; i < selectedParentIds.length; i += PUSH_BATCH_SIZE) {
+            b.push(selectedParentIds.slice(i, i + PUSH_BATCH_SIZE));
+          }
+          return b;
+        })()
+      : [selectedParentIds];
+    setTask({
+      label: useBatching ? `Pushing batch 1/${batches.length}...` : "Pushing to Shopify...",
+      progress: 35,
+      tone: "running",
+    });
     try {
-      const resp = await fetch("/api/shopify/cart-inventory", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "push-selected",
-          shop,
-          parentIds: selectedParentIds,
-          removeProductGids: hasRemove ? removeProductGids : undefined,
-          background,
-          notificationEmail:
+      let totalPushed = 0;
+      let totalCreated = 0;
+      let totalRemoved = 0;
+      let totalArchived = 0;
+      let lastDebug: {
+        hint?: string;
+        staleLinksCleared?: number;
+        variantsLinkedBySku?: number;
+        variantsLinkedByTitle?: number;
+        variantsAddedToExisting?: number;
+        variantsSkippedNoCartId?: number;
+        variantsSkippedNoInvItem?: number;
+        addVariantErrors?: string[];
+        steps?: Array<{ step: string; detail: string }>;
+      } | undefined;
+      for (let i = 0; i < batches.length; i++) {
+        if (batches.length > 1) {
+          setTask({
+            label: `Pushing batch ${i + 1}/${batches.length}...`,
+            progress: 35 + Math.round(((i + 0.5) / batches.length) * 55),
+            tone: "running",
+          });
+        }
+        const resp = await fetch("/api/shopify/cart-inventory", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "push-selected",
+            shop,
+            parentIds: batches[i],
+            background: background && batches.length === 1,
+            notificationEmail:
             (typeof process.env.NEXT_PUBLIC_PUSH_NOTIFICATION_EMAIL === "string" &&
               process.env.NEXT_PUBLIC_PUSH_NOTIFICATION_EMAIL.trim()) ||
             "elior@carbonjeanscompany.com",
         }),
       });
-      const json = (await resp.json().catch(() => ({}))) as {
-        error?: string;
-        message?: string;
-        pushed?: number;
-        productsCreated?: number;
-        removedFromShopify?: number;
-        archivedNotInCart?: number;
-        debug?: { hint?: string; variantsSkippedNoCartId?: number; variantsSkippedNoInvItem?: number };
-      };
-      const apiError = sanitizeUiErrorMessage(json.error, "");
-      const itemCount = selectedParentIds.length;
-      const fallback =
-        resp.status === 504
-          ? `Request timed out. ${itemCount} products may take 10+ min. Try batches of ~200 or wait for automatic sync (every 15 min).`
-          : resp.status === 502 || resp.status === 503
-            ? "Server overloaded or timeout. Try smaller batches (~200 items)."
-            : `Push to Shopify failed (${resp.status}).`;
-      const errMsg = apiError || fallback;
-      if (!resp.ok) throw new Error(errMsg);
-      if (resp.status === 202) {
-        if (hasRemove) {
-          removalQueueRef.current.clear();
-          setRemovalQueueSize(0);
+        const json = (await resp.json().catch(() => ({}))) as {
+          error?: string;
+          pushed?: number;
+          productsCreated?: number;
+          removedFromShopify?: number;
+          archivedNotInCart?: number;
+          debug?: typeof lastDebug;
+        };
+        const apiError = sanitizeUiErrorMessage(json.error, "");
+        const fallback =
+          resp.status === 504
+            ? `Request timed out. Batch ${i + 1} may be too large.`
+            : resp.status === 502 || resp.status === 503
+              ? "Server overloaded or timeout."
+              : `Push to Shopify failed (${resp.status}).`;
+        const errMsg = apiError || fallback;
+        if (!resp.ok) throw new Error(errMsg);
+        if (resp.status === 202) {
+          setStatus("Sync started in background. You can close this page.");
+          setTask({ label: "Sync running in background", progress: 100, tone: "success" });
+          await loadCart(page, pageSize, appliedFilters, { startLabel: "Refreshing catalog..." });
+          return;
         }
-        setStatus("Sync started in background. You can close this page.");
-        setTask({ label: "Sync running in background", progress: 100, tone: "success" });
-        await loadCart(page, pageSize, appliedFilters, { startLabel: "Refreshing catalog..." });
-        return;
-      }
-      if (hasRemove) {
-        removalQueueRef.current.clear();
-        setRemovalQueueSize(0);
+        totalPushed += json.pushed ?? 0;
+        totalCreated += json.productsCreated ?? 0;
+        totalRemoved += json.removedFromShopify ?? 0;
+        totalArchived += json.archivedNotInCart ?? 0;
+        if (json.debug) lastDebug = json.debug;
       }
       const parts: string[] = [];
-      if (hasPush && json.pushed != null) parts.push(`Updated ${json.pushed} variant(s)`);
-      if (json.productsCreated != null && json.productsCreated > 0) parts.push(`Created ${json.productsCreated} product(s)`);
-      if (hasRemove && json.removedFromShopify != null) parts.push(`Archived ${json.removedFromShopify} product(s) from catalog`);
-      if (!hasRemove && json.archivedNotInCart != null && json.archivedNotInCart > 0) parts.push(`Archived ${json.archivedNotInCart} product(s) not in Cart`);
-      if (json.debug?.hint) parts.push(json.debug.hint);
-      if (parts.length === 0) parts.push("Push completed. No inventory changes made.");
-      setStatus(parts.join(". "));
+      if (hasPush) parts.push(`Updated ${totalPushed} variant(s)`);
+      if (totalCreated > 0) parts.push(`created ${totalCreated} product(s)`);
+      if (totalArchived > 0) parts.push(`archived ${totalArchived}`);
+      if (lastDebug) {
+        const d = lastDebug;
+        if (d.variantsAddedToExisting) parts.push(`added ${d.variantsAddedToExisting} variant(s)`);
+        if (d.staleLinksCleared) parts.push(`cleared ${d.staleLinksCleared} stale link(s)`);
+        const sizeReorders = d.steps?.filter((s: { step: string }) => s.step === "size-reorder").length || 0;
+        if (sizeReorders > 0) parts.push(`reordered sizes on ${sizeReorders} product(s)`);
+        if (d.hint) parts.push(d.hint);
+        if (d.addVariantErrors?.length) parts.push(`⚠ ${d.addVariantErrors.length} variant error(s)`);
+      }
+      if (parts.length === 0) parts.push("Push completed — no changes needed.");
+      setStatus(parts.join(". ") + ".");
       setTask({ label: "Push to Shopify completed", progress: 100, tone: "success" });
       await loadCart(page, pageSize, appliedFilters, { startLabel: "Refreshing catalog..." });
     } catch (e: unknown) {
@@ -572,6 +736,32 @@ export default function ShopifyMappingCartsInventory() {
 
   return (
     <main className="page" style={{ ["--status-bar-height" as string]: `${statusBarHeight}px` }}>
+      <nav className="quick-nav" aria-label="Inventory sections">
+        <Link href="/studio/shopify-mapping-inventory/workset" className="quick-chip">
+          Workset
+        </Link>
+        <Link href="/studio/shopify-mapping-inventory/sales" className="quick-chip">
+          Sales
+        </Link>
+        <Link href="/studio/shopify-mapping-inventory/inventory" className="quick-chip">
+          Inventory
+        </Link>
+        <Link href="/studio/shopify-mapping-inventory/carts-inventory" className="quick-chip active">
+          Carts Inventory
+        </Link>
+        <Link href="/studio/shopify-mapping-inventory/configurations" className="quick-chip">
+          Configurations
+        </Link>
+      </nav>
+
+      <p className="breadcrumb">
+        <Link href="/studio/shopify-mapping-inventory/workset">Workset</Link>
+        <span className="sep"> / </span>
+        <span>Carts Inventory</span>
+      </p>
+
+      <SyncTogglesBar shop={shop} disabled={busy} />
+
       <section
         ref={statusBarRef}
         className={`card status-bar ${statusBarTone}`}
@@ -591,77 +781,125 @@ export default function ShopifyMappingCartsInventory() {
       </section>
 
       <section className="glass-panel card filter-card">
-        <div className="filters">
-          <input value={filters.SKU} onChange={(e) => updateFilter("SKU", e.target.value)} placeholder="SKU or UPC (partial)" />
-          <input value={filters.Name} onChange={(e) => updateFilter("Name", e.target.value)} placeholder="Product Name" />
-          <input value={filters.Brand} onChange={(e) => updateFilter("Brand", e.target.value)} placeholder="Brand" />
-          <input value={filters.PriceFrom} onChange={(e) => updateFilter("PriceFrom", e.target.value)} placeholder="Price From" />
-          <input value={filters.PriceTo} onChange={(e) => updateFilter("PriceTo", e.target.value)} placeholder="Price To" />
-          <input value={filters.StockFrom} onChange={(e) => updateFilter("StockFrom", e.target.value)} placeholder="Stock From" />
-          <input value={filters.StockTo} onChange={(e) => updateFilter("StockTo", e.target.value)} placeholder="Stock To" />
-          <select
-            value={
-              filters.StockNull ? "null"
-              : filters.StockFrom === "1" && !filters.StockTo ? "instock"
-              : filters.StockFrom === "0" && filters.StockTo === "0" ? "zero"
-              : filters.StockFrom === "0.01" && filters.StockTo === "0.99" ? "low"
-              : "all"
-            }
-            onChange={(e) => {
-              const p = normalizeText(e.target.value);
-              if (p === "null") setFilters((prev) => ({ ...prev, StockFrom: "", StockTo: "", StockNull: "null" }));
-              else if (p === "zero") setFilters((prev) => ({ ...prev, StockFrom: "0", StockTo: "0", StockNull: "" }));
-              else if (p === "low") setFilters((prev) => ({ ...prev, StockFrom: "0.01", StockTo: "0.99", StockNull: "" }));
-              else if (p === "instock") setFilters((prev) => ({ ...prev, StockFrom: "1", StockTo: "", StockNull: "" }));
-              else setFilters((prev) => ({ ...prev, StockFrom: "", StockTo: "", StockNull: "" }));
-            }}
-            title="Quick stock presets to find edge cases (e.g. low stock 0&lt;x&lt;1, null stock)"
-          >
-            <option value="all">Stock: All</option>
-            <option value="zero">Stock: Zero</option>
-            <option value="low">Stock: Low (0&lt;x&lt;1)</option>
-            <option value="instock">Stock: In stock (≥1)</option>
-            <option value="null">Stock: Null/unknown</option>
-          </select>
-          <select value={filters.CategoryName} onChange={(e) => updateFilter("CategoryName", e.target.value)}>
-            <option value="">Select Category</option>
-            {categories.map((category) => <option key={category} value={category}>{category}</option>)}
-          </select>
-          <select value={filters.Orderby} onChange={(e) => updateFilter("Orderby", normalizeText(e.target.value) as CartFilters["Orderby"])}>
-            <option value="All">All Sync Statuses</option>
-            <option value="Processed">Processed</option>
-            <option value="Pending">Pending</option>
-            <option value="Error">Error</option>
-          </select>
-          <select value={filters.LSSource} onChange={(e) => updateFilter("LSSource", normalizeText(e.target.value) as CartFilters["LSSource"])} title="Filter by Lightspeed inventory source">
-            <option value="All">All Sources</option>
-            <option value="InLS">In LS Inventory</option>
-            <option value="NotInLS">Not in LS (manual/Shopify)</option>
-          </select>
-          <select className="page-size-select" value={String(pageSize)} onChange={(e) => { const n = Number.parseInt(e.target.value, 10); setPageSize(n); void loadCart(1, n, appliedFilters, { startLabel: "Updating page size..." }); }} disabled={busy}>
-            {PAGE_SIZE_OPTIONS.map((size) => <option key={size} value={String(size)}>{size} / page</option>)}
-          </select>
+        <div className="filters filters-skuplugs">
+          <div className="filter-section">
+            <button type="button" className="filter-section-header" onClick={() => setGeneralFiltersOpen((prev) => !prev)} aria-expanded={generalFiltersOpen}>
+              <span className="filter-section-chevron">{generalFiltersOpen ? "▼" : "▶"}</span>
+              <span>General Filters</span>
+            </button>
+            {generalFiltersOpen && (
+              <>
+                <div className="filter-row">
+                  <input value={filters.SKU} onChange={(e) => updateFilter("SKU", e.target.value)} placeholder="SKU or UPC (partial)" aria-label="Filter by SKU or UPC" />
+                  <input value={filters.Name} onChange={(e) => updateFilter("Name", e.target.value)} placeholder="Product Name" aria-label="Filter by product name" />
+                  <input value={filters.Brand} onChange={(e) => updateFilter("Brand", e.target.value)} placeholder="Brand" aria-label="Filter by brand" />
+                  <input value={filters.Keyword} onChange={(e) => updateFilter("Keyword", e.target.value)} placeholder="Search Keyword" aria-label="Search keyword" />
+                </div>
+                <div className="filter-row">
+                  <input value={filters.PriceFrom} onChange={(e) => updateFilter("PriceFrom", e.target.value)} placeholder="Price From" type="number" step="any" min="0" aria-label="Minimum price" />
+                  <input value={filters.PriceTo} onChange={(e) => updateFilter("PriceTo", e.target.value)} placeholder="Price To" type="number" step="any" min="0" aria-label="Maximum price" />
+                  <input value={filters.StockFrom} onChange={(e) => updateFilter("StockFrom", e.target.value)} placeholder="Stock From" type="number" step="any" min="0" aria-label="Minimum stock" />
+                  <input value={filters.StockTo} onChange={(e) => updateFilter("StockTo", e.target.value)} placeholder="Stock To" type="number" step="any" min="0" aria-label="Maximum stock" />
+                </div>
+                <div className="filter-row filter-row-actions">
+                  <select value={filters.CategoryName} onChange={(e) => updateFilter("CategoryName", e.target.value)} aria-label="Filter by category">
+                    <option value="">Select Category</option>
+                    {categories.map((category) => <option key={category} value={category}>{category}</option>)}
+                  </select>
+                  <select value={filters.Orderby} onChange={(e) => updateFilter("Orderby", normalizeText(e.target.value) as CartFilters["Orderby"])} aria-label="Filter by process status">
+                    <option value="All">Status: All</option>
+                    <option value="Processed">Processed</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Error">Error</option>
+                  </select>
+                  <select value={filters.LSSource} onChange={(e) => updateFilter("LSSource", normalizeText(e.target.value) as CartFilters["LSSource"])} aria-label="Filter by source" title="Filter by Lightspeed inventory source">
+                    <option value="All">All Sources</option>
+                    <option value="InLS">In LS Inventory</option>
+                    <option value="NotInLS">Not in LS (manual/Shopify)</option>
+                  </select>
+                  <select value={filters.HasDescription} onChange={(e) => updateFilter("HasDescription", normalizeText(e.target.value) as CartFilters["HasDescription"])} aria-label="Filter by Shopify description" title="Filter by whether product has Shopify description">
+                    <option value="All">Description: All</option>
+                    <option value="Has">Has Description</option>
+                    <option value="None">No Description</option>
+                  </select>
+                  <select value={filters.HasImage} onChange={(e) => updateFilter("HasImage", normalizeText(e.target.value) as CartFilters["HasImage"])} aria-label="Filter by product image" title="Filter by whether product has image">
+                    <option value="All">Image: All</option>
+                    <option value="Has">Has Image</option>
+                    <option value="None">No Image</option>
+                  </select>
+                  <select
+                    value={
+                      filters.StockNull ? "null"
+                      : filters.StockFrom === "1" && !filters.StockTo ? "instock"
+                      : filters.StockFrom === "0" && filters.StockTo === "0" ? "zero"
+                      : filters.StockFrom === "0.01" && filters.StockTo === "0.99" ? "low"
+                      : "all"
+                    }
+                    onChange={(e) => {
+                      const p = normalizeText(e.target.value);
+                      if (p === "null") setFilters((prev) => ({ ...prev, StockFrom: "", StockTo: "", StockNull: "null" }));
+                      else if (p === "zero") setFilters((prev) => ({ ...prev, StockFrom: "0", StockTo: "0", StockNull: "" }));
+                      else if (p === "low") setFilters((prev) => ({ ...prev, StockFrom: "0.01", StockTo: "0.99", StockNull: "" }));
+                      else if (p === "instock") setFilters((prev) => ({ ...prev, StockFrom: "1", StockTo: "", StockNull: "" }));
+                      else setFilters((prev) => ({ ...prev, StockFrom: "", StockTo: "", StockNull: "" }));
+                    }}
+                    title="Quick stock presets"
+                    aria-label="Stock preset filter"
+                  >
+                    <option value="all">Stock: All</option>
+                    <option value="zero">Stock: Zero</option>
+                    <option value="low">Stock: Low</option>
+                    <option value="instock">Stock: In stock</option>
+                    <option value="null">Stock: Null</option>
+                  </select>
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="filter-section filter-section-matrix">
+            <button type="button" className="filter-section-header" onClick={() => setMatrixFiltersOpen((prev) => !prev)} aria-expanded={matrixFiltersOpen}>
+              <span className="filter-section-chevron">{matrixFiltersOpen ? "▼" : "▶"}</span>
+              <span>Matrix Filters</span>
+              <span className="filter-section-hint">(all variants must match)</span>
+            </button>
+            {matrixFiltersOpen && (
+              <div className="filter-row filter-row-matrix">
+                <input value={filters.MatrixStockFrom} onChange={(e) => updateFilter("MatrixStockFrom", e.target.value)} placeholder="Matrix Stock From" type="number" step="any" min="0" aria-label="Matrix: min stock (all variants)" title="Products where every variant has stock ≥ this" />
+                <input value={filters.MatrixStockTo} onChange={(e) => updateFilter("MatrixStockTo", e.target.value)} placeholder="Matrix Stock To" type="number" step="any" min="0" aria-label="Matrix: max stock (all variants)" title="Products where every variant has stock ≤ this" />
+                <input value={filters.MatrixPriceFrom} onChange={(e) => updateFilter("MatrixPriceFrom", e.target.value)} placeholder="Matrix Price From" type="number" step="any" min="0" aria-label="Matrix: min price (all variants)" title="Products where every variant price ≥ this" />
+                <input value={filters.MatrixPriceTo} onChange={(e) => updateFilter("MatrixPriceTo", e.target.value)} placeholder="Matrix Price To" type="number" step="any" min="0" aria-label="Matrix: max price (all variants)" title="Products where every variant price ≤ this" />
+                <input value={filters.MatrixSKU} onChange={(e) => updateFilter("MatrixSKU", e.target.value)} placeholder="Matrix SKU (all variants)" aria-label="Matrix: SKU (all variants must contain)" title="Products where every variant SKU/UPC contains this" />
+                <input value={filters.MatrixColor} onChange={(e) => updateFilter("MatrixColor", e.target.value)} placeholder="Matrix Color (all variants)" aria-label="Matrix: Color (all variants)" title="Products where every variant has this color" />
+                <input value={filters.MatrixSize} onChange={(e) => updateFilter("MatrixSize", e.target.value)} placeholder="Matrix Size (all variants)" aria-label="Matrix: Size (all variants)" title="Products where every variant has this size" />
+              </div>
+            )}
+          </div>
+
+          <div className="filter-row filter-row-actions filter-actions-global">
+            <div className="filter-actions">
+              <button className="btn-base search-btn" onClick={() => { setAppliedFilters(filters); void loadCart(1, pageSize, filters, { startLabel: "Applying filters...", successLabel: "Filters applied" }); }} disabled={busy}>Search</button>
+              <button className="btn-base btn-outline" onClick={() => { setFilters(DEFAULT_FILTERS); setAppliedFilters(DEFAULT_FILTERS); void loadCart(1, pageSize, DEFAULT_FILTERS, { startLabel: "Resetting filters...", successLabel: "Filters reset" }); }} disabled={busy}>Reset</button>
+            </div>
+          </div>
         </div>
         <div className="row actions-row">
-          <button className="btn-base search-btn" onClick={() => { setAppliedFilters(filters); void loadCart(1, pageSize, filters, { startLabel: "Applying filters...", successLabel: "Filters applied" }); }} disabled={busy}>Search</button>
-          <button className="btn-base btn-outline" onClick={() => { setFilters(DEFAULT_FILTERS); setAppliedFilters(DEFAULT_FILTERS); void loadCart(1, pageSize, DEFAULT_FILTERS, { startLabel: "Resetting filters...", successLabel: "Filters reset" }); }} disabled={busy}>Reset</button>
           <button className="btn-base btn-outline" onClick={() => void openComparePopup()} disabled={busy || !shop} title="Show Cart items that were not part of the last queue sync from LS inventory">Compare</button>
           <button className="btn-base btn-outline" onClick={() => void selectAllFilteredProducts()} disabled={busy || summary.totalProducts < 1} title="Select all products matching current filters">Select All</button>
           <button className="btn-base btn-outline" onClick={() => { setSelectedParents({}); setSelectedVariants({}); clearAllFilteredSelection(); }} disabled={busy || selectedParentIds.length < 1} title="Clear selection">Clear Selection</button>
-          <button className="btn-base btn-outline" onClick={() => void runAction("stage-remove", { parentIds: selectedParentIds })} disabled={busy || selectedParentIds.length < 1}>Remove Selected</button>
+          <button className="btn-base btn-outline" onClick={() => void runAction("stage-remove", { parentIds: selectedParentIds })} disabled={busy || selectedParentIds.length < 1} title="Remove from Carts Inventory and archive in Shopify">Remove Selected</button>
           <button className="btn-base btn-outline" onClick={() => void runAction("set-status", { parentIds: selectedParentIds, status: "PENDING" })} disabled={busy || selectedParentIds.length < 1}>Mark Pending</button>
           <button className="btn-base btn-outline" onClick={() => void runAction("set-status", { parentIds: selectedParentIds, status: "PROCESSED" })} disabled={busy || selectedParentIds.length < 1}>Mark Processed</button>
           <button className="btn-base btn-outline" onClick={() => void runAction("undo-session")} disabled={busy}>Undo Last Session</button>
-          <button className="btn-base push-btn" onClick={() => pushSelectedToShopify(false)} disabled={busy || (selectedParentIds.length < 1 && removalQueueSize < 1)} title={removalQueueSize > 0 ? `Push updates and remove ${removalQueueSize} product(s) from Shopify catalog` : "Push selected items to Shopify. Wait for completion."}>Push to Shopify{removalQueueSize > 0 ? ` (+ remove ${removalQueueSize})` : ""}</button>
-          <button className="btn-base btn-outline" onClick={() => pushSelectedToShopify(true)} disabled={busy || (selectedParentIds.length < 1 && removalQueueSize < 1)} title="Push in background. You can close this page and sync will continue.">Push (background)</button>
+          <button className="btn-base btn-outline" onClick={() => void matchToLSMatrix()} disabled={busy || !shop} title="Convert Shopify-pulled items to LS matrix IDs so they appear as In LS Inventory. Matches by SKU or UPC.">Match to LS Matrix</button>
+          <button className="btn-base btn-outline" onClick={() => void activateArchivedInCart()} disabled={busy || !shop} title="Activate archived Shopify products whose variants are in Cart. Temporary button – remove after products are back.">Activate Archived (in Cart)</button>
+          <button className="btn-base push-btn" onClick={() => pushSelectedToShopify(false)} disabled={busy || selectedParentIds.length < 1} title="Push selected items to Shopify. Wait for completion.">Push to Shopify</button>
+          <button className="btn-base btn-outline" onClick={() => pushSelectedToShopify(true)} disabled={busy || selectedParentIds.length < 1} title="Push in background. You can close this page and sync will continue.">Push (background)</button>
         </div>
         <p className="mini">
           Products {summary.totalProducts} | Items {summary.totalItems} | <span className="mini-processed">Processed {summary.totalProcessed}</span> | <span className="mini-pending">Pending {summary.totalPending}</span> | <span className="mini-error">Errors {summary.totalErrors}</span>
           {selectedCounts.products > 0 ? (
             <span className="mini-selected"> | Selected: {selectedCounts.products} product{selectedCounts.products !== 1 ? "s" : ""} ({selectedCounts.items} item{selectedCounts.items !== 1 ? "s" : ""})</span>
-          ) : null}
-          {removalQueueSize > 0 ? (
-            <span className="mini-removal"> | {removalQueueSize} pending removal from Shopify (<button type="button" className="mini-link" onClick={() => { removalQueueRef.current.clear(); setRemovalQueueSize(0); }}>clear</button>)</span>
           ) : null}
           {shop ? ` | Shop ${shop}` : ""}
         </p>
@@ -670,6 +908,27 @@ export default function ShopifyMappingCartsInventory() {
       {status ? <p className="status-msg">{status}</p> : null}
       {warning ? <p className="warn-msg">{warning}</p> : null}
       {error ? <p className="error-msg">{error}</p> : null}
+
+      <section className="table-toolbar">
+        <span className="toolbar-left">
+          <span className="toolbar-icon" aria-hidden>📊</span>
+          <span className="total-products">Total Products: {summary.totalProducts.toLocaleString()}</span>
+        </span>
+        <span className="toolbar-right">
+          <button type="button" className="toolbar-icon-btn" title="Export" aria-label="Export" onClick={() => {}} disabled={busy}>
+            📁
+          </button>
+          <button type="button" className="toolbar-icon-btn" title="Download" aria-label="Download" onClick={() => {}} disabled={busy}>
+            ⬇
+          </button>
+          <button type="button" className="toolbar-icon-btn" title="Remove selected from Carts Inventory and archive in Shopify" aria-label="Delete selected" onClick={() => void runAction("stage-remove", { parentIds: selectedParentIds })} disabled={busy || selectedParentIds.length < 1}>
+            🗑
+          </button>
+          <select className="page-size-select" value={String(pageSize)} onChange={(e) => { const n = Number.parseInt(e.target.value, 10); setPageSize(n); void loadCart(1, n, appliedFilters, { startLabel: "Updating page size..." }); }} disabled={busy}>
+            {PAGE_SIZE_OPTIONS.map((size) => <option key={size} value={String(size)}>{size}</option>)}
+          </select>
+        </span>
+      </section>
 
       <section className="glass-panel card table-wrap table-card">
         <table className="parent-table">
@@ -682,8 +941,8 @@ export default function ShopifyMappingCartsInventory() {
             <col style={{ width: 80 }} />
             <col style={{ width: 90 }} />
             <col style={{ width: 100 }} />
-            <col style={{ width: 88 }} />
             <col style={{ width: 72 }} />
+            <col style={{ width: 88 }} />
           </colgroup>
           <thead>
             <tr>
@@ -694,18 +953,35 @@ export default function ShopifyMappingCartsInventory() {
                   onChange={(e) => {
                     if (e.target.checked) {
                       clearAllFilteredSelection();
-                      const next: Record<string, boolean> = {};
-                      for (const row of sortedRows) next[row.id] = true;
-                      setSelectedParents(next);
+                      const nextParents: Record<string, boolean> = {};
+                      const nextVariants: Record<string, boolean> = {};
+                      for (const row of sortedRows) {
+                        nextParents[row.id] = true;
+                        for (const v of row.variants ?? []) {
+                          nextVariants[variantKey(row.id, v.id)] = true;
+                        }
+                      }
+                      setSelectedParents(nextParents);
+                      setSelectedVariants(nextVariants);
                     } else {
+                      const parentIds = new Set(sortedRows.map((r) => r.id));
                       setSelectedParents((prev) => {
                         const next = { ...prev };
-                        for (const row of sortedRows) next[row.id] = false;
+                        for (const id of parentIds) next[id] = false;
+                        return next;
+                      });
+                      setSelectedVariants((prev) => {
+                        const next = { ...prev };
+                        for (const row of sortedRows) {
+                          for (const v of row.variants ?? []) {
+                            delete next[variantKey(row.id, v.id)];
+                          }
+                        }
                         return next;
                       });
                     }
                   }}
-                  aria-label="Select all visible parents"
+                  aria-label="Select all visible products and variants"
                 />
               </th>
               <th aria-sort={getAriaSort("title")}>
@@ -753,7 +1029,7 @@ export default function ShopifyMappingCartsInventory() {
               <th className="details-header-cell" aria-sort={getAriaSort("details")}>
                 <span className="details-header-inner">
                   <button type="button" className={`sort-btn ${sortState?.field === "details" ? "active" : ""}`} onClick={() => toggleSort("details")}>
-                    <span>Details</span>
+                    <span>Process Status</span>
                     <span className="sort-mark">{getSortMark("details")}</span>
                   </button>
                 </span>
@@ -774,20 +1050,24 @@ export default function ShopifyMappingCartsInventory() {
                       <input
                         type="checkbox"
                         checked={Boolean(selectedParents[parent.id])}
-                        onChange={(e) => setSelectedParents((prev) => ({ ...prev, [parent.id]: e.target.checked }))}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setSelectedParents((prev) => ({ ...prev, [parent.id]: checked }));
+                          setSelectedVariants((prev) => {
+                            const next = { ...prev };
+                            for (const v of parent.variants ?? []) {
+                              const key = variantKey(parent.id, v.id);
+                              if (checked) next[key] = true;
+                              else delete next[key];
+                            }
+                            return next;
+                          });
+                        }}
                       />
                     </td>
                     <td>
                       <span className="title-cell">
-                        <img
-                          className="shopify-title-logo"
-                          src="/brand/shopify-bag.svg"
-                          alt=""
-                          aria-hidden="true"
-                          width={22}
-                          height={32}
-                          style={{ width: 22, height: 32 }}
-                        />
+                        <span className="item-icon" aria-hidden>🔥</span>
                         <span>{parent.title}</span>
                       </span>
                     </td>
@@ -936,10 +1216,30 @@ export default function ShopifyMappingCartsInventory() {
         </table>
       </section>
 
-      <section className="row pager">
-        <button className="btn-base btn-outline" onClick={() => { const n = Math.max(1, page - 1); setPage(n); void loadCart(n, pageSize, appliedFilters, { startLabel: "Loading previous page...", successLabel: "Page loaded" }); }} disabled={busy || page <= 1}>Prev</button>
-        <span>Page {page} / {totalPages}</span>
-        <button className="btn-base btn-outline" onClick={() => { const n = Math.min(totalPages, page + 1); setPage(n); void loadCart(n, pageSize, appliedFilters, { startLabel: "Loading next page...", successLabel: "Page loaded" }); }} disabled={busy || page >= totalPages}>Next</button>
+      <section className="pager-skuplugs">
+        <p className="pager-summary">Showing Page {page} of {totalPages}</p>
+        <div className="pager-controls">
+          <button className="btn-base btn-outline pager-btn" onClick={() => { const n = Math.max(1, page - 1); setPage(n); void loadCart(n, pageSize, appliedFilters, { startLabel: "Loading previous page...", successLabel: "Page loaded" }); }} disabled={busy || page <= 1} aria-label="Previous page">‹</button>
+          <div className="pager-numbers">
+            {Array.from({ length: Math.min(10, totalPages) }, (_, i) => {
+              const p = totalPages <= 10 ? i + 1 : (page <= 5 ? i + 1 : Math.max(1, page - 5 + i));
+              if (p > totalPages) return null;
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  className={`btn-base btn-outline pager-num ${p === page ? "active" : ""}`}
+                  onClick={() => void loadCart(p, pageSize, appliedFilters, { startLabel: "Loading page...", successLabel: "Page loaded" })}
+                  disabled={busy}
+                  aria-label={`Page ${p}`}
+                >
+                  {p}
+                </button>
+              );
+            })}
+          </div>
+          <button className="btn-base btn-outline pager-btn" onClick={() => { const n = Math.min(totalPages, page + 1); setPage(n); void loadCart(n, pageSize, appliedFilters, { startLabel: "Loading next page...", successLabel: "Page loaded" }); }} disabled={busy || page >= totalPages} aria-label="Next page">›</button>
+        </div>
         <span className="pager-goto">
           <label htmlFor="cart-pager-goto-input" className="pager-goto-label">Go to</label>
           <input
@@ -1028,6 +1328,27 @@ export default function ShopifyMappingCartsInventory() {
           color: #f8fafc;
         }
         .card { padding: 18px; display: grid; gap: 10px; }
+        .quick-nav { display: flex; flex-wrap: wrap; gap: 8px; }
+        .quick-chip { text-decoration: none; border-radius: 10px; border: 1px solid rgba(255,255,255,0.22); background: rgba(255,255,255,0.06); color: rgba(248,250,252,0.9); padding: 8px 12px; font-size: 0.78rem; font-weight: 700; white-space: nowrap; }
+        .quick-chip.active { color: #fff; background: rgba(255,255,255,0.16); border-color: rgba(255,255,255,0.38); }
+        .breadcrumb { margin: 0; font-size: 0.9rem; color: rgba(226,232,240,0.9); }
+        .breadcrumb a { color: rgba(226,232,240,0.9); text-decoration: none; }
+        .breadcrumb a:hover { text-decoration: underline; }
+        .breadcrumb .sep { color: rgba(226,232,240,0.6); margin: 0 4px; }
+        .table-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; }
+        .toolbar-left { display: flex; align-items: center; gap: 8px; }
+        .toolbar-icon { font-size: 1.1rem; }
+        .total-products { font-weight: 700; color: #fff; font-size: 0.9rem; }
+        .toolbar-right { display: flex; align-items: center; gap: 10px; }
+        .toolbar-icon-btn { min-width: 36px; min-height: 36px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: #fff; font-size: 1rem; cursor: pointer; }
+        .toolbar-right .page-size-select { min-width: 70px; }
+        .title-cell .item-icon { font-size: 1rem; margin-right: 8px; filter: hue-rotate(-20deg); }
+        .pager-skuplugs { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 16px; }
+        .pager-summary { margin: 0; font-size: 0.9rem; color: rgba(226,232,240,0.9); font-weight: 600; }
+        .pager-controls { display: flex; align-items: center; gap: 8px; }
+        .pager-numbers { display: flex; align-items: center; gap: 4px; }
+        .pager-num { min-width: 36px; min-height: 36px; padding: 0 10px; }
+        .pager-num.active { background: rgba(59,130,246,0.3); border-color: rgba(59,130,246,0.6); }
         .status-bar {
           position: fixed;
           top: 89px;
@@ -1106,10 +1427,55 @@ export default function ShopifyMappingCartsInventory() {
         }
         .filter-card { gap: 8px; }
         .filters {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        .filter-section {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          padding-bottom: 4px;
+          border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+        .filter-section:last-of-type { border-bottom: none; }
+        .filter-section-matrix { margin-top: 4px; }
+        .filter-section-header {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          background: none;
+          border: none;
+          color: rgba(248,250,252,0.95);
+          font-size: 0.9rem;
+          font-weight: 600;
+          cursor: pointer;
+          padding: 4px 0;
+          text-align: left;
+        }
+        .filter-section-header:hover {
+          color: #fff;
+        }
+        .filter-section-chevron {
+          font-size: 0.7rem;
+          opacity: 0.8;
+        }
+        .filter-section-hint {
+          font-size: 0.78rem;
+          font-weight: 400;
+          color: rgba(226,232,240,0.6);
+          margin-left: 4px;
+        }
+        .filter-row {
           display: grid;
           grid-template-columns: repeat(4, minmax(0, 1fr));
           gap: 8px;
         }
+        .filter-row-matrix {
+          grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        }
+        .filter-row-actions { margin-top: 4px; }
+        .filter-actions-global { margin-top: 8px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 12px; }
         .page :global(input:not([type="checkbox"]):not([type="radio"]):not([type="range"])),
         .page :global(textarea),
         .page :global(select) {
@@ -1279,7 +1645,6 @@ export default function ShopifyMappingCartsInventory() {
         .thumb-btn:hover { opacity: 0.8; }
         .muted { color: rgba(226,232,240,.55); }
         .title-cell { display: inline-flex; align-items: center; gap: 8px; }
-        .shopify-title-logo { width: 18px; height: 24px; object-fit: contain; display: inline-block; }
         .details-head { text-align: center !important; }
         .details-header-cell { text-align: center !important; }
         .details-header-inner {
@@ -1304,12 +1669,6 @@ export default function ShopifyMappingCartsInventory() {
           max-width: 88px;
           margin: 0 auto;
         }
-        .details-availability-inline {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          flex-shrink: 0;
-        }
         .details-toggle-btn {
           width: 56px;
           display: inline-flex;
@@ -1320,6 +1679,12 @@ export default function ShopifyMappingCartsInventory() {
           line-height: 1;
         }
         .eye-symbol { width: 18px; height: 18px; display: block; }
+        .details-availability-inline {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
         .parent-detail-thumb { width: var(--parent-thumb-w); height: var(--parent-thumb-h); object-fit: cover; border-radius: 4px; background: rgba(255,255,255,.08); display: block; margin: 0 auto; }
         .sync-badge {
           display: inline-flex;
@@ -1554,10 +1919,8 @@ export default function ShopifyMappingCartsInventory() {
         }
         @media (max-width: 900px) {
           .page { padding-top: 146px; }
-          .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
         @media (max-width: 640px) {
-          .filters { grid-template-columns: 1fr; }
           .actions-row :global(.btn-base) { flex: 1 1 auto; }
           .pager span { font-size: 0.95rem; }
         }

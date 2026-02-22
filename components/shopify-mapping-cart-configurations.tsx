@@ -141,7 +141,7 @@ const NEW_PRODUCT_RULES: Array<ToggleSpec<keyof NewProductRules>> = [
   {
     key: "postVariantAsIndividual",
     label: "Post Variant As Individual Product",
-    hint: "Do you want to post all product variants as individual products on the cart?",
+    hint: "Do you want to post all product variant as individual product on the cart?",
   },
 ];
 
@@ -297,6 +297,7 @@ export default function ShopifyMappingCartConfigurations() {
     },
   ]);
   const [pulling, setPulling] = useState(false);
+  const [pullingFull, setPullingFull] = useState(false);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState("");
   const [shop, setShop] = useState<string | null>(null);
@@ -476,6 +477,44 @@ export default function ShopifyMappingCartConfigurations() {
     }
   }
 
+  async function pullFullReplace() {
+    const confirmed = typeof window !== "undefined" && window.confirm(
+      "This will REPLACE the entire Carts Inventory with all Shopify products (active, archived, draft, unlisted). Current data will be lost. Continue?"
+    );
+    if (!confirmed) return;
+    if (pullingFull) return;
+    setPullingFull(true);
+    notify("Pulling full catalog and replacing Carts Inventory... This may take a moment.");
+    try {
+      const resp = await fetch("/api/shopify/pull-catalog", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ replace: true, includeAllStatuses: true }),
+      });
+      const json = (await resp.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        pulled?: number;
+        totalVariants?: number;
+        message?: string;
+        warning?: string;
+      };
+      if (!resp.ok || json.ok === false) {
+        notify(`Error: ${json.error || "Pull failed."}`);
+        return;
+      }
+      const msg = json.message || `Replaced with ${json.pulled ?? 0} products.`;
+      notify(json.warning ? `${msg} Warning: ${json.warning}` : msg);
+    } catch (e: unknown) {
+      const message =
+        String((e as { message?: string } | null)?.message || "").trim() ||
+        "Pull failed unexpectedly.";
+      notify(`Error: ${message}`);
+    } finally {
+      setPullingFull(false);
+    }
+  }
+
   function saveReserveStock() {
     const value = reserveStock.trim();
     if (!value) {
@@ -498,6 +537,8 @@ export default function ShopifyMappingCartConfigurations() {
     void saveSection("storeMapping", { rows: updated });
   }
 
+  const shopDomain = shop || "30e7d3.myshopify.com";
+
   return (
     <main className="page cart-config-page">
       {persistenceWarning ? (
@@ -505,18 +546,6 @@ export default function ShopifyMappingCartConfigurations() {
           <strong>Persistence issue:</strong> {persistenceWarning}
         </div>
       ) : null}
-      <section className="glass-panel hero">
-        <p className="eyebrow">Shopify Mapping Inventory</p>
-        <h1>Cart (Shopify - {shop || "30e7d3.myshopify.com"}) Configurations</h1>
-        <p>
-          Do you have any questions or feel setup is complicated?{" "}
-          <Link href="/settings" className="inline-link">
-            Contact us
-          </Link>{" "}
-          and get help from support executive.
-        </p>
-      </section>
-
       <nav className="quick-nav" aria-label="Cart configuration sections">
         <Link href="/studio/shopify-mapping-inventory/workset" className="quick-chip">
           Workset
@@ -544,20 +573,54 @@ export default function ShopifyMappingCartConfigurations() {
         </Link>
       </nav>
 
+      <p className="breadcrumb">
+        <Link href="/studio/shopify-mapping-inventory/workset">Workset</Link>
+        <span className="sep"> / </span>
+        <span>Configurations</span>
+        <span className="sep"> / </span>
+        <span>Configuration (Shopify - {shopDomain})</span>
+      </p>
+
+      <section className="glass-panel hero">
+        <h1>Cart (Shopify - {shopDomain}) Configurations</h1>
+        <p>
+          Do you have any Questions or you feel Complicated setup?{" "}
+          <Link href="/settings" className="inline-link">
+            Contact us
+          </Link>{" "}
+          and get help from support executive.
+        </p>
+      </section>
+
       <section className="glass-panel pull-card">
-        <button
-          suppressHydrationWarning
-          type="button"
-          className="btn-base btn-primary pull-btn"
-          onClick={() => void pullMappingData()}
-          disabled={pulling || !syncApproved}
-        >
-          {syncApproved
-            ? pulling
-              ? "Pulling..."
-              : "Pull Mapping Data from Shopify"
-            : "Pull Mapping Data from Shopify (Approval Required)"}
-        </button>
+        <div className="pull-card-buttons">
+          <button
+            suppressHydrationWarning
+            type="button"
+            className="btn-base btn-primary pull-btn"
+            onClick={() => void pullMappingData()}
+            disabled={pulling || pullingFull || !syncApproved}
+          >
+            {syncApproved
+              ? pulling
+                ? "Pulling..."
+                : "Pull Mapping Data from Shopify"
+              : "Pull Mapping Data from Shopify (Approval Required)"}
+          </button>
+          <button
+            suppressHydrationWarning
+            type="button"
+            className="btn-base btn-outline pull-full-btn"
+            onClick={() => void pullFullReplace()}
+            disabled={pulling || pullingFull}
+            title="Replace entire Carts Inventory with all Shopify products (active, archived, draft, unlisted)"
+          >
+            {pullingFull ? "Replacing..." : "Pull Full & Replace (All Statuses)"}
+          </button>
+        </div>
+        <p className="pull-card-note">
+          <strong>Pull Full & Replace</strong> clears existing Carts Inventory and loads all products from Shopify including archived, draft, and unlisted.
+        </p>
       </section>
 
       <section className="two-col">
@@ -576,7 +639,7 @@ export default function ShopifyMappingCartConfigurations() {
               />
               <ToggleFieldRow
                 label="Live Upload"
-                hint="It means that all the items coming from POS will directly route to Cart."
+                hint="It means that all the items coming from POS will directly moved to Cart."
                 checked={basic.liveUpload}
                 onChange={(checked) => setBasic((prev) => ({ ...prev, liveUpload: checked }))}
               />
@@ -671,7 +734,13 @@ export default function ShopifyMappingCartConfigurations() {
                 <ToggleFieldRow
                   key={rule.key}
                   label={rule.label}
-                  hint={rule.hint}
+                  hint={
+                    rule.key === "productStatus"
+                      ? `Do you want to post new products as 'Invisible' on the ${shopDomain}?`
+                      : rule.key === "postVariantAsIndividual"
+                        ? `Do you want to post all product variant as individual product on the ${shopDomain}?`
+                        : rule.hint
+                  }
                   checked={newProductRules[rule.key]}
                   onChange={(checked) => patchBoolean(setNewProductRules, rule.key, checked)}
                 />
@@ -729,7 +798,7 @@ export default function ShopifyMappingCartConfigurations() {
             </header>
             <AlertInfo id="rules-product-update-status" />
             <p className="section-note">
-              Here you can set which fields you want to update in existing products in 30e7d3.myshopify.com.
+              Here you can set which field you want to update in existing products in your {shopDomain}.
             </p>
             <div className="form-rows">
               {PRODUCT_UPDATE_RULES.map((rule) => (
@@ -754,7 +823,7 @@ export default function ShopifyMappingCartConfigurations() {
               <h2>Order status</h2>
             </header>
             <AlertInfo id="order-status-settings" />
-            <p className="section-note">Select order statuses which you want to process in your linked POS.</p>
+            <p className="section-note">Select Order status, which you want to process in your linked POS.</p>
             <div className="form-rows">
               {ORDER_STATUS_RULES.map((rule) => (
                 <ToggleFieldRow
@@ -779,12 +848,12 @@ export default function ShopifyMappingCartConfigurations() {
             </header>
             <AlertInfo id="tax-settings-status" />
             <p className="section-note">
-              This setting is used for order processing in a connected point of sale system or ERP.
+              This setting is used for order processing in a connected Point of sale system or ERP.
             </p>
             <div className="form-rows">
               <ToggleFieldRow
                 label="Price entered with Tax"
-                hint="Product's price entered in 30e7d3.myshopify.com is inclusive tax?"
+                hint={`Product's price entered in ${shopDomain} is inclusive tax?`}
                 checked={priceInclusiveTax}
                 onChange={setPriceInclusiveTax}
               />
@@ -844,14 +913,6 @@ export default function ShopifyMappingCartConfigurations() {
           display: grid;
           gap: 8px;
         }
-        .eyebrow {
-          margin: 0;
-          color: rgba(226, 232, 240, 0.78);
-          font-size: 0.74rem;
-          letter-spacing: 0.08em;
-          text-transform: uppercase;
-          font-weight: 700;
-        }
         .hero h1 {
           margin: 0;
           font-size: clamp(1.35rem, 2.7vw, 2rem);
@@ -895,11 +956,39 @@ export default function ShopifyMappingCartConfigurations() {
           background: rgba(255, 255, 255, 0.16);
           border-color: rgba(255, 255, 255, 0.38);
         }
+        .breadcrumb {
+          margin: 0;
+          font-size: 0.9rem;
+          color: rgba(226, 232, 240, 0.9);
+        }
+        .breadcrumb a {
+          color: rgba(226, 232, 240, 0.9);
+          text-decoration: none;
+        }
+        .breadcrumb a:hover {
+          text-decoration: underline;
+        }
+        .breadcrumb .sep {
+          color: rgba(226, 232, 240, 0.6);
+          margin: 0 4px;
+        }
         .pull-card {
           border-radius: 16px;
           padding: 14px;
         }
-        .pull-btn {
+        .pull-card-buttons {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 10px;
+          align-items: center;
+        }
+        .pull-card-note {
+          margin: 10px 0 0;
+          font-size: 0.85rem;
+          color: rgba(226, 232, 240, 0.85);
+        }
+        .pull-btn,
+        .pull-full-btn {
           min-height: 44px;
           padding: 0 14px;
         }
@@ -927,6 +1016,13 @@ export default function ShopifyMappingCartConfigurations() {
           border: 1px solid rgba(125, 211, 252, 0.4);
           background: rgba(125, 211, 252, 0.2);
           border-radius: 10px;
+          padding: 10px 12px;
+          color: #bae6fd;
+          font-size: 0.79rem;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          flex-wrap: wrap;
         }
         .alert.alert-warning {
           border-color: rgba(251, 191, 36, 0.6);

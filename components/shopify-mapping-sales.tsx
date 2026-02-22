@@ -65,29 +65,20 @@ function formatDateTime(value: string) {
   if (!text) return "--";
   const d = new Date(text);
   if (Number.isNaN(d.getTime())) return text;
-  return d.toLocaleString(undefined, {
-    month: "2-digit",
-    day: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const y = d.getFullYear();
+  const h = d.getHours();
+  const min = d.getMinutes();
+  const sec = d.getSeconds();
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 || 12;
+  return `${m}/${day}/${y} ${String(h12).padStart(2, "0")}:${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")} ${ampm}`;
 }
 
 function formatFixed(value: number) {
   if (!Number.isFinite(value)) return "0.000";
   return value.toFixed(3);
-}
-
-function formatCurrency(value: number) {
-  if (!Number.isFinite(value)) return "$0";
-  return value.toLocaleString(undefined, {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  });
 }
 
 function buildPager(currentPage: number, totalPages: number) {
@@ -187,29 +178,6 @@ export default function ShopifyMappingSales() {
 
   const pager = useMemo(() => buildPager(page, totalPages), [page, totalPages]);
 
-  const insights = useMemo(() => {
-    const gross = rows.reduce((sum, row) => sum + (Number.isFinite(row.total) ? row.total : 0), 0);
-    const net = rows.reduce(
-      (sum, row) => sum + (Number.isFinite(row.subTotal) ? row.subTotal : 0),
-      0
-    );
-    const tax = rows.reduce((sum, row) => sum + (Number.isFinite(row.tax) ? row.tax : 0), 0);
-    const processed = rows.filter((row) => row.processStatus === "PROCESSED").length;
-    const pending = rows.filter((row) => row.processStatus === "PENDING").length;
-    const processedRate = rows.length ? Math.round((processed / rows.length) * 100) : 0;
-    const avgOrderValue = rows.length ? gross / rows.length : 0;
-
-    return {
-      gross,
-      net,
-      tax,
-      processed,
-      pending,
-      processedRate,
-      avgOrderValue,
-    };
-  }, [rows]);
-
   function onFilterChange<K extends keyof SalesFilters>(key: K, value: SalesFilters[K]) {
     setFilters((prev) => ({ ...prev, [key]: value }));
   }
@@ -236,31 +204,6 @@ export default function ShopifyMappingSales() {
 
   return (
     <main className="page sales-page">
-      <section className="glass-panel hero">
-        <div className="hero-copy">
-          <p className="eyebrow">Shopify Mapping Inventory</p>
-          <h1>Revenue Operations Console</h1>
-          <p>
-            Live order intelligence with strong filtering, pipeline-state tracking, and fast review
-            of line-level details.
-          </p>
-        </div>
-        <div className="hero-actions">
-          <button
-            suppressHydrationWarning
-            type="button"
-            className="btn"
-            onClick={() => void loadSales()}
-            disabled={loading}
-          >
-            {loading ? "Refreshing..." : "Refresh Now"}
-          </button>
-          <span className="stamp">
-            Last refresh: {lastLoadedAt ? new Date(lastLoadedAt).toLocaleString() : "--"}
-          </span>
-        </div>
-      </section>
-
       <nav className="quick-nav" aria-label="Sales sections">
         <Link href="/studio/shopify-mapping-inventory/workset" className="quick-chip">
           Workset
@@ -279,41 +222,45 @@ export default function ShopifyMappingSales() {
         </Link>
       </nav>
 
-      <section className="insight-grid">
-        <article className="glass-panel insight">
-          <p>Gross (current page)</p>
-          <strong>{formatCurrency(insights.gross)}</strong>
-        </article>
-        <article className="glass-panel insight">
-          <p>Average Order Value</p>
-          <strong>{formatCurrency(insights.avgOrderValue)}</strong>
-        </article>
-        <article className="glass-panel insight">
-          <p>Processed Rate</p>
-          <strong>{insights.processedRate}%</strong>
-        </article>
-        <article className="glass-panel insight">
-          <p>Pipeline State</p>
-          <strong>
-            {insights.processed} processed / {insights.pending} pending
-          </strong>
-        </article>
-      </section>
+      <p className="breadcrumb">
+        <Link href="/studio/shopify-mapping-inventory/workset">Workset</Link>
+        <span className="sep"> / </span>
+        <span>Sales</span>
+      </p>
 
       <section className="glass-panel filters">
         <div className="filters-grid">
+          <input
+            value={filters.orderNo}
+            onChange={(e) => onFilterChange("orderNo", e.target.value)}
+            placeholder="Order No"
+            className="control"
+          />
           <select
             value={filters.shop}
             onChange={(e) => onFilterChange("shop", e.target.value)}
             className="control"
           >
-            <option value="">Select Store</option>
+            <option value="">Select Cart</option>
             {shops.map((shop) => (
               <option value={shop} key={shop}>
                 {shop}
               </option>
             ))}
           </select>
+          <input
+            type="date"
+            value={filters.fromDate}
+            onChange={(e) => onFilterChange("fromDate", e.target.value)}
+            placeholder="From Date"
+            className="control"
+          />
+          <input
+            value={filters.sku}
+            onChange={(e) => onFilterChange("sku", e.target.value)}
+            placeholder="SKU"
+            className="control"
+          />
           <select
             value={filters.processStatus}
             onChange={(e) =>
@@ -324,55 +271,32 @@ export default function ShopifyMappingSales() {
             }
             className="control"
           >
-            <option value="all">All Pipeline States</option>
+            <option value="all">Select Process Status</option>
             <option value="processed">Processed Only</option>
             <option value="pending">Pending Only</option>
           </select>
           <input
-            value={filters.orderNo}
-            onChange={(e) => onFilterChange("orderNo", e.target.value)}
-            placeholder="Order Number"
-            className="control"
-          />
-          <input
-            value={filters.sku}
-            onChange={(e) => onFilterChange("sku", e.target.value)}
-            placeholder="SKU"
-            className="control"
-          />
-          <input
-            type="date"
-            value={filters.fromDate}
-            onChange={(e) => onFilterChange("fromDate", e.target.value)}
-            className="control"
-          />
-          <input
             type="date"
             value={filters.toDate}
             onChange={(e) => onFilterChange("toDate", e.target.value)}
+            placeholder="To Date"
             className="control"
           />
         </div>
         <div className="filters-actions">
           <button suppressHydrationWarning type="button" className="btn" onClick={onApplyFilters} disabled={loading}>
-            Apply Filters
+            {loading ? "Searching…" : "Search"}
           </button>
           <button suppressHydrationWarning type="button" className="btn ghost" onClick={onClearFilters} disabled={loading}>
-            Clear
+            Reset
           </button>
         </div>
       </section>
 
       <section className="sales-meta">
-        <small>{total.toLocaleString()} orders found</small>
+        <span className="total-orders">Total Orders: {total.toLocaleString()}</span>
         <div className="meta-right">
-          <span>
-            Net: <strong>{formatCurrency(insights.net)}</strong>
-          </span>
-          <span>
-            Tax: <strong>{formatCurrency(insights.tax)}</strong>
-          </span>
-          <label htmlFor="sales-page-size">Rows</label>
+          <label htmlFor="sales-page-size">Rows per page</label>
           <select
             id="sales-page-size"
             value={pageSize}
@@ -393,15 +317,15 @@ export default function ShopifyMappingSales() {
           <table>
             <thead>
               <tr>
-                <th>Order</th>
-                <th>Timeline</th>
+                <th>Invoice#</th>
+                <th>Order Date / Download at</th>
                 <th>Customer</th>
-                <th>Net</th>
+                <th>Sub Total</th>
                 <th>Tax</th>
-                <th>Gross</th>
-                <th>Logistics</th>
-                <th>Payment</th>
-                <th>Pipeline</th>
+                <th>Total</th>
+                <th>Delivery Type</th>
+                <th>Cart Status</th>
+                <th>Process Status</th>
               </tr>
             </thead>
             <tbody>
@@ -418,15 +342,17 @@ export default function ShopifyMappingSales() {
                     <Fragment key={row.id}>
                       <tr>
                         <td>
-                          <div className="order-cell">
-                            <strong>#{row.invoice}</strong>
-                            <span>{row.shop}</span>
+                          <div className="invoice-cell">
+                            <span className="invoice-icon" aria-hidden>
+                              🛒
+                            </span>
+                            <strong>{row.invoice}</strong>
                           </div>
                         </td>
                         <td>
                           <div className="timeline-cell">
-                            <span>Placed: {formatDateTime(row.orderDate)}</span>
-                            <span>Imported: {formatDateTime(row.downloadedAt)}</span>
+                            <span>{formatDateTime(row.orderDate)}</span>
+                            <span>{formatDateTime(row.downloadedAt)}</span>
                           </div>
                         </td>
                         <td>{row.customer || "--"}</td>
@@ -434,14 +360,18 @@ export default function ShopifyMappingSales() {
                         <td>{formatFixed(row.tax)}</td>
                         <td>{formatFixed(row.total)}</td>
                         <td>
-                          <span className="pill warn">{row.deliveryType || "SHIPPING"}</span>
+                          <span className="pill delivery">{row.deliveryType || "SHIPPING"}</span>
                         </td>
                         <td>
-                          <span className="pill ok">{row.cartStatus || "UNKNOWN"}</span>
+                          <span className="pill cart-status">{row.cartStatus || "UNKNOWN"}</span>
                         </td>
                         <td>
                           <div className="pipeline-cell">
-                            <span className={`pill ${row.processStatus === "PROCESSED" ? "ok" : "warn"}`}>
+                            <span
+                              className={`pill process ${
+                                row.processStatus === "PROCESSED" ? "processed" : "pending"
+                              }`}
+                            >
                               {row.processStatus}
                             </span>
                             <button
@@ -452,7 +382,7 @@ export default function ShopifyMappingSales() {
                               aria-expanded={expanded}
                               aria-label={expanded ? "Hide order items" : "Show order items"}
                             >
-                              {expanded ? "Hide" : "Details"}
+                              {expanded ? "▲" : "▼"}
                             </button>
                           </div>
                         </td>
@@ -546,42 +476,21 @@ export default function ShopifyMappingSales() {
           gap: 12px;
           color: #f8fafc;
         }
-        .hero {
-          border-radius: 18px;
-          padding: 16px;
-          display: grid;
-          grid-template-columns: 1fr auto;
-          gap: 12px;
-          align-items: end;
-        }
-        .eyebrow {
+        .breadcrumb {
           margin: 0;
-          color: rgba(226, 232, 240, 0.78);
-          font-size: 0.74rem;
-          letter-spacing: 0.08em;
-          text-transform: uppercase;
-          font-weight: 700;
-        }
-        .hero h1 {
-          margin: 6px 0 0;
-          font-size: clamp(1.45rem, 2.8vw, 2rem);
-          line-height: 1.12;
-        }
-        .hero p {
-          margin: 9px 0 0;
-          color: rgba(226, 232, 240, 0.84);
           font-size: 0.9rem;
-          line-height: 1.42;
-          max-width: 760px;
+          color: rgba(226, 232, 240, 0.9);
         }
-        .hero-actions {
-          display: grid;
-          justify-items: end;
-          gap: 8px;
+        .breadcrumb a {
+          color: rgba(226, 232, 240, 0.9);
+          text-decoration: none;
         }
-        .stamp {
-          font-size: 0.75rem;
-          color: rgba(226, 232, 240, 0.78);
+        .breadcrumb a:hover {
+          text-decoration: underline;
+        }
+        .breadcrumb .sep {
+          color: rgba(226, 232, 240, 0.6);
+          margin: 0 4px;
         }
         .quick-nav {
           display: flex;
@@ -605,41 +514,18 @@ export default function ShopifyMappingSales() {
           background: rgba(255, 255, 255, 0.16);
           border-color: rgba(255, 255, 255, 0.38);
         }
-        .insight-grid {
-          display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 10px;
-        }
-        .insight {
-          border-radius: 14px;
-          padding: 12px;
-          display: grid;
-          gap: 4px;
-        }
-        .insight p {
-          margin: 0;
-          color: rgba(226, 232, 240, 0.8);
-          font-size: 0.76rem;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-          font-weight: 700;
-        }
-        .insight strong {
-          color: #fff;
-          font-size: 1.06rem;
-          line-height: 1.25;
-          font-weight: 800;
-        }
         .filters {
-          border-radius: 16px;
-          padding: 14px;
+          border-radius: 14px;
+          padding: 16px;
           display: grid;
-          gap: 10px;
+          gap: 12px;
+          background: rgba(255, 255, 255, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.14);
         }
         .filters-grid {
           display: grid;
           grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 10px;
+          gap: 12px;
         }
         .control {
           min-height: 40px;
@@ -692,6 +578,10 @@ export default function ShopifyMappingSales() {
           color: rgba(226, 232, 240, 0.84);
           font-size: 0.83rem;
         }
+        .total-orders {
+          font-weight: 600;
+          color: #fff;
+        }
         .meta-right {
           display: inline-flex;
           align-items: center;
@@ -729,20 +619,17 @@ export default function ShopifyMappingSales() {
           color: rgba(248, 250, 252, 0.95);
           vertical-align: middle;
         }
-        .order-cell {
-          display: grid;
-          gap: 2px;
+        .invoice-cell {
+          display: flex;
+          align-items: center;
+          gap: 8px;
         }
-        .order-cell strong {
+        .invoice-icon {
+          font-size: 1rem;
+          filter: hue-rotate(80deg) saturate(1.2);
+        }
+        .invoice-cell strong {
           font-size: 0.9rem;
-        }
-        .order-cell span {
-          color: rgba(226, 232, 240, 0.74);
-          font-size: 0.72rem;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          max-width: 240px;
         }
         .timeline-cell {
           display: grid;
@@ -762,12 +649,22 @@ export default function ShopifyMappingSales() {
           letter-spacing: 0.02em;
           border: 1px solid transparent;
         }
-        .pill.ok {
+        .pill.delivery {
+          background: rgba(245, 158, 11, 0.24);
+          border-color: rgba(245, 158, 11, 0.46);
+          color: #fef3c7;
+        }
+        .pill.cart-status {
           background: rgba(34, 197, 94, 0.26);
           border-color: rgba(34, 197, 94, 0.5);
           color: #dcfce7;
         }
-        .pill.warn {
+        .pill.process.processed {
+          background: rgba(34, 197, 94, 0.26);
+          border-color: rgba(34, 197, 94, 0.5);
+          color: #dcfce7;
+        }
+        .pill.process.pending {
           background: rgba(245, 158, 11, 0.24);
           border-color: rgba(245, 158, 11, 0.46);
           color: #fef3c7;
@@ -881,21 +778,11 @@ export default function ShopifyMappingSales() {
           background: rgba(120, 53, 15, 0.2);
         }
         @media (max-width: 1080px) {
-          .insight-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
           .filters-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
           }
         }
         @media (max-width: 760px) {
-          .hero {
-            grid-template-columns: 1fr;
-            align-items: start;
-          }
-          .hero-actions {
-            justify-items: start;
-          }
           .filters-grid {
             grid-template-columns: 1fr;
           }

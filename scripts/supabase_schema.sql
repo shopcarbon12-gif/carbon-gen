@@ -152,6 +152,8 @@ alter table if exists shopify_cart_inventory_staging
 alter table if exists shopify_cart_inventory_staging
   add column if not exists image text;
 alter table if exists shopify_cart_inventory_staging
+  add column if not exists description text;
+alter table if exists shopify_cart_inventory_staging
   add column if not exists status text;
 alter table if exists shopify_cart_inventory_staging
   add column if not exists error_message text;

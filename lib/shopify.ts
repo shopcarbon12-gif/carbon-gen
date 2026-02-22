@@ -18,7 +18,7 @@ export function getShopifyConfig(baseUrl: string) {
     clientId: (process.env.SHOPIFY_APP_CLIENT_ID || "").trim() || "missing-client-id",
     scopes:
       (process.env.SHOPIFY_SCOPES || "").trim() ||
-      "read_products,write_products,write_files,read_locations,write_inventory",
+      "read_products,write_products,write_files,read_locations,write_inventory,read_orders",
     redirectUri:
       (process.env.SHOPIFY_REDIRECT_URI || "").trim() || `${baseUrl}/api/shopify/callback`,
     apiVersion: (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01",
@@ -41,6 +41,9 @@ export function getShopifyAdminToken(shop: string) {
   return global;
 }
 
+const SHOPIFY_THROTTLE_MAX_RETRIES = 4;
+const SHOPIFY_THROTTLE_BASE_DELAY_MS = 1500;
+
 export async function runShopifyGraphql<T>({
   shop,
   token,
@@ -55,46 +58,64 @@ export async function runShopifyGraphql<T>({
   apiVersion: string;
 }) {
   const url = `https://${shop}/admin/api/${apiVersion}/graphql.json`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Shopify-Access-Token": token,
-    },
-    body: JSON.stringify({ query, variables: variables || {} }),
-    cache: "no-store",
-  });
 
-  const text = await res.text();
-  let json: any = null;
-  try {
-    json = JSON.parse(text);
-  } catch {
-    json = { raw: text };
-  }
+  for (let attempt = 0; attempt <= SHOPIFY_THROTTLE_MAX_RETRIES; attempt++) {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": token,
+      },
+      body: JSON.stringify({ query, variables: variables || {} }),
+      cache: "no-store",
+    });
 
-  if (!res.ok) {
+    const text = await res.text();
+    let json: any = null;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      json = { raw: text };
+    }
+
+    if (res.status === 429 || (Array.isArray(json?.errors) && json.errors.some((e: any) => e?.extensions?.code === "THROTTLED"))) {
+      if (attempt < SHOPIFY_THROTTLE_MAX_RETRIES) {
+        const delay = SHOPIFY_THROTTLE_BASE_DELAY_MS * Math.pow(2, attempt);
+        await new Promise((r) => setTimeout(r, delay));
+        continue;
+      }
+    }
+
+    if (!res.ok) {
+      return {
+        ok: false as const,
+        status: res.status,
+        errors: json?.errors || json,
+        data: null as T | null,
+      };
+    }
+
+    if (Array.isArray(json?.errors) && json.errors.length > 0) {
+      return {
+        ok: false as const,
+        status: 400,
+        errors: json.errors,
+        data: json?.data ?? null,
+      };
+    }
+
     return {
-      ok: false as const,
-      status: res.status,
-      errors: json?.errors || json,
-      data: null as T | null,
-    };
-  }
-
-  if (Array.isArray(json?.errors) && json.errors.length > 0) {
-    return {
-      ok: false as const,
-      status: 400,
-      errors: json.errors,
-      data: json?.data ?? null,
+      ok: true as const,
+      status: 200,
+      errors: null,
+      data: (json?.data ?? null) as T | null,
     };
   }
 
   return {
-    ok: true as const,
-    status: 200,
-    errors: null,
-    data: (json?.data ?? null) as T | null,
+    ok: false as const,
+    status: 429,
+    errors: [{ message: "Shopify API throttled after max retries" }],
+    data: null as T | null,
   };
 }

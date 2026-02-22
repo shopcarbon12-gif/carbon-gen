@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { SyncTogglesBar } from "@/components/sync-toggles-bar";
 
 type MatrixVariantRow = {
   id: string;
@@ -10,6 +12,7 @@ type MatrixVariantRow = {
   sellerSku: string;
   cartId: string;
   stock: number | null;
+  shopifyStock?: number | null;
   stockByLocation: Array<{ location: string; qty: number | null }>;
   price: number | null;
   color: string;
@@ -26,6 +29,8 @@ type MatrixParentRow = {
   brand: string;
   sku: string;
   stock: number | null;
+  shopifyStock?: number | null;
+  stockGap?: number | null;
   price: number | null;
   variations: number;
   image?: string;
@@ -35,6 +40,7 @@ type MatrixParentRow = {
 
 type InventoryFilters = {
   SKU: string;
+  GroupSKU: string;
   Name: string;
   Brand: string;
   PriceFrom: string;
@@ -42,6 +48,8 @@ type InventoryFilters = {
   StockFrom: string;
   StockTo: string;
   CategoryName: string;
+  ProductCreatedFrom: string;
+  ProductCreatedTo: string;
   Keyword: string;
   CartState: "All" | "Enabled" | "NotEnabled";
   ShopifyState: "All" | "Available" | "Missing";
@@ -73,9 +81,9 @@ type InventoryResponse = {
   rows?: MatrixParentRow[];
 };
 
-const PAGE_SIZE_OPTIONS = [50, 100, 200, 300, 500] as const;
-const CATALOG_SELECT_PAGE_SIZE = 1000;
-const CATALOG_SELECT_PARALLEL = 4;
+const PAGE_SIZE_OPTIONS = [20, 50, 100, 200, 300, 500] as const;
+const CATALOG_SELECT_PAGE_SIZE = 2000;
+const CATALOG_SELECT_PARALLEL = 8;
 const STAGE_ADD_CHUNK_SIZE = 300;
 const STAGE_REMOVE_CHUNK_SIZE = 500;
 const STAGE_PARALLEL_CHUNKS = 3;
@@ -110,6 +118,7 @@ type ParentSortState = {
 
 const DEFAULT_FILTERS: InventoryFilters = {
   SKU: "",
+  GroupSKU: "",
   Name: "",
   Brand: "",
   PriceFrom: "",
@@ -117,6 +126,8 @@ const DEFAULT_FILTERS: InventoryFilters = {
   StockFrom: "",
   StockTo: "",
   CategoryName: "",
+  ProductCreatedFrom: "",
+  ProductCreatedTo: "",
   Keyword: "",
   CartState: "All",
   ShopifyState: "All",
@@ -145,7 +156,7 @@ function formatQty(value: number | null) {
 
 function formatPrice(value: number | null) {
   if (value === null || value === undefined || Number.isNaN(value)) return "-";
-  return value.toFixed(2);
+  return value.toFixed(3);
 }
 
 function isVisibleStockLocation(location: string) {
@@ -178,7 +189,8 @@ function buildInventoryParams(
   nextFilters: InventoryFilters,
   shopValue: string,
   forceRefresh?: boolean,
-  catalogCursor?: string | null
+  catalogCursor?: string | null,
+  selectAll?: boolean
 ) {
   const params = new URLSearchParams();
   params.set("page", String(nextPage));
@@ -190,6 +202,7 @@ function buildInventoryParams(
   if (shopValue) params.set("shop", shopValue);
   if (forceRefresh) params.set("refresh", "1");
   if (catalogCursor) params.set("catalogCursor", catalogCursor);
+  if (selectAll) params.set("selectAll", "1");
   return params;
 }
 
@@ -200,7 +213,7 @@ export default function ShopifyMappingInventory() {
   const [rows, setRows] = useState<MatrixParentRow[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<number>(100);
+  const [pageSize, setPageSize] = useState<number>(20);
   const [totalPages, setTotalPages] = useState(1);
   const [shop, setShop] = useState("");
   const [summary, setSummary] = useState({
@@ -475,9 +488,18 @@ export default function ShopifyMappingInventory() {
     pageNum: number,
     pageSize: number,
     filtersSnapshot: InventoryFilters,
-    shopContext: string
+    shopContext: string,
+    opts?: { selectAll?: boolean }
   ): Promise<InventoryResponse> {
-    const params = buildInventoryParams(pageNum, pageSize, filtersSnapshot, shopContext);
+    const params = buildInventoryParams(
+      pageNum,
+      pageSize,
+      filtersSnapshot,
+      shopContext,
+      undefined,
+      undefined,
+      opts?.selectAll
+    );
     const resp = await fetch(`/api/shopify/inventory-matrix?${params.toString()}`, {
       cache: "no-store",
     });
@@ -497,52 +519,21 @@ export default function ShopifyMappingInventory() {
     const shopContext = requireShopContext();
     if (!shopContext) return [];
 
-    const byId = new Map<string, MatrixParentRow>();
+    setTask({ label: `${progressLabel}...`, progress: 40, tone: "running" });
 
-    const first = await fetchPage(
+    const json = await fetchPage(
       1,
-      CATALOG_SELECT_PAGE_SIZE,
+      10000,
       filtersSnapshot,
-      shopContext
+      shopContext,
+      { selectAll: true }
     );
-    const pageRows = Array.isArray(first.rows) ? first.rows : [];
+
+    const pageRows = Array.isArray(json.rows) ? json.rows : [];
+    const byId = new Map<string, MatrixParentRow>();
     for (const row of pageRows) {
       if (!normalizeText(row.id)) continue;
       byId.set(row.id, row);
-    }
-    const totalCatalogPages = Math.max(1, Number(first.totalPages || 1));
-    setTask({
-      label: `${progressLabel} (1/${totalCatalogPages})...`,
-      progress: Math.min(95, Math.max(8, Math.round((1 / totalCatalogPages) * 95))),
-      tone: "running",
-    });
-
-    if (totalCatalogPages <= 1) return Array.from(byId.values());
-
-    const remainingPages = Array.from(
-      { length: totalCatalogPages - 1 },
-      (_, i) => i + 2
-    );
-    for (let i = 0; i < remainingPages.length; i += CATALOG_SELECT_PARALLEL) {
-      const batch = remainingPages.slice(i, i + CATALOG_SELECT_PARALLEL);
-      const results = await Promise.all(
-        batch.map((p) =>
-          fetchPage(p, CATALOG_SELECT_PAGE_SIZE, filtersSnapshot, shopContext)
-        )
-      );
-      for (const json of results) {
-        const rows = Array.isArray(json.rows) ? json.rows : [];
-        for (const row of rows) {
-          if (!normalizeText(row.id)) continue;
-          byId.set(row.id, row);
-        }
-      }
-      const done = Math.min(i + batch.length + 1, totalCatalogPages);
-      setTask({
-        label: `${progressLabel} (${done}/${totalCatalogPages})...`,
-        progress: Math.min(95, Math.max(8, Math.round((done / totalCatalogPages) * 95))),
-        tone: "running",
-      });
     }
 
     return Array.from(byId.values());
@@ -577,16 +568,21 @@ export default function ShopifyMappingInventory() {
         return;
       }
 
-      const nextSelectedParents: Record<string, boolean> = {};
+      const nextParents: Record<string, boolean> = {};
+      const nextVariants: Record<string, boolean> = {};
       for (const row of allRows) {
-        nextSelectedParents[row.id] = true;
+        nextParents[row.id] = true;
+        for (const v of row.variants ?? []) {
+          nextVariants[variantKey(row.id, v.id)] = true;
+        }
       }
-      setSelectedParents(nextSelectedParents);
-      setSelectedVariants({});
+      setSelectedParents(nextParents);
+      setSelectedVariants(nextVariants);
       allCatalogRowsRef.current = allRows;
       setAllCatalogSelected(true);
       setAllCatalogSelectedCount(allRows.length);
-      setStatus(`Selected all ${allRows.length} filtered catalog products.`);
+      const totalItems = allRows.reduce((n, r) => n + (r.variants?.length ?? r.variations ?? 0), 0);
+      setStatus(`Selected all ${allRows.length} filtered catalog products (${totalItems} variant${totalItems !== 1 ? "s" : ""}).`);
       setTask({
         label: `Selected ${allRows.length} filtered products`,
         progress: 100,
@@ -830,6 +826,32 @@ export default function ShopifyMappingInventory() {
 
   return (
     <main className="page">
+      <nav className="quick-nav" aria-label="Inventory sections">
+        <Link href="/studio/shopify-mapping-inventory/workset" className="quick-chip">
+          Workset
+        </Link>
+        <Link href="/studio/shopify-mapping-inventory/sales" className="quick-chip">
+          Sales
+        </Link>
+        <Link href="/studio/shopify-mapping-inventory/inventory" className="quick-chip active">
+          Inventory
+        </Link>
+        <Link href="/studio/shopify-mapping-inventory/carts-inventory" className="quick-chip">
+          Carts Inventory
+        </Link>
+        <Link href="/studio/shopify-mapping-inventory/configurations" className="quick-chip">
+          Configurations
+        </Link>
+      </nav>
+
+      <p className="breadcrumb">
+        <Link href="/studio/shopify-mapping-inventory/workset">Workset</Link>
+        <span className="sep"> / </span>
+        <span>Inventory</span>
+      </p>
+
+      <SyncTogglesBar shop={shop} disabled={busy} />
+
       <section className={`card status-bar ${task.tone === "running" ? "working" : task.tone}`} aria-live="polite" aria-atomic="true">
         <div className="status-bar-head">
           <div className="status-bar-title">progress bar</div>
@@ -844,34 +866,46 @@ export default function ShopifyMappingInventory() {
       </section>
 
       <section className="glass-panel card filter-card">
-        <div className="filters">
-          <input value={filters.SKU} onChange={(e) => updateFilter("SKU", e.target.value)} placeholder="SKU or UPC (partial)" />
-          <input value={filters.Name} onChange={(e) => updateFilter("Name", e.target.value)} placeholder="Product Name" />
-          <input value={filters.PriceFrom} onChange={(e) => updateFilter("PriceFrom", e.target.value)} placeholder="Price From" />
-          <input value={filters.PriceTo} onChange={(e) => updateFilter("PriceTo", e.target.value)} placeholder="Price To" />
-          <input value={filters.StockFrom} onChange={(e) => updateFilter("StockFrom", e.target.value)} placeholder="Stock From" />
-          <input value={filters.StockTo} onChange={(e) => updateFilter("StockTo", e.target.value)} placeholder="Stock To" />
-          <select value={filters.CategoryName} onChange={(e) => updateFilter("CategoryName", e.target.value)}>
-            <option value="">Select Category</option>
-            {categories.map((category) => <option key={category} value={category}>{category}</option>)}
-          </select>
-          <select value={filters.CartState} onChange={(e) => updateFilter("CartState", normalizeText(e.target.value) as InventoryFilters["CartState"])}>
-            <option value="All">Items enabled for Cart</option>
-            <option value="Enabled">Enabled in Cart</option>
-            <option value="NotEnabled">Not enabled in Cart</option>
-          </select>
-          <select value={filters.ShopifyState} onChange={(e) => updateFilter("ShopifyState", normalizeText(e.target.value) as InventoryFilters["ShopifyState"])}>
-            <option value="All">Shopify availability</option>
-            <option value="Available">Available on Shopify</option>
-            <option value="Missing">Missing on Shopify</option>
-          </select>
-          <select className="page-size-select" value={String(pageSize)} onChange={(e) => { const n = Number.parseInt(e.target.value, 10); setPageSize(n); void loadInventory(1, n, appliedFilters, { startLabel: "Updating page size...", startProgress: 24, successLabel: "Page size updated" }); }} disabled={busy}>
-            {PAGE_SIZE_OPTIONS.map((size) => <option key={size} value={String(size)}>{size} / page</option>)}
-          </select>
+        <div className="filters filters-skuplugs">
+          <div className="filter-row">
+            <input value={filters.SKU} onChange={(e) => updateFilter("SKU", e.target.value)} placeholder="SKU or UPC (partial)" aria-label="Filter by SKU" />
+            <input value={filters.GroupSKU} onChange={(e) => updateFilter("GroupSKU", e.target.value)} placeholder="Group SKU" aria-label="Filter by Group SKU" />
+            <input value={filters.Name} onChange={(e) => updateFilter("Name", e.target.value)} placeholder="Product Name" aria-label="Filter by product name" />
+            <input value={filters.Brand} onChange={(e) => updateFilter("Brand", e.target.value)} placeholder="Brand" aria-label="Filter by brand" />
+          </div>
+          <div className="filter-row">
+            <input value={filters.PriceFrom} onChange={(e) => updateFilter("PriceFrom", e.target.value)} placeholder="Price From" type="number" step="any" min="0" aria-label="Minimum price" />
+            <input value={filters.PriceTo} onChange={(e) => updateFilter("PriceTo", e.target.value)} placeholder="Price To" type="number" step="any" min="0" aria-label="Maximum price" />
+            <input value={filters.StockFrom} onChange={(e) => updateFilter("StockFrom", e.target.value)} placeholder="Stock From" type="number" step="any" min="0" aria-label="Minimum stock" />
+            <input value={filters.StockTo} onChange={(e) => updateFilter("StockTo", e.target.value)} placeholder="Stock To" type="number" step="any" min="0" aria-label="Maximum stock" />
+          </div>
+          <div className="filter-row">
+            <select value={filters.CategoryName} onChange={(e) => updateFilter("CategoryName", e.target.value)} aria-label="Filter by category">
+              <option value="">Select Category</option>
+              {categories.map((category) => <option key={category} value={category}>{category}</option>)}
+            </select>
+            <select value={filters.CartState} onChange={(e) => updateFilter("CartState", normalizeText(e.target.value) as InventoryFilters["CartState"])} aria-label="Filter by cart status">
+              <option value="All">Items enabled for Cart: All</option>
+              <option value="Enabled">Enabled in Cart</option>
+              <option value="NotEnabled">Not enabled in Cart</option>
+            </select>
+            <select value={filters.ShopifyState} onChange={(e) => updateFilter("ShopifyState", normalizeText(e.target.value) as InventoryFilters["ShopifyState"])} aria-label="Filter by Shopify status">
+              <option value="All">Shopify availability: All</option>
+              <option value="Available">On Shopify</option>
+              <option value="Missing">Not on Shopify</option>
+            </select>
+          </div>
+          <div className="filter-row filter-row-actions">
+            <input type="date" value={filters.ProductCreatedFrom} onChange={(e) => updateFilter("ProductCreatedFrom", e.target.value)} aria-label="Product created from date" />
+            <input type="date" value={filters.ProductCreatedTo} onChange={(e) => updateFilter("ProductCreatedTo", e.target.value)} aria-label="Product created to date" />
+            <input value={filters.Keyword} onChange={(e) => updateFilter("Keyword", e.target.value)} placeholder="Search Keyword" className="filter-keyword" aria-label="Search keyword" />
+            <div className="filter-actions">
+              <button className="btn-base search-btn" onClick={() => { setAppliedFilters(filters); void loadInventory(1, pageSize, filters, { startLabel: "Searching...", startProgress: 24, successLabel: "Search completed" }); }} disabled={busy}>Search</button>
+              <button className="btn-base btn-outline" onClick={() => { setFilters(DEFAULT_FILTERS); setAppliedFilters(DEFAULT_FILTERS); void loadInventory(1, pageSize, DEFAULT_FILTERS, { startLabel: "Resetting...", startProgress: 24, successLabel: "Filters reset" }); }} disabled={busy}>Reset</button>
+            </div>
+          </div>
         </div>
-        <div className="row actions-row">
-          <button className="btn-base search-btn" onClick={() => { setAppliedFilters(filters); void loadInventory(1, pageSize, filters, { startLabel: "Applying filters...", startProgress: 24, successLabel: "Filters applied" }); }} disabled={busy}>Search</button>
-          <button className="btn-base btn-outline" onClick={() => { setFilters(DEFAULT_FILTERS); setAppliedFilters(DEFAULT_FILTERS); void loadInventory(1, pageSize, DEFAULT_FILTERS, { startLabel: "Resetting filters...", startProgress: 24, successLabel: "Filters reset" }); }} disabled={busy}>Reset</button>
+        <div className="row actions-row actions-primary">
           <button className="btn-base btn-outline" onClick={() => void loadInventory(1, pageSize, appliedFilters, { startLabel: "Refreshing from Lightspeed...", startProgress: 24, successLabel: "Inventory refreshed" }, true)} disabled={busy} title="Force fresh fetch from Lightspeed (bypasses cache)">
             Refresh
           </button>
@@ -934,25 +968,44 @@ export default function ShopifyMappingInventory() {
           <button className="btn-base btn-outline" onClick={removeSelected} disabled={busy}>Remove from Queue</button>
           <button className="btn-base btn-outline" onClick={undoLastSession} disabled={busy}>Undo Last Session</button>
         </div>
-        <p className="mini">
-          Products {summary.totalProducts} | Items {summary.totalItems} | In Cart {summary.totalInCart} | On Shopify {summary.totalOnShopify}
-          {lightspeedCatalog.totalLoaded > 0 ? (
-            <span className="ls-catalog-info">
-              {" · "}
-              LS: {lightspeedCatalog.totalLoaded.toLocaleString()} items
-              {lightspeedCatalog.truncated ? (
-                <span className="truncated-badge" title="Click 'Load more catalog' to fetch remaining items (free plan, ~3.5k per load).">
-                  (truncated)
-                </span>
-              ) : null}
-            </span>
-          ) : null}
-        </p>
       </section>
 
       {status ? <p className="status">{status}</p> : null}
       {warning ? <p className="warn">{warning}</p> : null}
       {error ? <p className="error">{error}</p> : null}
+
+      <section className="table-toolbar">
+        <span className="toolbar-left">
+          <span className="toolbar-icon" aria-hidden>📊</span>
+          <span className="total-products">Total Products: {summary.totalProducts.toLocaleString()}</span>
+          <span className="toolbar-sep" aria-hidden>|</span>
+          <span className="mini-inline">
+            Items {summary.totalItems} | In Cart {summary.totalInCart} | On Shopify {summary.totalOnShopify}
+            {lightspeedCatalog.totalLoaded > 0 ? (
+              <span className="ls-catalog-info">
+                {" · "}
+                LS: {lightspeedCatalog.totalLoaded.toLocaleString()} items
+                {lightspeedCatalog.truncated ? (
+                  <span className="truncated-badge" title="Click 'Load more catalog' to fetch remaining items (free plan, ~3.5k per load).">
+                    (truncated)
+                  </span>
+                ) : null}
+              </span>
+            ) : null}
+          </span>
+        </span>
+        <span className="toolbar-right">
+          <button type="button" className="toolbar-icon-btn" title="Export" aria-label="Export" onClick={() => {}} disabled={busy}>
+            📁
+          </button>
+          <button type="button" className="toolbar-icon-btn" title="Download" aria-label="Download" onClick={() => {}} disabled={busy}>
+            ⬇
+          </button>
+          <select className="page-size-select" value={String(pageSize)} onChange={(e) => { const n = Number.parseInt(e.target.value, 10); setPageSize(n); void loadInventory(1, n, appliedFilters, { startLabel: "Updating page size...", startProgress: 24, successLabel: "Page size updated" }); }} disabled={busy}>
+            {PAGE_SIZE_OPTIONS.map((size) => <option key={size} value={String(size)}>{size}</option>)}
+          </select>
+        </span>
+      </section>
 
       <section className="glass-panel card table-wrap table-card">
         <table className="parent-table">
@@ -976,15 +1029,36 @@ export default function ShopifyMappingInventory() {
                   checked={allVisibleSortedSelected}
                   onChange={(e) => {
                     clearAllCatalogSelection();
-                    setSelectedParents(() => {
-                      const next: Record<string, boolean> = {};
-                      if (e.target.checked) {
-                        for (const row of sortedRows) next[row.id] = true;
+                    if (e.target.checked) {
+                      const nextParents: Record<string, boolean> = {};
+                      const nextVariants: Record<string, boolean> = {};
+                      for (const row of sortedRows) {
+                        nextParents[row.id] = true;
+                        for (const v of row.variants ?? []) {
+                          nextVariants[variantKey(row.id, v.id)] = true;
+                        }
                       }
-                      return next;
-                    });
+                      setSelectedParents(nextParents);
+                      setSelectedVariants(nextVariants);
+                    } else {
+                      const ids = new Set(sortedRows.map((r) => r.id));
+                      setSelectedParents((prev) => {
+                        const next = { ...prev };
+                        for (const id of ids) delete next[id];
+                        return next;
+                      });
+                      setSelectedVariants((prev) => {
+                        const next = { ...prev };
+                        for (const row of sortedRows) {
+                          for (const v of row.variants ?? []) {
+                            delete next[variantKey(row.id, v.id)];
+                          }
+                        }
+                        return next;
+                      });
+                    }
                   }}
-                  aria-label="Select all visible parents"
+                  aria-label="Select all visible products and variants"
                 />
               </th>
               <th aria-sort={getAriaSort("title")}>
@@ -1032,7 +1106,7 @@ export default function ShopifyMappingInventory() {
               <th className="details-header-cell" aria-sort={getAriaSort("details")}>
                 <span className="details-header-inner">
                   <button type="button" className={`sort-btn ${sortState?.field === "details" ? "active" : ""}`} onClick={() => toggleSort("details")}>
-                    <span>Details</span>
+                    <span>Available at</span>
                     <span className="sort-mark">{getSortMark("details")}</span>
                   </button>
                 </span>
@@ -1061,72 +1135,56 @@ export default function ShopifyMappingInventory() {
                     </td>
                     <td>
                       <span className="title-cell">
-                        <img
-                          className="ls-logo"
-                          src="/brand/lightspeed-mark.svg"
-                          alt=""
-                          aria-hidden="true"
-                          width={22}
-                          height={32}
-                          style={{ width: 22, height: 32 }}
-                        />
+                        <span className="item-icon" aria-hidden>
+                          🔥
+                        </span>
                         <span>{parent.title}</span>
                       </span>
                     </td>
-                    <td>{parent.category || "-"}</td><td>{parent.brand || "-"}</td><td>{parent.sku}</td><td>{formatQty(parent.stock)}</td><td>{formatPrice(parent.price)}</td><td>{parent.variations}</td>
+                    <td>{parent.category || "-"}</td><td>{parent.brand || "-"}</td><td>{parent.sku}</td>
+                    <td>
+                      <span className={parent.stockGap != null && parent.stockGap !== 0 ? "stock-with-gap" : ""} title={parent.stockGap != null && parent.stockGap !== 0 ? `LS: ${formatQty(parent.stock)} | Shopify: ${formatQty(parent.shopifyStock ?? null)} | Gap: ${parent.stockGap! > 0 ? "+" : ""}${parent.stockGap}` : ""}>
+                        {formatQty(parent.stock)}
+                        {parent.stockGap != null && parent.stockGap !== 0 ? (
+                          <span className="stock-gap-badge" title={`LS − Shopify = ${parent.stockGap > 0 ? "+" : ""}${parent.stockGap}`}>
+                            {" "}{parent.stockGap > 0 ? "▲" : "▼"} {parent.stockGap > 0 ? "+" : ""}{parent.stockGap}
+                          </span>
+                        ) : null}
+                      </span>
+                    </td>
+                    <td>{formatPrice(parent.price)}</td><td>{parent.variations}</td>
                     <td className="details-cell">
-                      <span className="details-parent-wrap">
-                        <span className="details-availability-inline" title={parent.availableAt.cart ? "In cart" : "Not in cart"}>
-                          {parent.availableAt.cart ? (
-                            <img
-                              className="parent-shopify-logo"
-                              src="/brand/shopify-bag.svg"
-                              alt="In cart"
-                              width={24}
-                              height={24}
-                            />
-                          ) : (
-                            <span className="muted">–</span>
-                          )}
-                        </span>
-                        <button
+                      <span className={`details-parent-wrap ${(parent.stock ?? 0) <= 0 ? "out-of-stock" : ""}`}>
+                        <span className="details-availability-inline" title={parent.availableAt.shopify ? "On Shopify" : "Not on Shopify"}>
+                            <span className="product-type-icon" aria-hidden>
+                              👕
+                            </span>
+                            {parent.availableAt.shopify ? (
+                              <img
+                                className="parent-shopify-logo"
+                                src="/brand/shopify-bag.svg"
+                                alt="On Shopify"
+                                width={24}
+                                height={24}
+                              />
+                            ) : (
+                              <span className="muted">–</span>
+                            )}
+                          </span>
+                          <button
                           className="details-toggle-btn"
                           onClick={() => setExpandedRows((prev) => ({ ...prev, [parent.id]: !prev[parent.id] }))}
                           aria-label={expanded ? "Hide details" : "Show details"}
                         >
                           {expanded ? (
-                            <svg
-                              className="eye-symbol"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              xmlns="http://www.w3.org/2000/svg"
-                              aria-hidden="true"
-                            >
-                              <path
-                                d="M2.5 12C4.5 7.9 8 5.5 12 5.5C16 5.5 19.5 7.9 21.5 12C19.5 16.1 16 18.5 12 18.5C8 18.5 4.5 16.1 2.5 12Z"
-                                stroke="currentColor"
-                                strokeWidth="1.8"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
+                            <svg className="eye-symbol" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                              <path d="M2.5 12C4.5 7.9 8 5.5 12 5.5C16 5.5 19.5 7.9 21.5 12C19.5 16.1 16 18.5 12 18.5C8 18.5 4.5 16.1 2.5 12Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                               <circle cx="12" cy="12" r="2.8" stroke="currentColor" strokeWidth="1.8" />
                               <line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
                             </svg>
                           ) : (
-                            <svg
-                              className="eye-symbol"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              xmlns="http://www.w3.org/2000/svg"
-                              aria-hidden="true"
-                            >
-                              <path
-                                d="M2.5 12C4.5 7.9 8 5.5 12 5.5C16 5.5 19.5 7.9 21.5 12C19.5 16.1 16 18.5 12 18.5C8 18.5 4.5 16.1 2.5 12Z"
-                                stroke="currentColor"
-                                strokeWidth="1.8"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
+                            <svg className="eye-symbol" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                              <path d="M2.5 12C4.5 7.9 8 5.5 12 5.5C16 5.5 19.5 7.9 21.5 12C19.5 16.1 16 18.5 12 18.5C8 18.5 4.5 16.1 2.5 12Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                               <circle cx="12" cy="12" r="2.8" stroke="currentColor" strokeWidth="1.8" />
                             </svg>
                           )}
@@ -1218,13 +1276,24 @@ export default function ShopifyMappingInventory() {
                                                 <strong>{formatQty(row.qty)}</strong>
                                               </li>
                                             ))}
+                                            {variant.shopifyStock != null && variant.availableInShopify ? (
+                                              <li className={variant.stock !== variant.shopifyStock ? "shopify-gap" : ""}>
+                                                <span>Shopify</span>
+                                                <strong>{formatQty(variant.shopifyStock)}</strong>
+                                              </li>
+                                            ) : null}
                                             <li className="total">
                                               <span>Company Stock</span>
                                               <strong>{formatQty(companyStock)}</strong>
                                             </li>
                                           </ul>
                                         ) : (
-                                          <div className="stock-fallback">Company Stock: {formatQty(companyStock)}</div>
+                                          <div className="stock-fallback">
+                                            Company Stock: {formatQty(companyStock)}
+                                            {variant.shopifyStock != null && variant.availableInShopify && variant.stock !== variant.shopifyStock ? (
+                                              <span className="variant-gap-inline"> · Shopify: {formatQty(variant.shopifyStock)} (Gap: {(variant.stock ?? 0) - variant.shopifyStock > 0 ? "+" : ""}{(variant.stock ?? 0) - variant.shopifyStock})</span>
+                                            ) : null}
+                                          </div>
                                         )}
                                       </div>
                                     </td>
@@ -1278,10 +1347,30 @@ export default function ShopifyMappingInventory() {
         </table>
       </section>
 
-      <section className="row pager">
-        <button className="btn-base btn-outline" onClick={() => { const n = Math.max(1, page - 1); setPage(n); void loadInventory(n, pageSize, appliedFilters, { startLabel: "Loading previous page...", startProgress: 24, successLabel: "Page loaded" }); }} disabled={busy || page <= 1}>Prev</button>
-        <span>Page {page} / {totalPages}</span>
-        <button className="btn-base btn-outline" onClick={() => { const n = Math.min(totalPages, page + 1); setPage(n); void loadInventory(n, pageSize, appliedFilters, { startLabel: "Loading next page...", startProgress: 24, successLabel: "Page loaded" }); }} disabled={busy || page >= totalPages}>Next</button>
+      <section className="pager-skuplugs">
+        <p className="pager-summary">Showing Page {page} of {totalPages}</p>
+        <div className="pager-controls">
+          <button className="btn-base btn-outline pager-btn" onClick={() => { const n = Math.max(1, page - 1); setPage(n); void loadInventory(n, pageSize, appliedFilters, { startLabel: "Loading previous page...", startProgress: 24, successLabel: "Page loaded" }); }} disabled={busy || page <= 1} aria-label="Previous page">‹</button>
+          <div className="pager-numbers">
+            {Array.from({ length: Math.min(10, totalPages) }, (_, i) => {
+              const p = totalPages <= 10 ? i + 1 : (page <= 5 ? i + 1 : Math.max(1, page - 5 + i));
+              if (p > totalPages) return null;
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  className={`btn-base btn-outline pager-num ${p === page ? "active" : ""}`}
+                  onClick={() => void loadInventory(p, pageSize, appliedFilters, { startLabel: "Loading page...", startProgress: 24, successLabel: "Page loaded" })}
+                  disabled={busy}
+                  aria-label={`Page ${p}`}
+                >
+                  {p}
+                </button>
+              );
+            })}
+          </div>
+          <button className="btn-base btn-outline pager-btn" onClick={() => { const n = Math.min(totalPages, page + 1); setPage(n); void loadInventory(n, pageSize, appliedFilters, { startLabel: "Loading next page...", startProgress: 24, successLabel: "Page loaded" }); }} disabled={busy || page >= totalPages} aria-label="Next page">›</button>
+        </div>
         <span className="pager-goto">
           <label htmlFor="pager-goto-input" className="pager-goto-label">Go to</label>
           <input
@@ -1311,7 +1400,33 @@ export default function ShopifyMappingInventory() {
       ) : null}
 
       <style jsx>{`
-        .page { --detail-thumb-w: 56px; --detail-thumb-h: 80px; --parent-thumb-w: 40px; --parent-thumb-h: 58px; max-width: 1220px; margin: 0 auto; padding: 134px 8px 26px; display: grid; gap: 12px; color: #f8fafc; }
+        .page { --detail-thumb-w: 56px; --detail-thumb-h: 80px; --parent-thumb-w: 40px; --parent-thumb-h: 58px; max-width: 1220px; margin: 0 auto; padding: 134px 8px 26px; display: grid; gap: 8px; color: #f8fafc; }
+        .quick-nav { display: flex; flex-wrap: wrap; gap: 8px; }
+        .quick-chip { text-decoration: none; border-radius: 10px; border: 1px solid rgba(255,255,255,0.22); background: rgba(255,255,255,0.06); color: rgba(248,250,252,0.9); padding: 8px 12px; font-size: 0.78rem; font-weight: 700; white-space: nowrap; }
+        .quick-chip.active { color: #fff; background: rgba(255,255,255,0.16); border-color: rgba(255,255,255,0.38); }
+        .breadcrumb { margin: 0; font-size: 0.9rem; color: rgba(226,232,240,0.9); }
+        .breadcrumb a { color: rgba(226,232,240,0.9); text-decoration: none; }
+        .breadcrumb a:hover { text-decoration: underline; }
+        .breadcrumb .sep { color: rgba(226,232,240,0.6); margin: 0 4px; }
+        .table-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 10px 14px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; gap: 8px; }
+        .toolbar-left { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: 1; min-width: 0; }
+        .toolbar-sep { color: rgba(226,232,240,0.4); font-weight: 600; margin: 0 2px; }
+        .mini-inline { font-size: 0.85rem; font-weight: 600; color: rgba(226,232,240,0.9); }
+        .toolbar-icon { font-size: 1.1rem; }
+        .total-products { font-weight: 700; color: #fff; font-size: 0.9rem; }
+        .toolbar-right { display: flex; align-items: center; gap: 10px; }
+        .toolbar-icon-btn { min-width: 36px; min-height: 36px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: #fff; font-size: 1rem; cursor: pointer; }
+        .toolbar-right .page-size-select { min-width: 70px; }
+        .title-cell .item-icon { font-size: 1rem; margin-right: 8px; filter: hue-rotate(-20deg); }
+        .details-parent-wrap.out-of-stock { opacity: 0.45; }
+        .details-parent-wrap.out-of-stock .parent-shopify-logo { filter: grayscale(1); }
+        .product-type-icon { font-size: 0.9rem; margin-right: 6px; }
+        .pager-skuplugs { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 12px 16px; }
+        .pager-summary { margin: 0; font-size: 0.9rem; color: rgba(226,232,240,0.9); font-weight: 600; }
+        .pager-controls { display: flex; align-items: center; gap: 8px; }
+        .pager-numbers { display: flex; align-items: center; gap: 4px; }
+        .pager-num { min-width: 36px; min-height: 36px; padding: 0 10px; }
+        .pager-num.active { background: rgba(59,130,246,0.3); border-color: rgba(59,130,246,0.6); }
         .card { padding: 18px; display: grid; gap: 10px; }
         .status-bar {
           position: fixed;
@@ -1388,9 +1503,6 @@ export default function ShopifyMappingInventory() {
           font-size: 0.8rem;
           color: #475569;
           line-height: 1.25;
-        }
-        .filter-card {
-          gap: 8px;
         }
         .filters {
           display: grid;
@@ -1577,6 +1689,20 @@ export default function ShopifyMappingInventory() {
         }
         .thumb-btn:hover { opacity: 0.8; }
         .muted { color: rgba(226,232,240,.55); }
+        .stock-with-gap { font-weight: 700; }
+        .stock-gap-badge {
+          display: inline-block;
+          margin-left: 4px;
+          padding: 1px 6px;
+          border-radius: 6px;
+          font-size: 0.75rem;
+          font-weight: 700;
+        }
+        .stock-with-gap .stock-gap-badge {
+          background: rgba(245, 158, 11, 0.25);
+          color: #fde68a;
+          border: 1px solid rgba(245, 158, 11, 0.4);
+        }
         .title-cell { display: inline-flex; align-items: center; gap: 8px; }
         .ls-logo { width: 18px; height: 24px; object-fit: contain; display: inline-block; }
         .details-head { text-align: center !important; }
@@ -1603,14 +1729,6 @@ export default function ShopifyMappingInventory() {
           max-width: 88px;
           margin: 0 auto;
         }
-        .details-availability-inline {
-          width: 32px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          flex-shrink: 0;
-        }
-        .details-parent-spacer { display: none; }
         .details-toggle-btn {
           width: 56px;
           display: inline-flex;
@@ -1625,6 +1743,14 @@ export default function ShopifyMappingInventory() {
           height: 18px;
           display: block;
         }
+        .details-availability-inline {
+          width: 32px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+        .details-parent-spacer { display: none; }
         .parent-detail-thumb { width: var(--parent-thumb-w); height: var(--parent-thumb-h); object-fit: cover; border-radius: 4px; background: rgba(255,255,255,.08); display: block; margin: 0 auto; }
         .availability { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-width: 72px; margin: 0 auto; }
         .availability.center { justify-content: center; width: 100%; }
@@ -1663,6 +1789,8 @@ export default function ShopifyMappingInventory() {
         .stock-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; min-width: 0; }
         .stock-list li { display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 8px; border-bottom: 1px solid rgba(255,255,255,.14); padding: 6px 0; }
         .stock-list li.total { border-bottom: 0; border-top: 1px solid rgba(255,255,255,.2); margin-top: 2px; font-weight: 700; }
+        .stock-list li.shopify-gap { background: rgba(245, 158, 11, 0.12); }
+        .variant-gap-inline { color: #fde68a; font-size: 0.8rem; margin-left: 6px; }
         .stock-matrix-head span:first-child,
         .stock-list li span { white-space: nowrap; }
         .stock-matrix-head span:last-child,
@@ -1749,10 +1877,8 @@ export default function ShopifyMappingInventory() {
         }
         @media (max-width: 900px) {
           .page { padding-top: 146px; }
-          .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
         @media (max-width: 640px) {
-          .filters { grid-template-columns: 1fr; }
           .actions-row :global(.btn-base) {
             flex: 1 1 auto;
           }

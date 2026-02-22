@@ -13,7 +13,7 @@ type BasicSettings = {
 
 type ProductMapping = {
   sku: string;
-  stockSource: string[];
+  stockSource: string;
   price: string;
   costPrice: string;
   msrp: string;
@@ -168,7 +168,7 @@ export default function ShopifyMappingPosConfigurations() {
 
   const [productMapping, setProductMapping] = useState<ProductMapping>({
     sku: "customSku",
-    stockSource: ["1", "9", "0"],
+    stockSource: "0",
     price: "Default",
     costPrice: "",
     msrp: "MSRP",
@@ -226,8 +226,10 @@ export default function ShopifyMappingPosConfigurations() {
         setBasic((prev) => ({ ...prev, ...bs }));
       }
       if (cfg.productMapping && typeof cfg.productMapping === "object") {
-        const pm = cfg.productMapping as Partial<ProductMapping>;
-        setProductMapping((prev) => ({ ...prev, ...pm }));
+        const pm = cfg.productMapping as Partial<ProductMapping> & { stockSource?: string | string[] };
+        const stockSrc = pm.stockSource;
+        const stockSrcStr = Array.isArray(stockSrc) ? (stockSrc[0] ?? "0") : (stockSrc ?? "0");
+        setProductMapping((prev) => ({ ...prev, ...pm, stockSource: stockSrcStr }));
       }
       if (cfg.downloadSettings && typeof cfg.downloadSettings === "object") {
         const ds = cfg.downloadSettings as Partial<DownloadOrderSettings>;
@@ -306,6 +308,7 @@ export default function ShopifyMappingPosConfigurations() {
         shops: "all",
         includeNoStock: "1",
         refresh: "1",
+        maxPages: "120",
       });
       const resp = await fetch(`/api/lightspeed/catalog?${params.toString()}`, {
         cache: "no-store",
@@ -332,20 +335,6 @@ export default function ShopifyMappingPosConfigurations() {
 
   return (
     <main className="page pos-config-page">
-      <section className="glass-panel hero">
-        <div className="hero-copy">
-          <p className="eyebrow">Shopify Mapping Inventory</p>
-          <h1>POS (Lightspeed - Lightspeed_257323) Configurations</h1>
-          <p>
-            Do you have any questions or feel setup is complicated?{" "}
-            <Link href="/settings" className="inline-link">
-              Contact us
-            </Link>{" "}
-            and get help from support executive.
-          </p>
-        </div>
-      </section>
-
       <nav className="quick-nav" aria-label="POS configuration sections">
         <Link href="/studio/shopify-mapping-inventory/workset" className="quick-chip">
           Workset
@@ -372,6 +361,27 @@ export default function ShopifyMappingPosConfigurations() {
           Cart Configurations
         </Link>
       </nav>
+
+      <p className="breadcrumb">
+        <Link href="/studio/shopify-mapping-inventory/workset">Workset</Link>
+        <span className="sep"> / </span>
+        <span>POS (Lightspeed - Lightspeed_257323)</span>
+        <span className="sep"> / </span>
+        <span>Configurations</span>
+      </p>
+
+      <section className="glass-panel hero">
+        <div className="hero-copy">
+          <h1>POS (Lightspeed - Lightspeed_257323) Configurations</h1>
+          <p>
+            Do you have any Questions or feel Complicated setup?{" "}
+            <Link href="/settings" className="inline-link">
+              Contact us
+            </Link>{" "}
+            and get help from support executive.
+          </p>
+        </div>
+      </section>
 
       <section className="glass-panel pull-card">
         <button
@@ -471,21 +481,11 @@ export default function ShopifyMappingPosConfigurations() {
               label="Stock Source"
               hint="Please select stock source, which source you want to populate."
             >
-              <select
-                multiple
+              <SelectControl
                 value={productMapping.stockSource}
-                onChange={(e) => {
-                  const selected = Array.from(e.target.selectedOptions).map((option) => option.value);
-                  setProductMapping((prev) => ({ ...prev, stockSource: selected }));
-                }}
-                className="multi"
-              >
-                {stockSourceOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+                options={stockSourceOptions}
+                onChange={(value) => setProductMapping((prev) => ({ ...prev, stockSource: value }))}
+              />
             </FieldRow>
 
             <FieldRow
@@ -795,6 +795,22 @@ export default function ShopifyMappingPosConfigurations() {
           color: #fff;
           background: rgba(255, 255, 255, 0.16);
           border-color: rgba(255, 255, 255, 0.38);
+        }
+        .breadcrumb {
+          margin: 0;
+          font-size: 0.9rem;
+          color: rgba(226, 232, 240, 0.9);
+        }
+        .breadcrumb a {
+          color: rgba(226, 232, 240, 0.9);
+          text-decoration: none;
+        }
+        .breadcrumb a:hover {
+          text-decoration: underline;
+        }
+        .breadcrumb .sep {
+          color: rgba(226, 232, 240, 0.6);
+          margin: 0 4px;
         }
         .pull-card {
           border-radius: 16px;

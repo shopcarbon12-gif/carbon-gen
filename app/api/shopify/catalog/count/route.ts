@@ -8,6 +8,35 @@ export const dynamic = "force-dynamic";
 const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
 const BASE_FILTER = "status:active -status:unlisted published_status:published";
 
+type CountResult = number | { count?: number } | null;
+
+async function fetchCount(
+  shop: string,
+  token: string,
+  queryFilter: string
+): Promise<number | null> {
+  const query = `query ProductCount($query: String) { productsCount(query: $query) { count } }`;
+  const res = await fetch(`https://${shop}/admin/api/${API_VERSION}/graphql.json`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Shopify-Access-Token": token,
+    },
+    body: JSON.stringify({ query, variables: { query: queryFilter } }),
+    cache: "no-store",
+    signal: AbortSignal.timeout(15_000),
+  });
+  const json = (await res.json().catch(() => ({}))) as { data?: { productsCount?: CountResult } };
+  const raw = json?.data?.productsCount;
+  const count =
+    typeof raw === "number"
+      ? raw
+      : raw && typeof raw === "object" && typeof raw.count === "number"
+        ? raw.count
+        : null;
+  return count != null && Number.isFinite(count) ? count : null;
+}
+
 async function getToken(shop: string): Promise<string | null> {
   const supabase = getSupabaseAdmin();
   const { data } = await supabase
@@ -33,26 +62,29 @@ export async function GET(req: NextRequest) {
     if (!token) {
       return NextResponse.json({ ok: false, error: "Shop not connected.", productCount: null }, { status: 401 });
     }
-    const query = `query ProductCount($query: String) { productsCount(query: $query) { count } }`;
-    const res = await fetch(`https://${shop}/admin/api/${API_VERSION}/graphql.json`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Shopify-Access-Token": token,
-      },
-      body: JSON.stringify({ query, variables: { query: BASE_FILTER } }),
-      cache: "no-store",
-      signal: AbortSignal.timeout(15_000),
-    });
-    const json = (await res.json().catch(() => ({}))) as { data?: { productsCount?: number | { count?: number } } };
-    const raw = json?.data?.productsCount;
-    const count =
-      typeof raw === "number"
-        ? raw
-        : raw && typeof raw === "object" && typeof raw.count === "number"
-          ? raw.count
-          : null;
-    const productCount = count != null && Number.isFinite(count) ? count : null;
+    const breakdown = String(searchParams.get("breakdown") || "").toLowerCase() === "1" || searchParams.get("breakdown") === "true";
+    if (breakdown) {
+      const [published, draft, archived] = await Promise.all([
+        fetchCount(shop, token, "status:active published_status:published"),
+        fetchCount(shop, token, "status:draft"),
+        fetchCount(shop, token, "status:archived"),
+      ]);
+      const productCount = published ?? 0;
+      return NextResponse.json({
+        ok: true,
+        productCount,
+        shop,
+        filter: "status:active published",
+        breakdown: {
+          published: published ?? 0,
+          draft: draft ?? 0,
+          archived: archived ?? 0,
+          total: (published ?? 0) + (draft ?? 0) + (archived ?? 0),
+        },
+        hint: "If draft is high and you pushed recently, check Cart Config > Product Status (post as Invisible).",
+      });
+    }
+    const productCount = await fetchCount(shop, token, BASE_FILTER);
     return NextResponse.json({
       ok: true,
       productCount,
