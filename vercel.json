@@ -1,7 +1,20 @@
 {
   "crons": [
-    { "path": "/api/cron/lightspeed-catalog-warm", "schedule": "0 3 * * *" },
-    { "path": "/api/cron/cart-sync", "schedule": "* * * * *" },
-    { "path": "/api/cron/daily-sync-report", "schedule": "55 4 * * *" }
+    {
+      "path": "/api/cron/lightspeed-catalog-warm",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/cart-sync",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/daily-sync-report",
+      "schedule": "55 4 * * *"
+    },
+    {
+      "path": "/api/cron/sales-sync",
+      "schedule": "* * * * *"
+    }
   ]
 }

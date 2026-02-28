@@ -1,0 +1,22 @@
+﻿---
+description: Work in small steps, verify each result, avoid timeouts. Reduces crashes.
+alwaysApply: true
+---
+
+# Stable Mode (Crash Prevention)
+
+**MANDATORY:** Follow these practices to avoid crashes and incomplete runs.
+
+## Rules
+
+1. **One change at a time** - Make one edit or run one command per turn. Verify it succeeded before continuing.
+
+2. **Verify tool results** - If search_replace or write returns an error, retry with a smaller change or use Shell/alternate approach. Don't assume edits applied.
+
+3. **Use semicolon not double-ampersand** - On Windows PowerShell, chain commands with ; never &&.
+
+4. **Short command chains** - Avoid long multi-step shell commands. Run one thing, check output, then continue.
+
+5. **Prefer small deploys** - If you made code changes, deploy. Don't batch many unrelated changes before deploy.
+
+6. **Use BACKUP-WEBHOOK-CONVERSATION.md** - For long tasks, update the backup file after each major step so context can be restored if the session resets.

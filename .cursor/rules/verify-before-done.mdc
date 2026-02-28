@@ -1,0 +1,18 @@
+---
+description: MUST verify changes in the browser before declaring done. No exceptions.
+alwaysApply: true
+---
+
+# Verify Before Done (LOCKED)
+
+**MANDATORY:** After deploying ANY code change, you MUST open the browser and verify the change works before telling the user it's done.
+
+## Verification steps (required)
+1. Deploy to Vercel
+2. Open the relevant page in the browser using MCP browser tools
+3. Take a snapshot and confirm the change is visually correct and functional
+4. Only THEN tell the user it's done
+
+Never say "done", "deployed", "live", or similar until you have verified with your own eyes in the browser.
+
+Skip only if the user explicitly says "skip testing" or "no need to test".

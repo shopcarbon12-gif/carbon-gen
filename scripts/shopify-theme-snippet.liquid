@@ -1,0 +1,363 @@
+{% comment %}
+  Lightspeed In-Store Purchase History — merged into Order History table
+  Place this snippet at the bottom of your Shopify account page template
+  (e.g. templates/customers/account.liquid or the account section).
+{% endcomment %}
+
+{% if customer %}
+<style>
+  .ls-badge {
+    display: inline-block;
+    font-size: 0.65rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    background: #000;
+    color: #fff;
+    padding: 2px 6px;
+    border-radius: 2px;
+    margin-left: 6px;
+    vertical-align: middle;
+    font-weight: 600;
+  }
+  .ls-row { cursor: pointer; }
+  .ls-row:hover { background: #fafafa; }
+
+  /* ── Modal ─────────────────────────────────────────────── */
+  .ls-modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 99999;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 60px 16px;
+    overflow-y: auto;
+  }
+  .ls-modal-overlay.ls-open { display: flex; }
+
+  .ls-modal {
+    background: #fff;
+    width: 100%;
+    max-width: 680px;
+    padding: 40px 36px 36px;
+    position: relative;
+    font-family: inherit;
+  }
+  .ls-modal-close {
+    position: absolute;
+    top: 14px;
+    right: 18px;
+    background: none;
+    border: none;
+    font-size: 1.6rem;
+    cursor: pointer;
+    color: #333;
+    line-height: 1;
+  }
+  .ls-modal-close:hover { color: #000; }
+
+  .ls-modal h2 {
+    font-size: 1.75rem;
+    font-weight: 400;
+    margin: 0 0 4px;
+  }
+  .ls-modal .ls-back {
+    display: inline-block;
+    margin-bottom: 20px;
+    font-size: 0.85rem;
+    color: #557b97;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  .ls-modal .ls-placed {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 22px;
+    font-size: 0.85rem;
+    color: #333;
+  }
+  .ls-modal .ls-placed .ls-check {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #4caf50;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .ls-modal .ls-placed .ls-check::after {
+    content: '';
+    display: block;
+    width: 5px;
+    height: 9px;
+    border: solid #fff;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+    margin-top: -1px;
+  }
+
+  .ls-modal table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+  .ls-modal thead th {
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    font-weight: 600;
+    color: #888;
+    text-align: left;
+    padding: 8px 0;
+    border-bottom: 1px solid #ddd;
+  }
+  .ls-modal thead th:last-child { text-align: right; }
+  .ls-modal tbody td {
+    padding: 14px 0;
+    vertical-align: top;
+    border-bottom: 1px solid #eee;
+    color: #333;
+  }
+  .ls-modal tbody td:last-child { text-align: right; }
+  .ls-modal .ls-line-desc { font-weight: 400; }
+  .ls-modal .ls-line-sub { font-size: 0.78rem; color: #888; margin-top: 2px; }
+
+  .ls-modal .ls-totals {
+    margin-top: 16px;
+    border-top: 1px solid #ddd;
+    padding-top: 12px;
+    font-size: 0.85rem;
+  }
+  .ls-modal .ls-totals-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 3px 0;
+    color: #333;
+  }
+  .ls-modal .ls-totals-row.ls-total-final {
+    font-weight: 600;
+    font-size: 0.95rem;
+    padding-top: 8px;
+    border-top: 1px solid #ddd;
+    margin-top: 6px;
+  }
+</style>
+
+<!-- Modal container -->
+<div class="ls-modal-overlay" id="lsModalOverlay">
+  <div class="ls-modal" id="lsModalContent"></div>
+</div>
+
+<script>
+(function() {
+  var email = {{ customer.email | json }};
+  if (!email) return;
+
+  var API_BASE = "https://carbon-gen-iota.vercel.app";
+  var url = API_BASE + "/api/shopify/customer-history?email=" + encodeURIComponent(email);
+
+  /* ── Helpers ─────────────────────────────────────────── */
+
+  function parseDate(str) {
+    if (!str) return null;
+    var d = new Date(str);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  function fmtDate(str) {
+    var d = parseDate(str);
+    if (!d) return "N/A";
+    return d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  }
+
+  function fmtMoney(val) {
+    var n = parseFloat(val);
+    return isNaN(n) ? "$0.00" : "$" + n.toFixed(2);
+  }
+
+  function fmtDateTime(str) {
+    var d = parseDate(str);
+    if (!d) return "";
+    return d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) +
+      " at " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  }
+
+  /* ── Find the existing order table ──────────────────── */
+
+  function findOrderTable() {
+    var tables = document.querySelectorAll("table");
+    for (var i = 0; i < tables.length; i++) {
+      var headerRow = tables[i].querySelector("thead tr, tr:first-child");
+      if (headerRow && headerRow.textContent && /order/i.test(headerRow.textContent) && /date/i.test(headerRow.textContent)) {
+        return tables[i];
+      }
+    }
+    return null;
+  }
+
+  function getExistingRowDates(tbody) {
+    var rows = tbody.querySelectorAll("tr");
+    var result = [];
+    for (var i = 0; i < rows.length; i++) {
+      var cells = rows[i].querySelectorAll("td");
+      var dateText = cells.length >= 2 ? cells[1].textContent.trim() : "";
+      var d = parseDate(dateText);
+      result.push({ row: rows[i], date: d });
+    }
+    return result;
+  }
+
+  /* ── Create an LS row matching the table columns ────── */
+
+  function createLsRow(sale, colCount) {
+    var tr = document.createElement("tr");
+    tr.className = "ls-row";
+    tr.setAttribute("data-ls-sale", JSON.stringify(sale));
+
+    var orderTd = document.createElement("td");
+    var link = document.createElement("a");
+    link.href = "#";
+    link.style.color = "inherit";
+    link.textContent = "#" + (sale.referenceNumber || sale.saleID || "—");
+    var badge = document.createElement("span");
+    badge.className = "ls-badge";
+    badge.textContent = "In-Store";
+    orderTd.appendChild(link);
+    orderTd.appendChild(badge);
+    tr.appendChild(orderTd);
+
+    var dateTd = document.createElement("td");
+    dateTd.textContent = fmtDate(sale.completeTime);
+    tr.appendChild(dateTd);
+
+    if (colCount >= 3) {
+      var payTd = document.createElement("td");
+      payTd.textContent = "Paid";
+      tr.appendChild(payTd);
+    }
+    if (colCount >= 4) {
+      var fulTd = document.createElement("td");
+      fulTd.textContent = "In-Store";
+      tr.appendChild(fulTd);
+    }
+    if (colCount >= 5) {
+      var totTd = document.createElement("td");
+      totTd.textContent = fmtMoney(sale.total) + " USD";
+      tr.appendChild(totTd);
+    }
+
+    tr.addEventListener("click", function(e) {
+      e.preventDefault();
+      openModal(sale);
+    });
+
+    return tr;
+  }
+
+  /* ── Modal ──────────────────────────────────────────── */
+
+  var overlay = document.getElementById("lsModalOverlay");
+  var modalContent = document.getElementById("lsModalContent");
+
+  overlay.addEventListener("click", function(e) {
+    if (e.target === overlay) closeModal();
+  });
+
+  document.addEventListener("keydown", function(e) {
+    if (e.key === "Escape") closeModal();
+  });
+
+  function closeModal() {
+    overlay.classList.remove("ls-open");
+    document.body.style.overflow = "";
+  }
+
+  function openModal(sale) {
+    var lines = sale.saleLines || [];
+    var subtotal = 0;
+    for (var i = 0; i < lines.length; i++) {
+      subtotal += parseFloat(lines[i].total) || 0;
+    }
+    var total = parseFloat(sale.total) || subtotal;
+
+    var html = '<button class="ls-modal-close" id="lsModalClose">&times;</button>';
+    html += '<h2>Sale #' + (sale.referenceNumber || sale.saleID || "—") + '</h2>';
+    html += '<span class="ls-back" id="lsModalBack">&larr; Return to account details</span>';
+    html += '<div class="ls-placed"><span class="ls-check"></span> Completed on ' + fmtDateTime(sale.completeTime) + '</div>';
+
+    html += '<table><thead><tr>';
+    html += '<th>Product</th><th>Price</th><th>Quantity</th><th>Total</th>';
+    html += '</tr></thead><tbody>';
+
+    for (var j = 0; j < lines.length; j++) {
+      var l = lines[j];
+      var lTotal = parseFloat(l.total) || 0;
+      var lQty = l.qty || 1;
+      var lPrice = lQty > 0 ? (lTotal / lQty) : lTotal;
+
+      html += '<tr>';
+      html += '<td><div class="ls-line-desc">' + (l.description || "Item") + '</div>';
+      html += '<div class="ls-line-sub">Completed ' + fmtDate(sale.completeTime) + '</div></td>';
+      html += '<td>' + fmtMoney(lPrice) + '</td>';
+      html += '<td style="text-align:center;">' + lQty + '</td>';
+      html += '<td>' + fmtMoney(l.total) + '</td>';
+      html += '</tr>';
+    }
+
+    html += '</tbody></table>';
+
+    html += '<div class="ls-totals">';
+    html += '<div class="ls-totals-row"><span>Subtotal</span><span>' + fmtMoney(subtotal) + '</span></div>';
+    html += '<div class="ls-totals-row ls-total-final"><span>Total</span><span>' + fmtMoney(total) + ' USD</span></div>';
+    html += '</div>';
+
+    modalContent.innerHTML = html;
+
+    document.getElementById("lsModalClose").addEventListener("click", closeModal);
+    document.getElementById("lsModalBack").addEventListener("click", closeModal);
+
+    overlay.classList.add("ls-open");
+    document.body.style.overflow = "hidden";
+  }
+
+  /* ── Fetch & inject ─────────────────────────────────── */
+
+  fetch(url)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (!data.sales || data.sales.length === 0) return;
+
+      var table = findOrderTable();
+      if (!table) return;
+
+      var thead = table.querySelector("thead tr, tr:first-child");
+      var colCount = thead ? thead.querySelectorAll("th, td").length : 5;
+
+      var tbody = table.querySelector("tbody") || table;
+      var existingRows = getExistingRowDates(tbody);
+
+      for (var i = 0; i < data.sales.length; i++) {
+        var tr = createLsRow(data.sales[i], colCount);
+        tbody.appendChild(tr);
+        existingRows.push({ row: tr, date: parseDate(data.sales[i].completeTime) });
+      }
+
+      existingRows.sort(function(a, b) {
+        var da = a.date ? a.date.getTime() : 0;
+        var db = b.date ? b.date.getTime() : 0;
+        return db - da;
+      });
+
+      for (var k = 0; k < existingRows.length; k++) {
+        tbody.appendChild(existingRows[k].row);
+      }
+    })
+    .catch(function(err) {
+      console.warn("[LS History] Could not load in-store history:", err);
+    });
+})();
+</script>
+{% endif %}
