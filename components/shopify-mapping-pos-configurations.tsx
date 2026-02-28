@@ -202,6 +202,14 @@ export default function ShopifyMappingPosConfigurations() {
     },
   ]);
 
+  const [imageSyncSettings, setImageSyncSettings] = useState<{
+    pushShopifyImagesToLS: boolean;
+    deleteExistingLSImages: boolean;
+  }>({
+    pushShopifyImagesToLS: false,
+    deleteExistingLSImages: false,
+  });
+
   const [status, setStatus] = useState("");
   const [pulling, setPulling] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -253,6 +261,10 @@ export default function ShopifyMappingPosConfigurations() {
           })
         );
       }
+      if (cfg.imageSyncSettings && typeof cfg.imageSyncSettings === "object") {
+        const is = cfg.imageSyncSettings as Partial<typeof imageSyncSettings>;
+        setImageSyncSettings((prev) => ({ ...prev, ...is }));
+      }
     } catch {
       // Config not loaded — use defaults.
     }
@@ -297,10 +309,14 @@ export default function ShopifyMappingPosConfigurations() {
     void saveSection("shopConfigurations", { rows: shopConfigurations });
   }
 
+  function saveImageSyncSettings() {
+    void saveSection("imageSyncSettings", imageSyncSettings as unknown as Record<string, unknown>);
+  }
+
   async function pullMappingData() {
     if (pulling) return;
     setPulling(true);
-    notify("Pulling inventory from Lightspeed POS...");
+    notify("Pulling inventory from Lightspeed POS and staging to Carts...");
     try {
       const params = new URLSearchParams({
         all: "1",
@@ -323,8 +339,51 @@ export default function ShopifyMappingPosConfigurations() {
         notify(`Error: ${json?.error || "Pull failed."}`);
         return;
       }
-      const total = Number(json?.total ?? json?.rows?.length ?? 0);
-      notify(`Pulled ${total.toLocaleString()} items from Lightspeed. Go to Inventory to view.`);
+      const rows = Array.isArray(json?.rows) ? json.rows : [];
+      const total = Number(json?.total ?? rows.length ?? 0);
+      const CHUNK_SIZE = 400;
+
+      let totalUpserted = 0;
+      let totalMerged = 0;
+      let totalAddedVariants = 0;
+      let totalSkippedUnmatched = 0;
+
+      for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
+        const chunk = rows.slice(i, i + CHUNK_SIZE);
+        const stageResp = await fetch("/api/shopify/cart-inventory", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "stage-add",
+            rows: chunk,
+            addMissingVariants: true,
+          }),
+        });
+        const stageJson = (await stageResp.json().catch(() => ({}))) as {
+          ok?: boolean;
+          error?: string;
+          upserted?: number;
+          merged?: number;
+          addedVariants?: number;
+          skippedUnmatched?: number;
+        };
+        if (!stageResp.ok || stageJson.ok === false) {
+          notify(
+            `Error: POS pull staged ${i.toLocaleString()} rows, then failed: ${
+              stageJson?.error || `stage-add failed (${stageResp.status})`
+            }`
+          );
+          return;
+        }
+        totalUpserted += Number(stageJson?.upserted || 0);
+        totalMerged += Number(stageJson?.merged || 0);
+        totalAddedVariants += Number(stageJson?.addedVariants || 0);
+        totalSkippedUnmatched += Number(stageJson?.skippedUnmatched || 0);
+      }
+
+      notify(
+        `Pulled ${total.toLocaleString()} LS item rows. Updated ${totalUpserted.toLocaleString()} Carts parent rows, merged ${totalMerged.toLocaleString()} matches, added ${totalAddedVariants.toLocaleString()} missing variants, skipped ${totalSkippedUnmatched.toLocaleString()} unmatched rows.`
+      );
     } catch (e: unknown) {
       const msg = String((e as { message?: string } | null)?.message || "Pull failed.");
       notify(`Error: ${msg}`);
@@ -727,6 +786,62 @@ export default function ShopifyMappingPosConfigurations() {
           </div>
         </section>
       ))}
+
+      {/* ── Image Sync Settings (Shopify → Lightspeed) ── */}
+      <section className="card" id="image-sync">
+        <h2>Image Sync Settings</h2>
+        <p className="card-subtitle">
+          Control how product images are synchronized from Shopify to Lightspeed.
+          When enabled, Shopify images will be pushed to Lightspeed during the
+          bidirectional sync (Phase 6).
+        </p>
+
+        <div className="fields-grid">
+          <FieldRow
+            label="Push Shopify Images to Lightspeed"
+            hint="Replace Lightspeed product images with the images from Shopify."
+          >
+            <input
+              type="checkbox"
+              checked={imageSyncSettings.pushShopifyImagesToLS}
+              onChange={(e) =>
+                setImageSyncSettings((prev) => ({
+                  ...prev,
+                  pushShopifyImagesToLS: e.target.checked,
+                }))
+              }
+            />
+          </FieldRow>
+
+          <FieldRow
+            label="Delete Existing Lightspeed Images First"
+            hint="Remove all existing images from the Lightspeed item before uploading the Shopify images."
+          >
+            <input
+              type="checkbox"
+              checked={imageSyncSettings.deleteExistingLSImages}
+              onChange={(e) =>
+                setImageSyncSettings((prev) => ({
+                  ...prev,
+                  deleteExistingLSImages: e.target.checked,
+                }))
+              }
+            />
+          </FieldRow>
+        </div>
+
+        <div className="actions">
+          <button
+            suppressHydrationWarning
+            type="button"
+            className="btn-base btn-primary"
+            onClick={() => saveImageSyncSettings()}
+            disabled={saving}
+          >
+            {saving ? "Saving..." : "Save"}
+          </button>
+        </div>
+      </section>
 
       {status ? <p className="notice">{status}</p> : null}
 

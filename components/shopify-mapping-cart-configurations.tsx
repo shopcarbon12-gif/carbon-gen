@@ -42,10 +42,10 @@ type ProductUpdateRules = {
   barcode: boolean;
   productType: boolean;
   vendor: boolean;
-  image: boolean;
   weight: boolean;
   tags: boolean;
   styleAttributes: boolean;
+  variantOptions: boolean;
 };
 
 type OrderStatus = {
@@ -54,6 +54,27 @@ type OrderStatus = {
   paid: boolean;
   partiallyPaid: boolean;
   voided: boolean;
+};
+
+type DestructiveSyncRules = {
+  archiveProductsNotInCart: boolean;
+  deleteVariantsFromShopify: boolean;
+  archiveOnMatrixRemoval: boolean;
+  createNewProducts: boolean;
+  addVariantsToExisting: boolean;
+};
+
+type PublicationItem = {
+  id: string;
+  name: string;
+  supportsFuturePublishing: boolean;
+  app: { title: string } | null;
+};
+
+type CatalogItem = {
+  id: string;
+  title: string;
+  status: string;
 };
 
 type StoreMappingRow = {
@@ -155,10 +176,18 @@ const PRODUCT_UPDATE_RULES: Array<ToggleSpec<keyof ProductUpdateRules>> = [
   { key: "barcode", label: "Barcode", hint: "Do you want to update Product's Barcode?" },
   { key: "productType", label: "Product Type", hint: "Do you want to update Product's Product type?" },
   { key: "vendor", label: "Vendor", hint: "Do you want to update Product's Vendor?" },
-  { key: "image", label: "Product Image", hint: "Do you want to update Product's Image?" },
   { key: "weight", label: "Product Weight", hint: "Do you want to update Product's Weight?" },
   { key: "tags", label: "Product Tags", hint: "Do you want to update Product's Tags?" },
   { key: "styleAttributes", label: "Style Attributes", hint: "Do you want to update Product's Style attributes?" },
+  { key: "variantOptions", label: "Variant Options", hint: "Do you want to update Variant's option values (Color, Size)?" },
+];
+
+const DESTRUCTIVE_SYNC_RULES: Array<ToggleSpec<keyof DestructiveSyncRules>> = [
+  { key: "createNewProducts", label: "Create New Products", hint: "Allow the sync to create new Shopify products for unlinked Cart Inventory items." },
+  { key: "addVariantsToExisting", label: "Add Variants to Existing Products", hint: "Allow the sync to add missing variants to existing Shopify products." },
+  { key: "archiveProductsNotInCart", label: "Archive Products Not in Cart", hint: "Archive Shopify products whose variants are no longer in Cart Inventory." },
+  { key: "deleteVariantsFromShopify", label: "Delete Variants from Shopify", hint: "Delete Shopify variants when they disappear from Lightspeed." },
+  { key: "archiveOnMatrixRemoval", label: "Archive on Matrix Removal", hint: "Archive entire Shopify products when their Lightspeed matrix is deleted or empty." },
 ];
 
 const ORDER_STATUS_RULES: Array<ToggleSpec<keyof OrderStatus>> = [
@@ -276,10 +305,10 @@ export default function ShopifyMappingCartConfigurations() {
     barcode: true,
     productType: true,
     vendor: true,
-    image: false,
     weight: false,
     tags: false,
     styleAttributes: false,
+    variantOptions: false,
   });
   const [orderStatus, setOrderStatus] = useState<OrderStatus>({
     authorized: false,
@@ -289,6 +318,13 @@ export default function ShopifyMappingCartConfigurations() {
     voided: false,
   });
   const [priceInclusiveTax, setPriceInclusiveTax] = useState(false);
+  const [destructiveSyncRules, setDestructiveSyncRules] = useState<DestructiveSyncRules>({
+    archiveProductsNotInCart: false,
+    deleteVariantsFromShopify: false,
+    archiveOnMatrixRemoval: false,
+    createNewProducts: false,
+    addVariantsToExisting: false,
+  });
   const [reserveStock, setReserveStock] = useState("0");
   const [storeMapRows, setStoreMapRows] = useState<StoreMappingRow[]>([
     {
@@ -296,6 +332,11 @@ export default function ShopifyMappingCartConfigurations() {
       posStore: "a41b6c5a-cdff-4dd1-b0bd-0f589dc1abfb",
     },
   ]);
+  const [publications, setPublications] = useState<PublicationItem[]>([]);
+  const [catalogs, setCatalogs] = useState<CatalogItem[]>([]);
+  const [selectedPublicationIds, setSelectedPublicationIds] = useState<string[]>([]);
+  const [selectedCatalogIds, setSelectedCatalogIds] = useState<string[]>([]);
+  const [loadingPubs, setLoadingPubs] = useState(false);
   const [pulling, setPulling] = useState(false);
   const [pullingFull, setPullingFull] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -326,6 +367,7 @@ export default function ShopifyMappingCartConfigurations() {
           shopRef.current = resolvedShop;
           setShop(resolvedShop);
           await loadConfig(resolvedShop);
+          void fetchPublications(resolvedShop);
         }
       } catch {
         if (!cancelled) {
@@ -337,6 +379,7 @@ export default function ShopifyMappingCartConfigurations() {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadConfig(resolvedShop: string | null) {
@@ -377,6 +420,10 @@ export default function ShopifyMappingCartConfigurations() {
         const os = cfg.orderStatus as Partial<OrderStatus>;
         setOrderStatus((prev) => ({ ...prev, ...os }));
       }
+      if (cfg.destructiveSyncRules && typeof cfg.destructiveSyncRules === "object") {
+        const dsr = cfg.destructiveSyncRules as Partial<DestructiveSyncRules>;
+        setDestructiveSyncRules((prev) => ({ ...prev, ...dsr }));
+      }
       if (cfg.taxSettings && typeof cfg.taxSettings === "object") {
         const ts = cfg.taxSettings as Record<string, unknown>;
         if (typeof ts.priceInclusiveTax === "boolean") setPriceInclusiveTax(ts.priceInclusiveTax);
@@ -400,8 +447,38 @@ export default function ShopifyMappingCartConfigurations() {
           );
         }
       }
+      if (cfg.publicationDefaults && typeof cfg.publicationDefaults === "object") {
+        const pd = cfg.publicationDefaults as Record<string, unknown>;
+        if (Array.isArray(pd.selectedPublicationIds)) {
+          setSelectedPublicationIds(pd.selectedPublicationIds.map(String));
+        }
+        if (Array.isArray(pd.selectedCatalogIds)) {
+          setSelectedCatalogIds(pd.selectedCatalogIds.map(String));
+        }
+      }
     } catch {
       // Config not loaded yet — use defaults.
+    }
+  }
+
+  async function fetchPublications(resolvedShop: string | null) {
+    setLoadingPubs(true);
+    try {
+      const qs = resolvedShop ? `?shop=${encodeURIComponent(resolvedShop)}` : "";
+      const resp = await fetch(`/api/shopify/publications${qs}`, { cache: "no-store" });
+      const json = (await resp.json().catch(() => ({}))) as {
+        ok?: boolean;
+        publications?: PublicationItem[];
+        catalogs?: CatalogItem[];
+      };
+      if (json.ok) {
+        setPublications(json.publications ?? []);
+        setCatalogs(json.catalogs ?? []);
+      }
+    } catch {
+      // Failed to fetch publications
+    } finally {
+      setLoadingPubs(false);
     }
   }
 
@@ -755,6 +832,134 @@ export default function ShopifyMappingCartConfigurations() {
 
           <section className="glass-panel card">
             <header>
+              <h2>Sales Channels & Catalogs</h2>
+            </header>
+            <p className="section-note">
+              Select which sales channels and catalogs products should be published to when pushing to Shopify.
+              These are the defaults — you can override them per-push.
+            </p>
+            {loadingPubs ? (
+              <p className="section-note" style={{ fontStyle: "italic" }}>Loading channels...</p>
+            ) : publications.length === 0 && catalogs.length === 0 ? (
+              <p className="section-note" style={{ fontStyle: "italic" }}>
+                No sales channels found. Make sure the app has &quot;read_publications&quot; scope.
+              </p>
+            ) : (
+              <>
+                {publications.length > 0 && (
+                  <div className="form-rows">
+                    <div className="field-row">
+                      <div className="field-copy">
+                        <h4>Sales Channels</h4>
+                        <p>Select All</p>
+                      </div>
+                      <div className="field-control">
+                        <input
+                          type="checkbox"
+                          checked={publications.length > 0 && publications.every((p) => selectedPublicationIds.includes(p.id))}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedPublicationIds(publications.map((p) => p.id));
+                            } else {
+                              setSelectedPublicationIds([]);
+                            }
+                          }}
+                          aria-label="Select all sales channels"
+                        />
+                      </div>
+                    </div>
+                    {publications.map((pub) => (
+                      <div className="field-row" key={pub.id}>
+                        <div className="field-copy">
+                          <h4>{pub.name}</h4>
+                          {pub.app?.title ? <p>{pub.app.title}</p> : null}
+                        </div>
+                        <div className="field-control">
+                          <input
+                            type="checkbox"
+                            checked={selectedPublicationIds.includes(pub.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedPublicationIds((prev) => [...prev, pub.id]);
+                              } else {
+                                setSelectedPublicationIds((prev) => prev.filter((id) => id !== pub.id));
+                              }
+                            }}
+                            aria-label={pub.name}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {catalogs.length > 0 && (
+                  <div className="form-rows" style={{ marginTop: 8 }}>
+                    <div className="field-row">
+                      <div className="field-copy">
+                        <h4>Catalogs</h4>
+                        <p>Select All</p>
+                      </div>
+                      <div className="field-control">
+                        <input
+                          type="checkbox"
+                          checked={catalogs.length > 0 && catalogs.every((c) => selectedCatalogIds.includes(c.id))}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedCatalogIds(catalogs.map((c) => c.id));
+                            } else {
+                              setSelectedCatalogIds([]);
+                            }
+                          }}
+                          aria-label="Select all catalogs"
+                        />
+                      </div>
+                    </div>
+                    {catalogs.map((cat) => (
+                      <div className="field-row" key={cat.id}>
+                        <div className="field-copy">
+                          <h4>{cat.title}</h4>
+                          <p>Status: {cat.status}</p>
+                        </div>
+                        <div className="field-control">
+                          <input
+                            type="checkbox"
+                            checked={selectedCatalogIds.includes(cat.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedCatalogIds((prev) => [...prev, cat.id]);
+                              } else {
+                                setSelectedCatalogIds((prev) => prev.filter((id) => id !== cat.id));
+                              }
+                            }}
+                            aria-label={cat.title}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+            <div className="actions">
+              <button
+                suppressHydrationWarning
+                type="button"
+                className="btn-base btn-primary"
+                disabled={saving || loadingPubs}
+                onClick={() =>
+                  void saveSection("publicationDefaults", {
+                    selectedPublicationIds,
+                    selectedCatalogIds,
+                  })
+                }
+              >
+                {saving ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </section>
+
+          <section className="glass-panel card">
+            <header>
               <h2>Map Stores</h2>
             </header>
             <AlertInfo id="map-stores-status" />
@@ -860,6 +1065,33 @@ export default function ShopifyMappingCartConfigurations() {
             </div>
             <div className="actions">
               <button suppressHydrationWarning type="button" className="btn-base btn-primary" disabled={saving} onClick={() => void saveSection("taxSettings", { priceInclusiveTax })}>
+                {saving ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </section>
+
+          <section className="glass-panel card safety-panel">
+            <header>
+              <h2>Sync Safety Controls</h2>
+            </header>
+            <AlertInfo id="destructive-sync-rules" />
+            <p className="section-note" style={{ color: "#fbbf24" }}>
+              These toggles control destructive operations during sync. All default to OFF.
+              Only enable them when you are confident the sync is working correctly.
+            </p>
+            <div className="form-rows">
+              {DESTRUCTIVE_SYNC_RULES.map((rule) => (
+                <ToggleFieldRow
+                  key={rule.key}
+                  label={rule.label}
+                  hint={rule.hint}
+                  checked={destructiveSyncRules[rule.key]}
+                  onChange={(checked) => patchBoolean(setDestructiveSyncRules, rule.key, checked)}
+                />
+              ))}
+            </div>
+            <div className="actions">
+              <button suppressHydrationWarning type="button" className="btn-base btn-primary" disabled={saving} onClick={() => void saveSection("destructiveSyncRules", destructiveSyncRules)}>
                 {saving ? "Saving..." : "Save"}
               </button>
             </div>
@@ -1007,6 +1239,13 @@ export default function ShopifyMappingCartConfigurations() {
           padding: 14px;
           display: grid;
           gap: 10px;
+        }
+        .card.safety-panel {
+          border: 1px solid rgba(251, 191, 36, 0.35);
+          background: linear-gradient(135deg, rgba(251, 191, 36, 0.06) 0%, rgba(239, 68, 68, 0.04) 100%);
+        }
+        .card.safety-panel header h2 {
+          color: #fbbf24;
         }
         .card header h2 {
           margin: 0;

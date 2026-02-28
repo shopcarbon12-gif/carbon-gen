@@ -1,7 +1,7 @@
 import { Resend } from "resend";
 
 const FROM_EMAIL =
-  (process.env.EMAIL_FROM || "").trim() || "onboarding@resend.dev";
+  (process.env.EMAIL_FROM || "").trim() || "sync@carbonjeanscompany.com";
 const FROM_NAME = (process.env.EMAIL_FROM_NAME || "").trim() || "Carbon Cart Sync";
 
 export type PushNotificationPayload = {

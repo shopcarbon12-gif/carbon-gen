@@ -31,6 +31,17 @@ function norm(s: unknown): string {
   return String(s ?? "").trim();
 }
 
+function normLower(s: unknown): string {
+  return norm(s).toLowerCase();
+}
+
+function getSelectedOptionValue(
+  options: Array<{ name: string; value: string }> | undefined,
+  optionName: string
+): string {
+  return normLower(options?.find((o) => normLower(o.name) === normLower(optionName))?.value);
+}
+
 function slugify(text: string): string {
   return text
     .toLowerCase()
@@ -334,10 +345,133 @@ export async function createShopifyProductFromCart(
     });
   }
 
+  // Enforce deterministic size ordering after create/add-variants.
+  // This prevents Shopify's internal option ordering from scrambling sizes.
+  const optionsRes = await runShopifyGraphql<{
+    product?: {
+      options?: Array<{ name: string; values?: string[] }>;
+    };
+  }>({
+    shop,
+    token,
+    query: `query($id: ID!) {
+      product(id: $id) {
+        options { name values }
+      }
+    }`,
+    variables: { id: productGid },
+    apiVersion: API_VERSION,
+  });
+
+  const shopOptions = optionsRes.ok ? optionsRes.data?.product?.options || [] : [];
+  const sizeOption = shopOptions.find((o) => normLower(o.name) === "size");
+  if (sizeOption && Array.isArray(sizeOption.values) && sizeOption.values.length > 1) {
+    const current = sizeOption.values.map((v) => norm(v)).filter(Boolean);
+    const sorted = sortSizes(current);
+    const needsReorder = sorted.length === current.length && sorted.some((value, index) => value !== current[index]);
+    if (needsReorder) {
+      const reorderOptions = shopOptions.map((o) => {
+        const values = Array.isArray(o.values) ? o.values.map((v) => norm(v)).filter(Boolean) : [];
+        const orderedValues = normLower(o.name) === "size" ? sorted : values;
+        return {
+          name: o.name,
+          values: orderedValues.map((value) => ({ name: value })),
+        };
+      });
+      await runShopifyGraphql({
+        shop,
+        token,
+        query: `mutation reorderOptions($productId: ID!, $options: [OptionReorderInput!]!) {
+          productOptionsReorder(productId: $productId, options: $options) {
+            userErrors { message }
+          }
+        }`,
+        variables: { productId: productGid, options: reorderOptions },
+        apiVersion: API_VERSION,
+      });
+    }
+  }
+
+  // Re-map Shopify variant IDs to cart variant order by identity (SKU first, then Color+Size),
+  // so size rows never receive the wrong SKU/cartId due to Shopify option sorting.
+  const mapRes = await runShopifyGraphql<{
+    product?: {
+      variants?: {
+        nodes?: Array<{
+          id: string;
+          sku?: string | null;
+          selectedOptions?: Array<{ name: string; value: string }>;
+        }>;
+      };
+    };
+  }>({
+    shop,
+    token,
+    query: `query($id: ID!) {
+      product(id: $id) {
+        variants(first: 250) {
+          nodes { id sku selectedOptions { name value } }
+        }
+      }
+    }`,
+    variables: { id: productGid },
+    apiVersion: API_VERSION,
+  });
+
+  const mappedVariantGids = (() => {
+    const shopVariants =
+      mapRes.ok && mapRes.data?.product?.variants?.nodes
+        ? mapRes.data.product.variants.nodes
+        : [];
+    if (shopVariants.length < 1) return variantGids;
+
+    const used = new Set<string>();
+    const bySku = new Map<string, string>();
+    for (const sv of shopVariants) {
+      const sku = normLower(sv?.sku);
+      if (sku && sv?.id) bySku.set(sku, sv.id);
+    }
+
+    const mapped = parent.variants.map((v) => {
+      const sku = normLower(v.sku);
+      if (sku) {
+        const id = bySku.get(sku);
+        if (id) {
+          used.add(id);
+          return id;
+        }
+      }
+
+      const color = normLower(v.color);
+      const size = normLower(v.size);
+      const byOptions = shopVariants.find((sv) => {
+        if (!sv?.id || used.has(sv.id)) return false;
+        const svColor = getSelectedOptionValue(sv.selectedOptions, "Color");
+        const svSize = getSelectedOptionValue(sv.selectedOptions, "Size");
+        if (color && size) return svColor === color && svSize === size;
+        if (color) return svColor === color;
+        if (size) return svSize === size;
+        return false;
+      });
+      if (byOptions?.id) {
+        used.add(byOptions.id);
+        return byOptions.id;
+      }
+      return "";
+    });
+
+    const matchedCount = mapped.filter(Boolean).length;
+    if (matchedCount > 0) return mapped;
+    return variantGids;
+  })();
+
+  variantGids = mappedVariantGids;
+
   const quantities: Array<{ inventoryItemId: string; locationId: string; quantity: number }> = [];
   for (let i = 0; i < parent.variants.length && i < variantGids.length; i++) {
     const v = parent.variants[i];
     const variantGid = variantGids[i];
+    if (!variantGid) continue;
     const invRes = await runShopifyGraphql<{
       productVariant?: { inventoryItem?: { id: string } };
     }>({

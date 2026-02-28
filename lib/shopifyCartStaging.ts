@@ -1,4 +1,4 @@
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { neonQuery, ensureNeonReady } from "@/lib/neonDb";
 import { normalizeShopDomain } from "@/lib/shopify";
 
 export type SyncStatus = "PENDING" | "PROCESSED" | "ERROR";
@@ -18,6 +18,10 @@ export type StagingVariant = {
   stock: number | null;
   stockByLocation: StockByLocationRow[];
   price: number | null;
+  comparePrice: number | null;
+  costPrice: number | null;
+  weight: number | null;
+  weightUnit: string;
   color: string;
   size: string;
   image: string;
@@ -68,12 +72,11 @@ type PersistedRow = {
 
 type PersistResult<T> = {
   ok: boolean;
-  backend: "supabase" | "memory";
+  backend: "neon" | "memory";
   warning?: string;
   data: T;
 };
 
-const TABLE = "shopify_cart_inventory_staging";
 const DEFAULT_SHOP_KEY = "__default_shop__";
 const memoryStore = new Map<string, Map<string, StagingParent>>();
 
@@ -183,6 +186,10 @@ function parseVariant(raw: unknown, parentId: string, fallbackIndex: number): St
         })
       : [],
     price: toNumber(row.price),
+    comparePrice: toNumber(row.comparePrice),
+    costPrice: toNumber(row.costPrice),
+    weight: toNumber(row.weight),
+    weightUnit: normalizeText(row.weightUnit) || "kg",
     color: normalizeText(row.color),
     size: normalizeText(row.size),
     image: normalizeText(row.image),
@@ -194,8 +201,9 @@ function parseVariant(raw: unknown, parentId: string, fallbackIndex: number): St
 
 function parsePersistedRow(row: PersistedRow): StagingParent {
   const parentId = normalizeText(row.parent_id);
-  const variants = Array.isArray(row.variants)
-    ? row.variants.map((variant, idx) => parseVariant(variant, parentId, idx))
+  const rawVariants = typeof row.variants === "string" ? JSON.parse(row.variants) : row.variants;
+  const variants = Array.isArray(rawVariants)
+    ? rawVariants.map((variant, idx) => parseVariant(variant, parentId, idx))
     : [];
 
   return summarizeParent({
@@ -220,87 +228,53 @@ function parsePersistedRow(row: PersistedRow): StagingParent {
   });
 }
 
-function toPersistedRow(shopKey: string, parent: StagingParent): PersistedRow {
-  const normalized = summarizeParent(parent);
-  const nowIso = new Date().toISOString();
-  return {
-    shop: shopKey,
-    parent_id: normalized.id,
-    parent_sku: normalized.sku,
-    title: normalized.title,
-    category: normalized.category,
-    brand: normalized.brand,
-    stock: normalized.stock,
-    price: normalized.price,
-    image: normalized.image,
-    description: normalizeText(normalized.description) || undefined,
-    status: normalized.status,
-    error_message: normalized.error || null,
-    variants: normalized.variants,
-    updated_at: nowIso,
-  };
-}
-
-function tryGetSupabase() {
-  try {
-    return getSupabaseAdmin();
-  } catch {
-    return null;
-  }
-}
-
 function toMemoryRows(shopKey: string) {
   const bucket = getMemoryBucket(shopKey);
   return Array.from(bucket.values()).sort((a, b) => a.sku.localeCompare(b.sku));
 }
 
+async function tryNeon(): Promise<boolean> {
+  try {
+    if (!(process.env.NEON_DATABASE_URL || "").trim()) return false;
+    await ensureNeonReady();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function listCartCatalogParents(shop: string): Promise<PersistResult<StagingParent[]>> {
   const shopKey = normalizeShopKey(shop);
-  const supabase = tryGetSupabase();
-  if (!supabase) {
+
+  if (!(await tryNeon())) {
     return {
       ok: true,
       backend: "memory",
-      warning:
-        "Supabase is not configured. Cart Inventory staging is running in memory for this session.",
+      warning: "Neon is not configured. Cart Inventory staging is running in memory for this session.",
       data: toMemoryRows(shopKey),
     };
   }
 
-  const rows: PersistedRow[] = [];
-  const pageSize = 1000;
-  let offset = 0;
-  let hasMore = true;
-
-  while (hasMore) {
-    const { data: pageData, error } = await supabase
-      .from(TABLE)
-      .select(
-        "shop,parent_id,parent_sku,title,category,brand,stock,price,image,description,status,error_message,variants,created_at,updated_at"
-      )
-      .eq("shop", shopKey)
-      .order("updated_at", { ascending: false })
-      .range(offset, offset + pageSize - 1);
-
-    if (error) {
-      return {
-        ok: true,
-        backend: "memory",
-        warning: `Supabase staging table unavailable (${error.message}). Using in-memory staging instead.`,
-        data: toMemoryRows(shopKey),
-      };
-    }
-
-    const page = Array.isArray(pageData) ? pageData : [];
-    for (const row of page) {
-      rows.push(row as PersistedRow);
-    }
-    hasMore = page.length >= pageSize;
-    offset += pageSize;
+  try {
+    const rows = await neonQuery<PersistedRow>(
+      `SELECT shop, parent_id, parent_sku, title, category, brand, stock, price,
+              image, description, status, error_message, variants, created_at, updated_at
+       FROM shopify_cart_inventory_staging
+       WHERE shop = $1
+       ORDER BY updated_at DESC`,
+      [shopKey]
+    );
+    const parsed = rows.map((row) => parsePersistedRow(row));
+    return { ok: true, backend: "neon", data: parsed };
+  } catch (err) {
+    console.warn("[cart-staging] Neon query failed, falling back to memory:", (err as Error)?.message);
+    return {
+      ok: true,
+      backend: "memory",
+      warning: `Neon staging table unavailable (${(err as Error)?.message}). Using in-memory staging instead.`,
+      data: toMemoryRows(shopKey),
+    };
   }
-
-  const parsedRows = rows.map((row) => parsePersistedRow(row));
-  return { ok: true, backend: "supabase", data: parsedRows };
 }
 
 export async function listCartCatalogParentIds(
@@ -326,8 +300,7 @@ export async function upsertCartCatalogParents(
     return { ok: true, backend: "memory", data: { upserted: 0 } };
   }
 
-  const supabase = tryGetSupabase();
-  if (!supabase) {
+  if (!(await tryNeon())) {
     const bucket = getMemoryBucket(shopKey);
     for (const parent of sanitized) {
       bucket.set(normalizeLower(parent.id), parent);
@@ -335,18 +308,67 @@ export async function upsertCartCatalogParents(
     return {
       ok: true,
       backend: "memory",
-      warning:
-        "Supabase is not configured. Cart Inventory staging is running in memory for this session.",
+      warning: "Neon is not configured. Cart Inventory staging is running in memory for this session.",
       data: { upserted: sanitized.length },
     };
   }
 
-  const payload = sanitized.map((parent) => toPersistedRow(shopKey, parent));
-  const { error } = await supabase
-    .from(TABLE)
-    .upsert(payload, { onConflict: "shop,parent_id" });
+  try {
+    const BATCH = 50;
+    for (let i = 0; i < sanitized.length; i += BATCH) {
+      const batch = sanitized.slice(i, i + BATCH);
+      const values: unknown[] = [];
+      const placeholders: string[] = [];
 
-  if (error) {
+      for (let j = 0; j < batch.length; j++) {
+        const p = batch[j];
+        const normalized = summarizeParent(p);
+        const offset = j * 14;
+        placeholders.push(
+          `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14})`
+        );
+        values.push(
+          shopKey,
+          normalized.id,
+          normalized.sku,
+          normalized.title,
+          normalized.category,
+          normalized.brand,
+          normalized.stock,
+          normalized.price,
+          normalized.image,
+          normalizeText(normalized.description) || null,
+          normalized.status,
+          normalized.error || null,
+          JSON.stringify(normalized.variants),
+          new Date().toISOString()
+        );
+      }
+
+      await neonQuery(
+        `INSERT INTO shopify_cart_inventory_staging
+           (shop, parent_id, parent_sku, title, category, brand, stock, price, image, description, status, error_message, variants, updated_at)
+         VALUES ${placeholders.join(", ")}
+         ON CONFLICT (shop, parent_id) DO UPDATE SET
+           parent_sku = EXCLUDED.parent_sku,
+           title = EXCLUDED.title,
+           category = EXCLUDED.category,
+           brand = EXCLUDED.brand,
+           stock = EXCLUDED.stock,
+           price = EXCLUDED.price,
+           image = EXCLUDED.image,
+           description = EXCLUDED.description,
+           status = EXCLUDED.status,
+           error_message = EXCLUDED.error_message,
+           variants = EXCLUDED.variants,
+           updated_at = EXCLUDED.updated_at`,
+        values
+      );
+    }
+
+    return { ok: true, backend: "neon", data: { upserted: sanitized.length } };
+  } catch (err) {
+    console.warn("[cart-staging] Neon upsert failed, falling back to memory:", (err as Error)?.message);
     const bucket = getMemoryBucket(shopKey);
     for (const parent of sanitized) {
       bucket.set(normalizeLower(parent.id), parent);
@@ -354,45 +376,45 @@ export async function upsertCartCatalogParents(
     return {
       ok: true,
       backend: "memory",
-      warning: `Supabase upsert unavailable (${error.message}). Using in-memory staging instead.`,
+      warning: `Neon upsert unavailable (${(err as Error)?.message}). Using in-memory staging instead.`,
       data: { upserted: sanitized.length },
     };
   }
-
-  return { ok: true, backend: "supabase", data: { upserted: sanitized.length } };
 }
 
 export async function clearCartCatalogForShop(shop: string): Promise<PersistResult<{ removed: number }>> {
   const shopKey = normalizeShopKey(shop);
-  const supabase = tryGetSupabase();
-  if (!supabase) {
+
+  if (!(await tryNeon())) {
     const bucket = getMemoryBucket(shopKey);
     const count = bucket.size;
     bucket.clear();
     return {
       ok: true,
       backend: "memory",
-      warning:
-        "Supabase is not configured. Cleared in-memory staging for this shop.",
+      warning: "Neon is not configured. Cleared in-memory staging for this shop.",
       data: { removed: count },
     };
   }
-  const { data: deletedRows, error } = await supabase
-    .from(TABLE)
-    .delete()
-    .eq("shop", shopKey)
-    .select("parent_id");
-  if (error) {
-    console.error("[cart-staging] Clear failed:", error.message, { shopKey });
+
+  try {
+    const result = await neonQuery<{ cnt: string }>(
+      `WITH deleted AS (
+         DELETE FROM shopify_cart_inventory_staging WHERE shop = $1 RETURNING parent_id
+       ) SELECT count(*)::text AS cnt FROM deleted`,
+      [shopKey]
+    );
+    const removed = parseInt(result[0]?.cnt || "0", 10);
+    return { ok: true, backend: "neon", data: { removed } };
+  } catch (err) {
+    console.error("[cart-staging] Clear failed:", (err as Error)?.message);
     return {
       ok: false,
-      backend: "supabase",
-      warning: `Failed to clear Carts Inventory: ${error.message}`,
+      backend: "neon",
+      warning: `Failed to clear Carts Inventory: ${(err as Error)?.message}`,
       data: { removed: 0 },
     };
   }
-  const removed = Array.isArray(deletedRows) ? deletedRows.length : 0;
-  return { ok: true, backend: "supabase", data: { removed } };
 }
 
 const REMOVE_BATCH_SIZE = 400;
@@ -409,8 +431,7 @@ export async function removeCartCatalogParents(
     return { ok: true, backend: "memory", data: { removed: 0 } };
   }
 
-  const supabase = tryGetSupabase();
-  if (!supabase) {
+  if (!(await tryNeon())) {
     const bucket = getMemoryBucket(shopKey);
     let removed = 0;
     for (const id of ids) {
@@ -419,37 +440,36 @@ export async function removeCartCatalogParents(
     return {
       ok: true,
       backend: "memory",
-      warning:
-        "Supabase is not configured. Cart Inventory staging is running in memory for this session.",
+      warning: "Neon is not configured. Cart Inventory staging is running in memory for this session.",
       data: { removed },
     };
   }
 
-  let removed = 0;
-  for (let i = 0; i < ids.length; i += REMOVE_BATCH_SIZE) {
-    const batch = ids.slice(i, i + REMOVE_BATCH_SIZE);
-    const { data: deletedRows, error } = await supabase
-      .from(TABLE)
-      .delete()
-      .eq("shop", shopKey)
-      .in("parent_id", batch)
-      .select("parent_id");
-
-    if (error) {
-      console.error("[cart-staging] Delete failed:", error.message, { shopKey, idsCount: batch.length });
-      return {
-        ok: false,
-        backend: "supabase",
-        warning: `Failed to remove from staging: ${error.message}`,
-        data: { removed },
-      };
+  try {
+    let removed = 0;
+    for (let i = 0; i < ids.length; i += REMOVE_BATCH_SIZE) {
+      const batch = ids.slice(i, i + REMOVE_BATCH_SIZE);
+      const placeholders = batch.map((_, idx) => `$${idx + 2}`).join(", ");
+      const result = await neonQuery<{ cnt: string }>(
+        `WITH deleted AS (
+           DELETE FROM shopify_cart_inventory_staging
+           WHERE shop = $1 AND parent_id IN (${placeholders})
+           RETURNING parent_id
+         ) SELECT count(*)::text AS cnt FROM deleted`,
+        [shopKey, ...batch]
+      );
+      removed += parseInt(result[0]?.cnt || "0", 10);
     }
-    removed += Array.isArray(deletedRows) ? deletedRows.length : 0;
+    return { ok: true, backend: "neon", data: { removed } };
+  } catch (err) {
+    console.error("[cart-staging] Delete failed:", (err as Error)?.message);
+    return {
+      ok: false,
+      backend: "neon",
+      warning: `Failed to remove from staging: ${(err as Error)?.message}`,
+      data: { removed: 0 },
+    };
   }
-  if (removed < ids.length && ids.length > 0) {
-    console.warn("[cart-staging] Delete partial:", { requested: ids.length, removed, shopKey });
-  }
-  return { ok: true, backend: "supabase", data: { removed } };
 }
 
 export async function updateCartCatalogStatus(
@@ -494,10 +514,6 @@ export async function updateCartCatalogStatus(
   };
 }
 
-/**
- * Update a cart catalog parent's id (parent_id) from old to new.
- * Used when matching Shopify-pulled items to LS matrix (matrix:xxx or sku:xxx).
- */
 export async function updateCartCatalogParentId(
   shop: string,
   oldParentId: string,
@@ -507,11 +523,10 @@ export async function updateCartCatalogParentId(
   const oldId = normalizeText(oldParentId);
   const newId = normalizeText(updatedParent.id);
   if (!oldId || !newId || normalizeLower(oldId) === normalizeLower(newId)) {
-    return { ok: true, backend: "supabase", data: { updated: 0 } };
+    return { ok: true, backend: "neon", data: { updated: 0 } };
   }
 
-  const supabase = tryGetSupabase();
-  if (!supabase) {
+  if (!(await tryNeon())) {
     const bucket = getMemoryBucket(shopKey);
     const existing = bucket.get(normalizeLower(oldId));
     if (!existing) return { ok: true, backend: "memory", data: { updated: 0 } };
@@ -520,36 +535,16 @@ export async function updateCartCatalogParentId(
     return { ok: true, backend: "memory", data: { updated: 1 } };
   }
 
-  const payload = toPersistedRow(shopKey, summarizeParent(updatedParent));
-  const { error } = await supabase
-    .from(TABLE)
-    .update({
-      parent_id: payload.parent_id,
-      parent_sku: payload.parent_sku,
-      title: payload.title,
-      category: payload.category,
-      brand: payload.brand,
-      stock: payload.stock,
-      price: payload.price,
-      image: payload.image,
-      description: payload.description,
-      status: payload.status,
-      error_message: payload.error_message,
-      variants: payload.variants,
-      updated_at: payload.updated_at,
-    })
-    .eq("shop", shopKey)
-    .eq("parent_id", oldId);
-
-  if (error) {
+  try {
+    await removeCartCatalogParents(shop, [oldId]);
+    await upsertCartCatalogParents(shop, [updatedParent]);
+    return { ok: true, backend: "neon", data: { updated: 1 } };
+  } catch (err) {
     return {
       ok: false,
-      backend: "supabase",
-      warning: `Failed to update parent_id: ${error.message}`,
+      backend: "neon",
+      warning: `Failed to update parent_id: ${(err as Error)?.message}`,
       data: { updated: 0 },
     };
   }
-
-  return { ok: true, backend: "supabase", data: { updated: 1 } };
 }
-

@@ -355,6 +355,45 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
     setDialogInput("");
   }
 
+  const [globalTasks, setGlobalTasks] = useState<
+    Array<{ id: string; label: string; tone: "running" | "success" | "error" | "idle"; meta?: string; ts: number }>
+  >([]);
+
+  useEffect(() => {
+    try { window.localStorage.removeItem("carbon_global_task"); } catch {}
+
+    function readTasks() {
+      try {
+        const raw = window.localStorage.getItem("carbon_global_tasks");
+        if (!raw) { setGlobalTasks([]); return; }
+        const tasks: typeof globalTasks = JSON.parse(raw);
+        const now = Date.now();
+        const alive = tasks.filter((t) => t.tone === "running" || now - t.ts < 8000);
+        if (alive.length !== tasks.length) {
+          window.localStorage.setItem("carbon_global_tasks", JSON.stringify(alive));
+        }
+        setGlobalTasks(alive);
+      } catch { setGlobalTasks([]); }
+    }
+    readTasks();
+    const onStorage = (e: StorageEvent) => { if (e.key === "carbon_global_tasks") readTasks(); };
+    const onCustom = () => readTasks();
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("carbon_global_task_update", onCustom);
+    const cleanup = window.setInterval(readTasks, 3000);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("carbon_global_task_update", onCustom);
+      window.clearInterval(cleanup);
+    };
+  }, []);
+
+  const overallTone: "working" | "success" | "error" | "idle" =
+    globalTasks.some((t) => t.tone === "running") ? "working"
+    : globalTasks.some((t) => t.tone === "error") ? "error"
+    : globalTasks.some((t) => t.tone === "success") ? "success"
+    : "idle";
+
   return (
     <div className={`shell ${chatExpanded && showChatPanel ? "chat-expanded" : ""}`}>
       <svg
@@ -822,6 +861,26 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
         }`}
         style={drawerOpen ? { paddingLeft: "calc(13px + 255px + 13px)" } : undefined}
       >
+        <section className={`global-task-bar global-task-${overallTone}`} aria-live="polite" aria-atomic="true">
+          <div className="global-task-head">
+            <div className="global-task-title">PROGRESS BAR</div>
+            <span className={`global-task-chip global-task-chip-${overallTone}`}>
+              {overallTone === "error" ? "Error" : overallTone === "working" ? "Working" : overallTone === "success" ? "Done" : "Idle"}
+            </span>
+          </div>
+          {globalTasks.length === 0 ? (
+            <div className="global-task-message">Ready</div>
+          ) : (
+            globalTasks.map((t) => (
+              <div key={t.id} className="global-task-row">
+                <span className={`global-task-dot global-task-dot-${t.tone === "running" ? "working" : t.tone}`} />
+                <span className="global-task-message">
+                  {t.tone === "error" ? `Error: ${t.label}` : t.label}
+                </span>
+              </div>
+            ))
+          )}
+        </section>
         {children}
       </main>
 
@@ -1863,7 +1922,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           );
           position: relative;
           min-height: 100vh;
-          padding-top: 58px;
+          padding-top: 100px;
           padding-left: var(--page-edge-gap);
           padding-right: var(--content-right-pad);
           will-change: padding-left, padding-right;
@@ -1904,6 +1963,89 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           backdrop-filter: blur(4px);
           -webkit-backdrop-filter: blur(4px);
         }
+        .global-task-bar {
+          position: fixed;
+          top: 89px;
+          left: calc(var(--page-edge-gap) + var(--page-edge-gap));
+          right: calc(var(--right-rail-width) + var(--page-edge-gap) + var(--content-api-gap) + 8px);
+          z-index: 40;
+          display: grid;
+          gap: 4px;
+          padding: 10px 14px;
+          border-radius: 10px;
+          border: 1.5px solid #dbe5f1;
+          background: #f8fafc;
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.06);
+          transition: border-color 0.2s, box-shadow 0.2s;
+          font-family: "Inter", system-ui, sans-serif;
+        }
+        .global-task-idle { border-color: #dbe5f1; }
+        .global-task-working {
+          border-color: #facc15;
+          box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.15), 0 8px 24px rgba(0, 0, 0, 0.24);
+        }
+        .global-task-success {
+          border-color: #86efac;
+          box-shadow: 0 0 0 1px rgba(134, 239, 172, 0.14), 0 8px 24px rgba(0, 0, 0, 0.2);
+        }
+        .global-task-error {
+          border-color: #fca5a5;
+          box-shadow: 0 0 0 1px rgba(252, 165, 165, 0.16), 0 8px 24px rgba(0, 0, 0, 0.22);
+        }
+        .global-task-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+        }
+        .global-task-title {
+          font-weight: 700;
+          letter-spacing: 0.01em;
+          text-transform: uppercase;
+          font-size: 0.78rem;
+          color: #64748b;
+        }
+        .global-task-chip {
+          font-size: 0.72rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          padding: 2px 10px;
+          border-radius: 999px;
+          background: #e2e8f0;
+          color: #475569;
+        }
+        .global-task-chip-working { background: #fef9c3; color: #854d0e; }
+        .global-task-chip-success { background: #dcfce7; color: #166534; }
+        .global-task-chip-error { background: #fee2e2; color: #991b1b; }
+        .global-task-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .global-task-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          flex-shrink: 0;
+        }
+        .global-task-dot-working { background: #f59e0b; box-shadow: 0 0 6px rgba(245,158,11,0.5); animation: global-dot-pulse 1.2s ease-in-out infinite; }
+        .global-task-dot-success { background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,0.4); }
+        .global-task-dot-error { background: #ef4444; box-shadow: 0 0 6px rgba(239,68,68,0.4); }
+        .global-task-dot-idle { background: #94a3b8; }
+        @keyframes global-dot-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+        .global-task-message {
+          font-size: 0.95rem;
+          font-weight: 600;
+          color: #0f172a;
+          line-height: 1.35;
+        }
+        :global(.content.menu-open) .global-task-bar {
+          left: 280px;
+        }
+        :global(.content.no-integration-panel) .global-task-bar {
+          right: calc(var(--page-edge-gap) + 8px);
+        }
         @media (max-width: 1180px) {
           .integration-panel-wrap {
             display: none;
@@ -1920,6 +2062,10 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           .shell.chat-expanded .content.no-integration-panel {
             --content-right-pad: 0px;
             padding-right: 0;
+          }
+          .global-task-bar {
+            left: 8px;
+            right: 8px;
           }
         }
         @media (max-width: 520px) {

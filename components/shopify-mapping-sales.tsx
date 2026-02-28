@@ -360,20 +360,22 @@ export default function ShopifyMappingSales() {
                         <td>{formatFixed(row.tax)}</td>
                         <td>{formatFixed(row.total)}</td>
                         <td>
-                          <span className="pill delivery">{row.deliveryType || "SHIPPING"}</span>
+                          {(row.deliveryType || "").toUpperCase().includes("UPS") ? (
+                            <img src="/badge-ups.png" alt={row.deliveryType} className="ups-badge-img" title={row.deliveryType} />
+                          ) : (
+                            <span className="pill delivery">{row.deliveryType || "SHIPPING"}</span>
+                          )}
                         </td>
                         <td>
                           <span className="pill cart-status">{row.cartStatus || "UNKNOWN"}</span>
                         </td>
                         <td>
                           <div className="pipeline-cell">
-                            <span
-                              className={`pill process ${
-                                row.processStatus === "PROCESSED" ? "processed" : "pending"
-                              }`}
-                            >
-                              {row.processStatus}
-                            </span>
+                            <img
+                              src={row.processStatus === "PROCESSED" ? "/badge-processed.png" : "/badge-pending.png"}
+                              alt={row.processStatus}
+                              className="sync-badge-img"
+                            />
                             <button
                               suppressHydrationWarning
                               type="button"
@@ -471,7 +473,7 @@ export default function ShopifyMappingSales() {
         .sales-page {
           max-width: 1240px;
           margin: 0 auto;
-          padding: 20px 8px 28px;
+          padding: 100px 8px 28px;
           display: grid;
           gap: 12px;
           color: #f8fafc;
@@ -649,6 +651,15 @@ export default function ShopifyMappingSales() {
           letter-spacing: 0.02em;
           border: 1px solid transparent;
         }
+        .ups-badge-img {
+          max-height: 38px;
+          max-width: 38px;
+          height: 38px;
+          width: 38px;
+          object-fit: contain;
+          vertical-align: middle;
+          display: inline-block;
+        }
         .pill.delivery {
           background: rgba(245, 158, 11, 0.24);
           border-color: rgba(245, 158, 11, 0.46);
@@ -659,15 +670,15 @@ export default function ShopifyMappingSales() {
           border-color: rgba(34, 197, 94, 0.5);
           color: #dcfce7;
         }
-        .pill.process.processed {
-          background: rgba(34, 197, 94, 0.26);
-          border-color: rgba(34, 197, 94, 0.5);
-          color: #dcfce7;
-        }
-        .pill.process.pending {
-          background: rgba(245, 158, 11, 0.24);
-          border-color: rgba(245, 158, 11, 0.46);
-          color: #fef3c7;
+        .sync-badge-img {
+          max-height: 42px;
+          max-width: 42px;
+          height: 42px;
+          width: 42px;
+          object-fit: contain;
+          vertical-align: middle;
+          display: inline-block;
+          flex-shrink: 0;
         }
         .pipeline-cell {
           display: flex;

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { SyncTogglesBar } from "@/components/sync-toggles-bar";
+import { setGlobalTask as sgt, updateGlobalTaskMeta as ugtm } from "@/lib/globalTask";
 
 type MatrixVariantRow = {
   id: string;
@@ -232,14 +233,24 @@ export default function ShopifyMappingInventory() {
   const [selectedVariants, setSelectedVariants] = useState<Record<string, boolean>>({});
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
-  const [status, setStatus] = useState("");
+  const [status, _rawSetStatus] = useState("");
   const [warning, setWarning] = useState("");
   const [error, setError] = useState("");
-  const [task, setTask] = useState<{
+  const [task, _rawSetTask] = useState<{
     label: string;
     progress: number;
     tone: TaskTone;
   }>({ label: "Ready", progress: 0, tone: "idle" });
+
+  function setTask(t: { label: string; progress: number; tone: TaskTone }) {
+    _rawSetTask(t);
+    sgt("page-inventory", t.label, t.tone);
+  }
+
+  function setStatus(s: string) {
+    _rawSetStatus(s);
+    ugtm("page-inventory", s);
+  }
   const [sortState, setSortState] = useState<ParentSortState | null>(null);
   const allCatalogRowsRef = useRef<MatrixParentRow[] | null>(null);
   const [allCatalogSelected, setAllCatalogSelected] = useState(false);
@@ -671,7 +682,12 @@ export default function ShopifyMappingInventory() {
             const resp = await fetch("/api/shopify/cart-inventory", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ action: "stage-add", shop: shopContext, rows: chunk }),
+              body: JSON.stringify({
+                action: "stage-add",
+                shop: shopContext,
+                rows: chunk,
+                createIfMissing: true,
+              }),
             });
             const json = (await resp.json().catch(() => ({}))) as {
               error?: string;
@@ -852,18 +868,6 @@ export default function ShopifyMappingInventory() {
 
       <SyncTogglesBar shop={shop} disabled={busy} />
 
-      <section className={`card status-bar ${task.tone === "running" ? "working" : task.tone}`} aria-live="polite" aria-atomic="true">
-        <div className="status-bar-head">
-          <div className="status-bar-title">progress bar</div>
-          <span className={`status-chip ${task.tone === "running" ? "working" : task.tone}`}>
-            {task.tone === "error" ? "Error" : task.tone === "running" ? "Working" : task.tone === "success" ? "Done" : "Idle"}
-          </span>
-        </div>
-        <div className="status-bar-message">
-          {task.tone === "error" ? `Error: ${task.label}` : task.label}
-        </div>
-        {status ? <div className="status-bar-meta">{status}</div> : null}
-      </section>
 
       <section className="glass-panel card filter-card">
         <div className="filters filters-skuplugs">
@@ -1428,82 +1432,6 @@ export default function ShopifyMappingInventory() {
         .pager-num { min-width: 36px; min-height: 36px; padding: 0 10px; }
         .pager-num.active { background: rgba(59,130,246,0.3); border-color: rgba(59,130,246,0.6); }
         .card { padding: 18px; display: grid; gap: 10px; }
-        .status-bar {
-          position: fixed;
-          top: 89px;
-          left: calc(var(--page-inline-gap, 13px) + var(--page-edge-gap, 13px));
-          right: calc(
-            var(
-              --content-right-pad,
-              calc(var(--integration-panel-width, 255px) + var(--page-edge-gap, 13px) + var(--content-api-gap, 13px))
-            ) + 8px
-          );
-          z-index: 40;
-          display: grid;
-          gap: 4px;
-          padding: 10px 14px;
-          border-radius: 10px;
-          border: 1.5px solid #dbe5f1;
-          background: #f8fafc;
-          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.06);
-          transition: border-color 0.2s, box-shadow 0.2s;
-        }
-        :global(.content.menu-open) .status-bar {
-          left: 280px;
-        }
-        :global(.content.no-integration-panel) .status-bar {
-          right: calc(var(--page-inline-gap, 13px) + 8px);
-        }
-        .status-bar-head {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 10px;
-        }
-        .status-bar-title {
-          font-weight: 700;
-          letter-spacing: 0.01em;
-          text-transform: uppercase;
-          font-size: 0.78rem;
-          color: #64748b;
-        }
-        .status-chip {
-          font-size: 0.72rem;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.04em;
-          padding: 2px 10px;
-          border-radius: 999px;
-          background: #e2e8f0;
-          color: #475569;
-        }
-        .status-chip.working { background: #fef9c3; color: #854d0e; }
-        .status-chip.success { background: #dcfce7; color: #166534; border-color: #86efac; }
-        .status-chip.error { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
-        .status-bar.idle { border-color: #dbe5f1; }
-        .status-bar.working {
-          border-color: #facc15;
-          box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.15), 0 8px 24px rgba(0, 0, 0, 0.24);
-        }
-        .status-bar.success {
-          border-color: #86efac;
-          box-shadow: 0 0 0 1px rgba(134, 239, 172, 0.14), 0 8px 24px rgba(0, 0, 0, 0.2);
-        }
-        .status-bar.error {
-          border-color: #fca5a5;
-          box-shadow: 0 0 0 1px rgba(252, 165, 165, 0.16), 0 8px 24px rgba(0, 0, 0, 0.22);
-        }
-        .status-bar-message {
-          font-size: 0.95rem;
-          font-weight: 600;
-          color: #0f172a;
-          line-height: 1.35;
-        }
-        .status-bar-meta {
-          font-size: 0.8rem;
-          color: #475569;
-          line-height: 1.25;
-        }
         .filters {
           display: grid;
           grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1865,11 +1793,6 @@ export default function ShopifyMappingInventory() {
           min-width: 48px;
         }
         @media (max-width: 1180px) {
-          .status-bar {
-            top: 89px;
-            left: 8px;
-            right: 8px;
-          }
           .page { padding-top: 134px; }
           .card {
             padding: 14px;

@@ -29,6 +29,7 @@ type LSCatalogRow = {
   itemMatrixId: string;
   customSku: string;
   systemSku: string;
+  description: string;
   upc: string;
   ean: string;
   color: string;
@@ -38,17 +39,51 @@ type LSCatalogRow = {
   itemType: string;
 };
 
+function removeTrailingTokenCaseInsensitive(text: string, token: string): string {
+  const source = normalizeText(text);
+  const t = normalizeText(token);
+  if (!source || !t) return source;
+  const lowerSource = source.toLowerCase();
+  const lowerToken = t.toLowerCase();
+  if (!lowerSource.endsWith(` ${lowerToken}`)) return source;
+  return source.slice(0, source.length - t.length - 1).trim();
+}
+
+function deriveMatrixTitle(lsItems: LSCatalogRow[]): string {
+  const candidates = new Map<string, { raw: string; count: number }>();
+  for (const row of lsItems) {
+    let base = normalizeText(row.description);
+    if (!base) continue;
+    base = removeTrailingTokenCaseInsensitive(base, row.size);
+    base = removeTrailingTokenCaseInsensitive(base, row.color);
+    base = normalizeText(base);
+    if (!base) continue;
+    const key = base.toLowerCase();
+    const current = candidates.get(key);
+    if (current) {
+      current.count += 1;
+    } else {
+      candidates.set(key, { raw: base, count: 1 });
+    }
+  }
+  let winner = "";
+  let winnerCount = 0;
+  for (const v of candidates.values()) {
+    if (v.count > winnerCount || (v.count === winnerCount && v.raw.length > winner.length)) {
+      winner = v.raw;
+      winnerCount = v.count;
+    }
+  }
+  return winner;
+}
+
 function buildLSLookup(rows: LSCatalogRow[]): Map<string, LSCatalogRow> {
   const byKey = new Map<string, LSCatalogRow>();
   for (const row of rows) {
     const customSku = normalizeLower(row.customSku);
     const systemSku = normalizeLower(row.systemSku);
-    const upc = normalizeText(row.upc);
-    const ean = normalizeText(row.ean);
     if (customSku) byKey.set(customSku, row);
     if (systemSku && !byKey.has(systemSku)) byKey.set(systemSku, row);
-    if (upc) byKey.set(`upc:${upc}`, row);
-    if (ean) byKey.set(`ean:${ean}`, row);
   }
   return byKey;
 }
@@ -74,8 +109,6 @@ function findLSMatch(
   for (const v of parent.variants) {
     const variantSku = normalizeLower(v.sku);
     if (variantSku && lookup.has(variantSku)) return lookup.get(variantSku)!;
-    const upc = normalizeText(v.upc);
-    if (upc && lookup.has(`upc:${upc}`)) return lookup.get(`upc:${upc}`)!;
   }
   return null;
 }
@@ -139,6 +172,7 @@ export async function fetchLSCatalog(
         itemMatrixId: normalizeText(r.itemMatrixId),
         customSku: normalizeText(r.customSku),
         systemSku: normalizeText(r.systemSku),
+        description: normalizeText((r as { description?: unknown }).description),
         upc: normalizeText(r.upc),
         ean: normalizeText(r.ean),
         color: normalizeText(r.color),
@@ -179,22 +213,10 @@ function matchVariantToLS(
   lsItems: LSCatalogRow[]
 ): LSCatalogRow | null {
   const vSku = normalizeLower(v.sku) || normalizeLower(parentSku);
-  const vUpc = normalizeText(v.upc);
-  const vColor = normalizeLower(v.color);
-  const vSize = normalizeLower(v.size);
 
   for (const ls of lsItems) {
     if (vSku && (normalizeLower(ls.customSku) === vSku || normalizeLower(ls.systemSku) === vSku)) return ls;
-    if (vUpc && normalizeText(ls.upc) === vUpc) return ls;
   }
-  for (const ls of lsItems) {
-    const lsColor = normalizeLower(ls.color);
-    const lsSize = normalizeLower(ls.size);
-    if (vColor && vSize && lsColor === vColor && lsSize === vSize) return ls;
-    if (vColor && !vSize && lsColor === vColor) return ls;
-    if (!vColor && vSize && lsSize === vSize) return ls;
-  }
-  if (lsItems.length === 1) return lsItems[0];
   return null;
 }
 
@@ -228,6 +250,7 @@ export async function runMatchToLSMatrix(
 
     const matrixId = normalizeText(lsRow.itemMatrixId);
     const siblingItems = (matrixId && matrixId !== "0" ? matrixIdx.get(matrixId) : null) || [lsRow];
+    const lsTitle = deriveMatrixTitle(siblingItems);
 
     const updatedVariants: StagingVariant[] = parent.variants.map((v) => {
       const lsMatch = matchVariantToLS(v, parent.sku, siblingItems);
@@ -248,6 +271,7 @@ export async function runMatchToLSMatrix(
       ...parent,
       id: newParentId,
       variants: updatedVariants,
+      ...(lsTitle ? { title: lsTitle } : {}),
       ...(lsCategory ? { category: lsCategory } : {}),
       ...(lsBrand ? { brand: lsBrand } : {}),
     };
@@ -273,6 +297,7 @@ export async function runMatchToLSMatrix(
 
     const matrixId = normalizeText(lsRow.itemMatrixId);
     const siblingItems = (matrixId && matrixId !== "0" ? matrixIdx.get(matrixId) : null) || [lsRow];
+    const lsTitle = deriveMatrixTitle(siblingItems);
 
     let changed = false;
     const updatedVariants: StagingVariant[] = parent.variants.map((v) => {
@@ -293,13 +318,16 @@ export async function runMatchToLSMatrix(
     const lsBrand = normalizeText(lsRow.brand);
     const catUpdate = lsCategory && !normalizeText(parent.category) ? lsCategory : undefined;
     const brandUpdate = lsBrand && (!normalizeText(parent.brand) || normalizeLower(parent.brand) === "default") ? lsBrand : undefined;
+    const titleUpdate = lsTitle && normalizeLower(parent.title) !== normalizeLower(lsTitle) ? lsTitle : undefined;
     if (catUpdate || brandUpdate) changed = true;
+    if (titleUpdate) changed = true;
 
     if (!changed) continue;
 
     const updatedParent: StagingParent = {
       ...parent,
       variants: updatedVariants,
+      ...(titleUpdate ? { title: titleUpdate } : {}),
       ...(catUpdate ? { category: catUpdate } : {}),
       ...(brandUpdate ? { brand: brandUpdate } : {}),
     };

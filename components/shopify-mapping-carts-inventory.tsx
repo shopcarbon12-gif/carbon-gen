@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SyncTogglesBar } from "@/components/sync-toggles-bar";
+import { setGlobalTask, updateGlobalTaskMeta } from "@/lib/globalTask";
 
 type CartInventoryVariantRow = {
   id: string;
@@ -53,6 +54,10 @@ type CartFilters = {
   Keyword: string;
   /** "All" | "InLS" (from LS inventory page) | "NotInLS" (manual/Shopify-only) */
   LSSource: "All" | "InLS" | "NotInLS";
+  /** "All" | "InShopify" | "NotInShopify" */
+  ShopifySource: "All" | "InShopify" | "NotInShopify";
+  /** "All" | "AllSkuInShopify" | "MissingSkuInShopify" */
+  ShopifySkuCoverage: "All" | "AllSkuInShopify" | "MissingSkuInShopify";
   /** "All" | "Has" | "None" - filter by Shopify product description */
   HasDescription: "All" | "Has" | "None";
   /** "All" | "Has" | "None" - filter by product image */
@@ -103,6 +108,8 @@ const DEFAULT_FILTERS: CartFilters = {
   CategoryName: "",
   Keyword: "",
   LSSource: "All",
+  ShopifySource: "All",
+  ShopifySkuCoverage: "All",
   HasDescription: "All",
   HasImage: "All",
   MatrixStockFrom: "",
@@ -196,9 +203,14 @@ export default function ShopifyMappingCartsInventory() {
   const [pageSize, setPageSize] = useState<number>(20);
   const [totalPages, setTotalPages] = useState(1);
   const [busy, setBusy] = useState(false);
-  const [status, setStatus] = useState("");
+  const [status, _rawSetStatus] = useState("");
   const [warning, setWarning] = useState("");
   const [error, setError] = useState("");
+
+  function setStatus(s: string) {
+    _rawSetStatus(s);
+    updateGlobalTaskMeta(taskIdRef.current, s);
+  }
   const [selectedParents, setSelectedParents] = useState<Record<string, boolean>>({});
   const [selectedVariants, setSelectedVariants] = useState<Record<string, boolean>>({});
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
@@ -210,25 +222,268 @@ export default function ShopifyMappingCartsInventory() {
 
   const [goToPageInput, setGoToPageInput] = useState("");
   const [allFilteredSelected, setAllFilteredSelected] = useState(false);
+
+  type PubItem = { id: string; name: string; app: { title: string } | null };
+  type CatItem = { id: string; title: string; status: string; publicationId?: string | null };
+  const [pushDialogOpen, setPushDialogOpen] = useState(false);
+  const [pushDialogBg, setPushDialogBg] = useState(false);
+  const [pushPubs, setPushPubs] = useState<PubItem[]>([]);
+  const [pushCats, setPushCats] = useState<CatItem[]>([]);
+  const [pushSelectedPubs, setPushSelectedPubs] = useState<string[]>([]);
+  const [pushSelectedCats, setPushSelectedCats] = useState<string[]>([]);
+  const [pushPubsLoading, setPushPubsLoading] = useState(false);
+
+  const [channelPubs, setChannelPubs] = useState<Record<string, string[]>>({});
+  const [channelDropdownOpen, setChannelDropdownOpen] = useState<string | null>(null);
+  const [channelDropdownLoading, setChannelDropdownLoading] = useState(false);
+  const [channelAllPubs, setChannelAllPubs] = useState<PubItem[]>([]);
+  const [channelAllCats, setChannelAllCats] = useState<CatItem[]>([]);
+  const [bulkChannelOpen, setBulkChannelOpen] = useState(false);
+  const [bulkChannelPubs, setBulkChannelPubs] = useState<string[]>([]);
+  const [bulkChannelCats, setBulkChannelCats] = useState<string[]>([]);
+  
+  const channelsFetchedForPage = useRef<string>("");
+
+  const marketCatalogs = useMemo(
+    () => channelAllCats.filter((c) => c.id.includes("MarketCatalog")),
+    [channelAllCats]
+  );
+
+  function getProductGid(parent: CartInventoryParentRow): string | null {
+    for (const v of parent.variants ?? []) {
+      const cid = (v.cartId || "").trim();
+      if (!cid) continue;
+      if (cid.includes("~")) return `gid://shopify/Product/${cid.split("~")[0]}`;
+      if (cid.startsWith("gid://shopify/ProductVariant/")) return null;
+      if (!cid.startsWith("gid://")) return null;
+    }
+    return null;
+  }
+
+  async function ensureChannelLists(): Promise<{ publications: PubItem[]; catalogs: CatItem[] }> {
+    const qs = shop ? `?shop=${encodeURIComponent(shop)}` : "";
+    const resp = await fetch(`/api/shopify/publications${qs}`, { cache: "no-store" });
+    const json = (await resp.json().catch(() => ({}))) as { publications?: PubItem[]; catalogs?: CatItem[] };
+    const pubs = json.publications ?? [];
+    const cats = json.catalogs ?? [];
+    if (pubs.length) setChannelAllPubs(pubs);
+    if (cats.length) setChannelAllCats(cats);
+    return { publications: pubs, catalogs: cats };
+  }
+
+  async function prefetchChannelPubs(rows: CartInventoryParentRow[]) {
+    const gids: string[] = [];
+    for (const r of rows) {
+      const g = getProductGid(r);
+      if (g && !channelPubs[g]) gids.push(g);
+    }
+    if (gids.length === 0) return;
+    const unique = Array.from(new Set(gids)).slice(0, 50);
+    try {
+      const freshLists = await ensureChannelLists();
+      const freshMarketCats = freshLists.catalogs.filter((c) => c.id.includes("MarketCatalog") && c.publicationId);
+      const resp = await fetch("/api/shopify/publications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "get-product-publications",
+          shop,
+          productGids: unique,
+          catalogPubIds: freshMarketCats.map((c) => c.publicationId!),
+        }),
+      });
+      const json = (await resp.json().catch(() => ({}))) as { ok?: boolean; products?: Record<string, string[]> };
+      if (json.ok && json.products) {
+        setChannelPubs((prev) => ({ ...prev, ...json.products }));
+      }
+    } catch { /* best-effort */ }
+  }
+
+  async function openChannelDropdown(parent: CartInventoryParentRow) {
+    const pgid = getProductGid(parent);
+    if (!pgid) return;
+    if (channelDropdownOpen === parent.id) {
+      setChannelDropdownOpen(null);
+      return;
+    }
+    setChannelDropdownOpen(parent.id);
+    setChannelDropdownLoading(true);
+    try {
+      await ensureChannelLists();
+      if (!channelPubs[pgid]) {
+        const prodPubResp = await fetch("/api/shopify/publications", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "get-product-publications",
+            shop,
+            productGids: [pgid],
+            catalogPubIds: marketCatalogs.filter((c) => c.publicationId).map((c) => c.publicationId!),
+          }),
+        });
+        const prodPubJson = (await prodPubResp.json().catch(() => ({}))) as {
+          ok?: boolean;
+          products?: Record<string, string[]>;
+        };
+        if (prodPubJson.ok && prodPubJson.products?.[pgid]) {
+          setChannelPubs((prev) => ({ ...prev, [pgid]: prodPubJson.products![pgid] }));
+        }
+      }
+    } catch { /* failed to load */ } finally {
+      setChannelDropdownLoading(false);
+    }
+  }
+
+  async function toggleChannel(productGid: string, publicationId: string, checked: boolean) {
+    const current = channelPubs[productGid] || [];
+    const updated = checked
+      ? [...current, publicationId]
+      : current.filter((id) => id !== publicationId);
+    setChannelPubs((prev) => ({ ...prev, [productGid]: updated }));
+    try {
+      await fetch("/api/shopify/publications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "set-product-publications",
+          shop,
+          productGid,
+          publishTo: checked ? [publicationId] : [],
+          unpublishFrom: checked ? [] : [publicationId],
+        }),
+      });
+    } catch {
+      setChannelPubs((prev) => ({ ...prev, [productGid]: current }));
+    }
+  }
+
+  async function toggleAllChannels(productGid: string, checked: boolean) {
+    const allIds = channelAllPubs.map((p) => p.id);
+    const current = channelPubs[productGid] || [];
+    setChannelPubs((prev) => ({ ...prev, [productGid]: checked ? allIds : [] }));
+    try {
+      await fetch("/api/shopify/publications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "set-product-publications",
+          shop,
+          productGid,
+          publishTo: checked ? allIds : [],
+          unpublishFrom: checked ? [] : allIds,
+        }),
+      });
+    } catch {
+      setChannelPubs((prev) => ({ ...prev, [productGid]: current }));
+    }
+  }
+
+  async function openBulkChannelDialog() {
+    setBulkChannelOpen(true);
+    try {
+      await ensureChannelLists();
+      setBulkChannelPubs(channelAllPubs.map((p) => p.id));
+      setBulkChannelCats([]);
+    } catch { /* best-effort */ }
+  }
+
+  function applyBulkChannels() {
+    const count = selectedParentIds.length;
+    const allPublishIds = [...bulkChannelPubs, ...bulkChannelCats];
+    const allKnownIds = [...channelAllPubs.map((p) => p.id), ...marketCatalogs.filter((c) => c.publicationId).map((c) => c.publicationId!)];
+    const allUnpubIds = allKnownIds.filter((id) => !allPublishIds.includes(id));
+    const parentIdsCopy = [...selectedParentIds];
+
+    setBulkChannelOpen(false);
+    setGlobalTask("bg-channels", `Updating channels & catalogs for ${count} products...`, "running");
+
+    fetch("/api/shopify/publications", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "bulk-set-publications",
+        shop,
+        parentIds: parentIdsCopy,
+        publishTo: allPublishIds,
+        unpublishFrom: allUnpubIds,
+      }),
+    })
+      .then((resp) => resp.json().catch(() => ({})))
+      .then((json: { ok?: boolean; updated?: number; totalProducts?: number; published?: number; errors?: string[]; message?: string }) => {
+        if (json.ok) {
+          setGlobalTask("bg-channels", `Channels & catalogs updated for ${json.totalProducts ?? json.updated ?? count} product(s)`, "success");
+          channelsFetchedForPage.current = "";
+          void prefetchChannelPubs(rows);
+        } else {
+          setGlobalTask("bg-channels", `Update error: ${json.errors?.slice(0, 3).join(", ") || json.message || "Unknown"}`, "error");
+        }
+      })
+      .catch(() => {
+        setGlobalTask("bg-channels", "Channel/catalog update failed — network error", "error");
+      });
+  }
+
+  useEffect(() => {
+    if (!channelDropdownOpen) return;
+    const handler = () => setChannelDropdownOpen(null);
+    document.addEventListener("click", handler);
+    return () => document.removeEventListener("click", handler);
+  }, [channelDropdownOpen]);
+
+  useEffect(() => {
+    if (rows.length === 0 || !shop) return;
+    const pageKey = `${page}-${pageSize}-${shop}`;
+    if (channelsFetchedForPage.current === pageKey) return;
+    channelsFetchedForPage.current = pageKey;
+    void prefetchChannelPubs(rows);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, page, pageSize, shop]);
+
+  type SyncLogEntry = {
+    id: string;
+    synced_at: string;
+    items_checked: number;
+    items_updated: number;
+    variants_added: number;
+    variants_deleted: number;
+    products_archived: number;
+    errors: number;
+    error_details: string | null;
+    duration_ms: number;
+  };
+  const [syncLogEntries, setSyncLogEntries] = useState<SyncLogEntry[]>([]);
+  const [syncLogOpen, setSyncLogOpen] = useState(false);
+
+  const fetchSyncLog = useCallback(async () => {
+    if (!shop) return;
+    try {
+      const resp = await fetch(`/api/shopify/sync-log?shop=${encodeURIComponent(shop)}&limit=20`, { cache: "no-store" });
+      const json = await resp.json().catch(() => ({}));
+      if (json.ok && Array.isArray(json.entries)) {
+        setSyncLogEntries(json.entries);
+      }
+    } catch { /* silent */ }
+  }, [shop]);
+
+  useEffect(() => {
+    if (!shop) return;
+    fetchSyncLog();
+    const interval = setInterval(fetchSyncLog, 60_000);
+    return () => clearInterval(interval);
+  }, [shop, fetchSyncLog]);
   const allFilteredRowsRef = useRef<CartInventoryParentRow[] | null>(null);
-  const statusBarRef = useRef<HTMLElement | null>(null);
-  const [statusBarHeight, setStatusBarHeight] = useState(0);
-  const [task, setTask] = useState<{
+  const [task, _rawSetTask] = useState<{
     label: string;
     progress: number;
     tone: TaskTone;
   }>({ label: "Ready", progress: 0, tone: "idle" });
 
-  useEffect(() => {
-    const node = statusBarRef.current;
-    if (!node) return;
-    const ro = new ResizeObserver(() => {
-      const nextHeight = Math.ceil(node.getBoundingClientRect().height);
-      setStatusBarHeight((prev) => (prev === nextHeight ? prev : nextHeight));
-    });
-    ro.observe(node);
-    return () => ro.disconnect();
-  }, []);
+  const taskIdRef = useRef("page-carts-inventory");
+
+  function setTask(t: { label: string; progress: number; tone: TaskTone }, bgId?: string) {
+    _rawSetTask(t);
+    setGlobalTask(bgId || taskIdRef.current, t.label, t.tone);
+  }
 
   function updateFilter<K extends keyof CartFilters>(key: K, value: CartFilters[K]) {
     setFilters((prev) => ({ ...prev, [key]: value }));
@@ -443,7 +698,6 @@ export default function ShopifyMappingCartsInventory() {
 
   const allVisibleSelected =
     sortedRows.length > 0 && sortedRows.every((row) => Boolean(selectedParents[row.id]));
-  const statusBarTone = task.tone === "running" ? "working" : task.tone;
 
   function toggleSort(field: SortField) {
     setSortState((prev) => {
@@ -602,27 +856,149 @@ export default function ShopifyMappingCartsInventory() {
     }
   }
 
-  const PUSH_BATCH_SIZE = 200;
+  const PUSH_BATCH_SIZE = 80;
 
-  async function pushSelectedToShopify(background = false) {
+  async function countRemainingMissingSkuForSelection(parentIds: string[]) {
+    if (!shop || parentIds.length < 1) return 0;
+    const wanted = new Set(parentIds.map((id) => id.toLowerCase()));
+    let remaining = 0;
+    let currentPage = 1;
+    let totalPages = 1;
+    while (currentPage <= totalPages && remaining < wanted.size) {
+      const params = new URLSearchParams();
+      params.set("page", String(currentPage));
+      params.set("pageSize", String(SELECT_PAGE_SIZE));
+      params.set("ShopifySkuCoverage", "MissingSkuInShopify");
+      params.set("refreshCoverage", "1");
+      if (shop) params.set("shop", shop);
+      const resp = await fetch(`/api/shopify/cart-inventory?${params.toString()}`, { cache: "no-store" });
+      const json = (await resp.json().catch(() => ({}))) as CartInventoryResponse;
+      if (!resp.ok || json.ok === false) {
+        throw new Error(normalizeText(json.error) || "Failed to validate missing SKU coverage after push.");
+      }
+      const rows = Array.isArray(json.rows) ? json.rows : [];
+      for (const row of rows) {
+        if (wanted.has(row.id.toLowerCase())) remaining += 1;
+      }
+      totalPages = Math.max(1, Number(json.totalPages || 1));
+      currentPage += 1;
+    }
+    return remaining;
+  }
+
+  async function countRemainingUnlinkedVariantsForSelection(parentIds: string[]) {
+    if (!shop || parentIds.length < 1) return 0;
+    const wanted = new Set(parentIds.map((id) => id.toLowerCase()));
+    let remaining = 0;
+    let currentPage = 1;
+    let totalPages = 1;
+    while (currentPage <= totalPages) {
+      const params = new URLSearchParams();
+      params.set("page", String(currentPage));
+      params.set("pageSize", String(SELECT_PAGE_SIZE));
+      if (shop) params.set("shop", shop);
+      const resp = await fetch(`/api/shopify/cart-inventory?${params.toString()}`, { cache: "no-store" });
+      const json = (await resp.json().catch(() => ({}))) as CartInventoryResponse;
+      if (!resp.ok || json.ok === false) {
+        throw new Error(normalizeText(json.error) || "Failed to validate remaining unlinked variants after push.");
+      }
+      const rows = Array.isArray(json.rows) ? json.rows : [];
+      for (const row of rows) {
+        if (!wanted.has(row.id.toLowerCase())) continue;
+        remaining += (row.variants || []).filter((variant) => !normalizeText(variant.cartId)).length;
+      }
+      totalPages = Math.max(1, Number(json.totalPages || 1));
+      currentPage += 1;
+    }
+    return remaining;
+  }
+
+  async function countFinalRemainingAfterSettle(parentIds: string[]) {
+    const unlinkedNow = await countRemainingUnlinkedVariantsForSelection(parentIds);
+    const missingNow = await countRemainingMissingSkuForSelection(parentIds);
+    if (unlinkedNow < 1 && missingNow < 1) {
+      return { unlinked: 0, missing: 0 };
+    }
+    // Give the backend one short settle window in case persistence is still in flight.
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    const unlinkedAfter = await countRemainingUnlinkedVariantsForSelection(parentIds);
+    const missingAfter = await countRemainingMissingSkuForSelection(parentIds);
+    return { unlinked: unlinkedAfter, missing: missingAfter };
+  }
+
+  async function openPushDialog(background: boolean) {
     const hasPush = selectedParentIds.length > 0;
     if (!hasPush) {
       setError("Nothing to push. Select items to push, or remove items first to remove them from Shopify.");
       return;
     }
-    setBusy(true);
+    setPushDialogBg(background);
+    setPushDialogOpen(true);
+    setPushPubsLoading(true);
+    try {
+      const qs = shop ? `?shop=${encodeURIComponent(shop)}` : "";
+      const [pubResp, cfgResp] = await Promise.all([
+        fetch(`/api/shopify/publications${qs}`, { cache: "no-store" }),
+        fetch(`/api/shopify/cart-config${qs}`, { cache: "no-store" }),
+      ]);
+      const pubJson = (await pubResp.json().catch(() => ({}))) as {
+        ok?: boolean;
+        publications?: PubItem[];
+        catalogs?: CatItem[];
+      };
+      const cfgJson = (await cfgResp.json().catch(() => ({}))) as {
+        config?: { publicationDefaults?: { selectedPublicationIds?: string[]; selectedCatalogIds?: string[] } };
+      };
+      const pubs = pubJson.publications ?? [];
+      const cats = (pubJson.catalogs ?? []).filter((c) => c.id.includes("MarketCatalog") && c.publicationId);
+      setPushPubs(pubs);
+      setPushCats(cats);
+      const defaults = cfgJson.config?.publicationDefaults;
+      if (defaults?.selectedPublicationIds?.length) {
+        setPushSelectedPubs(defaults.selectedPublicationIds);
+      } else {
+        setPushSelectedPubs(pubs.map((p) => p.id));
+      }
+      if (defaults?.selectedCatalogIds?.length) {
+        setPushSelectedCats(defaults.selectedCatalogIds);
+      } else {
+        setPushSelectedCats([]);
+      }
+    } catch {
+      setPushPubs([]);
+      setPushCats([]);
+      setPushSelectedPubs([]);
+      setPushSelectedCats([]);
+    } finally {
+      setPushPubsLoading(false);
+    }
+  }
+
+  async function pushSelectedToShopify(background = false) {
+    setPushDialogOpen(false);
+    const runInBackground = background === true;
+    const requestedParentIds =
+      allFilteredSelected && allFilteredRowsRef.current && allFilteredRowsRef.current.length > 0
+        ? allFilteredRowsRef.current.map((row) => row.id)
+        : [...selectedParentIds];
+    const hasPush = requestedParentIds.length > 0;
+    if (!hasPush) {
+      setError("Nothing to push. Select items to push, or remove items first to remove them from Shopify.");
+      return;
+    }
+    if (!runInBackground) setBusy(true);
     setError("");
     setStatus("");
-    const useBatching = selectedParentIds.length > PUSH_BATCH_SIZE;
-    const batches = useBatching
+    const useBatching = !runInBackground && requestedParentIds.length > PUSH_BATCH_SIZE;
+    let batches = useBatching
       ? (() => {
           const b: string[][] = [];
-          for (let i = 0; i < selectedParentIds.length; i += PUSH_BATCH_SIZE) {
-            b.push(selectedParentIds.slice(i, i + PUSH_BATCH_SIZE));
+          for (let i = 0; i < requestedParentIds.length; i += PUSH_BATCH_SIZE) {
+            b.push(requestedParentIds.slice(i, i + PUSH_BATCH_SIZE));
           }
           return b;
         })()
-      : [selectedParentIds];
+      : [requestedParentIds];
     setTask({
       label: useBatching ? `Pushing batch 1/${batches.length}...` : "Pushing to Shopify...",
       progress: 35,
@@ -633,7 +1009,7 @@ export default function ShopifyMappingCartsInventory() {
       let totalCreated = 0;
       let totalRemoved = 0;
       let totalArchived = 0;
-      let lastDebug: {
+      let aggregatedDebug: {
         hint?: string;
         staleLinksCleared?: number;
         variantsLinkedBySku?: number;
@@ -643,7 +1019,13 @@ export default function ShopifyMappingCartsInventory() {
         variantsSkippedNoInvItem?: number;
         addVariantErrors?: string[];
         steps?: Array<{ step: string; detail: string }>;
-      } | undefined;
+      } = {};
+      const allHints = new Set<string>();
+      const allSteps: Array<{ step: string; detail: string }> = [];
+      let addVariantsBlocked = 0;
+      let createProductsBlocked = 0;
+      const failedParentIds = new Set<string>();
+      let autoSplitCount = 0;
       for (let i = 0; i < batches.length; i++) {
         if (batches.length > 1) {
           setTask({
@@ -659,7 +1041,9 @@ export default function ShopifyMappingCartsInventory() {
             action: "push-selected",
             shop,
             parentIds: batches[i],
-            background: background && batches.length === 1,
+            publicationIds: [...pushSelectedPubs, ...pushSelectedCats],
+            catalogIds: [],
+            background: runInBackground,
             notificationEmail:
             (typeof process.env.NEXT_PUBLIC_PUSH_NOTIFICATION_EMAIL === "string" &&
               process.env.NEXT_PUBLIC_PUSH_NOTIFICATION_EMAIL.trim()) ||
@@ -672,7 +1056,18 @@ export default function ShopifyMappingCartsInventory() {
           productsCreated?: number;
           removedFromShopify?: number;
           archivedNotInCart?: number;
-          debug?: typeof lastDebug;
+          startedAt?: string;
+          debug?: {
+            hint?: string;
+            staleLinksCleared?: number;
+            variantsLinkedBySku?: number;
+            variantsLinkedByTitle?: number;
+            variantsAddedToExisting?: number;
+            variantsSkippedNoCartId?: number;
+            variantsSkippedNoInvItem?: number;
+            addVariantErrors?: string[];
+            steps?: Array<{ step: string; detail: string }>;
+          };
         };
         const apiError = sanitizeUiErrorMessage(json.error, "");
         const fallback =
@@ -682,10 +1077,82 @@ export default function ShopifyMappingCartsInventory() {
               ? "Server overloaded or timeout."
               : `Push to Shopify failed (${resp.status}).`;
         const errMsg = apiError || fallback;
-        if (!resp.ok) throw new Error(errMsg);
+        if (!resp.ok) {
+          const isTimeoutStatus = resp.status === 502 || resp.status === 503 || resp.status === 504 || resp.status === 524;
+          const currentBatch = batches[i] || [];
+          if (isTimeoutStatus && currentBatch.length > 1) {
+            const splitAt = Math.ceil(currentBatch.length / 2);
+            const left = currentBatch.slice(0, splitAt);
+            const right = currentBatch.slice(splitAt);
+            batches.splice(i, 1, left, right);
+            autoSplitCount += 1;
+            setTask({
+              label: `Batch timed out. Retrying in smaller chunks (${left.length}/${right.length})...`,
+              progress: Math.max(35, Math.min(90, 35 + Math.round(((i + 0.5) / Math.max(1, batches.length)) * 55))),
+              tone: "running",
+            });
+            i -= 1;
+            continue;
+          }
+          for (const pid of currentBatch) failedParentIds.add(pid);
+          if (batches.length === 1) {
+            throw new Error(errMsg);
+          }
+          continue;
+        }
         if (resp.status === 202) {
           setStatus("Sync started in background. You can close this page.");
-          setTask({ label: "Sync running in background", progress: 100, tone: "success" });
+          setTask({ label: "Sync running in background...", progress: 35, tone: "running" });
+          const startedAt = normalizeText(json.startedAt) || new Date().toISOString();
+          const startedAtMs = Date.parse(startedAt);
+          const pollStart = Number.isFinite(startedAtMs) ? startedAtMs : Date.now();
+          // Poll sync activity and update the progress bar with real completion status.
+          const maxPollMs = 15 * 60 * 1000;
+          const pollIntervalMs = 6000;
+          let elapsed = 0;
+          while (elapsed <= maxPollMs) {
+            await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+            elapsed += pollIntervalMs;
+            const pct = Math.min(92, 35 + Math.round((elapsed / maxPollMs) * 57));
+            setTask({ label: "Background sync running...", progress: pct, tone: "running" });
+            try {
+              const qs = new URLSearchParams({
+                shop,
+                limit: "5",
+              });
+              const logResp = await fetch(`/api/shopify/sync-log?${qs.toString()}`, { cache: "no-store" });
+              const logJson = (await logResp.json().catch(() => ({}))) as {
+                entries?: Array<{
+                  synced_at?: string;
+                  items_updated?: number;
+                  variants_added?: number;
+                  errors?: number;
+                  error_details?: string | null;
+                }>;
+              };
+              const entries = Array.isArray(logJson.entries) ? logJson.entries : [];
+              const done = entries.find((entry) => {
+                const ts = Date.parse(normalizeText(entry.synced_at));
+                return Number.isFinite(ts) && ts >= pollStart - 1000;
+              });
+              if (done) {
+                const updated = Number(done.items_updated || 0);
+                const added = Number(done.variants_added || 0);
+                const errors = Number(done.errors || 0);
+                const details = normalizeText(done.error_details);
+                const parts: string[] = [];
+                parts.push(`Background sync completed. Updated ${updated} variant(s)`);
+                if (added > 0) parts.push(`added ${added} variant(s)`);
+                if (errors > 0) parts.push(`⚠ ${errors} error(s)`);
+                if (errors > 0 && details) parts.push(details.slice(0, 240));
+                setStatus(parts.join(". ") + ".");
+                setTask({ label: "Background sync completed", progress: 100, tone: errors > 0 ? "error" : "success" });
+                break;
+              }
+            } catch {
+              // Keep polling; user still has the initial started message.
+            }
+          }
           await loadCart(page, pageSize, appliedFilters, { startLabel: "Refreshing catalog..." });
           return;
         }
@@ -693,20 +1160,57 @@ export default function ShopifyMappingCartsInventory() {
         totalCreated += json.productsCreated ?? 0;
         totalRemoved += json.removedFromShopify ?? 0;
         totalArchived += json.archivedNotInCart ?? 0;
-        if (json.debug) lastDebug = json.debug;
+        if (json.debug) {
+          const d = json.debug;
+          aggregatedDebug.staleLinksCleared = (aggregatedDebug.staleLinksCleared || 0) + Number(d.staleLinksCleared || 0);
+          aggregatedDebug.variantsLinkedBySku = (aggregatedDebug.variantsLinkedBySku || 0) + Number(d.variantsLinkedBySku || 0);
+          aggregatedDebug.variantsLinkedByTitle = (aggregatedDebug.variantsLinkedByTitle || 0) + Number(d.variantsLinkedByTitle || 0);
+          aggregatedDebug.variantsAddedToExisting = (aggregatedDebug.variantsAddedToExisting || 0) + Number(d.variantsAddedToExisting || 0);
+          aggregatedDebug.variantsSkippedNoCartId = (aggregatedDebug.variantsSkippedNoCartId || 0) + Number(d.variantsSkippedNoCartId || 0);
+          aggregatedDebug.variantsSkippedNoInvItem = (aggregatedDebug.variantsSkippedNoInvItem || 0) + Number(d.variantsSkippedNoInvItem || 0);
+          if (Array.isArray(d.addVariantErrors) && d.addVariantErrors.length > 0) {
+            aggregatedDebug.addVariantErrors = [...(aggregatedDebug.addVariantErrors || []), ...d.addVariantErrors];
+          }
+          if (Array.isArray(d.steps) && d.steps.length > 0) {
+            allSteps.push(...d.steps);
+            addVariantsBlocked += d.steps.filter((s) => s.step === "add-variants-blocked").length;
+            createProductsBlocked += d.steps.filter((s) => s.step === "create-product-blocked").length;
+          }
+          const hint = normalizeText(d.hint);
+          if (hint) allHints.add(hint);
+        }
       }
       const parts: string[] = [];
       if (hasPush) parts.push(`Updated ${totalPushed} variant(s)`);
       if (totalCreated > 0) parts.push(`created ${totalCreated} product(s)`);
       if (totalArchived > 0) parts.push(`archived ${totalArchived}`);
-      if (lastDebug) {
-        const d = lastDebug;
+      const remainingFinal = await countFinalRemainingAfterSettle(requestedParentIds);
+      if (aggregatedDebug) {
+        const d = aggregatedDebug;
         if (d.variantsAddedToExisting) parts.push(`added ${d.variantsAddedToExisting} variant(s)`);
         if (d.staleLinksCleared) parts.push(`cleared ${d.staleLinksCleared} stale link(s)`);
-        const sizeReorders = d.steps?.filter((s: { step: string }) => s.step === "size-reorder").length || 0;
+        const sizeReorders = allSteps.filter((s: { step: string }) => s.step === "size-reorder").length;
         if (sizeReorders > 0) parts.push(`reordered sizes on ${sizeReorders} product(s)`);
-        if (d.hint) parts.push(d.hint);
+        if (addVariantsBlocked > 0) parts.push(`⚠ ${addVariantsBlocked} product(s) blocked by Add Variants setting`);
+        if (createProductsBlocked > 0) parts.push(`⚠ ${createProductsBlocked} product(s) blocked by Create New Products setting`);
         if (d.addVariantErrors?.length) parts.push(`⚠ ${d.addVariantErrors.length} variant error(s)`);
+        if (remainingFinal.unlinked > 0 && allHints.size > 0) {
+          parts.push(Array.from(allHints).slice(0, 2).join(" | "));
+        }
+      }
+      const remainingUnlinked = remainingFinal.unlinked;
+      if (remainingUnlinked > 0) {
+        parts.push(`⚠ ${remainingUnlinked} variant(s) still unlinked`);
+      }
+      const remainingMissing = remainingFinal.missing;
+      if (remainingMissing > 0) {
+        parts.push(`⚠ ${remainingMissing}/${requestedParentIds.length} selected product(s) still have missing SKU in Shopify`);
+      }
+      if (autoSplitCount > 0) {
+        parts.push(`auto-split ${autoSplitCount} timed-out batch(es)`);
+      }
+      if (failedParentIds.size > 0) {
+        parts.push(`⚠ ${failedParentIds.size} product(s) failed due to timeout/server error`);
       }
       if (parts.length === 0) parts.push("Push completed — no changes needed.");
       setStatus(parts.join(". ") + ".");
@@ -717,7 +1221,7 @@ export default function ShopifyMappingCartsInventory() {
       setError(message);
       setTask({ label: message, progress: 100, tone: "error" });
     } finally {
-      setBusy(false);
+      if (!runInBackground) setBusy(false);
     }
   }
 
@@ -730,12 +1234,13 @@ export default function ShopifyMappingCartsInventory() {
   }
 
   function statusBadge(s: "PENDING" | "PROCESSED" | "ERROR") {
-    const cls = s === "PROCESSED" ? "sync-processed" : s === "ERROR" ? "sync-error" : "sync-pending";
-    return <span className={`sync-badge ${cls}`}>{s}</span>;
+    if (s === "PROCESSED") return <img src="/badge-processed.png" alt="Processed" className="sync-badge-img" />;
+    if (s === "PENDING") return <img src="/badge-pending.png" alt="Pending" className="sync-badge-img" />;
+    return <img src="/badge-error.png" alt="Error" className="sync-badge-img" />;
   }
 
   return (
-    <main className="page" style={{ ["--status-bar-height" as string]: `${statusBarHeight}px` }}>
+    <main className="page">
       <nav className="quick-nav" aria-label="Inventory sections">
         <Link href="/studio/shopify-mapping-inventory/workset" className="quick-chip">
           Workset
@@ -762,23 +1267,64 @@ export default function ShopifyMappingCartsInventory() {
 
       <SyncTogglesBar shop={shop} disabled={busy} />
 
-      <section
-        ref={statusBarRef}
-        className={`card status-bar ${statusBarTone}`}
-        aria-live="polite"
-        aria-atomic="true"
-      >
-        <div className="status-bar-head">
-          <div className="status-bar-title">Progress</div>
-          <span className={`status-chip ${statusBarTone}`}>
-            {task.tone === "error" ? "Error" : task.tone === "running" ? "Working" : task.tone === "success" ? "Done" : "Idle"}
-          </span>
+      {/* Sync Activity Log */}
+      <div className="card" style={{ marginBottom: 12, padding: "10px 16px" }}>
+        <div
+          style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", userSelect: "none" }}
+          onClick={() => setSyncLogOpen((v) => !v)}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontWeight: 600, fontSize: 13 }}>Sync Activity</span>
+            {syncLogEntries.length > 0 && (
+              <span style={{ fontSize: 11, opacity: 0.7 }}>
+                Last: {new Date(syncLogEntries[0].synced_at).toLocaleString()} — {syncLogEntries[0].items_updated} updated, {syncLogEntries[0].errors} errors
+              </span>
+            )}
+          </div>
+          <span style={{ fontSize: 12, opacity: 0.5 }}>{syncLogOpen ? "▲" : "▼"}</span>
         </div>
-        <div className="status-bar-message">
-          {task.tone === "error" ? `Error: ${task.label}` : task.label}
-        </div>
-        {status ? <div className="status-bar-meta">{status}</div> : null}
-      </section>
+        {syncLogOpen && (
+          <div style={{ marginTop: 10, overflowX: "auto" }}>
+            {syncLogEntries.length === 0 ? (
+              <p style={{ fontSize: 12, opacity: 0.5 }}>No sync activity recorded yet.</p>
+            ) : (
+              <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+                    <th style={{ textAlign: "left", padding: "4px 8px", fontWeight: 600 }}>Time</th>
+                    <th style={{ textAlign: "right", padding: "4px 8px", fontWeight: 600 }}>Checked</th>
+                    <th style={{ textAlign: "right", padding: "4px 8px", fontWeight: 600 }}>Updated</th>
+                    <th style={{ textAlign: "right", padding: "4px 8px", fontWeight: 600 }}>+Variants</th>
+                    <th style={{ textAlign: "right", padding: "4px 8px", fontWeight: 600 }}>-Variants</th>
+                    <th style={{ textAlign: "right", padding: "4px 8px", fontWeight: 600 }}>Archived</th>
+                    <th style={{ textAlign: "right", padding: "4px 8px", fontWeight: 600 }}>Errors</th>
+                    <th style={{ textAlign: "right", padding: "4px 8px", fontWeight: 600 }}>Duration</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {syncLogEntries.map((entry) => (
+                    <tr
+                      key={entry.id}
+                      style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}
+                      title={entry.error_details || ""}
+                    >
+                      <td style={{ padding: "3px 8px" }}>{new Date(entry.synced_at).toLocaleString()}</td>
+                      <td style={{ padding: "3px 8px", textAlign: "right" }}>{entry.items_checked}</td>
+                      <td style={{ padding: "3px 8px", textAlign: "right" }}>{entry.items_updated}</td>
+                      <td style={{ padding: "3px 8px", textAlign: "right", color: entry.variants_added > 0 ? "#4ade80" : undefined }}>{entry.variants_added}</td>
+                      <td style={{ padding: "3px 8px", textAlign: "right", color: entry.variants_deleted > 0 ? "#f87171" : undefined }}>{entry.variants_deleted}</td>
+                      <td style={{ padding: "3px 8px", textAlign: "right" }}>{entry.products_archived}</td>
+                      <td style={{ padding: "3px 8px", textAlign: "right", color: entry.errors > 0 ? "#f87171" : undefined }}>{entry.errors}</td>
+                      <td style={{ padding: "3px 8px", textAlign: "right" }}>{entry.duration_ms < 1000 ? `${entry.duration_ms}ms` : `${(entry.duration_ms / 1000).toFixed(1)}s`}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+      </div>
+
 
       <section className="glass-panel card filter-card">
         <div className="filters filters-skuplugs">
@@ -816,6 +1362,16 @@ export default function ShopifyMappingCartsInventory() {
                     <option value="All">All Sources</option>
                     <option value="InLS">In LS Inventory</option>
                     <option value="NotInLS">Not in LS (manual/Shopify)</option>
+                  </select>
+                  <select value={filters.ShopifySource} onChange={(e) => updateFilter("ShopifySource", normalizeText(e.target.value) as CartFilters["ShopifySource"])} aria-label="Filter by Shopify presence" title="Filter by Shopify presence">
+                    <option value="All">Shopify: All</option>
+                    <option value="InShopify">In Shopify</option>
+                    <option value="NotInShopify">Not in Shopify</option>
+                  </select>
+                  <select value={filters.ShopifySkuCoverage} onChange={(e) => updateFilter("ShopifySkuCoverage", normalizeText(e.target.value) as CartFilters["ShopifySkuCoverage"])} aria-label="Filter by Shopify SKU coverage" title="Filter by strict SKU coverage in Shopify">
+                    <option value="All">SKU Coverage: All</option>
+                    <option value="AllSkuInShopify">All SKUs in Shopify</option>
+                    <option value="MissingSkuInShopify">Has Missing SKU in Shopify</option>
                   </select>
                   <select value={filters.HasDescription} onChange={(e) => updateFilter("HasDescription", normalizeText(e.target.value) as CartFilters["HasDescription"])} aria-label="Filter by Shopify description" title="Filter by whether product has Shopify description">
                     <option value="All">Description: All</option>
@@ -893,8 +1449,9 @@ export default function ShopifyMappingCartsInventory() {
           <button className="btn-base btn-outline" onClick={() => void runAction("undo-session")} disabled={busy}>Undo Last Session</button>
           <button className="btn-base btn-outline" onClick={() => void matchToLSMatrix()} disabled={busy || !shop} title="Convert Shopify-pulled items to LS matrix IDs so they appear as In LS Inventory. Matches by SKU or UPC.">Match to LS Matrix</button>
           <button className="btn-base btn-outline" onClick={() => void activateArchivedInCart()} disabled={busy || !shop} title="Activate archived Shopify products whose variants are in Cart. Temporary button – remove after products are back.">Activate Archived (in Cart)</button>
-          <button className="btn-base push-btn" onClick={() => pushSelectedToShopify(false)} disabled={busy || selectedParentIds.length < 1} title="Push selected items to Shopify. Wait for completion.">Push to Shopify</button>
-          <button className="btn-base btn-outline" onClick={() => pushSelectedToShopify(true)} disabled={busy || selectedParentIds.length < 1} title="Push in background. You can close this page and sync will continue.">Push (background)</button>
+          <button className="btn-base btn-outline" onClick={() => void openBulkChannelDialog()} disabled={busy || selectedParentIds.length < 1} title="Update sales channels & catalogs for selected products">Update Channels</button>
+          <button className="btn-base push-btn" onClick={() => void openPushDialog(true)} disabled={busy || selectedParentIds.length < 1} title="Push selected items to Shopify in background while you keep working.">Push to Shopify</button>
+          <button className="btn-base btn-outline" onClick={() => void openPushDialog(true)} disabled={busy || selectedParentIds.length < 1} title="Push in background. You can close this page and sync will continue.">Push (background)</button>
         </div>
         <p className="mini">
           Products {summary.totalProducts} | Items {summary.totalItems} | <span className="mini-processed">Processed {summary.totalProcessed}</span> | <span className="mini-pending">Pending {summary.totalPending}</span> | <span className="mini-error">Errors {summary.totalErrors}</span>
@@ -934,14 +1491,16 @@ export default function ShopifyMappingCartsInventory() {
         <table className="parent-table">
           <colgroup>
             <col style={{ width: 34 }} />
-            <col style={{ width: 340 }} />
-            <col style={{ width: 190 }} />
-            <col style={{ width: 130 }} />
-            <col style={{ width: 80 }} />
-            <col style={{ width: 80 }} />
-            <col style={{ width: 90 }} />
+            <col style={{ width: 270 }} />
+            <col style={{ width: 150 }} />
             <col style={{ width: 100 }} />
-            <col style={{ width: 72 }} />
+            <col style={{ width: 70 }} />
+            <col style={{ width: 70 }} />
+            <col style={{ width: 80 }} />
+            <col style={{ width: 70 }} />
+            <col style={{ width: 140 }} />
+            <col style={{ width: 36 }} />
+            <col style={{ width: 76 }} />
             <col style={{ width: 88 }} />
           </colgroup>
           <thead>
@@ -1034,12 +1593,14 @@ export default function ShopifyMappingCartsInventory() {
                   </button>
                 </span>
               </th>
+              <th></th>
+              <th>Channels</th>
               <th className="picture-header-cell">Picture</th>
             </tr>
           </thead>
           <tbody>
             {sortedRows.length < 1 ? (
-              <tr><td colSpan={10}>{busy ? "Loading..." : "No products found. Pull catalog from Cart Configurations."}</td></tr>
+              <tr><td colSpan={12}>{busy ? "Loading..." : "No products found. Pull catalog from Cart Configurations."}</td></tr>
             ) : sortedRows.map((parent) => {
               const expanded = Boolean(expandedRows[parent.id]);
               const parentImage = normalizeText(parent.image);
@@ -1082,25 +1643,110 @@ export default function ShopifyMappingCartsInventory() {
                         <span className="details-availability-inline">
                           {statusBadge(parent.status)}
                         </span>
-                        <button
-                          className="details-toggle-btn"
-                          onClick={() => setExpandedRows((prev) => ({ ...prev, [parent.id]: !prev[parent.id] }))}
-                          aria-label={expanded ? "Hide details" : "Show details"}
-                        >
-                          {expanded ? (
-                            <svg className="eye-symbol" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                              <path d="M2.5 12C4.5 7.9 8 5.5 12 5.5C16 5.5 19.5 7.9 21.5 12C19.5 16.1 16 18.5 12 18.5C8 18.5 4.5 16.1 2.5 12Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                              <circle cx="12" cy="12" r="2.8" stroke="currentColor" strokeWidth="1.8" />
-                              <line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                            </svg>
-                          ) : (
-                            <svg className="eye-symbol" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                              <path d="M2.5 12C4.5 7.9 8 5.5 12 5.5C16 5.5 19.5 7.9 21.5 12C19.5 16.1 16 18.5 12 18.5C8 18.5 4.5 16.1 2.5 12Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                              <circle cx="12" cy="12" r="2.8" stroke="currentColor" strokeWidth="1.8" />
-                            </svg>
-                          )}
-                        </button>
                       </span>
+                    </td>
+                    <td className="eye-cell">
+                      <button
+                        className="details-toggle-btn"
+                        onClick={() => setExpandedRows((prev) => ({ ...prev, [parent.id]: !prev[parent.id] }))}
+                        aria-label={expanded ? "Hide details" : "Show details"}
+                      >
+                        {expanded ? (
+                          <svg className="eye-symbol" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                            <path d="M2.5 12C4.5 7.9 8 5.5 12 5.5C16 5.5 19.5 7.9 21.5 12C19.5 16.1 16 18.5 12 18.5C8 18.5 4.5 16.1 2.5 12Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                            <circle cx="12" cy="12" r="2.8" stroke="currentColor" strokeWidth="1.8" />
+                            <line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                          </svg>
+                        ) : (
+                          <svg className="eye-symbol" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                            <path d="M2.5 12C4.5 7.9 8 5.5 12 5.5C16 5.5 19.5 7.9 21.5 12C19.5 16.1 16 18.5 12 18.5C8 18.5 4.5 16.1 2.5 12Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                            <circle cx="12" cy="12" r="2.8" stroke="currentColor" strokeWidth="1.8" />
+                          </svg>
+                        )}
+                      </button>
+                    </td>
+                    <td className="channels-cell" style={{ position: "relative" }}>
+                      {(() => {
+                        const pgid = getProductGid(parent);
+                        if (!pgid) return <span className="muted">&ndash;</span>;
+                        const pubs = channelPubs[pgid];
+                        const totalChannels = channelAllPubs.length;
+                        const totalCats = marketCatalogs.filter((c) => c.publicationId).length;
+                        const total = totalChannels + totalCats || "?";
+                        const knownPubIds = new Set([
+                          ...channelAllPubs.map((p) => p.id),
+                          ...marketCatalogs.filter((c) => c.publicationId).map((c) => c.publicationId!),
+                        ]);
+                        const count = pubs ? pubs.filter((id) => knownPubIds.has(id)).length : "?";
+                        const isOpen = channelDropdownOpen === parent.id;
+                        return (
+                          <>
+                            <button type="button" className="channels-badge" onClick={() => void openChannelDropdown(parent)} title="Manage sales channels & catalogs">
+                              {count}/{total}
+                            </button>
+                            {isOpen && (
+                              <div className="channels-dropdown" onClick={(e) => e.stopPropagation()}>
+                                {channelDropdownLoading ? (
+                                  <p className="channels-dd-loading">Loading...</p>
+                                ) : channelAllPubs.length === 0 ? (
+                                  <p className="channels-dd-loading">No channels</p>
+                                ) : (
+                                  <>
+                                    <label className="channels-dd-item channels-dd-all">
+                                      <input
+                                        type="checkbox"
+                                        checked={channelAllPubs.every((p) => (channelPubs[pgid] || []).includes(p.id))}
+                                        onChange={(e) => void toggleAllChannels(pgid, e.target.checked)}
+                                      />
+                                      <span>Select All Channels</span>
+                                    </label>
+                                    {channelAllPubs.map((pub) => (
+                                      <label key={pub.id} className="channels-dd-item">
+                                        <input
+                                          type="checkbox"
+                                          checked={(channelPubs[pgid] || []).includes(pub.id)}
+                                          onChange={(e) => void toggleChannel(pgid, pub.id, e.target.checked)}
+                                        />
+                                        <span>{pub.name}</span>
+                                      </label>
+                                    ))}
+                                    {marketCatalogs.filter((c) => c.publicationId).length > 0 && (
+                                      <>
+                                        <div className="channels-dd-divider" />
+                                        <label className="channels-dd-item channels-dd-all">
+                                          <input
+                                            type="checkbox"
+                                            checked={marketCatalogs.filter((c) => c.publicationId).every((c) => (channelPubs[pgid] || []).includes(c.publicationId!))}
+                                            onChange={(e) => {
+                                              const catPubIds = marketCatalogs.filter((c) => c.publicationId).map((c) => c.publicationId!);
+                                              if (e.target.checked) {
+                                                for (const cid of catPubIds) void toggleChannel(pgid, cid, true);
+                                              } else {
+                                                for (const cid of catPubIds) void toggleChannel(pgid, cid, false);
+                                              }
+                                            }}
+                                          />
+                                          <span>Select All Catalogs</span>
+                                        </label>
+                                        {marketCatalogs.filter((c) => c.publicationId).map((cat) => (
+                                          <label key={cat.id} className="channels-dd-item">
+                                            <input
+                                              type="checkbox"
+                                              checked={(channelPubs[pgid] || []).includes(cat.publicationId!)}
+                                              onChange={(e) => void toggleChannel(pgid, cat.publicationId!, e.target.checked)}
+                                            />
+                                            <span>{cat.title}</span>
+                                          </label>
+                                        ))}
+                                      </>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
                     </td>
                     <td className="picture-cell">
                       {parentImage ? (
@@ -1114,7 +1760,7 @@ export default function ShopifyMappingCartsInventory() {
                   </tr>
                   {expanded ? (
                     <tr className="expand-row">
-                      <td colSpan={10}>
+                      <td colSpan={12}>
                         <div className="variant-wrap">
                           <table className="variant-table">
                             <colgroup>
@@ -1160,28 +1806,7 @@ export default function ShopifyMappingCartsInventory() {
                                     </td>
                                     <td>{variant.upc || "-"}</td>
                                     <td colSpan={2} className="variant-stock-cell">
-                                      <div className="stock-matrix">
-                                        <div className="stock-matrix-head">
-                                          <span>Store</span>
-                                          <span>Stock</span>
-                                        </div>
-                                        {variant.stockByLocation.length ? (
-                                          <ul className="stock-list">
-                                            {variant.stockByLocation.map((row) => (
-                                              <li key={`${key}-${row.location}`}>
-                                                <span>{row.location}</span>
-                                                <strong>{formatQty(row.qty)}</strong>
-                                              </li>
-                                            ))}
-                                            <li className="total">
-                                              <span>Company Stock</span>
-                                              <strong>{formatQty(variant.stock)}</strong>
-                                            </li>
-                                          </ul>
-                                        ) : (
-                                          <div className="stock-fallback">Company Stock: {formatQty(variant.stock)}</div>
-                                        )}
-                                      </div>
+                                      <strong>{formatQty(variant.stock)}</strong>
                                     </td>
                                     <td>{formatPrice(variant.price)}</td>
                                     <td>{variant.color || "-"}</td>
@@ -1268,6 +1893,185 @@ export default function ShopifyMappingCartsInventory() {
         </div>
       ) : null}
 
+      {pushDialogOpen ? (
+        <div className="preview-overlay" onClick={() => setPushDialogOpen(false)} role="dialog" aria-label="Push to Shopify — Sales Channels">
+          <div className="push-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="push-dialog-head">
+              <h3>Push to Shopify — Sales Channels</h3>
+              <button type="button" className="preview-close" onClick={() => setPushDialogOpen(false)} aria-label="Close">&times;</button>
+            </div>
+            <p className="push-dialog-note">
+              Select which sales channels and catalogs these {selectedParentIds.length} product(s) should be published to.
+              Unchecked channels will have the product removed.
+            </p>
+            {pushPubsLoading ? (
+              <p className="push-dialog-note" style={{ fontStyle: "italic" }}>Loading channels...</p>
+            ) : pushPubs.length === 0 && pushCats.length === 0 ? (
+              <p className="push-dialog-note" style={{ fontStyle: "italic" }}>
+                No sales channels found. Products will be pushed without channel assignment.
+              </p>
+            ) : (
+              <div className="push-dialog-body">
+                {pushPubs.length > 0 && (
+                  <div className="push-dialog-section">
+                    <label className="push-dialog-selectall">
+                      <input
+                        type="checkbox"
+                        checked={pushPubs.length > 0 && pushPubs.every((p) => pushSelectedPubs.includes(p.id))}
+                        onChange={(e) => {
+                          if (e.target.checked) setPushSelectedPubs(pushPubs.map((p) => p.id));
+                          else setPushSelectedPubs([]);
+                        }}
+                      />
+                      <strong>Select All Sales Channels</strong>
+                    </label>
+                    {pushPubs.map((pub) => (
+                      <label key={pub.id} className="push-dialog-item">
+                        <input
+                          type="checkbox"
+                          checked={pushSelectedPubs.includes(pub.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) setPushSelectedPubs((prev) => [...prev, pub.id]);
+                            else setPushSelectedPubs((prev) => prev.filter((id) => id !== pub.id));
+                          }}
+                        />
+                        <span>{pub.name}</span>
+                        {pub.app?.title ? <span className="push-dialog-app">{pub.app.title}</span> : null}
+                      </label>
+                    ))}
+                  </div>
+                )}
+                {pushCats.length > 0 && (
+                  <div className="push-dialog-section">
+                    <label className="push-dialog-selectall">
+                      <input
+                        type="checkbox"
+                        checked={pushCats.length > 0 && pushCats.every((c) => pushSelectedCats.includes(c.publicationId || c.id))}
+                        onChange={(e) => {
+                          if (e.target.checked) setPushSelectedCats(pushCats.map((c) => c.publicationId || c.id));
+                          else setPushSelectedCats([]);
+                        }}
+                      />
+                      <strong>Select All Catalogs</strong>
+                    </label>
+                    {pushCats.map((cat) => (
+                      <label key={cat.id} className="push-dialog-item">
+                        <input
+                          type="checkbox"
+                          checked={pushSelectedCats.includes(cat.publicationId || cat.id)}
+                          onChange={(e) => {
+                            const catPubId = cat.publicationId || cat.id;
+                            if (e.target.checked) setPushSelectedCats((prev) => [...prev, catPubId]);
+                            else setPushSelectedCats((prev) => prev.filter((id) => id !== catPubId));
+                          }}
+                        />
+                        <span>{cat.title}</span>
+                        <span className="push-dialog-app">{cat.status}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="push-dialog-actions">
+              <button type="button" className="btn-base btn-outline" onClick={() => setPushDialogOpen(false)}>Cancel</button>
+              <button
+                type="button"
+                className="btn-base push-btn"
+                disabled={pushPubsLoading}
+                onClick={() => void pushSelectedToShopify(pushDialogBg)}
+              >
+                {pushDialogBg ? "Push (background)" : "Push to Shopify"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {bulkChannelOpen ? (
+        <div className="preview-overlay" onClick={() => setBulkChannelOpen(false)} role="dialog" aria-label="Update Channels & Catalogs">
+          <div className="push-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="push-dialog-head">
+              <h3>Update Channels & Catalogs</h3>
+              <button type="button" className="preview-close" onClick={() => setBulkChannelOpen(false)} aria-label="Close">&times;</button>
+            </div>
+            <p className="push-dialog-note">
+              Apply channel & catalog selections to <strong>{selectedParentIds.length}</strong> selected product(s).
+              Unchecked items will be unpublished from those channels.
+            </p>
+            <div className="push-dialog-body">
+              {channelAllPubs.length > 0 && (
+                <div className="push-dialog-section">
+                  <label className="push-dialog-selectall">
+                    <input
+                      type="checkbox"
+                      checked={channelAllPubs.length > 0 && channelAllPubs.every((p) => bulkChannelPubs.includes(p.id))}
+                      onChange={(e) => {
+                        if (e.target.checked) setBulkChannelPubs(channelAllPubs.map((p) => p.id));
+                        else setBulkChannelPubs([]);
+                      }}
+                    />
+                    <strong>Select All Sales Channels</strong>
+                  </label>
+                  {channelAllPubs.map((pub) => (
+                    <label key={pub.id} className="push-dialog-item">
+                      <input
+                        type="checkbox"
+                        checked={bulkChannelPubs.includes(pub.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) setBulkChannelPubs((prev) => [...prev, pub.id]);
+                          else setBulkChannelPubs((prev) => prev.filter((id) => id !== pub.id));
+                        }}
+                      />
+                      <span>{pub.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+              {marketCatalogs.filter((c) => c.publicationId).length > 0 && (
+                <div className="push-dialog-section">
+                  <label className="push-dialog-selectall">
+                    <input
+                      type="checkbox"
+                      checked={marketCatalogs.filter((c) => c.publicationId).length > 0 && marketCatalogs.filter((c) => c.publicationId).every((c) => bulkChannelCats.includes(c.publicationId!))}
+                      onChange={(e) => {
+                        if (e.target.checked) setBulkChannelCats(marketCatalogs.filter((c) => c.publicationId).map((c) => c.publicationId!));
+                        else setBulkChannelCats([]);
+                      }}
+                    />
+                    <strong>Select All Catalogs</strong>
+                  </label>
+                  {marketCatalogs.filter((c) => c.publicationId).map((cat) => (
+                    <label key={cat.id} className="push-dialog-item">
+                      <input
+                        type="checkbox"
+                        checked={bulkChannelCats.includes(cat.publicationId!)}
+                        onChange={(e) => {
+                          if (e.target.checked) setBulkChannelCats((prev) => [...prev, cat.publicationId!]);
+                          else setBulkChannelCats((prev) => prev.filter((id) => id !== cat.publicationId!));
+                        }}
+                      />
+                      <span>{cat.title}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="push-dialog-actions">
+              <button type="button" className="btn-base btn-outline" onClick={() => setBulkChannelOpen(false)}>Cancel</button>
+              <button
+                type="button"
+                className="btn-base push-btn"
+                disabled={selectedParentIds.length < 1}
+                onClick={() => applyBulkChannels()}
+              >
+                {`Apply to ${selectedParentIds.length} product(s)`}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {comparePopupOpen ? (
         <div className="compare-overlay" onClick={() => setComparePopupOpen(false)} role="dialog" aria-label="Items not in last sync">
           <div className="compare-popup" onClick={(e) => e.stopPropagation()}>
@@ -1349,82 +2153,6 @@ export default function ShopifyMappingCartsInventory() {
         .pager-numbers { display: flex; align-items: center; gap: 4px; }
         .pager-num { min-width: 36px; min-height: 36px; padding: 0 10px; }
         .pager-num.active { background: rgba(59,130,246,0.3); border-color: rgba(59,130,246,0.6); }
-        .status-bar {
-          position: fixed;
-          top: 89px;
-          left: calc(var(--page-inline-gap, 13px) + var(--page-edge-gap, 13px));
-          right: calc(
-            var(
-              --content-right-pad,
-              calc(var(--integration-panel-width, 255px) + var(--page-edge-gap, 13px) + var(--content-api-gap, 13px))
-            ) + 8px
-          );
-          z-index: 40;
-          display: grid;
-          gap: 4px;
-          padding: 10px 14px;
-          border-radius: 10px;
-          border: 1.5px solid #dbe5f1;
-          background: #f8fafc;
-          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.06);
-          transition: border-color 0.2s, box-shadow 0.2s;
-        }
-        :global(.content.menu-open) .status-bar {
-          left: 280px;
-        }
-        :global(.content.no-integration-panel) .status-bar {
-          right: calc(var(--page-inline-gap, 13px) + 8px);
-        }
-        .status-bar-head {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 10px;
-        }
-        .status-bar-title {
-          font-weight: 700;
-          letter-spacing: 0.01em;
-          text-transform: uppercase;
-          font-size: 0.78rem;
-          color: #64748b;
-        }
-        .status-chip {
-          font-size: 0.72rem;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.04em;
-          padding: 2px 10px;
-          border-radius: 999px;
-          background: #e2e8f0;
-          color: #475569;
-        }
-        .status-chip.working { background: #fef9c3; color: #854d0e; }
-        .status-chip.success { background: #dcfce7; color: #166534; }
-        .status-chip.error { background: #fee2e2; color: #991b1b; }
-        .status-bar.idle { border-color: #dbe5f1; }
-        .status-bar.working {
-          border-color: #facc15;
-          box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.15), 0 8px 24px rgba(0, 0, 0, 0.24);
-        }
-        .status-bar.success {
-          border-color: #86efac;
-          box-shadow: 0 0 0 1px rgba(134, 239, 172, 0.14), 0 8px 24px rgba(0, 0, 0, 0.2);
-        }
-        .status-bar.error {
-          border-color: #fca5a5;
-          box-shadow: 0 0 0 1px rgba(252, 165, 165, 0.16), 0 8px 24px rgba(0, 0, 0, 0.22);
-        }
-        .status-bar-message {
-          font-size: 0.95rem;
-          font-weight: 600;
-          color: #0f172a;
-          line-height: 1.35;
-        }
-        .status-bar-meta {
-          font-size: 0.8rem;
-          color: #475569;
-          line-height: 1.25;
-        }
         .filter-card { gap: 8px; }
         .filters {
           display: flex;
@@ -1628,9 +2356,58 @@ export default function ShopifyMappingCartsInventory() {
         .parent-table th:nth-child(9),
         .parent-table td:nth-child(9),
         .parent-table th:nth-child(10),
-        .parent-table td:nth-child(10) { text-align: center !important; }
+        .parent-table td:nth-child(10),
+        .parent-table th:nth-child(11),
+        .parent-table td:nth-child(11) { text-align: center !important; }
         th { font-size: .76rem; color: rgba(226,232,240,.75); }
         .picture-header-cell { font-weight: 700; }
+        .channels-cell { vertical-align: middle; text-align: center !important; }
+        .channels-badge {
+          background: rgba(125, 211, 252, 0.15);
+          border: 1px solid rgba(125, 211, 252, 0.35);
+          color: #bae6fd;
+          font-size: 0.72rem;
+          font-weight: 700;
+          padding: 2px 7px;
+          border-radius: 6px;
+          cursor: pointer;
+          white-space: nowrap;
+        }
+        .channels-badge:hover { background: rgba(125, 211, 252, 0.25); }
+        .channels-dropdown {
+          position: absolute;
+          top: 100%;
+          right: 0;
+          z-index: 120;
+          min-width: 220px;
+          overflow-y: visible;
+          background: #1e293b;
+          border: 1px solid rgba(255,255,255,0.2);
+          border-radius: 10px;
+          padding: 6px 0;
+          box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+        }
+        .channels-dd-loading {
+          padding: 8px 12px;
+          margin: 0;
+          font-size: 0.8rem;
+          color: rgba(226,232,240,0.7);
+          font-style: italic;
+        }
+        .channels-dd-item {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 5px 12px;
+          font-size: 0.8rem;
+          color: #f1f5f9;
+          cursor: pointer;
+          white-space: nowrap;
+        }
+        .channels-dd-item:hover { background: rgba(255,255,255,0.06); }
+        .channels-dd-all { border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 6px; margin-bottom: 2px; font-weight: 600; }
+        .channels-dd-item input[type="checkbox"] { width: 15px; height: 15px; accent-color: #22c55e; cursor: pointer; }
+        .channels-dd-divider { height: 1px; background: rgba(255,255,255,0.12); margin: 6px 0; }
         .picture-cell { vertical-align: middle; text-align: center !important; }
         .thumb-btn {
           background: none;
@@ -1657,26 +2434,23 @@ export default function ShopifyMappingCartsInventory() {
           width: 100%;
           justify-content: center;
         }
-        .details-cell { text-align: center !important; vertical-align: middle; }
+        .details-cell { text-align: center !important; vertical-align: middle; padding-top: 0 !important; padding-bottom: 0 !important; }
+        .eye-cell { text-align: center !important; vertical-align: middle; padding: 0 !important; }
         .details-parent-wrap {
-          display: grid;
-          grid-template-columns: auto 56px;
+          display: flex;
           align-items: center;
           justify-content: center;
-          justify-items: center;
-          gap: 0;
+          gap: 4px;
           width: 100%;
-          max-width: 88px;
           margin: 0 auto;
         }
         .details-toggle-btn {
-          width: 56px;
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          text-align: center;
           padding: 0;
           line-height: 1;
+          flex-shrink: 0;
         }
         .eye-symbol { width: 18px; height: 18px; display: block; }
         .details-availability-inline {
@@ -1684,6 +2458,9 @@ export default function ShopifyMappingCartsInventory() {
           align-items: center;
           justify-content: center;
           flex-shrink: 0;
+          overflow: hidden;
+          max-width: 70px;
+          max-height: 70px;
         }
         .parent-detail-thumb { width: var(--parent-thumb-w); height: var(--parent-thumb-h); object-fit: cover; border-radius: 4px; background: rgba(255,255,255,.08); display: block; margin: 0 auto; }
         .sync-badge {
@@ -1696,6 +2473,7 @@ export default function ShopifyMappingCartsInventory() {
           letter-spacing: 0.03em;
           text-transform: uppercase;
         }
+        .sync-badge-img { max-height: 70px; max-width: 70px; height: 70px; width: 70px; object-fit: contain; vertical-align: middle; display: inline-block; flex-shrink: 0; }
         .sync-processed { background: rgba(34, 197, 94, 0.2); color: #86efac; border: 1px solid rgba(34, 197, 94, 0.3); }
         .sync-pending { background: rgba(245, 158, 11, 0.2); color: #fde68a; border: 1px solid rgba(245, 158, 11, 0.3); }
         .sync-error { background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.3); }
@@ -1812,6 +2590,88 @@ export default function ShopifyMappingCartsInventory() {
           background: rgba(0, 0, 0, 0.85);
           border-color: #fff;
         }
+        .push-dialog {
+          cursor: default;
+          background: #1e293b;
+          border-radius: 14px;
+          box-shadow: 0 12px 48px rgba(0, 0, 0, 0.55);
+          max-width: min(520px, 94vw);
+          max-height: 85vh;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+        .push-dialog-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 16px 20px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+          flex-shrink: 0;
+        }
+        .push-dialog-head h3 {
+          margin: 0;
+          font-size: 1.05rem;
+        }
+        .push-dialog-note {
+          margin: 0;
+          padding: 12px 20px 0;
+          color: rgba(226, 232, 240, 0.82);
+          font-size: 0.84rem;
+          line-height: 1.4;
+        }
+        .push-dialog-body {
+          overflow-y: auto;
+          padding: 12px 20px;
+          display: grid;
+          gap: 8px;
+        }
+        .push-dialog-section {
+          display: grid;
+          gap: 2px;
+        }
+        .push-dialog-selectall,
+        .push-dialog-item {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 8px 10px;
+          border-radius: 8px;
+          cursor: pointer;
+          font-size: 0.88rem;
+          transition: background 0.15s;
+        }
+        .push-dialog-selectall {
+          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+          padding-bottom: 10px;
+          margin-bottom: 4px;
+        }
+        .push-dialog-item:hover {
+          background: rgba(255, 255, 255, 0.06);
+        }
+        .push-dialog-app {
+          color: rgba(226, 232, 240, 0.55);
+          font-size: 0.78rem;
+          margin-left: auto;
+        }
+        .push-dialog-actions {
+          display: flex;
+          justify-content: flex-end;
+          gap: 10px;
+          padding: 14px 20px;
+          border-top: 1px solid rgba(255, 255, 255, 0.1);
+          flex-shrink: 0;
+        }
+        .push-dialog :global(input[type="checkbox"]) {
+          width: 17px;
+          height: 17px;
+          min-height: 17px;
+          border-radius: 4px;
+          accent-color: #22c55e;
+          cursor: pointer;
+          flex-shrink: 0;
+        }
         .compare-overlay {
           position: fixed;
           inset: 0;
@@ -1906,14 +2766,6 @@ export default function ShopifyMappingCartsInventory() {
           color: #e2e8f0;
         }
         @media (max-width: 1180px) {
-          .status-bar {
-            top: 89px;
-            left: 8px;
-            right: 8px;
-          }
-          :global(.content.menu-open) .status-bar {
-            left: 280px;
-          }
           .page { padding-top: 134px; }
           .card { padding: 14px; }
         }
@@ -1923,6 +2775,8 @@ export default function ShopifyMappingCartsInventory() {
         @media (max-width: 640px) {
           .actions-row :global(.btn-base) { flex: 1 1 auto; }
           .pager span { font-size: 0.95rem; }
+          .sync-badge-img { max-height: 50px; max-width: 50px; height: 50px; width: 50px; }
+          .details-availability-inline { max-width: 50px; max-height: 50px; }
         }
       `}</style>
     </main>

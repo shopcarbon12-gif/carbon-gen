@@ -1,13 +1,10 @@
 /**
  * Persists "last sync" metadata so Compare works across server instances.
- * Stage-add sessions are stored in memory (undo) and optionally in Supabase.
- * Compare reads from Supabase first; if empty, falls back to in-memory sessions.
+ * Uses Neon (Postgres) instead of Supabase to reduce egress.
  */
 
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { neonQuery, ensureNeonReady } from "@/lib/neonDb";
 import { normalizeShopDomain } from "@/lib/shopify";
-
-const TABLE = "shopify_cart_sync_log";
 
 function normalizeText(value: unknown) {
   return String(value ?? "").trim();
@@ -21,17 +18,18 @@ function toShopKey(shop: string) {
   return normalizeShopDomain(normalizeText(shop)) || normalizeText(shop).toLowerCase() || "";
 }
 
-function tryGetSupabase() {
+async function tryNeon(): Promise<boolean> {
   try {
-    return getSupabaseAdmin();
+    if (!(process.env.NEON_DATABASE_URL || "").trim()) return false;
+    await ensureNeonReady();
+    return true;
   } catch {
-    return null;
+    return false;
   }
 }
 
 /**
  * Log a stage-add batch so Compare can find it later.
- * Call this after each successful stage-add chunk.
  */
 export async function logStageAdd(shop: string, parentIds: string[]): Promise<void> {
   const shopKey = toShopKey(shop);
@@ -40,20 +38,21 @@ export async function logStageAdd(shop: string, parentIds: string[]): Promise<vo
   const ids = Array.from(new Set(parentIds.map((id) => normalizeText(id)).filter(Boolean)));
   if (ids.length < 1) return;
 
-  const supabase = tryGetSupabase();
-  if (!supabase) return;
+  if (!(await tryNeon())) return;
 
-  await supabase.from(TABLE).insert({
-    shop: shopKey,
-    action: "stage-add",
-    parent_ids: ids,
-    created_at: new Date().toISOString(),
-  });
+  try {
+    await neonQuery(
+      `INSERT INTO shopify_cart_sync_log (shop, action, parent_ids, created_at)
+       VALUES ($1, $2, $3, $4)`,
+      [shopKey, "stage-add", JSON.stringify(ids), new Date().toISOString()]
+    );
+  } catch (err) {
+    console.warn("[sync-log] Failed to log stage-add:", (err as Error)?.message);
+  }
 }
 
 /**
  * Get all parent IDs that were part of recent stage-add operations (within last N minutes).
- * Used by Compare to determine which cart items came from the last queue sync.
  */
 export async function getRecentStageAddParentIds(
   shop: string,
@@ -62,30 +61,31 @@ export async function getRecentStageAddParentIds(
   const shopKey = toShopKey(shop);
   if (!shopKey) return new Set();
 
-  const supabase = tryGetSupabase();
-  if (!supabase) return new Set();
+  if (!(await tryNeon())) return new Set();
 
-  const cutoff = new Date(Date.now() - withinMinutes * 60 * 1000).toISOString();
+  try {
+    const cutoff = new Date(Date.now() - withinMinutes * 60 * 1000).toISOString();
 
-  const { data, error } = await supabase
-    .from(TABLE)
-    .select("parent_ids, created_at")
-    .eq("shop", shopKey)
-    .eq("action", "stage-add")
-    .gte("created_at", cutoff)
-    .order("created_at", { ascending: false })
-    .limit(50);
+    const rows = await neonQuery<{ parent_ids: string | string[] }>(
+      `SELECT parent_ids FROM shopify_cart_sync_log
+       WHERE shop = $1 AND action = $2 AND created_at >= $3
+       ORDER BY created_at DESC
+       LIMIT 50`,
+      [shopKey, "stage-add", cutoff]
+    );
 
-  if (error || !Array.isArray(data)) return new Set();
-
-  const ids = new Set<string>();
-  for (const row of data) {
-    const arr = row?.parent_ids;
-    if (!Array.isArray(arr)) continue;
-    for (const id of arr) {
-      const n = normalizeText(id);
-      if (n) ids.add(normalizeLower(n));
+    const ids = new Set<string>();
+    for (const row of rows) {
+      const arr = typeof row.parent_ids === "string" ? JSON.parse(row.parent_ids) : row.parent_ids;
+      if (!Array.isArray(arr)) continue;
+      for (const id of arr) {
+        const n = normalizeText(id);
+        if (n) ids.add(normalizeLower(n));
+      }
     }
+    return ids;
+  } catch (err) {
+    console.warn("[sync-log] Failed to read recent stage-adds:", (err as Error)?.message);
+    return new Set();
   }
-  return ids;
 }

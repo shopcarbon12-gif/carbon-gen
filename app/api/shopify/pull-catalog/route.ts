@@ -11,6 +11,7 @@ import {
   type SyncStatus,
 } from "@/lib/shopifyCartStaging";
 import { loadSyncToggles } from "@/lib/shopifyCartConfig";
+import { fetchLSCatalog, runMatchToLSMatrix } from "@/lib/cartInventoryMatchToLS";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -144,6 +145,12 @@ type ShopifyProductNode = {
   variants?: { nodes?: ShopifyVariantNode[] };
 };
 
+type LSCatalogRow = {
+  itemMatrixId: string;
+  customSku: string;
+  systemSku: string;
+};
+
 function extractOptionValue(variant: ShopifyVariantNode, optionName: string): string {
   if (!Array.isArray(variant.selectedOptions)) return "";
   const match = variant.selectedOptions.find(
@@ -246,6 +253,10 @@ function transformProduct(product: ShopifyProductNode): StagingParent | null {
       stock: variantStock,
       stockByLocation: [],
       price: parseNumber(v.price),
+      comparePrice: parseNumber(v.compareAtPrice),
+      costPrice: null,
+      weight: null,
+      weightUnit: "kg",
       color: extractOptionValue(v, "Color"),
       size: extractOptionValue(v, "Size"),
       image: normalizeText(v.image?.url) || firstImage || "",
@@ -279,6 +290,110 @@ function transformProduct(product: ShopifyProductNode): StagingParent | null {
     errorCount: 0,
     variants: stagingVariants,
     error: null,
+  };
+}
+
+function toLsParentId(row: LSCatalogRow): string {
+  const matrixId = normalizeText(row.itemMatrixId);
+  if (matrixId && matrixId !== "0") return `matrix:${matrixId.toLowerCase()}`;
+  const sku = normalizeText(row.customSku) || normalizeText(row.systemSku);
+  return sku ? `sku:${sku.toLowerCase()}` : "";
+}
+
+function buildLsSkuIndex(rows: LSCatalogRow[]) {
+  const bySku = new Map<string, LSCatalogRow[]>();
+  for (const row of rows) {
+    const keys = [normalizeText(row.customSku), normalizeText(row.systemSku)]
+      .map((v) => v.toLowerCase())
+      .filter(Boolean);
+    for (const key of keys) {
+      const arr = bySku.get(key) || [];
+      arr.push(row);
+      bySku.set(key, arr);
+    }
+  }
+  return bySku;
+}
+
+function repartitionProductsByLsParent(
+  products: StagingParent[],
+  lsRows: LSCatalogRow[]
+): {
+  parents: StagingParent[];
+  unmatchedVariants: number;
+  conflictedVariants: number;
+  matchedVariants: number;
+  unmatchedProducts: number;
+} {
+  const bySku = buildLsSkuIndex(lsRows);
+  const byParentId = new Map<string, StagingParent>();
+  let unmatchedVariants = 0;
+  let conflictedVariants = 0;
+  let matchedVariants = 0;
+  let unmatchedProducts = 0;
+
+  for (const parent of products) {
+    const grouped = new Map<string, StagingVariant[]>();
+    for (const variant of parent.variants) {
+      const sku = normalizeText(variant.sku).toLowerCase();
+      if (!sku) {
+        unmatchedVariants += 1;
+        continue;
+      }
+      const rows = bySku.get(sku) || [];
+      const candidateParentIds = Array.from(
+        new Set(rows.map((row) => toLsParentId(row)).filter(Boolean))
+      );
+      if (candidateParentIds.length !== 1) {
+        if (candidateParentIds.length > 1) conflictedVariants += 1;
+        else unmatchedVariants += 1;
+        continue;
+      }
+      const parentId = candidateParentIds[0];
+      const bucket = grouped.get(parentId) || [];
+      bucket.push({ ...variant, parentId });
+      grouped.set(parentId, bucket);
+      matchedVariants += 1;
+    }
+
+    if (grouped.size < 1) {
+      unmatchedProducts += 1;
+      continue;
+    }
+
+    for (const [parentId, variants] of grouped.entries()) {
+      const existing = byParentId.get(parentId);
+      if (!existing) {
+        byParentId.set(parentId, {
+          ...parent,
+          id: parentId,
+          sku: variants[0]?.sku || parent.sku,
+          variants: [...variants],
+          variations: variants.length,
+          processedCount: variants.length,
+          pendingCount: 0,
+          errorCount: 0,
+        });
+      } else {
+        const seen = new Set(existing.variants.map((v) => normalizeText(v.sku).toLowerCase()).filter(Boolean));
+        for (const v of variants) {
+          const key = normalizeText(v.sku).toLowerCase();
+          if (key && seen.has(key)) continue;
+          existing.variants.push(v);
+          if (key) seen.add(key);
+        }
+        existing.variations = existing.variants.length;
+        existing.processedCount = existing.variants.length;
+      }
+    }
+  }
+
+  return {
+    parents: Array.from(byParentId.values()),
+    unmatchedVariants,
+    conflictedVariants,
+    matchedVariants,
+    unmatchedProducts,
   };
 }
 
@@ -367,19 +482,46 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const result = await upsertCartCatalogParents(shop, allProducts);
+    // Strict pipeline for Carts Config pull:
+    // Shopify variants must resolve to a single LS parent before writing to Carts.
+    const lsCatalog = await fetchLSCatalog(req.nextUrl.origin);
+    const repartition = repartitionProductsByLsParent(
+      allProducts,
+      lsCatalog.map((row) => ({
+        itemMatrixId: normalizeText((row as { itemMatrixId?: unknown }).itemMatrixId),
+        customSku: normalizeText((row as { customSku?: unknown }).customSku),
+        systemSku: normalizeText((row as { systemSku?: unknown }).systemSku),
+      }))
+    );
+    const result = await upsertCartCatalogParents(shop, repartition.parents);
+
+    let matchResult: { matched?: number; skipped?: number; errors?: string[] } = {};
+    try {
+      const origin = req.nextUrl.origin;
+      const mr = await runMatchToLSMatrix(shop, origin);
+      matchResult = { matched: mr.matched, skipped: mr.skipped, errors: mr.errors };
+    } catch (matchErr) {
+      matchResult = { matched: 0, skipped: 0, errors: [(matchErr as Error)?.message || "LS match failed"] };
+    }
 
     return NextResponse.json({
       ok: true,
       shop,
-      pulled: allProducts.length,
-      totalVariants: allProducts.reduce((sum, p) => sum + p.variants.length, 0),
+      pulled: repartition.parents.length,
+      totalVariants: repartition.parents.reduce((sum, p) => sum + p.variants.length, 0),
       upserted: result.data.upserted,
       replaced: replace,
+      lsMatchedVariants: repartition.matchedVariants,
+      lsUnmatchedVariants: repartition.unmatchedVariants,
+      lsConflictedVariants: repartition.conflictedVariants,
+      lsUnmatchedProducts: repartition.unmatchedProducts,
+      lsMatched: matchResult.matched ?? 0,
+      lsSkipped: matchResult.skipped ?? 0,
+      lsMatchErrors: matchResult.errors ?? [],
       warning: result.warning || "",
       message: replace
-        ? `Replaced Carts Inventory with ${allProducts.length} products from Shopify (active, archived, draft, unlisted).`
-        : `Successfully pulled ${allProducts.length} products from Shopify.`,
+        ? `Replaced Carts Inventory with ${repartition.parents.length} LS-matched parent(s) from Shopify. Unmatched variants: ${repartition.unmatchedVariants}. Conflicts: ${repartition.conflictedVariants}.`
+        : `Pulled ${repartition.parents.length} LS-matched parent(s) from Shopify. Unmatched variants: ${repartition.unmatchedVariants}. Conflicts: ${repartition.conflictedVariants}.`,
     });
   } catch (e: unknown) {
     return NextResponse.json(

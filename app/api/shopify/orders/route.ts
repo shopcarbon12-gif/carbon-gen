@@ -27,6 +27,8 @@ type OrderNode = {
   currentTotalTaxSet?: { shopMoney?: { amount?: string | number } };
   currentTotalPriceSet?: { shopMoney?: { amount?: string | number } };
   customer?: { displayName?: string; firstName?: string; lastName?: string };
+  email?: string;
+  billingAddress?: { name?: string; firstName?: string; lastName?: string };
   shippingLines?: { nodes?: Array<{ title?: string }> };
   lineItems?: { nodes?: Array<{ title?: string; sku?: string; quantity?: number }> };
 };
@@ -118,11 +120,16 @@ function deriveProcessStatus(financialStatus: string, fulfillmentStatus: string)
 }
 
 function buildCustomerName(node: OrderNode) {
+  const billingName = norm(node.billingAddress?.name);
+  if (billingName) return billingName;
+  const first = norm(node.billingAddress?.firstName || node.customer?.firstName);
+  const last = norm(node.billingAddress?.lastName || node.customer?.lastName);
+  if (first || last) return [first, last].filter(Boolean).join(" ");
+  const email = norm(node.email);
+  if (email) return email;
   const display = norm(node.customer?.displayName);
   if (display) return display;
-  const first = norm(node.customer?.firstName);
-  const last = norm(node.customer?.lastName);
-  return [first, last].filter(Boolean).join(" ") || "--";
+  return "--";
 }
 
 function buildDeliveryType(node: OrderNode) {
@@ -271,8 +278,9 @@ async function fetchShopOrders(args: {
               currentSubtotalPriceSet { shopMoney { amount } }
               currentTotalTaxSet { shopMoney { amount } }
               currentTotalPriceSet { shopMoney { amount } }
-              customer {
-                displayName
+              email
+              billingAddress {
+                name
                 firstName
                 lastName
               }

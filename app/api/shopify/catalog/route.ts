@@ -203,14 +203,14 @@ async function fetchCatalogCountWithToken(
   const queries = [
     `
       query ProductCatalogCount($query: String) {
-        productsCount(query: $query) {
+        productsCount(query: $query, limit: null) {
           count
         }
       }
     `,
     `
       query ProductCatalogCount($query: String) {
-        productsCount(query: $query)
+        productsCount(query: $query, limit: null)
       }
     `,
   ];

@@ -18,7 +18,7 @@ export function getShopifyConfig(baseUrl: string) {
     clientId: (process.env.SHOPIFY_APP_CLIENT_ID || "").trim() || "missing-client-id",
     scopes:
       (process.env.SHOPIFY_SCOPES || "").trim() ||
-      "read_products,write_products,write_files,read_locations,write_inventory,read_orders",
+      "read_products,write_products,write_files,read_locations,write_inventory,read_orders,read_customers,read_publications,write_publications",
     redirectUri:
       (process.env.SHOPIFY_REDIRECT_URI || "").trim() || `${baseUrl}/api/shopify/callback`,
     apiVersion: (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01",

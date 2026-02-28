@@ -30,7 +30,7 @@ import { loadSyncToggles } from "@/lib/shopifyCartConfig";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 800;
+export const maxDuration = 300;
 
 const ALLOWED_PAGE_SIZES = [20, 50, 75, 100, 200, 500] as const;
 
@@ -50,6 +50,10 @@ type CartFilters = {
   keyword: string;
   /** "All" | "InLS" (from Lightspeed inventory) | "NotInLS" (manual/Shopify-only) */
   lsSource: string;
+  /** "All" | "InShopify" | "NotInShopify" */
+  shopifySource: string;
+  /** "All" | "AllSkuInShopify" | "MissingSkuInShopify" */
+  shopifySkuCoverage: string;
   /** "All" | "Has" | "None" - filter by Shopify product description */
   hasDescription: string;
   /** "All" | "Has" | "None" - filter by product image */
@@ -76,6 +80,15 @@ type ProductUpdateResponse = {
   productUpdate?: { product?: { id: string }; userErrors?: Array<{ message: string }> };
 };
 type ShopifyGraphqlResult<T> = { ok: boolean; data?: T | null; errors?: unknown };
+type ProductVariantsPageResponse = {
+  productVariants?: {
+    edges?: Array<{ node?: { sku?: string | null } }>;
+    pageInfo?: { hasNextPage?: boolean; endCursor?: string };
+  };
+};
+
+const SHOPIFY_SKU_CACHE_TTL_MS = 60_000;
+const shopifySkuCache = new Map<string, { expiresAt: number; skuSet: Set<string> }>();
 
 function normalizeText(value: unknown) {
   return String(value ?? "").trim();
@@ -125,6 +138,68 @@ function parsePageSize(value: unknown) {
   return 20;
 }
 
+function shouldUseStrictShopifySkuCoverage(filters: CartFilters) {
+  const coverage = normalizeLower(filters.shopifySkuCoverage);
+  return coverage === "allskuinshopify" || coverage === "missingskuinshopify";
+}
+
+async function loadShopifySkuSet(
+  shop: string,
+  options: { forceRefresh?: boolean } = {}
+): Promise<{ skuSet: Set<string> | null; warning: string }> {
+  const cacheKey = normalizeLower(shop);
+  const now = Date.now();
+  const cached = shopifySkuCache.get(cacheKey);
+  const forceRefresh = options.forceRefresh === true;
+  if (!forceRefresh && cached && cached.expiresAt > now) {
+    return { skuSet: cached.skuSet, warning: "" };
+  }
+
+  // Strict SKU coverage must use the installed shop token from DB.
+  // Do not silently fall back to env tokens here; that can mask real gaps.
+  const token = await getTokenForShop(shop, { allowEnvFallback: false });
+  if (!token) {
+    return { skuSet: null, warning: "Strict SKU coverage unavailable: missing installed Shopify token for this shop." };
+  }
+
+  const apiVersion = normalizeText(process.env.SHOPIFY_API_VERSION) || "2025-01";
+  const skuSet = new Set<string>();
+  let after: string | null = null;
+
+  for (let page = 0; page < 100; page++) {
+    const res = (await runShopifyGraphql<ProductVariantsPageResponse>({
+      shop,
+      token,
+      apiVersion,
+      query: `query ProductVariantsPage($after: String) {
+        productVariants(first: 250, after: $after) {
+          edges { node { sku } }
+          pageInfo { hasNextPage endCursor }
+        }
+      }`,
+      variables: { after },
+    })) as ShopifyGraphqlResult<ProductVariantsPageResponse>;
+
+    if (!res.ok) {
+      return { skuSet: null, warning: "Strict SKU coverage unavailable: failed to fetch Shopify variants." };
+    }
+
+    const conn = res.data?.productVariants;
+    for (const edge of conn?.edges || []) {
+      const sku = normalizeLower(edge?.node?.sku);
+      if (sku) skuSet.add(sku);
+    }
+
+    if (!conn?.pageInfo?.hasNextPage) break;
+    const endCursor = normalizeText(conn.pageInfo.endCursor);
+    if (!endCursor) break;
+    after = endCursor;
+  }
+
+  shopifySkuCache.set(cacheKey, { expiresAt: now + SHOPIFY_SKU_CACHE_TTL_MS, skuSet });
+  return { skuSet, warning: "" };
+}
+
 function toSyncStatus(value: unknown): SyncStatus {
   const normalized = normalizeLower(value);
   if (normalized === "processed") return "PROCESSED";
@@ -147,6 +222,9 @@ function parseFilters(searchParams: URLSearchParams): CartFilters {
     categoryName: normalizeText(searchParams.get("CategoryName")),
     keyword: normalizeText(searchParams.get("Keyword")),
     lsSource: normalizeText(searchParams.get("LSSource")) || "All",
+    shopifySource: normalizeText(searchParams.get("ShopifySource")) || "All",
+    shopifySkuCoverage:
+      normalizeText(searchParams.get("ShopifySkuCoverage")) || "All",
     hasDescription: normalizeText(searchParams.get("HasDescription")) || "All",
     hasImage: normalizeText(searchParams.get("HasImage")) || "All",
     matrixStockFrom: parseNumber(searchParams.get("MatrixStockFrom")),
@@ -213,12 +291,57 @@ function rowMatchesMatrixFilters(parent: StagingParent, filters: CartFilters): b
   return true;
 }
 
-function rowMatchesFilters(parent: StagingParent, filters: CartFilters) {
+function rowMatchesFilters(parent: StagingParent, filters: CartFilters, shopifySkuSet: Set<string> | null = null) {
   const lsSourceFilter = normalizeLower(filters.lsSource);
   if (lsSourceFilter && lsSourceFilter !== "all") {
     const inLs = isInLightspeedCatalog(parent.id);
     if (lsSourceFilter === "inls" && !inLs) return false;
     if (lsSourceFilter === "notinls" && inLs) return false;
+  }
+  const shopifySourceFilter = normalizeLower(filters.shopifySource);
+  if (shopifySourceFilter && shopifySourceFilter !== "all") {
+    const inShopify = parent.variants.some((variant) => {
+      const hasCartId = Boolean(normalizeText(variant.cartId));
+      const matched = Boolean((variant as StagingVariant & { shopifyMatched?: boolean }).shopifyMatched);
+      return hasCartId || matched;
+    });
+    if (shopifySourceFilter === "inshopify" && !inShopify) return false;
+    if (shopifySourceFilter === "notinshopify" && inShopify) return false;
+  }
+  const skuCoverageFilter = normalizeLower(filters.shopifySkuCoverage);
+  if (skuCoverageFilter && skuCoverageFilter !== "all") {
+    const variantsWithSku = parent.variants.filter((variant) =>
+      Boolean(normalizeText(variant.sku))
+    );
+    const hasAnyVariantSku = variantsWithSku.length > 0;
+    const allVariantSkuInShopify =
+      hasAnyVariantSku &&
+      variantsWithSku.every((variant) => {
+        const variantSku = normalizeLower(variant.sku);
+        if (variantSku && shopifySkuSet) {
+          return shopifySkuSet.has(variantSku);
+        }
+        const hasCartId = Boolean(normalizeText(variant.cartId));
+        const matched = Boolean(variant.shopifyMatched);
+        return hasCartId || matched;
+      });
+    const hasMissingVariantSku =
+      hasAnyVariantSku &&
+      variantsWithSku.some((variant) => {
+        const variantSku = normalizeLower(variant.sku);
+        if (variantSku && shopifySkuSet) {
+          return !shopifySkuSet.has(variantSku);
+        }
+        const hasCartId = Boolean(normalizeText(variant.cartId));
+        const matched = Boolean(variant.shopifyMatched);
+        return !hasCartId && !matched;
+      });
+    if (skuCoverageFilter === "allskuinshopify" && !allVariantSkuInShopify) {
+      return false;
+    }
+    if (skuCoverageFilter === "missingskuinshopify" && !hasMissingVariantSku) {
+      return false;
+    }
   }
 
   const statusFilter = normalizeLower(filters.status);
@@ -231,7 +354,12 @@ function rowMatchesFilters(parent: StagingParent, filters: CartFilters) {
   const skuNeedle = normalizeLower(filters.sku);
   if (skuNeedle) {
     const parentHit = includesText(parent.sku, skuNeedle);
-    const variantHit = parent.variants.some((variant) => includesText(variant.sku, skuNeedle));
+    const variantHit = parent.variants.some(
+      (variant) =>
+        includesText(variant.sku, skuNeedle) ||
+        includesText(variant.upc, skuNeedle) ||
+        includesText(variant.sellerSku, skuNeedle)
+    );
     if (!parentHit && !variantHit) return false;
   }
 
@@ -330,27 +458,54 @@ function toPagedRows(rows: StagingParent[], page: number, pageSize: number) {
   };
 }
 
+function parseLocationStock(raw: unknown): Array<{ location: string; qty: number | null }> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [];
+  const out: Array<{ location: string; qty: number | null }> = [];
+  for (const [location, qty] of Object.entries(raw as Record<string, unknown>)) {
+    const loc = normalizeText(location);
+    if (!loc) continue;
+    out.push({ location: loc, qty: parseNumber(qty) });
+  }
+  return out;
+}
+
 function parseVariant(raw: unknown, parentId: string, index: number): StagingVariant {
-  const row = (raw || {}) as Partial<StagingVariant> & { availableInShopify?: boolean };
+  const row = (raw || {}) as Partial<StagingVariant> & {
+    availableInShopify?: boolean;
+    customSku?: unknown;
+    systemSku?: unknown;
+    ean?: unknown;
+    itemId?: unknown;
+    locations?: unknown;
+  };
   const matched = Boolean(row.shopifyMatched || row.availableInShopify);
+  const stockByLocation = Array.isArray(row.stockByLocation)
+    ? row.stockByLocation.map((stockRow) => {
+        const item = (stockRow || {}) as { location?: unknown; qty?: unknown };
+        return {
+          location: normalizeText(item.location),
+          qty: parseNumber(item.qty),
+        };
+      })
+    : parseLocationStock(row.locations);
+  const stockFromLocations = stockByLocation.reduce((sum, item) => sum + (item.qty ?? 0), 0);
+  const stockValue = parseNumber(row.stock);
+  const skuValue = normalizeText(row.sku) || normalizeText(row.customSku) || normalizeText(row.systemSku);
+  const upcValue = normalizeText(row.upc) || normalizeText(row.ean);
   return {
-    id: normalizeText(row.id) || `${parentId}-variant-${index + 1}`,
+    id: normalizeText(row.id) || normalizeText(row.itemId) || `${parentId}-variant-${index + 1}`,
     parentId,
-    sku: normalizeText(row.sku),
-    upc: normalizeText(row.upc),
+    sku: skuValue,
+    upc: upcValue,
     sellerSku: normalizeText(row.sellerSku),
     cartId: normalizeText(row.cartId),
-    stock: parseNumber(row.stock),
-    stockByLocation: Array.isArray(row.stockByLocation)
-      ? row.stockByLocation.map((stockRow) => {
-          const item = (stockRow || {}) as { location?: unknown; qty?: unknown };
-          return {
-            location: normalizeText(item.location),
-            qty: parseNumber(item.qty),
-          };
-        })
-      : [],
+    stock: stockValue ?? (stockByLocation.length > 0 ? stockFromLocations : null),
+    stockByLocation,
     price: parseNumber(row.price),
+    comparePrice: parseNumber(row.comparePrice),
+    costPrice: parseNumber(row.costPrice),
+    weight: parseNumber(row.weight),
+    weightUnit: normalizeText(row.weightUnit) || "kg",
     color: normalizeText(row.color),
     size: normalizeText(row.size),
     image: normalizeText(row.image),
@@ -363,19 +518,34 @@ function parseVariant(raw: unknown, parentId: string, index: number): StagingVar
 function parseIncomingParent(raw: unknown, index: number): StagingParent | null {
   const row = (raw || {}) as Partial<StagingParent> & {
     availableAt?: { shopify?: boolean };
+    customSku?: unknown;
+    systemSku?: unknown;
+    itemMatrixId?: unknown;
+    itemMatrixID?: unknown;
+    itemId?: unknown;
   };
+  const lsSku = normalizeText(row.customSku) || normalizeText(row.systemSku);
+  const lsMatrixId = normalizeText(row.itemMatrixId) || normalizeText(row.itemMatrixID);
 
+  const explicitParentId = normalizeText((raw as { parentId?: unknown } | null)?.parentId);
+  const rowId = normalizeText(row.id);
   const id =
-    normalizeText(row.id) ||
-    normalizeText((raw as { parentId?: unknown } | null)?.parentId) ||
+    explicitParentId ||
+    (lsMatrixId ? `matrix:${normalizeLower(lsMatrixId)}` : "") ||
+    (rowId.startsWith("matrix:") || rowId.startsWith("sku:") ? rowId : "") ||
+    rowId ||
+    (lsSku ? `sku:${normalizeLower(lsSku)}` : "") ||
     normalizeText(row.sku) ||
     `row-${index + 1}`;
-  const sku = normalizeText(row.sku);
-  if (!id || !sku) return null;
 
   const variants = Array.isArray(row.variants)
     ? row.variants.map((variant, variantIndex) => parseVariant(variant, id, variantIndex))
-    : [];
+    : [parseVariant(raw, id, 0)].filter((v) => Boolean(normalizeText(v.sku)));
+  const sku =
+    normalizeText(row.sku) ||
+    lsSku ||
+    normalizeText(variants.find((variant) => normalizeText(variant.sku))?.sku);
+  if (!id || !sku) return null;
 
   const hasAnyVariant = variants.length > 0;
   const statusFromAvailability = row.availableAt?.shopify ? "PROCESSED" : "PENDING";
@@ -391,12 +561,12 @@ function parseIncomingParent(raw: unknown, index: number): StagingParent | null 
 
   return {
     id,
-    title: normalizeText(row.title) || sku,
+    title: normalizeText(row.title) || normalizeText(row.description) || sku,
     category: normalizeText(row.category).replace(/[\\\/]/g, " >> "),
     brand: normalizeText(row.brand),
     sku,
-    stock: parseNumber(row.stock),
-    price: parseNumber(row.price),
+    stock: parseNumber(row.stock) ?? variants.reduce((sum, v) => sum + (v.stock ?? 0), 0),
+    price: parseNumber(row.price) ?? variants.find((v) => v.price != null)?.price ?? null,
     variations: variants.length,
     image: normalizeText(row.image),
     description: normalizeText(row.description) || undefined,
@@ -421,7 +591,11 @@ function resolveFallbackShop(availableShops: string[]) {
   return envShop || availableShops[0] || "";
 }
 
-async function getTokenForShop(shop: string): Promise<string | null> {
+async function getTokenForShop(
+  shop: string,
+  options: { allowEnvFallback?: boolean } = {}
+): Promise<string | null> {
+  const allowEnvFallback = options.allowEnvFallback !== false;
   try {
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
@@ -434,6 +608,7 @@ async function getTokenForShop(shop: string): Promise<string | null> {
   } catch {
     // fallback to env
   }
+  if (!allowEnvFallback) return null;
   const envToken = getShopifyAdminToken(shop);
   return envToken || null;
 }
@@ -512,10 +687,26 @@ export async function GET(req: NextRequest) {
     const page = parsePositiveInt(searchParams.get("page"), 1);
     const pageSize = parsePageSize(searchParams.get("pageSize"));
     const filters = parseFilters(searchParams);
+    const forceCoverageRefresh =
+      normalizeLower(searchParams.get("refreshCoverage")) === "1" ||
+      normalizeLower(searchParams.get("refreshCoverage")) === "true";
 
     const listed = await listCartCatalogParents(shop);
+    const strictCoverage = shouldUseStrictShopifySkuCoverage(filters);
+    const coverageData = strictCoverage
+      ? await loadShopifySkuSet(shop, { forceRefresh: forceCoverageRefresh })
+      : { skuSet: null as Set<string> | null, warning: "" };
+    if (strictCoverage && !coverageData.skuSet) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: coverageData.warning || "Strict SKU coverage is unavailable for this shop.",
+        },
+        { status: 503 }
+      );
+    }
     const sorted = [...listed.data].sort((a, b) => compareText(a.sku, b.sku));
-    const filtered = sorted.filter((row) => rowMatchesFilters(row, filters));
+    const filtered = sorted.filter((row) => rowMatchesFilters(row, filters, coverageData.skuSet));
     const paged = toPagedRows(filtered, page, pageSize);
 
     const categories = Array.from(
@@ -533,7 +724,7 @@ export async function GET(req: NextRequest) {
       ok: true,
       shop,
       shops: availableShops,
-      warning: listed.warning || "",
+      warning: [listed.warning, coverageData.warning].filter(Boolean).join(" ").trim(),
       options: {
         categories,
         brands,
@@ -614,10 +805,164 @@ export async function POST(req: NextRequest) {
       }
 
       const current = await listCartCatalogParents(shop);
-      const undoOps = buildUndoForStageAdd(current.data, incoming);
-      const saved = await upsertCartCatalogParents(shop, incoming);
 
-      const parentIds = incoming.map((row: StagingParent) => row.id).filter(Boolean);
+      // --- Phase 1: SKU/UPC dedup ---
+      // Build lookup maps from existing cart items so incoming LS rows
+      // match existing Shopify-pulled items even if parent_id differs.
+      const existingBySku = new Map<string, StagingParent>();
+      const existingByUpc = new Map<string, StagingParent>();
+      const existingByParentId = new Map<string, StagingParent>();
+      for (const p of current.data) {
+        const pId = normalizeLower(p.id);
+        if (pId) existingByParentId.set(pId, p);
+        const pSku = normalizeLower(p.sku);
+        if (pSku) existingBySku.set(pSku, p);
+        for (const v of p.variants) {
+          const vSku = normalizeLower(v.sku);
+          const vUpc = normalizeLower(v.upc);
+          if (vSku) existingBySku.set(vSku, p);
+          if (vUpc) existingByUpc.set(vUpc, p);
+        }
+      }
+
+      const addMissingVariants = body?.addMissingVariants === true;
+      const createIfMissing = body?.createIfMissing === true;
+      let mergedCount = 0;
+      let addedVariants = 0;
+      let skippedUnmatched = 0;
+      let createdParents = 0;
+      const reconciledByParentId = new Map<string, StagingParent>();
+      const changedParentIds = new Set<string>();
+      const matchedByIncomingParentId = new Map<string, StagingParent>();
+      for (const inc of incoming) {
+        const incSku = normalizeLower(inc.sku);
+        const incomingParentId = normalizeLower(inc.id);
+
+        // Find existing cart item by SKU, then fallback to variant UPC
+        let match: StagingParent | undefined;
+        if (incomingParentId) match = matchedByIncomingParentId.get(incomingParentId);
+        if (!match && incSku) match = existingBySku.get(incSku);
+        if (!match) {
+          for (const v of inc.variants) {
+            const vSku = normalizeLower(v.sku);
+            if (vSku && existingBySku.has(vSku)) { match = existingBySku.get(vSku); break; }
+          }
+        }
+        if (!match) {
+          if (incomingParentId) {
+            match = existingByParentId.get(incomingParentId);
+          }
+        }
+
+        if (!match) {
+          if (createIfMissing) {
+            const newParentId = normalizeText(inc.id) || `sku:${normalizeLower(inc.sku || `queued-${Date.now()}`)}`;
+            const newParentKey = normalizeLower(newParentId);
+            const target = reconciledByParentId.get(newParentKey) || {
+              ...inc,
+              id: newParentId,
+              status: "PENDING" as const,
+              processedCount: 0,
+              pendingCount: (inc.variants || []).length,
+              errorCount: 0,
+              variants: (inc.variants || []).map((v) => ({
+                ...v,
+                parentId: newParentId,
+                cartId: normalizeText(v.cartId),
+                shopifyMatched: Boolean(v.shopifyMatched),
+              })),
+            };
+            if (!reconciledByParentId.has(newParentKey)) {
+              reconciledByParentId.set(newParentKey, target);
+              createdParents += 1;
+            }
+            if (incomingParentId) {
+              matchedByIncomingParentId.set(incomingParentId, target);
+            }
+            changedParentIds.add(newParentKey);
+            mergedCount++;
+            continue;
+          }
+          skippedUnmatched++;
+          continue;
+        }
+
+        let changedThisIncoming = false;
+        const parentId = normalizeLower(match.id);
+        const target = reconciledByParentId.get(parentId) || {
+          ...match,
+          variants: [...match.variants],
+          description: inc.description || match.description,
+        };
+        if (!reconciledByParentId.has(parentId)) {
+          reconciledByParentId.set(parentId, target);
+        }
+        if (incomingParentId) {
+          matchedByIncomingParentId.set(incomingParentId, target);
+        }
+
+        for (const incV of inc.variants) {
+          const incVSku = normalizeLower(incV.sku);
+          const incVUpc = normalizeLower(incV.upc);
+          // SKU is the variant identity. UPC is parent context and may repeat
+          // across sibling variants, so only use UPC fallback when it's unique.
+          let existingIdx = target.variants.findIndex((ev) =>
+            incVSku && normalizeLower(ev.sku) === incVSku
+          );
+          if (existingIdx < 0 && !addMissingVariants && !incVSku && incVUpc) {
+            const upcMatches = target.variants
+              .map((ev, idx) => ({ idx, upc: normalizeLower(ev.upc) }))
+              .filter((entry) => entry.upc === incVUpc);
+            if (upcMatches.length === 1) {
+              existingIdx = upcMatches[0].idx;
+            }
+          }
+
+          if (existingIdx >= 0) {
+            const existingV = target.variants[existingIdx];
+            target.variants[existingIdx] = {
+              ...existingV,
+              ...incV,
+              parentId: target.id,
+              cartId: existingV?.cartId || incV.cartId,
+              shopifyMatched: existingV?.shopifyMatched || incV.shopifyMatched,
+            };
+            changedThisIncoming = true;
+            continue;
+          }
+
+          if (addMissingVariants) {
+            target.variants.push({
+              ...incV,
+              parentId: target.id,
+              cartId: "",
+              shopifyMatched: false,
+              status: "PENDING",
+            });
+            changedThisIncoming = true;
+            addedVariants++;
+          }
+        }
+
+        if (inc.description && !target.description) {
+          target.description = inc.description;
+          changedThisIncoming = true;
+        }
+
+        if (changedThisIncoming) {
+          changedParentIds.add(parentId);
+          mergedCount++;
+        }
+      }
+
+      const reconciled = Array.from(reconciledByParentId.entries())
+        .filter(([parentId]) => changedParentIds.has(parentId))
+        .map(([, parent]) => parent);
+
+      const undoOps = buildUndoForStageAdd(current.data, reconciled);
+      const saved = await upsertCartCatalogParents(shop, reconciled);
+
+      const parentIds = reconciled.map((row: StagingParent) => row.id).filter(Boolean);
       await logStageAdd(shop, parentIds);
 
       const session =
@@ -626,7 +971,7 @@ export async function POST(req: NextRequest) {
               shop,
               target: "cart_inventory",
               action: "stage-add",
-              note: `Queued ${incoming.length} parent item(s) to Cart Inventory.`,
+              note: `Queued ${reconciled.length} parent item(s) to Cart Inventory.`,
               operations: undoOps,
             })
           : null;
@@ -636,6 +981,10 @@ export async function POST(req: NextRequest) {
         action,
         shop,
         upserted: saved.data.upserted,
+        merged: mergedCount,
+        createdParents,
+        addedVariants,
+        skippedUnmatched,
         warning: [saved.warning, current.warning].filter(Boolean).join(" ").trim(),
         undoSession: session
           ? {
@@ -751,6 +1100,9 @@ export async function POST(req: NextRequest) {
         categoryName: normalizeText(f.CategoryName ?? f.categoryName),
         keyword: normalizeText(f.Keyword ?? f.keyword),
         lsSource: normalizeText(f.LSSource ?? f.lsSource) || "All",
+        shopifySource: normalizeText(f.ShopifySource ?? f.shopifySource) || "All",
+        shopifySkuCoverage:
+          normalizeText(f.ShopifySkuCoverage ?? f.shopifySkuCoverage) || "All",
         hasDescription: normalizeText(f.HasDescription ?? f.hasDescription) || "All",
         hasImage: normalizeText(f.HasImage ?? f.hasImage) || "All",
         matrixStockFrom: parseNumber(f.MatrixStockFrom ?? f.matrixStockFrom),
@@ -761,7 +1113,13 @@ export async function POST(req: NextRequest) {
         matrixColor: normalizeText(f.MatrixColor ?? f.matrixColor),
         matrixSize: normalizeText(f.MatrixSize ?? f.matrixSize),
       };
-      const freshFiltered = freshSorted.filter((row) => rowMatchesFilters(row, filters));
+      const strictCoverage = shouldUseStrictShopifySkuCoverage(filters);
+      const coverageData = strictCoverage
+        ? await loadShopifySkuSet(shop)
+        : { skuSet: null as Set<string> | null, warning: "" };
+      const freshFiltered = freshSorted.filter((row) =>
+        rowMatchesFilters(row, filters, coverageData.skuSet)
+      );
       const reqPage = parsePositiveInt(body?.page, 1);
       const reqPageSize = parsePageSize(body?.pageSize);
       const freshPaged = toPagedRows(freshFiltered, reqPage, reqPageSize);
@@ -776,7 +1134,7 @@ export async function POST(req: NextRequest) {
         shop,
         removed: removed.data.removed,
         archivedInShopify,
-        warning: [removed.warning, current.warning].filter(Boolean).join(" ").trim(),
+        warning: [removed.warning, current.warning, coverageData.warning].filter(Boolean).join(" ").trim(),
         undoSession: session
           ? {
               id: session.id,
@@ -1103,6 +1461,78 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    if (action === "image-sync-test") {
+      const { runImageSync, loadImageSyncSettings } = await import("@/lib/lightspeedImageSyncOrchestrator");
+      const targetIds = parseIds(body?.parentIds);
+      const dryRun = body?.dryRun === true;
+      const forceRun = body?.forceRun === true;
+
+      if (body?.directTest) {
+        const { syncImagesToLsMatrix, syncImagesToLsItem, listLsImages } = await import("@/lib/lightspeedImageSync");
+        const imageUrls = Array.isArray(body.imageUrls) ? body.imageUrls as string[] : [];
+        const matrixId = typeof body.matrixId === "string" ? body.matrixId : null;
+        const itemId = typeof body.itemId === "string" ? body.itemId : null;
+        const deleteFirst = body.deleteFirst !== false;
+        const title = typeof body.title === "string" ? body.title : "Test Product";
+
+        if (imageUrls.length === 0 || (!matrixId && !itemId)) {
+          return NextResponse.json({ error: "directTest requires imageUrls[] and matrixId or itemId" }, { status: 400 });
+        }
+
+        const before = matrixId
+          ? await listLsImages({ itemMatrixID: matrixId })
+          : await listLsImages({ itemID: itemId! });
+
+        const syncResult = matrixId
+          ? await syncImagesToLsMatrix({ itemMatrixID: matrixId, shopifyImageUrls: imageUrls, productTitle: title, deleteFirst })
+          : await syncImagesToLsItem({ itemID: itemId!, shopifyImageUrls: imageUrls, productTitle: title, deleteFirst });
+
+        const after = matrixId
+          ? await listLsImages({ itemMatrixID: matrixId })
+          : await listLsImages({ itemID: itemId! });
+
+        return NextResponse.json({
+          ok: true,
+          action: "direct-test",
+          before: { count: before.length, images: before.map((i) => ({ id: i.imageID, filename: i.filename, size: i.size })) },
+          syncResult,
+          after: { count: after.length, images: after.map((i) => ({ id: i.imageID, filename: i.filename, size: i.size })) },
+        });
+      }
+
+      if (targetIds.length === 0) {
+        const allParents = (await listCartCatalogParents(shop)).data;
+        const lsMatched = allParents.filter(
+          (p) => p.id.toLowerCase().startsWith("matrix:") || p.id.toLowerCase().startsWith("sku:")
+        );
+        return NextResponse.json({
+          ok: true,
+          action: "list-candidates",
+          total: lsMatched.length,
+          candidates: lsMatched.slice(0, 20).map((p) => ({
+            id: p.id,
+            title: p.title,
+            sku: p.sku,
+            image: p.image,
+            variants: p.variants.length,
+            hasImages: Boolean(p.image),
+          })),
+        });
+      }
+
+      if (forceRun) {
+        const result = await runImageSync(shop, {
+          parentIds: targetIds,
+          dryRun,
+          settingsOverride: { pushShopifyImagesToLS: true, deleteExistingLSImages: true },
+        });
+        return NextResponse.json({ ok: true, action: "image-sync-test", result });
+      }
+
+      const result = await runImageSync(shop, { parentIds: targetIds, dryRun });
+      return NextResponse.json({ ok: true, action: "image-sync-test", result });
+    }
+
     // Push to Shopify: Manual or via cron (/api/cron/cart-sync). Cron auth via CRON_SECRET.
     if (action === "push-selected" || action === "push-all") {
       const syncToggles = await loadSyncToggles(shop || "__default__");
@@ -1141,23 +1571,35 @@ export async function POST(req: NextRequest) {
 
 
       if (body?.background === true) {
+        const startedAt = new Date().toISOString();
+        const origin = req.nextUrl.origin;
+        const bgPublicationIds = Array.isArray(body?.publicationIds)
+          ? (body.publicationIds as string[]).filter((id) => typeof id === "string" && id.trim())
+          : [];
+        const bgCatalogIds = Array.isArray(body?.catalogIds)
+          ? (body.catalogIds as string[]).filter((id) => typeof id === "string" && id.trim())
+          : [];
+        const pushPayload: Record<string, unknown> = {
+          action,
+          shop,
+          parentIds,
+          background: false,
+          publicationIds: bgPublicationIds,
+          catalogIds: bgCatalogIds,
+        };
+        if (notificationEmail) pushPayload.notificationEmail = notificationEmail;
+        const cookie = req.headers.get("cookie");
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+        };
+        const cronSecret = (process.env.CRON_SECRET || "").trim();
+        if (cronSecret) headers["x-cron-secret"] = cronSecret;
+        if (cookie) headers.Cookie = cookie;
+
         try {
           const { getCloudflareContext } = await import("@opennextjs/cloudflare");
           const { ctx } = getCloudflareContext();
           if (ctx?.waitUntil) {
-            const origin = req.nextUrl.origin;
-            const pushPayload: Record<string, unknown> = {
-              action,
-              shop,
-              parentIds,
-              background: false,
-            };
-            if (notificationEmail) pushPayload.notificationEmail = notificationEmail;
-            const cookie = req.headers.get("cookie");
-            const headers: Record<string, string> = {
-              "Content-Type": "application/json",
-            };
-            if (cookie) headers.Cookie = cookie;
             console.log("[cart-inventory] Background push started:", { shop, parentCount: parentIds.length });
             ctx.waitUntil(
               fetch(`${origin}/api/shopify/cart-inventory`, {
@@ -1172,23 +1614,90 @@ export async function POST(req: NextRequest) {
                 action,
                 shop,
                 message: "Sync started in background. You can close this page.",
+                startedAt,
               },
               { status: 202 }
             );
           }
         } catch {
-          /* fallback to sync below */
+          /* fallback below */
         }
+        // Fallback for runtimes without waitUntil (e.g. Vercel):
+        // fire-and-forget self request and return immediately.
+        void fetch(`${origin}/api/shopify/cart-inventory`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(pushPayload),
+        }).catch(() => {});
+        return NextResponse.json(
+          {
+            ok: true,
+            action,
+            shop,
+            message: "Sync started in background. You can keep navigating.",
+            startedAt,
+          },
+          { status: 202 }
+        );
       }
+
+      const publicationIds = Array.isArray(body?.publicationIds)
+        ? (body.publicationIds as string[]).filter((id) => typeof id === "string" && id.trim())
+        : [];
+      const catalogIds = Array.isArray(body?.catalogIds)
+        ? (body.catalogIds as string[]).filter((id) => typeof id === "string" && id.trim())
+        : [];
 
       const result = await runCartPushAll(shop, {
         notificationEmail,
         parentIds,
+        publicationIds,
+        catalogIds,
       });
 
       if (!result.ok) {
         const status = result.error?.toLowerCase().includes("token") ? 401 : 400;
         return NextResponse.json({ error: result.error ?? "Push failed" }, { status });
+      }
+
+      // Write activity row so UI can poll progress/completion for manual background pushes.
+      try {
+        const { neonQuery, ensureNeonReady } = await import("@/lib/neonDb");
+        await ensureNeonReady();
+        const debug = (result.debug || {}) as {
+          variantsAddedToExisting?: number;
+          addVariantErrors?: string[];
+          inventoryErrors?: string[];
+        };
+        const errCount =
+          Number(debug.addVariantErrors?.length || 0) +
+          Number(debug.inventoryErrors?.length || 0);
+        const errText = [
+          ...(Array.isArray(debug.addVariantErrors) ? debug.addVariantErrors : []),
+          ...(Array.isArray(debug.inventoryErrors) ? debug.inventoryErrors : []),
+        ]
+          .join("; ")
+          .slice(0, 2000);
+
+        await neonQuery(
+          `INSERT INTO shopify_cart_sync_activity
+             (shop, synced_at, items_checked, items_updated, variants_added, variants_deleted, products_archived, errors, error_details, duration_ms)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          [
+            shop,
+            new Date().toISOString(),
+            Number(result.totalVariants || 0),
+            Number(result.pushed || 0),
+            Number(debug.variantsAddedToExisting || 0),
+            0,
+            Number(result.archivedNotInCart || 0),
+            errCount,
+            errText || null,
+            0,
+          ]
+        );
+      } catch {
+        // best-effort log only
       }
 
       return NextResponse.json({

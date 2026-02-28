@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
-const BASE_FILTER = "status:active -status:unlisted published_status:published";
+const BASE_FILTER = "status:active";
 
 type CountResult = number | { count?: number } | null;
 
@@ -15,7 +15,7 @@ async function fetchCount(
   token: string,
   queryFilter: string
 ): Promise<number | null> {
-  const query = `query ProductCount($query: String) { productsCount(query: $query) { count } }`;
+  const query = `query ProductCount($query: String) { productsCount(query: $query, limit: null) { count } }`;
   const res = await fetch(`https://${shop}/admin/api/${API_VERSION}/graphql.json`, {
     method: "POST",
     headers: {
@@ -74,7 +74,7 @@ export async function GET(req: NextRequest) {
         ok: true,
         productCount,
         shop,
-        filter: "status:active published",
+        filter: "status:active",
         breakdown: {
           published: published ?? 0,
           draft: draft ?? 0,
@@ -89,7 +89,7 @@ export async function GET(req: NextRequest) {
       ok: true,
       productCount,
       shop,
-      filter: "status:active published",
+      filter: "status:active",
     });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);

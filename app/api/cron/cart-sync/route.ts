@@ -4,10 +4,11 @@ import { isRequestAuthed } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { normalizeShopDomain } from "@/lib/shopify";
 import { runCartPushAll } from "@/lib/cartInventoryPush";
+import { runDeltaSync } from "@/lib/cartInventoryDeltaSync";
 import { loadSyncToggles } from "@/lib/shopifyCartConfig";
 
 export const runtime = "nodejs";
-export const maxDuration = 800;
+export const maxDuration = 300;
 
 function isAuthorized(req: NextRequest) {
   if (isRequestAuthed(req)) return true;
@@ -77,40 +78,66 @@ export async function GET(req: NextRequest) {
         timestamp: new Date().toISOString(),
       });
     }
-    if (!syncToggles.shopifyAutoSyncEnabled) {
+    const url = new URL(req.url);
+    const force = url.searchParams.get("force") === "true";
+
+    if (!syncToggles.shopifyAutoSyncEnabled && !force) {
       return NextResponse.json({
         ok: true,
         shop,
         skipped: true,
-        message: "15-min auto sync is paused. Manual push/remove still work.",
+        message: "Auto sync is paused. Manual push/remove still work.",
         timestamp: new Date().toISOString(),
       });
     }
 
-    const notificationEmail =
-      (process.env.PUSH_NOTIFICATION_EMAIL || "").trim() || null;
+    // Use delta sync (only changed items) instead of full push
+    const mode = url.searchParams.get("mode") || "delta";
 
-    const result = await runCartPushAll(shop, {
-      notificationEmail,
-    });
+    if (mode === "full") {
+      // Auto sync must not send push-completion emails.
+      // Email notifications are manual-push only.
+      const result = await runCartPushAll(shop, { notificationEmail: null });
+      if (!result.ok) {
+        console.error("[cart-sync] Full push failed:", result.error);
+        return NextResponse.json(
+          { ok: false, error: result.error || "Cart sync failed", detail: result.debug },
+          { status: 400 }
+        );
+      }
+      return NextResponse.json({
+        ok: true,
+        shop,
+        mode: "full",
+        pushed: result.pushed ?? 0,
+        totalVariants: result.totalVariants ?? 0,
+        markedProcessed: result.markedProcessed ?? 0,
+        removedFromShopify: result.removedFromShopify ?? 0,
+        productsCreated: result.productsCreated ?? 0,
+        timestamp: new Date().toISOString(),
+      });
+    }
 
-    if (!result.ok) {
-      const errMsg = result.error || "Cart sync failed";
-      console.error("[cart-sync] Cart inventory failed:", errMsg);
-      return NextResponse.json(
-        { ok: false, error: errMsg, detail: result.debug },
-        { status: 400 }
-      );
+    const forceFullCheck = url.searchParams.get("fullCheck") === "true";
+    const targetParentId = url.searchParams.get("targetParent") || undefined;
+    const deltaResult = await runDeltaSync(shop, { forceFullCheck: forceFullCheck || !!targetParentId, targetParentId });
+
+    if (!deltaResult.ok) {
+      console.error("[cart-sync] Delta sync errors:", deltaResult.errorDetails);
     }
 
     return NextResponse.json({
-      ok: true,
+      ok: deltaResult.ok,
       shop,
-      pushed: result.pushed ?? 0,
-      totalVariants: result.totalVariants ?? 0,
-      markedProcessed: result.markedProcessed ?? 0,
-      removedFromShopify: result.removedFromShopify ?? 0,
-      productsCreated: result.productsCreated ?? 0,
+      mode: "delta",
+      itemsChecked: deltaResult.itemsChecked,
+      itemsUpdated: deltaResult.itemsUpdated,
+      variantsAdded: deltaResult.variantsAdded,
+      variantsDeleted: deltaResult.variantsDeleted,
+      productsArchived: deltaResult.productsArchived,
+      pushed: deltaResult.pushed ?? 0,
+      errors: deltaResult.errors,
+      durationMs: deltaResult.durationMs,
       timestamp: new Date().toISOString(),
     });
   } catch (e: unknown) {

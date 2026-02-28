@@ -507,7 +507,7 @@ export default function ShopifyMappingWorkset() {
         .workset-page {
           max-width: 1200px;
           margin: 0 auto;
-          padding: 20px 12px 24px;
+          padding: 100px 12px 24px;
           display: grid;
           gap: 10px;
           color: #f8fafc;
