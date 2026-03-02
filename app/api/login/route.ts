@@ -5,18 +5,24 @@ import { authenticateUser, normalizeUsername } from "@/lib/userAuth";
 const DEFAULT_SESSION_USER_ID = "00000000-0000-0000-0000-000000000001";
 
 function setSessionCookies(
+  req: Request,
   res: NextResponse,
   user: { id: string; username: string; role: string }
 ) {
   const username = normalizeUsername(user.username);
   const role = String(user.role || "user").trim().toLowerCase();
 
+  const proto = req.headers.get("x-forwarded-proto") || "";
+  const isSecure =
+    process.env.NODE_ENV === "production" &&
+    (req.url.startsWith("https://") || proto === "https");
+
   res.cookies.set({
     name: "carbon_gen_auth_v1",
     value: "true",
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: isSecure,
     path: "/",
     maxAge: 60 * 60 * 24 * 7,
   });
@@ -26,7 +32,7 @@ function setSessionCookies(
     value: username || "admin",
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: isSecure,
     path: "/",
     maxAge: 60 * 60 * 24 * 7,
   });
@@ -36,7 +42,7 @@ function setSessionCookies(
     value: role || "user",
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: isSecure,
     path: "/",
     maxAge: 60 * 60 * 24 * 7,
   });
@@ -46,7 +52,7 @@ function setSessionCookies(
     value: String(user.id || DEFAULT_SESSION_USER_ID),
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: isSecure,
     path: "/",
     maxAge: 60 * 60 * 24 * 7,
   });
@@ -73,7 +79,7 @@ export async function POST(req: Request) {
       const appUser = await authenticateUser(username, password);
       if (appUser) {
         const res = NextResponse.json({ success: true });
-        setSessionCookies(res, {
+        setSessionCookies(req, res, {
           id: appUser.id,
           username: appUser.username,
           role: appUser.role,
@@ -124,7 +130,7 @@ export async function POST(req: Request) {
     }
 
     const res = NextResponse.json({ success: true });
-    setSessionCookies(res, {
+    setSessionCookies(req, res, {
       id: DEFAULT_SESSION_USER_ID,
       username: adminUsername,
       role: "admin",
