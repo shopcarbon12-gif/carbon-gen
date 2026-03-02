@@ -12,10 +12,10 @@ function setSessionCookies(
   const username = normalizeUsername(user.username);
   const role = String(user.role || "user").trim().toLowerCase();
 
-  const proto = req.headers.get("x-forwarded-proto") || "";
+  const proto = req.headers.get("x-forwarded-proto") || req.headers.get("x-forwarded-protocol") || "";
   const isSecure =
-    process.env.NODE_ENV === "production" &&
-    (req.url.startsWith("https://") || proto === "https");
+    req.url.startsWith("https://") ||
+    proto.toLowerCase().includes("https");
 
   res.cookies.set({
     name: "carbon_gen_auth_v1",
