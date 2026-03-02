@@ -2,11 +2,11 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: [
-      "carbon-gen.shopcarbon.com",
-      "carbon-gen.shopcarbon.co",
-      "carbon-gen.shopcarbon12.workers.dev",
-      "carbon-gen-iota.vercel.app",
-    ],
+    "carbon-gen.shopcarbon.com",
+    "carbon-gen.shopcarbon.co",
+    "carbon-gen.shopcarbon12.workers.dev",
+    "carbon-gen-iota.vercel.app",
+  ],
   async headers() {
     const isProd = process.env.NODE_ENV === "production";
     const csp = [
@@ -22,7 +22,6 @@ const nextConfig: NextConfig = {
       "base-uri 'self'",
       "frame-ancestors 'none'",
       "form-action 'self'",
-      "upgrade-insecure-requests",
     ].join("; ");
 
     return [
