@@ -87,12 +87,8 @@ export async function POST(req: Request) {
         return res;
       }
     } catch (e: any) {
-      const message = String(e?.message || "").toLowerCase();
-      const missingUsersTable =
-        message.includes("app_users") && message.includes("does not exist");
-      if (!missingUsersTable) {
-        throw e;
-      }
+      console.warn("DB Auth unavailable/failed, falling back:", e?.message);
+      // Suppress error so we can proceed to the fallback mode
     }
 
     // Controlled fallback mode: admin username + master password.
