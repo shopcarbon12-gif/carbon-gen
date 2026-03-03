@@ -175,7 +175,7 @@ function getProbeOrigins(req: NextRequest) {
     .trim()
     .replace(/\/+$/, "");
   const defaultInternal =
-    process.env.NODE_ENV === "production" ? "http://127.0.0.1:" + (process.env.PORT || "3000") : "";
+    process.env.NODE_ENV === "production" ? "http://127.0.0.1:3000" : "";
   const origins = [configuredInternal || defaultInternal, requestOrigin].filter(Boolean);
   return Array.from(new Set(origins));
 }
