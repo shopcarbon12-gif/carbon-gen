@@ -169,50 +169,76 @@ function inferLabel(status: IntegrationStatus, json: unknown) {
   return "Online";
 }
 
+function getProbeOrigins(req: NextRequest) {
+  const requestOrigin = new URL(req.url).origin.replace(/\/+$/, "");
+  const configuredInternal = String(process.env.INTERNAL_API_ORIGIN || "")
+    .trim()
+    .replace(/\/+$/, "");
+  const defaultInternal =
+    process.env.NODE_ENV === "production" ? "http://127.0.0.1:" + (process.env.PORT || "3000") : "";
+  const origins = [configuredInternal || defaultInternal, requestOrigin].filter(Boolean);
+  return Array.from(new Set(origins));
+}
+
 async function probeEndpoint(req: NextRequest, endpoint: string): Promise<IntegrationRecord> {
-  const origin = "http://127.0.0.1:" + (process.env.PORT || "3000");
+  const origins = getProbeOrigins(req);
   const cookie = req.headers.get("cookie") || "";
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), ENDPOINT_PROBE_TIMEOUT_MS);
 
-  try {
-    const response = await fetch(`${origin}${endpoint}`, {
-      method: "GET",
-      headers: cookie ? { cookie } : undefined,
-      cache: "no-store",
-      signal: controller.signal,
-    });
+  let lastStatus: IntegrationStatus = "offline";
+  let lastLabel = "Offline";
+  let failedOrigins = 0;
 
-    let json: unknown = null;
+  for (const origin of origins) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), ENDPOINT_PROBE_TIMEOUT_MS);
+
     try {
-      json = await response.json();
-    } catch {
-      json = null;
+      const response = await fetch(`${origin}${endpoint}`, {
+        method: "GET",
+        headers: cookie ? { cookie } : undefined,
+        cache: "no-store",
+        signal: controller.signal,
+      });
+
+      let json: unknown = null;
+      try {
+        json = await response.json();
+      } catch {
+        json = null;
+      }
+
+      const status = inferStatus(response.ok, json);
+      if (status === "online") {
+        clearTimeout(timeout);
+        return {
+          id: endpointToId(endpoint),
+          name: endpointToName(endpoint),
+          endpoint,
+          settingsHref: endpointToSettingsHref(endpoint),
+          status,
+          label: inferLabel(status, json),
+        };
+      }
+
+      // If we reached here, it didn't error, but it returned offline payload
+      lastStatus = status;
+      lastLabel = inferLabel(status, json);
+    } catch (e: any) {
+      console.error(`[Integrations Probe] Failed to fetch ${endpoint} via ${origin}:`, e?.message || e);
+      failedOrigins++;
+    } finally {
+      clearTimeout(timeout);
     }
-
-    const status = inferStatus(response.ok, json);
-
-    return {
-      id: endpointToId(endpoint),
-      name: endpointToName(endpoint),
-      endpoint,
-      settingsHref: endpointToSettingsHref(endpoint),
-      status,
-      label: inferLabel(status, json),
-    };
-  } catch (e: any) {
-    console.error(`[Integrations Probe] Failed to fetch ${endpoint}:`, e);
-    return {
-      id: endpointToId(endpoint),
-      name: endpointToName(endpoint),
-      endpoint,
-      settingsHref: endpointToSettingsHref(endpoint),
-      status: "offline",
-      label: "Offline",
-    };
-  } finally {
-    clearTimeout(timeout);
   }
+
+  return {
+    id: endpointToId(endpoint),
+    name: endpointToName(endpoint),
+    endpoint,
+    settingsHref: endpointToSettingsHref(endpoint),
+    status: lastStatus,
+    label: lastLabel,
+  };
 }
 
 export const dynamic = "force-dynamic";
