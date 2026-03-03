@@ -16,11 +16,12 @@ const LS_V3_PAGE_LIMIT = 100;
 // Cap to stay under Cloudflare Workers free-plan subrequest limit (50/request).
 // Set LS_MAX_CATALOG_PAGES in Cloudflare env (e.g. 100) + limits.subrequests in wrangler when on Paid for full catalog.
 const IS_VERCEL = Boolean(process.env.VERCEL);
+// Coolify standalone runs as normal Node server, not subject to Workers limits.
 const LS_V3_MAX_PAGES = Math.min(
-  Number(process.env.LS_MAX_CATALOG_PAGES) || (IS_VERCEL ? 80 : 8),
+  Number(process.env.LS_MAX_CATALOG_PAGES) || 80,
   250
 );
-const LS_MIN_REQUEST_INTERVAL_MS = IS_VERCEL ? 180 : 400;
+const LS_MIN_REQUEST_INTERVAL_MS = IS_VERCEL ? 180 : 250;
 const LS_RATE_LIMIT_RETRY_ATTEMPTS = 3;
 const ALLOWED_PAGE_SIZES = [100, 500] as const;
 const ALLOWED_SORT_FIELDS = [
@@ -553,15 +554,15 @@ function extractMatrixColorAndSize(item: any) {
   const attributes = item?.ItemAttributes || {};
   const color = normalizeText(
     attributes?.attribute1 ??
-      attributes?.color ??
-      item?.attribute1 ??
-      item?.color
+    attributes?.color ??
+    item?.attribute1 ??
+    item?.color
   );
   const size = normalizeText(
     attributes?.attribute2 ??
-      attributes?.size ??
-      item?.attribute2 ??
-      item?.size
+    attributes?.size ??
+    item?.attribute2 ??
+    item?.size
   );
   return { color, size };
 }
@@ -989,7 +990,7 @@ async function fetchRawCatalogItemsV3(accessToken: string): Promise<{ rawItems: 
   return rawItems.length > 0 ? { rawItems, nextCursor: lastNext } : null;
 }
 
-const CATALOG_CHUNK_PAGES = IS_VERCEL ? 50 : 8; // Vercel: no limit; Workers Free: 10ms CPU
+const CATALOG_CHUNK_PAGES = 50; // Standalone Docker has no subrequest limits
 
 /**
  * Fetch a chunk of catalog starting from a cursor URL. Used for chunked loading on Workers Free.
@@ -1405,14 +1406,14 @@ export async function GET(req: NextRequest) {
     const snapshot = cacheWarm
       ? cachedRows
       : await loadCatalogSnapshot(
-          accessToken,
-          {
-            shopNameById: shopsData.shopNameById,
-            categoryNameById: categoriesData.categoryNameById,
-            manufacturerNameById: manufacturerData.manufacturerNameById,
-          },
-          rawItemsForSnapshot
-        );
+        accessToken,
+        {
+          shopNameById: shopsData.shopNameById,
+          categoryNameById: categoriesData.categoryNameById,
+          manufacturerNameById: manufacturerData.manufacturerNameById,
+        },
+        rawItemsForSnapshot
+      );
 
     const defaultLocation = pickDefaultLocation(shopsData.shopNames);
     const availableShopNames = shopsData.shopNames;
@@ -1452,10 +1453,10 @@ export async function GET(req: NextRequest) {
     const effectiveShops = allShopsRequested
       ? availableShopNames
       : availableShopNames.filter((shopName) =>
-          requestedShopNames.some(
-            (selected) => normalizeLower(selected) === normalizeLower(shopName)
-          )
-        );
+        requestedShopNames.some(
+          (selected) => normalizeLower(selected) === normalizeLower(shopName)
+        )
+      );
     const fallbackShop =
       availableShopNames.find(
         (shopName) => normalizeLower(shopName) === normalizeLower(defaultLocation)
