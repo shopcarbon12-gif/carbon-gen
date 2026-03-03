@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   allowedDevOrigins: [
     "carbon-gen.shopcarbon.com",
     "carbon-gen.shopcarbon.co",
