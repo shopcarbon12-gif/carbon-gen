@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { fetchInternalApi } from "@/lib/internalApiOrigin";
 
 export const runtime = "nodejs";
 export const maxDuration = 180;
@@ -24,7 +25,6 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const base = req.nextUrl.origin;
     const params = new URLSearchParams({
       all: "1",
       pageSize: "20000",
@@ -34,9 +34,11 @@ export async function GET(req: NextRequest) {
       includeNoStock: "1",
       refresh: "1",
     });
-    const response = await fetch(`${base}/api/lightspeed/catalog?${params.toString()}`, {
-      cache: "no-store",
-    });
+    const response = await fetchInternalApi(
+      `api/lightspeed/catalog?${params.toString()}`,
+      { cache: "no-store" },
+      req.nextUrl.origin
+    );
     const json = (await response.json().catch(() => ({}))) as {
       ok?: boolean;
       error?: string;

@@ -481,12 +481,12 @@ function parseVariant(raw: unknown, parentId: string, index: number): StagingVar
   const matched = Boolean(row.shopifyMatched || row.availableInShopify);
   const stockByLocation = Array.isArray(row.stockByLocation)
     ? row.stockByLocation.map((stockRow) => {
-        const item = (stockRow || {}) as { location?: unknown; qty?: unknown };
-        return {
-          location: normalizeText(item.location),
-          qty: parseNumber(item.qty),
-        };
-      })
+      const item = (stockRow || {}) as { location?: unknown; qty?: unknown };
+      return {
+        location: normalizeText(item.location),
+        qty: parseNumber(item.qty),
+      };
+    })
     : parseLocationStock(row.locations);
   const stockFromLocations = stockByLocation.reduce((sum, item) => sum + (item.qty ?? 0), 0);
   const stockValue = parseNumber(row.stock);
@@ -968,12 +968,12 @@ export async function POST(req: NextRequest) {
       const session =
         undoOps.length > 0
           ? createUndoSession({
-              shop,
-              target: "cart_inventory",
-              action: "stage-add",
-              note: `Queued ${reconciled.length} parent item(s) to Cart Inventory.`,
-              operations: undoOps,
-            })
+            shop,
+            target: "cart_inventory",
+            action: "stage-add",
+            note: `Queued ${reconciled.length} parent item(s) to Cart Inventory.`,
+            operations: undoOps,
+          })
           : null;
 
       return NextResponse.json({
@@ -988,12 +988,12 @@ export async function POST(req: NextRequest) {
         warning: [saved.warning, current.warning].filter(Boolean).join(" ").trim(),
         undoSession: session
           ? {
-              id: session.id,
-              target: session.target,
-              action: session.action,
-              note: session.note,
-              createdAt: session.createdAt,
-            }
+            id: session.id,
+            target: session.target,
+            action: session.action,
+            note: session.note,
+            createdAt: session.createdAt,
+          }
           : null,
       });
     }
@@ -1016,8 +1016,8 @@ export async function POST(req: NextRequest) {
 
       const removeProductGids = Array.isArray(body?.removeProductGids)
         ? (body.removeProductGids as unknown[])
-            .map((v) => normalizeText(v))
-            .filter((gid) => gid && gid.startsWith("gid://shopify/Product/"))
+          .map((v) => normalizeText(v))
+          .filter((gid) => gid && gid.startsWith("gid://shopify/Product/"))
         : [];
 
       const current = await listCartCatalogParents(shop);
@@ -1075,12 +1075,12 @@ export async function POST(req: NextRequest) {
       const session =
         undoOps.length > 0
           ? createUndoSession({
-              shop,
-              target: "cart_inventory",
-              action: "stage-remove",
-              note: `Removed ${parentIds.length} parent item(s) from Cart Inventory.`,
-              operations: undoOps,
-            })
+            shop,
+            target: "cart_inventory",
+            action: "stage-remove",
+            note: `Removed ${parentIds.length} parent item(s) from Cart Inventory.`,
+            operations: undoOps,
+          })
           : null;
 
       const freshListed = await listCartCatalogParents(shop);
@@ -1137,12 +1137,12 @@ export async function POST(req: NextRequest) {
         warning: [removed.warning, current.warning, coverageData.warning].filter(Boolean).join(" ").trim(),
         undoSession: session
           ? {
-              id: session.id,
-              target: session.target,
-              action: session.action,
-              note: session.note,
-              createdAt: session.createdAt,
-            }
+            id: session.id,
+            target: session.target,
+            action: session.action,
+            note: session.note,
+            createdAt: session.createdAt,
+          }
           : null,
         rows: formatCategories(freshPaged.rows),
         page: freshPaged.page,
@@ -1187,12 +1187,12 @@ export async function POST(req: NextRequest) {
       const session =
         undoOps.length > 0
           ? createUndoSession({
-              shop,
-              target: "cart_inventory",
-              action: "set-status",
-              note: `Updated ${parentIds.length} parent item(s) to ${status}.`,
-              operations: undoOps,
-            })
+            shop,
+            target: "cart_inventory",
+            action: "set-status",
+            note: `Updated ${parentIds.length} parent item(s) to ${status}.`,
+            operations: undoOps,
+          })
           : null;
 
       return NextResponse.json({
@@ -1204,12 +1204,12 @@ export async function POST(req: NextRequest) {
         warning: [updated.warning, current.warning].filter(Boolean).join(" ").trim(),
         undoSession: session
           ? {
-              id: session.id,
-              target: session.target,
-              action: session.action,
-              note: session.note,
-              createdAt: session.createdAt,
-            }
+            id: session.id,
+            target: session.target,
+            action: session.action,
+            note: session.note,
+            createdAt: session.createdAt,
+          }
           : null,
       });
     }
@@ -1564,7 +1564,7 @@ export async function POST(req: NextRequest) {
             removedFromShopify: 0,
             error: err,
             items: [],
-          }).catch(() => {});
+          }).catch(() => { });
         }
         return NextResponse.json({ error: err }, { status: 400 });
       }
@@ -1572,7 +1572,7 @@ export async function POST(req: NextRequest) {
 
       if (body?.background === true) {
         const startedAt = new Date().toISOString();
-        const origin = req.nextUrl.origin;
+        const origin = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : `http://127.0.0.1:${process.env.PORT || 3000}`;
         const bgPublicationIds = Array.isArray(body?.publicationIds)
           ? (body.publicationIds as string[]).filter((id) => typeof id === "string" && id.trim())
           : [];
@@ -1628,7 +1628,7 @@ export async function POST(req: NextRequest) {
           method: "POST",
           headers,
           body: JSON.stringify(pushPayload),
-        }).catch(() => {});
+        }).catch(() => { });
         return NextResponse.json(
           {
             ok: true,
@@ -1745,7 +1745,7 @@ export async function POST(req: NextRequest) {
           removedFromShopify: 0,
           error: logDetail,
           items: [],
-        }).catch(() => {});
+        }).catch(() => { });
       }
     }
 

@@ -8,6 +8,7 @@ import {
 } from "@/lib/shopify";
 import { listCartCatalogParentIds } from "@/lib/shopifyCartStaging";
 import { loadSyncToggles } from "@/lib/shopifyCartConfig";
+import { fetchInternalApi } from "@/lib/internalApiOrigin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -60,7 +61,7 @@ type LightspeedCatalogResponse = {
 
 type ShopifyProductEdge = {
   cursor?: string;
-    node?: {
+  node?: {
     id?: string;
     title?: string;
     description?: string;
@@ -544,23 +545,27 @@ async function fetchLightspeedSnapshotChunk(
   refresh: boolean,
   catalogCursor: string | null
 ): Promise<LightspeedSnapshotResult & { nextCatalogCursor?: string | null }> {
-  const url = new URL("/api/lightspeed/catalog", req.nextUrl.origin);
-  url.searchParams.set("all", "1");
-  url.searchParams.set("pageSize", "20000");
-  url.searchParams.set("sortField", "customSku");
-  url.searchParams.set("sortDir", "asc");
-  url.searchParams.set("shops", "all");
-  url.searchParams.set("includeNoStock", "1");
+  const params = new URLSearchParams();
+  params.set("all", "1");
+  params.set("pageSize", "20000");
+  params.set("sortField", "customSku");
+  params.set("sortDir", "asc");
+  params.set("shops", "all");
+  params.set("includeNoStock", "1");
   if (refresh) {
-    url.searchParams.set("refresh", "1");
+    params.set("refresh", "1");
   }
   if (catalogCursor) {
-    url.searchParams.set("catalogCursor", catalogCursor);
+    params.set("catalogCursor", catalogCursor);
   } else {
-    url.searchParams.set("maxPages", String(INITIAL_CATALOG_MAX_PAGES));
+    params.set("maxPages", String(INITIAL_CATALOG_MAX_PAGES));
   }
 
-  const response = await fetch(url.toString(), { cache: "no-store" });
+  const response = await fetchInternalApi(
+    `api/lightspeed/catalog?${params.toString()}`,
+    { cache: "no-store" },
+    req.nextUrl.origin
+  );
   const json = (await response.json().catch(() => ({}))) as LightspeedCatalogResponse & {
     nextCatalogCursor?: string | null;
     hasMoreCatalog?: boolean;
@@ -804,7 +809,7 @@ async function fetchShopifyVariants(shop: string, token: string) {
             price: parseNumber(variantNode.price),
             inventoryQuantity:
               typeof variantNode.inventoryQuantity === "number" &&
-              Number.isFinite(variantNode.inventoryQuantity)
+                Number.isFinite(variantNode.inventoryQuantity)
                 ? variantNode.inventoryQuantity
                 : null,
             color: normalizeText(colorOption?.value),
@@ -906,8 +911,8 @@ function buildMatrixRows(
 
     const shopifyQty =
       matchedVariant &&
-      typeof matchedVariant.inventoryQuantity === "number" &&
-      Number.isFinite(matchedVariant.inventoryQuantity)
+        typeof matchedVariant.inventoryQuantity === "number" &&
+        Number.isFinite(matchedVariant.inventoryQuantity)
         ? Math.max(0, Math.round(matchedVariant.inventoryQuantity))
         : null;
 
@@ -998,9 +1003,9 @@ function buildMatrixRows(
     const parentShopifyStock = group.hasShopifyStock ? group.shopifyStock : null;
     const stockGap =
       parentStock !== null &&
-      parentShopifyStock !== null &&
-      Number.isFinite(parentStock) &&
-      Number.isFinite(parentShopifyStock)
+        parentShopifyStock !== null &&
+        Number.isFinite(parentStock) &&
+        Number.isFinite(parentShopifyStock)
         ? Number((parentStock - parentShopifyStock).toFixed(2))
         : null;
 

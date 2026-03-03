@@ -483,8 +483,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Strict pipeline for Carts Config pull:
-    // Shopify variants must resolve to a single LS parent before writing to Carts.
-    const lsCatalog = await fetchLSCatalog(req.nextUrl.origin);
+    const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : `http://127.0.0.1:${process.env.PORT || 3000}`;
+    const lsCatalog = await fetchLSCatalog(baseUrl);
     const repartition = repartitionProductsByLsParent(
       allProducts,
       lsCatalog.map((row) => ({
@@ -497,7 +497,7 @@ export async function POST(req: NextRequest) {
 
     let matchResult: { matched?: number; skipped?: number; errors?: string[] } = {};
     try {
-      const origin = req.nextUrl.origin;
+      const origin = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : `http://127.0.0.1:${process.env.PORT || 3000}`;
       const mr = await runMatchToLSMatrix(shop, origin);
       matchResult = { matched: mr.matched, skipped: mr.skipped, errors: mr.errors };
     } catch (matchErr) {

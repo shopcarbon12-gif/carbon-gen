@@ -65,7 +65,7 @@
       "endpoint": "https://cloud.merchantos.com/oauth/access_token.php",
       "message": "Token refresh successful."
     },
-    "checkedAt": "2026-03-03T05:10:37.486Z"
+    "checkedAt": "2026-03-03T05:35:54.739Z"
   },
   "dropbox": {
     "connected": true,

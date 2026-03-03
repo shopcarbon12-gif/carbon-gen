@@ -12,6 +12,7 @@ import {
 } from "@/lib/shopify";
 import { listCartCatalogParents } from "@/lib/shopifyCartStaging";
 import { ensureLightspeedEnvLoaded } from "@/lib/loadLightspeedEnv";
+import { fetchInternalApi } from "@/lib/internalApiOrigin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,24 +31,12 @@ function parseIntSafe(v: unknown): number | null {
   return Number.isFinite(n) ? Math.trunc(n) : null;
 }
 
-function getBaseUrl(req: NextRequest): string {
-  try {
-    const url = new URL(req.url);
-    return url.origin;
-  } catch {
-    return process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  }
-}
-
-async function getLightspeedItemCount(baseUrl: string): Promise<number | null> {
+async function getLightspeedItemCount(reqFallbackOrigin: string): Promise<number | null> {
   try {
     ensureLightspeedEnvLoaded();
-    const res = await fetch(`${baseUrl}/api/lightspeed/catalog/count`, {
+    const res = await fetchInternalApi("api/lightspeed/catalog/count", {
       cache: "no-store",
-      signal: AbortSignal.timeout(15_000),
-    });
+    }, reqFallbackOrigin);
     const json = (await res.json().catch(() => ({}))) as { itemCount?: number };
     return parseIntSafe(json.itemCount);
   } catch {
@@ -55,11 +44,12 @@ async function getLightspeedItemCount(baseUrl: string): Promise<number | null> {
   }
 }
 
-async function getShopifyProductCount(baseUrl: string, shop: string): Promise<number | null> {
+async function getShopifyProductCount(reqFallbackOrigin: string, shop: string): Promise<number | null> {
   try {
-    const res = await fetch(
-      `${baseUrl}/api/shopify/catalog/count?shop=${encodeURIComponent(shop)}`,
-      { cache: "no-store", signal: AbortSignal.timeout(15_000) }
+    const res = await fetchInternalApi(
+      `api/shopify/catalog/count?shop=${encodeURIComponent(shop)}`,
+      { cache: "no-store" },
+      reqFallbackOrigin
     );
     const json = (await res.json().catch(() => ({}))) as { productCount?: number };
     return parseIntSafe(json.productCount);
@@ -172,19 +162,19 @@ async function getShopAndToken(): Promise<{ shop: string; token: string } | null
 }
 
 export async function GET(req: NextRequest) {
-  const baseUrl = getBaseUrl(req);
+  const reqFallbackOrigin = req.nextUrl.origin;
   try {
-    const lsStatusRes = await fetch(`${baseUrl}/api/lightspeed/status`, {
+    const lsStatusRes = await fetchInternalApi("api/lightspeed/status", {
       cache: "no-store",
-    });
+    }, reqFallbackOrigin);
     const lsStatus = (await lsStatusRes.json().catch(() => ({}))) as {
       connected?: boolean;
       accountId?: string;
       domainPrefix?: string;
     };
-    const shopStatusRes = await fetch(`${baseUrl}/api/shopify/status`, {
+    const shopStatusRes = await fetchInternalApi("api/shopify/status", {
       cache: "no-store",
-    });
+    }, reqFallbackOrigin);
     const shopStatus = (await shopStatusRes.json().catch(() => ({}))) as {
       connected?: boolean;
       shop?: string | null;
@@ -196,7 +186,7 @@ export async function GET(req: NextRequest) {
 
     let lsItemCount: number | null = null;
     if (lightspeedConnected) {
-      lsItemCount = await getLightspeedItemCount(baseUrl);
+      lsItemCount = await getLightspeedItemCount(reqFallbackOrigin);
     }
 
     let shopProductCount: number | null = null;
@@ -207,7 +197,7 @@ export async function GET(req: NextRequest) {
     if (shopifyConnected && shop) {
       const st = await getShopAndToken();
       if (st) {
-        shopProductCount = await getShopifyProductCount(baseUrl, st.shop);
+        shopProductCount = await getShopifyProductCount(reqFallbackOrigin, st.shop);
         cartSummary = await getCartInventorySummary(st.shop);
         const ordersResult = await getOrdersCount(st.shop, st.token);
         ordersCount = ordersResult.count;
