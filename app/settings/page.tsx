@@ -96,8 +96,7 @@ export default function SettingsPage() {
   const [lightspeedLoading, setLightspeedLoading] = useState(true);
   const [lightspeedBusy, setLightspeedBusy] = useState(false);
   const [lightspeedStatusData, setLightspeedStatusData] = useState<LightspeedStatusResponse | null>(null);
-  const [webhookBusy, setWebhookBusy] = useState(false);
-  const [webhookResult, setWebhookResult] = useState<{ ok: boolean; message?: string; error?: string } | null>(null);
+
 
   const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -210,27 +209,6 @@ export default function SettingsPage() {
     }
   }, []);
 
-  const registerSaleWebhook = useCallback(async () => {
-    setWebhookBusy(true);
-    setWebhookResult(null);
-    try {
-      const resp = await fetch("/api/lightspeed/webhooks/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ domainPrefix: "us" }),
-      });
-      const json = (await resp.json().catch(() => ({}))) as { ok?: boolean; message?: string; error?: string };
-      setWebhookResult({
-        ok: Boolean(json?.ok),
-        message: json?.message,
-        error: json?.error,
-      });
-    } catch (e: unknown) {
-      setWebhookResult({ ok: false, error: String((e as Error)?.message || "Failed") });
-    } finally {
-      setWebhookBusy(false);
-    }
-  }, []);
 
   const refreshSession = useCallback(async () => {
     setAdminLoading(true);
@@ -640,29 +618,16 @@ export default function SettingsPage() {
           <button className="btn ghost" onClick={() => void refreshLightspeedStatus(true)} disabled={lightspeedBusy}>
             {lightspeedBusy ? "Refreshing..." : "Refresh Status"}
           </button>
-          <button
-            className="btn ghost"
-            onClick={() => void registerSaleWebhook()}
-            disabled={webhookBusy || !lightspeedConnected}
-            title={!lightspeedConnected ? "Connect Lightspeed first" : "Register sale/refund webhook for event-driven sync"}
-          >
-            {webhookBusy ? "Registering..." : "Register Sale Webhook"}
-          </button>
           <a className="btn primary" href="/api/lightspeed/auth">
-            Re-connect Lightspeed (add webhooks)
+            Re-connect Lightspeed
           </a>
           <a className="btn ghost" href="/api/lightspeed/status" target="_blank" rel="noreferrer">
             Open Status Endpoint
           </a>
-          <Link className="btn primary" href="/studio/rfid-price-tag">
+          <Link className="btn ghost" href="/studio/rfid-price-tag">
             Open RFID Price Tag
           </Link>
         </div>
-        {webhookResult && (
-          <p className={webhookResult.ok ? "muted" : "warn"} style={{ marginTop: 8 }}>
-            {webhookResult.ok ? webhookResult.message : webhookResult.error}
-          </p>
-        )}
       </section>
 
       {isAdmin ? (
