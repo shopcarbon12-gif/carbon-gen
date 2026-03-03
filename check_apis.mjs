@@ -5,7 +5,8 @@ async function run() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: 'Eliorp1', password: 'Carbonusa1!' })
     });
-    const cookie = loginRes.headers.get('set-cookie');
+    const cookies = loginRes.headers.get('set-cookie') || '';
+    const cookie = cookies.split(',').map(c => c.split(';')[0]).join('; ');
 
     const dropboxRes = await fetch(`${url}/api/dropbox/status`, {
         headers: { cookie }

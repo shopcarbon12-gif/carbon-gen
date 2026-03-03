@@ -1,1 +1,21 @@
-# Lightspeed Webhook – 403 Fix\n\n## Current Status\n- The Retail token is fully operational.\n- A **403 Forbidden** error occurs during automated webhook registration because the Carbon Studio API keys lack explicit `webhooks` OAuth scope in Lightspeed.\n\n## Manual Fix Instructions (MerchantOS)\n\nTo resolve this without rotating API credentials or changing OAuth scopes, manually add the webhook in the Lightspeed Admin UI:\n\n1. Log in to Lightspeed and navigate to the API Webhooks section: `https://us.merchantos.com/setup/api`\n2. Click to register a new Webhook.\n3. **Event Type:** `sale.update`\n4. **Callback URL:** `https://app.shopcarbon.com/api/lightspeed/webhooks/sale-update`\n5. Save the webhook configuration.\n\n## Verification Steps\n1. Create or modify a sale in your Lightspeed Retail POS.\n2. Check the Coolify Proxy or Application Logs (`aw4800s4wsgok0wck480goco`) for an incoming `POST /api/lightspeed/webhooks/sale-update` request.\n3. The application should return a `200 OK` and process the sale event.If no event is received, verify the Callback URL matches exactly and the Event Type is correctly assigned to `sale.update`.
+# Lightspeed Sync Solutions
+
+## Webhook 403 Forbidden (Deprecated)
+Automatically registering the `sale.update` webhook via the Lightspeed API results in a **403 Forbidden** error because the Carbon Studio API keys lack the explicit `webhooks` OAuth scope.
+
+## The Solution: Coolify Native Scheduled Tasks
+Instead of relying on webhooks (which require manual intervention) or Vercel (which we are deprecating), we have perfectly replicated the original polling behavior from `vercel.json` directly into **Coolify's Scheduled Tasks** native runner.
+
+### Replicated Schedules in Coolify
+These 5 cron jobs now execute natively within the `carbon-gen` Docker container using `wget` to hit the internal Node.js process:
+
+1. **Sales Sync (Daytime)** - `* 0-2,14-23 * * *`
+2. **Sales Sync (Nighttime)** - `0 3-13 * * *`
+3. **Cart Sync** - `* * * * *`
+4. **Lightspeed Catalog Warm** - `0 3 * * *`
+5. **Daily Sync Report** - `55 4 * * *`
+
+### Verification
+- Navigate to your project in the Coolify Dashboard -> **Configuration** -> **Scheduled Tasks**.
+- The cron logs will display the native stdout.
+- *There is no further manual action required in MerchantOS.*

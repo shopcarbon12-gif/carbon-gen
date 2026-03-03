@@ -4,7 +4,7 @@
 
 1. Open **https://us.merchantos.com/setup/api** in your browser (logged into Lightspeed).
 2. Add a new webhook:
-   - **URL:** `https://carbon-gen-iota.vercel.app/api/lightspeed/webhooks/sale-update`
+   - **URL:** `https://app.shopcarbon.com/api/lightspeed/webhooks/sale-update`
    - **Event:** Sale (or sale.update)
 3. Save.
 

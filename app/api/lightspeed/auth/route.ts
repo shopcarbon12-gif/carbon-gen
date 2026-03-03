@@ -11,7 +11,7 @@ const SCOPES = "products:read sales:read customers:read inventory:read webhooks"
 
 export async function GET(req: Request) {
   const clientId = String(process.env.LS_CLIENT_ID || "").trim();
-  const base = String(process.env.NEXT_PUBLIC_BASE_URL || "https://carbon-gen-iota.vercel.app").replace(/\/$/, "");
+  const base = String(process.env.NEXT_PUBLIC_BASE_URL || "https://app.shopcarbon.com").replace(/\/$/, "");
   const redirectUri = String(process.env.LS_REDIRECT_URI || "").trim() || base + "/api/lightspeed/callback";
 
   if (!clientId) {

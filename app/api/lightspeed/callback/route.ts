@@ -14,7 +14,7 @@ export async function GET(req: Request) {
   const state = searchParams.get("state");
   const error = searchParams.get("error");
 
-  const base = String(process.env.NEXT_PUBLIC_BASE_URL || "https://carbon-gen-iota.vercel.app").replace(/\/$/, "");
+  const base = String(process.env.NEXT_PUBLIC_BASE_URL || "https://app.shopcarbon.com").replace(/\/$/, "");
   const redirectUri = String(process.env.LS_REDIRECT_URI || "").trim() || base + "/api/lightspeed/callback";
 
   const cookieStore = await cookies();

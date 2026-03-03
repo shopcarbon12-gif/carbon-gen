@@ -1,0 +1,77 @@
+{
+  "auth_flow": {
+    "login_status": 200,
+    "login_ok": true,
+    "logout_status": 200,
+    "logout_ok": true
+  },
+  "integrations": {
+    "integrations": [
+      {
+        "id": "api-health",
+        "name": "Core API",
+        "endpoint": "/api/health",
+        "settingsHref": "/settings#integration-core-api",
+        "status": "online",
+        "label": "Synced"
+      },
+      {
+        "id": "api-dropbox-status",
+        "name": "Dropbox",
+        "endpoint": "/api/dropbox/status",
+        "settingsHref": "/settings#integration-dropbox",
+        "status": "online",
+        "label": "Active"
+      },
+      {
+        "id": "api-lightspeed-status",
+        "name": "Lightspeed API",
+        "endpoint": "/api/lightspeed/status",
+        "settingsHref": "/settings#integration-lightspeed",
+        "status": "online",
+        "label": "Active"
+      },
+      {
+        "id": "api-shopify-status",
+        "name": "Shopify",
+        "endpoint": "/api/shopify/status",
+        "settingsHref": "/settings#integration-shopify",
+        "status": "online",
+        "label": "Active"
+      }
+    ]
+  },
+  "shopify": {
+    "connected": true,
+    "shop": "30e7d3.myshopify.com",
+    "installedAt": "2026-02-23T13:45:00.433+00:00",
+    "source": "db"
+  },
+  "lightspeed": {
+    "ok": true,
+    "connected": true,
+    "label": "Active",
+    "clientIdSet": true,
+    "clientSecretSet": true,
+    "refreshTokenSet": true,
+    "domainPrefix": "us",
+    "accountId": "257323",
+    "redirectUri": "",
+    "apiBase": "https://api.lightspeedapp.com",
+    "credentialsReady": true,
+    "probe": {
+      "attempted": true,
+      "success": true,
+      "endpoint": "https://cloud.merchantos.com/oauth/access_token.php",
+      "message": "Token refresh successful."
+    },
+    "checkedAt": "2026-03-03T05:10:37.486Z"
+  },
+  "dropbox": {
+    "connected": true,
+    "email": "elior@mania-usa.com",
+    "accountId": "dbid:AADYXiOisSV_T-ZaPH9G6vONqZniphtYRmk",
+    "connectedAt": "2026-02-20T08:13:47.465+00:00",
+    "updatedAt": "2026-02-20T08:13:47.465+00:00"
+  }
+}

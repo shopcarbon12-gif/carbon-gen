@@ -40,7 +40,7 @@ $lines = @(
   "",
   "6) Deployments",
   "- Production alias updated multiple times today after fixes.",
-  "- Current production URL: https://carbon-gen-iota.vercel.app",
+  "- Current production URL: https://app.shopcarbon.com",
   "",
   "Key Commits (latest to earlier)",
   "- 09cd358: Retry generate API once and improve failed-fetch error clarity",

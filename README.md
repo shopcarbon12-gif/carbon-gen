@@ -155,11 +155,11 @@ On first login, if `app_users` is empty, this admin account is auto-created.
 ## Shopify OAuth Setup
 In Shopify app settings, whitelist callback URL exactly:
 ```text
-https://your-domain.vercel.app/api/shopify/callback
+https://app.shopcarbon.com/api/shopify/callback
 ```
 Set this same URL in:
 ```env
-SHOPIFY_REDIRECT_URI=https://your-domain.vercel.app/api/shopify/callback
+SHOPIFY_REDIRECT_URI=https://app.shopcarbon.com/api/shopify/callback
 ```
 
 ## Deploy
@@ -179,7 +179,7 @@ npm run check:sync
 
 Shopify smoke check (status + auth redirect + catalog consistency):
 ```powershell
-$env:SHOPIFY_SMOKE_BASE_URL="https://carbon-gen-iota.vercel.app"
+$env:SHOPIFY_SMOKE_BASE_URL="https://app.shopcarbon.com"
 $env:SHOPIFY_SMOKE_SHOP="your-store.myshopify.com"
 npm run check:shopify
 ```

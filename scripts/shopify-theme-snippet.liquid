@@ -156,7 +156,7 @@
   var email = {{ customer.email | json }};
   if (!email) return;
 
-  var API_BASE = "https://carbon-gen-iota.vercel.app";
+  var API_BASE = "https://app.shopcarbon.com";
   var url = API_BASE + "/api/shopify/customer-history?email=" + encodeURIComponent(email);
 
   /* ── Helpers ─────────────────────────────────────────── */

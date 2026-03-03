@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
     "carbon-gen.shopcarbon.com",
     "carbon-gen.shopcarbon.co",
     "carbon-gen.shopcarbon12.workers.dev",
-    "carbon-gen-iota.vercel.app",
+    "app.shopcarbon.com",
   ],
   async headers() {
     const isProd = process.env.NODE_ENV === "production";

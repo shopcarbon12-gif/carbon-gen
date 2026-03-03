@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const base = normalizeText(process.env.NEXT_PUBLIC_BASE_URL) || "https://carbon-gen-iota.vercel.app";
+  const base = normalizeText(process.env.NEXT_PUBLIC_BASE_URL) || "https://app.shopcarbon.com";
   const callbackUrl = `${base.replace(/\/$/, "")}/api/lightspeed/webhooks/sale-update`;
 
   try {
