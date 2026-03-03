@@ -36,7 +36,7 @@ export async function fetchInternalApi(
 
     const errorDetails: string[] = [];
     let lastResponse: Response | null = null;
-    const TIMEOUT_MS = 12000;
+    const TIMEOUT_MS = 90000; // 90s timeout for large catalog fetches like Lightspeed
 
     for (const origin of origins) {
         const url = `${origin}${normalizedPath}`;
