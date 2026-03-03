@@ -8,8 +8,10 @@ export function getProbeOrigins(reqFallbackOrigin?: string): string[] {
     // Including loopback IPv4 explicitly to avoid IPv6 `fetch failed` bugs in Node.js 18+.
     if (process.env.NODE_ENV === "production" || process.env.NODE_ENV !== "development") {
         candidates.push(`http://127.0.0.1:${process.env.PORT || 3000}`);
+        candidates.push(`http://0.0.0.0:${process.env.PORT || 3000}`);
     } else {
         candidates.push(`http://127.0.0.1:${process.env.PORT || 3000}`);
+        candidates.push(`http://0.0.0.0:${process.env.PORT || 3000}`);
         candidates.push(`http://localhost:${process.env.PORT || 3000}`);
     }
 
