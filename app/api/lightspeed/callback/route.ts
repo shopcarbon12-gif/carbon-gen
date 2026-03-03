@@ -37,7 +37,7 @@ export async function GET(req: Request) {
     return NextResponse.redirect(base + "/settings?ls_error=missing_credentials");
   }
 
-  const tokenUrl = "https://" + domainPrefix + ".retail.lightspeed.app/api/1.0/token";
+  const tokenUrl = "https://cloud.merchantos.com/oauth/access_token.php";
   const body = new URLSearchParams({
     code,
     client_id: clientId,

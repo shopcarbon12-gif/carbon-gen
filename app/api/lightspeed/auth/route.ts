@@ -7,7 +7,7 @@ import { cookies } from "next/headers";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const SCOPES = "products:read sales:read customers:read inventory:read webhooks";
+const SCOPES = "employee:all";
 
 export async function GET(req: Request) {
   const clientId = String(process.env.LS_CLIENT_ID || "").trim();
@@ -30,5 +30,5 @@ export async function GET(req: Request) {
     scope: SCOPES,
   });
 
-  return NextResponse.redirect("https://secure.retail.lightspeed.app/connect?" + params.toString());
+  return NextResponse.redirect("https://cloud.merchantos.com/oauth/authorize.php?" + params.toString());
 }
