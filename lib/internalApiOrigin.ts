@@ -9,10 +9,13 @@ export function getProbeOrigins(reqFallbackOrigin?: string): string[] {
     if (process.env.NODE_ENV === "production" || process.env.NODE_ENV !== "development") {
         candidates.push(`http://127.0.0.1:${process.env.PORT || 3000}`);
         candidates.push(`http://0.0.0.0:${process.env.PORT || 3000}`);
+        candidates.push(`http://localhost:${process.env.PORT || 3000}`);
+        candidates.push(`http://[::1]:${process.env.PORT || 3000}`);
     } else {
         candidates.push(`http://127.0.0.1:${process.env.PORT || 3000}`);
         candidates.push(`http://0.0.0.0:${process.env.PORT || 3000}`);
         candidates.push(`http://localhost:${process.env.PORT || 3000}`);
+        candidates.push(`http://[::1]:${process.env.PORT || 3000}`);
     }
 
     if (reqFallbackOrigin) {
@@ -31,7 +34,7 @@ export async function fetchInternalApi(
     const origins = getProbeOrigins(reqFallbackOrigin);
     const normalizedPath = pathWithQuery.startsWith("/") ? pathWithQuery : `/${pathWithQuery}`;
 
-    let lastError: unknown = new Error("No origins available for internal fetch.");
+    const errorDetails: string[] = [];
     let lastResponse: Response | null = null;
     const TIMEOUT_MS = 12000;
 
@@ -54,9 +57,10 @@ export async function fetchInternalApi(
 
             // If not ok (e.g., 500 or 404), keep track but try next origin
             lastResponse = res;
-        } catch (err) {
+            errorDetails.push(`[${url} => HTTP ${res.status}]`);
+        } catch (err: any) {
             clearTimeout(timeoutToken);
-            lastError = err;
+            errorDetails.push(`[${url} => ${err?.message || String(err)}]`);
         }
     }
 
@@ -65,6 +69,6 @@ export async function fetchInternalApi(
         return lastResponse;
     }
 
-    // Otherwise throw the last network exception encountered.
-    throw lastError;
+    // Otherwise throw the aggregated network exceptions encountered.
+    throw new Error(`All internal fetch candidates failed: ${errorDetails.join(" | ")}`);
 }
