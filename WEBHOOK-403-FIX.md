@@ -1,13 +1,1 @@
-# Lightspeed Webhook – 403 Fix
-
-## Current status
-- Retail token works (no more "access token is not valid")
-- 403 = Carbon Studio app lacks webhook permissions in Lightspeed
-
-## Fix options
-
-**Option A:** Go to https://us.merchantos.com/setup/api and add the webhook manually:
-- Callback: `https://carbon-gen-iota.vercel.app/api/lightspeed/webhooks/sale-update`
-- Event: `sale.update`
-
-**Option B:** Add the `webhooks` OAuth scope to Carbon Studio in Lightspeed, re-authorize, update `LS_REFRESH_TOKEN` in Vercel, then click Register Sale Webhook again.
+# Lightspeed Webhook – 403 Fix\n\n## Current Status\n- The Retail token is fully operational.\n- A **403 Forbidden** error occurs during automated webhook registration because the Carbon Studio API keys lack explicit `webhooks` OAuth scope in Lightspeed.\n\n## Manual Fix Instructions (MerchantOS)\n\nTo resolve this without rotating API credentials or changing OAuth scopes, manually add the webhook in the Lightspeed Admin UI:\n\n1. Log in to Lightspeed and navigate to the API Webhooks section: `https://us.merchantos.com/setup/api`\n2. Click to register a new Webhook.\n3. **Event Type:** `sale.update`\n4. **Callback URL:** `https://app.shopcarbon.com/api/lightspeed/webhooks/sale-update`\n5. Save the webhook configuration.\n\n## Verification Steps\n1. Create or modify a sale in your Lightspeed Retail POS.\n2. Check the Coolify Proxy or Application Logs (`aw4800s4wsgok0wck480goco`) for an incoming `POST /api/lightspeed/webhooks/sale-update` request.\n3. The application should return a `200 OK` and process the sale event.If no event is received, verify the Callback URL matches exactly and the Event Type is correctly assigned to `sale.update`.

@@ -170,7 +170,7 @@ function inferLabel(status: IntegrationStatus, json: unknown) {
 }
 
 async function probeEndpoint(req: NextRequest, endpoint: string): Promise<IntegrationRecord> {
-  const origin = new URL(req.url).origin;
+  const origin = "http://127.0.0.1:" + (process.env.PORT || "3000");
   const cookie = req.headers.get("cookie") || "";
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), ENDPOINT_PROBE_TIMEOUT_MS);
@@ -200,7 +200,8 @@ async function probeEndpoint(req: NextRequest, endpoint: string): Promise<Integr
       status,
       label: inferLabel(status, json),
     };
-  } catch {
+  } catch (e: any) {
+    console.error(`[Integrations Probe] Failed to fetch ${endpoint}:`, e);
     return {
       id: endpointToId(endpoint),
       name: endpointToName(endpoint),
