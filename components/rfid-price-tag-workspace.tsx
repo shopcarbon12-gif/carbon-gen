@@ -592,6 +592,7 @@ export default function RfidPriceTagWorkspace() {
         zpl?: string;
         printStatus?: { attempted: boolean; success: boolean; message: string };
         error?: string;
+        printerIp?: string;
       };
       if (!resp.ok) throw new Error(String(json?.error || "Failed to generate labels."));
 
@@ -603,13 +604,25 @@ export default function RfidPriceTagWorkspace() {
       };
       setLastBatch(batch);
       if (printNow) {
-        setActionStatus(
-          String(json.printStatus?.message || `Saved ${Number(json.created || 0)} label mapping(s).`)
-        );
-        completeProgress(
-          "Generate + print completed.",
-          String(json.printStatus?.message || "Batch printed and mappings saved.")
-        );
+        const targetIp = (json.printerIp || printDraft.printerIp || settingsDraft.printerIp || "").trim();
+        if (!targetIp) {
+          throw new Error("Printer IP is required for print action (please set in RFID settings).");
+        }
+        try {
+          await fetch(`http://${targetIp}/pstprnt`, {
+            method: "POST",
+            mode: "no-cors",
+            body: json.zpl,
+          });
+          setActionStatus(`Sent ${Number(json.created || 0)} label(s) directly to local printer ${targetIp}.`);
+          completeProgress(
+            "Print completed.",
+            `Sent ${Number(json.created || 0)} label(s) securely to ${targetIp} via local network browser fetch.`
+          );
+        } catch (printErr: any) {
+          console.error("Local network print error:", printErr);
+          throw new Error(`Browser failed to reach printer at ${targetIp}. Please ensure you are on the same Wi-Fi network and allow 'Insecure content' for this site.`);
+        }
       } else {
         setActionStatus(`Saved ${Number(json.created || 0)} label mapping(s).`);
         completeProgress(
@@ -799,13 +812,13 @@ export default function RfidPriceTagWorkspace() {
       }
       return batchSortState.direction === "asc"
         ? String(a.epc || "").localeCompare(String(b.epc || ""), undefined, {
-            numeric: true,
-            sensitivity: "base",
-          })
+          numeric: true,
+          sensitivity: "base",
+        })
         : String(b.epc || "").localeCompare(String(a.epc || ""), undefined, {
-            numeric: true,
-            sensitivity: "base",
-          });
+          numeric: true,
+          sensitivity: "base",
+        });
     });
     return next;
   }, [batchSortState.direction, batchSortState.field, lastBatch?.labels]);
@@ -836,34 +849,34 @@ export default function RfidPriceTagWorkspace() {
       if (logsSortState.field === "lightspeedSystemId") {
         return logsSortState.direction === "asc"
           ? String(a.lightspeedSystemId || "").localeCompare(String(b.lightspeedSystemId || ""), undefined, {
-              numeric: true,
-              sensitivity: "base",
-            })
+            numeric: true,
+            sensitivity: "base",
+          })
           : String(b.lightspeedSystemId || "").localeCompare(String(a.lightspeedSystemId || ""), undefined, {
-              numeric: true,
-              sensitivity: "base",
-            });
+            numeric: true,
+            sensitivity: "base",
+          });
       }
       if (logsSortState.field === "itemName") {
         return logsSortState.direction === "asc"
           ? String(a.itemName || "").localeCompare(String(b.itemName || ""), undefined, {
-              numeric: true,
-              sensitivity: "base",
-            })
-          : String(b.itemName || "").localeCompare(String(a.itemName || ""), undefined, {
-              numeric: true,
-              sensitivity: "base",
-            });
-      }
-      return logsSortState.direction === "asc"
-        ? String(a.epc || "").localeCompare(String(b.epc || ""), undefined, {
             numeric: true,
             sensitivity: "base",
           })
-        : String(b.epc || "").localeCompare(String(a.epc || ""), undefined, {
+          : String(b.itemName || "").localeCompare(String(a.itemName || ""), undefined, {
             numeric: true,
             sensitivity: "base",
           });
+      }
+      return logsSortState.direction === "asc"
+        ? String(a.epc || "").localeCompare(String(b.epc || ""), undefined, {
+          numeric: true,
+          sensitivity: "base",
+        })
+        : String(b.epc || "").localeCompare(String(a.epc || ""), undefined, {
+          numeric: true,
+          sensitivity: "base",
+        });
     });
     return next;
   }, [logsRows, logsSortState.direction, logsSortState.field]);
@@ -900,145 +913,145 @@ export default function RfidPriceTagWorkspace() {
 
       <fieldset className="lock-shell" disabled={editLocked}>
         <section className="glass-panel card">
-        <h2>Print Labels</h2>
-        <div className="catalog-search-panel">
-          <label>
-            <span className="control-label">Search Lightspeed Catalog</span>
-            <div className="inline">
-              <input
-                value={catalogQuery}
-                onChange={(e) => setCatalogQuery(e.target.value)}
-                placeholder="Search by System ID, SKU, UPC, EAN, or description"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    void runCatalogSearch();
-                  }
-                }}
-              />
-              <button
-                className="btn-base btn-outline search-btn"
-                onClick={runCatalogSearch}
-                disabled={catalogBusy}
-              >
-                {catalogBusy ? "Searching..." : "Search"}
-              </button>
+          <h2>Print Labels</h2>
+          <div className="catalog-search-panel">
+            <label>
+              <span className="control-label">Search Lightspeed Catalog</span>
+              <div className="inline">
+                <input
+                  value={catalogQuery}
+                  onChange={(e) => setCatalogQuery(e.target.value)}
+                  placeholder="Search by System ID, SKU, UPC, EAN, or description"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void runCatalogSearch();
+                    }
+                  }}
+                />
+                <button
+                  className="btn-base btn-outline search-btn"
+                  onClick={runCatalogSearch}
+                  disabled={catalogBusy}
+                >
+                  {catalogBusy ? "Searching..." : "Search"}
+                </button>
+              </div>
+            </label>
+            {catalogStatus ? <p className="hint ok">{catalogStatus}</p> : null}
+            {catalogError ? <p className="hint bad">{catalogError}</p> : null}
+            <div className="catalog-results">
+              {catalogItems.map((item) => (
+                <button
+                  key={item.itemId || item.systemSku || item.customSku || item.upc}
+                  className="catalog-result"
+                  onClick={() => applyCatalogItem(item)}
+                >
+                  <span className="catalog-result-title">{item.description || "(No description)"}</span>
+                  <span className="catalog-result-meta">
+                    ID: {item.systemSku || item.itemId || "-"} | SKU: {item.customSku || "-"} | UPC/EAN:{" "}
+                    {item.upc || item.ean || "-"} | Price: ${item.retailPrice || "0"}
+                  </span>
+                </button>
+              ))}
             </div>
-          </label>
-          {catalogStatus ? <p className="hint ok">{catalogStatus}</p> : null}
-          {catalogError ? <p className="hint bad">{catalogError}</p> : null}
-          <div className="catalog-results">
-            {catalogItems.map((item) => (
-              <button
-                key={item.itemId || item.systemSku || item.customSku || item.upc}
-                className="catalog-result"
-                onClick={() => applyCatalogItem(item)}
-              >
-                <span className="catalog-result-title">{item.description || "(No description)"}</span>
-                <span className="catalog-result-meta">
-                  ID: {item.systemSku || item.itemId || "-"} | SKU: {item.customSku || "-"} | UPC/EAN:{" "}
-                  {item.upc || item.ean || "-"} | Price: ${item.retailPrice || "0"}
-                </span>
-              </button>
-            ))}
           </div>
-        </div>
 
-        <div className="actions">
-          <label className="inventory-toggle">
-            <input
-              type="checkbox"
-              checked={addToInventory}
-              onChange={(e) => setAddToInventory(e.target.checked)}
-            />
-            Add to inventory
-          </label>
-          <button
-            className="btn-base btn-primary"
-            onClick={() => void previewLabel()}
-            disabled={actionBusy !== null}
-          >
-            {actionBusy === "preview" ? "Preparing..." : "Preview Label"}
-          </button>
-          <button
-            className="btn-base btn-primary"
-            onClick={() => void submitLabelGeneration(true)}
-            disabled={actionBusy !== null}
-          >
-            {actionBusy === "print" ? "Printing..." : "Print Tag"}
-          </button>
-        </div>
-        <p className="hint">One EPC is generated per tag, and mappings are held in runtime memory.</p>
-        {actionStatus ? <p className="status">{actionStatus}</p> : null}
-        {actionError ? <p className="error">{actionError}</p> : null}
+          <div className="actions">
+            <label className="inventory-toggle">
+              <input
+                type="checkbox"
+                checked={addToInventory}
+                onChange={(e) => setAddToInventory(e.target.checked)}
+              />
+              Add to inventory
+            </label>
+            <button
+              className="btn-base btn-primary"
+              onClick={() => void previewLabel()}
+              disabled={actionBusy !== null}
+            >
+              {actionBusy === "preview" ? "Preparing..." : "Preview Label"}
+            </button>
+            <button
+              className="btn-base btn-primary"
+              onClick={() => void submitLabelGeneration(true)}
+              disabled={actionBusy !== null}
+            >
+              {actionBusy === "print" ? "Printing..." : "Print Tag"}
+            </button>
+          </div>
+          <p className="hint">One EPC is generated per tag, and mappings are held in runtime memory.</p>
+          {actionStatus ? <p className="status">{actionStatus}</p> : null}
+          {actionError ? <p className="error">{actionError}</p> : null}
         </section>
 
         {lastBatch ? (
           <section className="glass-panel card">
-          <h2>Last Generated Batch</h2>
-          <p>
-            <strong>Lightspeed System ID:</strong> {lastBatch.lightspeedSystemId}
-          </p>
-          <p>
-            <strong>Derived Item Number:</strong> {lastBatch.itemNumber}
-          </p>
-          <table>
-            <thead>
-              <tr>
-                <th>
-                  <button
-                    type="button"
-                    className={`table-sort-btn ${batchSortState.field === "epc" ? "active" : ""}`}
-                    onClick={() => toggleBatchSort("epc")}
-                  >
-                    <span>EPC</span>
-                    <span className="sort-mark">
-                      {batchSortState.field === "epc"
-                        ? batchSortState.direction === "asc"
-                          ? "↑"
-                          : "↓"
-                        : "↕"}
-                    </span>
-                  </button>
-                </th>
-                <th>
-                  <button
-                    type="button"
-                    className={`table-sort-btn ${batchSortState.field === "serialNumber" ? "active" : ""}`}
-                    onClick={() => toggleBatchSort("serialNumber")}
-                  >
-                    <span>Serial</span>
-                    <span className="sort-mark">
-                      {batchSortState.field === "serialNumber"
-                        ? batchSortState.direction === "asc"
-                          ? "↑"
-                          : "↓"
-                        : "↕"}
-                    </span>
-                  </button>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedBatchLabels.map((label) => (
-                <tr key={`${label.epc}-${label.serialNumber}`}>
-                  <td>
-                    <code>{label.epc}</code>
-                  </td>
-                  <td>{label.serialNumber}</td>
+            <h2>Last Generated Batch</h2>
+            <p>
+              <strong>Lightspeed System ID:</strong> {lastBatch.lightspeedSystemId}
+            </p>
+            <p>
+              <strong>Derived Item Number:</strong> {lastBatch.itemNumber}
+            </p>
+            <table>
+              <thead>
+                <tr>
+                  <th>
+                    <button
+                      type="button"
+                      className={`table-sort-btn ${batchSortState.field === "epc" ? "active" : ""}`}
+                      onClick={() => toggleBatchSort("epc")}
+                    >
+                      <span>EPC</span>
+                      <span className="sort-mark">
+                        {batchSortState.field === "epc"
+                          ? batchSortState.direction === "asc"
+                            ? "↑"
+                            : "↓"
+                          : "↕"}
+                      </span>
+                    </button>
+                  </th>
+                  <th>
+                    <button
+                      type="button"
+                      className={`table-sort-btn ${batchSortState.field === "serialNumber" ? "active" : ""}`}
+                      onClick={() => toggleBatchSort("serialNumber")}
+                    >
+                      <span>Serial</span>
+                      <span className="sort-mark">
+                        {batchSortState.field === "serialNumber"
+                          ? batchSortState.direction === "asc"
+                            ? "↑"
+                            : "↓"
+                          : "↕"}
+                      </span>
+                    </button>
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          <label>
-            <span className="control-label">Batch ZPL</span>
-            <textarea value={lastBatch.zpl} readOnly rows={12} />
-          </label>
-          <div className="actions">
-            <button className="btn-base btn-outline" onClick={() => void copyLastBatchZpl()}>
-              Copy ZPL
-            </button>
-          </div>
+              </thead>
+              <tbody>
+                {sortedBatchLabels.map((label) => (
+                  <tr key={`${label.epc}-${label.serialNumber}`}>
+                    <td>
+                      <code>{label.epc}</code>
+                    </td>
+                    <td>{label.serialNumber}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <label>
+              <span className="control-label">Batch ZPL</span>
+              <textarea value={lastBatch.zpl} readOnly rows={12} />
+            </label>
+            <div className="actions">
+              <button className="btn-base btn-outline" onClick={() => void copyLastBatchZpl()}>
+                Copy ZPL
+              </button>
+            </div>
           </section>
         ) : null}
 

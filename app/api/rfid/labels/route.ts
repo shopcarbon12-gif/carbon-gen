@@ -11,7 +11,6 @@ import {
   insertMappings,
   reserveSerialNumbers,
 } from "@/lib/rfidStore";
-import { getRedis } from "@/lib/redis";
 
 export const runtime = "nodejs";
 
@@ -96,34 +95,11 @@ export async function POST(req: Request) {
 
     if (input.printNow) {
       if (!printerIp) {
-        throw new Error("Printer IP is required for print action.");
+        throw new Error("Printer IP is required (please configure your RFID settings).");
       }
       printStatus.attempted = true;
-      try {
-        const redis = getRedis();
-        if (redis) {
-          await redis.lpush(
-            "carbon:print:jobs",
-            JSON.stringify({
-              ip: printerIp,
-              port: printerPort,
-              zpl: result.batchZpl,
-            })
-          );
-          printStatus.success = true;
-          printStatus.message = `Queued ${result.labels.length} label(s) for local print agent.`;
-        } else {
-          await sendZplToPrinter({
-            ip: printerIp,
-            port: printerPort,
-            zpl: result.batchZpl,
-          });
-          printStatus.success = true;
-          printStatus.message = `Sent ${result.labels.length} label(s) to ${printerIp}:${printerPort}.`;
-        }
-      } catch (e: any) {
-        printStatus.message = String(e?.message || "Print failed.");
-      }
+      printStatus.success = true;
+      printStatus.message = "Delegated to client-side network for local IP routing.";
     }
 
     return NextResponse.json(
@@ -136,6 +112,7 @@ export async function POST(req: Request) {
           serialNumber: label.serialNumber,
         })),
         zpl: result.batchZpl,
+        printerIp, // Include resolved IP for the frontend to route locally
         printStatus,
       },
       { status: 201 }

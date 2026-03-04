@@ -21,7 +21,6 @@
     "empty:storage": "node scripts/empty-storage.mjs",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload",
-    "start:printer": "node scripts/print-agent.mjs",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
   },
   "dependencies": {

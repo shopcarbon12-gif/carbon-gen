@@ -591,17 +591,29 @@ export default function LightspeedCatalogWorkspace() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-        const json = (await resp.json().catch(() => ({}))) as { error?: string; printStatus?: { message?: string } };
+        const json = (await resp.json().catch(() => ({}))) as { error?: string; zpl?: string; printerIp?: string };
 
         if (!resp.ok) {
           failed += 1;
           failureMessages.push(
-            `Row ${index + 1}: ${normalizeText(json?.error) || "Unable to print RFID label."}`
+            `Row ${index + 1}: ${normalizeText(json?.error) || "Unable to generate logic label."}`
           );
           continue;
         }
 
-        success += 1;
+        try {
+          const targetIp = (json.printerIp || "").trim();
+          if (!targetIp) throw new Error("Printer IP is missing from configuration.");
+          await fetch(`http://${targetIp}/pstprnt`, {
+            method: "POST",
+            mode: "no-cors",
+            body: json.zpl
+          });
+          success += 1;
+        } catch (e) {
+          failed += 1;
+          failureMessages.push(`Row ${index + 1}: Browser couldn't route payload to ${json.printerIp} (check IP and allow Insecure Content).`);
+        }
       }
 
       if (failed > 0) {
@@ -855,9 +867,8 @@ export default function LightspeedCatalogWorkspace() {
                   <th key={locationName}>
                     <button
                       type="button"
-                      className={`sort-head-btn ${
-                        sortState.field === toLocationSortField(locationName) ? "active" : ""
-                      }`}
+                      className={`sort-head-btn ${sortState.field === toLocationSortField(locationName) ? "active" : ""
+                        }`}
                       onClick={() => toggleSort(toLocationSortField(locationName))}
                       disabled={busy}
                     >
