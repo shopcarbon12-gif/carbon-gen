@@ -11,6 +11,7 @@ import {
   insertMappings,
   reserveSerialNumbers,
 } from "@/lib/rfidStore";
+import { getRedis } from "@/lib/redis";
 
 export const runtime = "nodejs";
 
@@ -99,13 +100,27 @@ export async function POST(req: Request) {
       }
       printStatus.attempted = true;
       try {
-        await sendZplToPrinter({
-          ip: printerIp,
-          port: printerPort,
-          zpl: result.batchZpl,
-        });
-        printStatus.success = true;
-        printStatus.message = `Sent ${result.labels.length} label(s) to ${printerIp}:${printerPort}.`;
+        const redis = getRedis();
+        if (redis) {
+          await redis.lpush(
+            "carbon:print:jobs",
+            JSON.stringify({
+              ip: printerIp,
+              port: printerPort,
+              zpl: result.batchZpl,
+            })
+          );
+          printStatus.success = true;
+          printStatus.message = `Queued ${result.labels.length} label(s) for local print agent.`;
+        } else {
+          await sendZplToPrinter({
+            ip: printerIp,
+            port: printerPort,
+            zpl: result.batchZpl,
+          });
+          printStatus.success = true;
+          printStatus.message = `Sent ${result.labels.length} label(s) to ${printerIp}:${printerPort}.`;
+        }
       } catch (e: any) {
         printStatus.message = String(e?.message || "Print failed.");
       }
