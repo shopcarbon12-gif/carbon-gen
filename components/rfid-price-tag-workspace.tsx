@@ -177,6 +177,72 @@ function toCsvCell(value: unknown) {
   return `"${text.replace(/"/g, '""')}"`;
 }
 
+function resolvePrinterUrls(targetIp: string, targetPortRaw: string) {
+  const parsedPort = Number.parseInt(String(targetPortRaw || "").trim(), 10);
+  const ports = [parsedPort, 80].filter((port, idx, arr) => Number.isFinite(port) && port > 0 && port <= 65535 && arr.indexOf(port) === idx);
+  if (!ports.length) ports.push(80);
+  return ports.map((port) => (port === 80 ? `http://${targetIp}/pstprnt` : `http://${targetIp}:${port}/pstprnt`));
+}
+
+async function sendZplViaLocalBridge(targetIp: string, targetPortRaw: string, zpl: string): Promise<boolean> {
+  const endpoint = "http://127.0.0.1:18181/print";
+  const parsedPort = Number.parseInt(String(targetPortRaw || "").trim(), 10) || 9100;
+  const socketPort = parsedPort === 80 ? 9100 : parsedPort;
+  try {
+    const resp = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ip: targetIp, port: socketPort, zpl }),
+    });
+    if (!resp.ok) return false;
+    const json = (await resp.json().catch(() => ({}))) as { ok?: boolean };
+    return Boolean(json?.ok);
+  } catch {
+    return false;
+  }
+}
+
+async function sendZplToLocalPrinter(
+  targetIp: string,
+  targetPortRaw: string,
+  zpl: string
+): Promise<"fetch" | "beacon" | "bridge"> {
+  const urls = resolvePrinterUrls(targetIp, targetPortRaw);
+
+  for (const url of urls) {
+    try {
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 3500);
+      try {
+        await fetch(url, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "text/plain;charset=UTF-8" },
+          body: zpl,
+          signal: controller.signal,
+        });
+        return "fetch";
+      } finally {
+        window.clearTimeout(timeout);
+      }
+    } catch {
+      // Try next URL or fallback below
+    }
+  }
+
+  if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
+    const payload = new Blob([zpl], { type: "text/plain;charset=UTF-8" });
+    for (const url of urls) {
+      if (navigator.sendBeacon(url, payload)) return "beacon";
+    }
+  }
+
+  const bridged = await sendZplViaLocalBridge(targetIp, targetPortRaw, zpl);
+  if (bridged) return "bridge";
+
+  throw new Error("BROWSER_TO_PRINTER_BLOCKED");
+}
+
 function inferSizeFromDescription(description: string) {
   const parts = String(description || "")
     .trim()
@@ -593,6 +659,7 @@ export default function RfidPriceTagWorkspace() {
         printStatus?: { attempted: boolean; success: boolean; message: string };
         error?: string;
         printerIp?: string;
+        printerPort?: number;
       };
       if (!resp.ok) throw new Error(String(json?.error || "Failed to generate labels."));
 
@@ -605,23 +672,26 @@ export default function RfidPriceTagWorkspace() {
       setLastBatch(batch);
       if (printNow) {
         const targetIp = (json.printerIp || printDraft.printerIp || settingsDraft.printerIp || "").trim();
+        const targetPort = String(json.printerPort || printDraft.printerPort || settingsDraft.printerPort || "80").trim();
         if (!targetIp) {
           throw new Error("Printer IP is required for print action (please set in RFID settings).");
         }
         try {
-          await fetch(`http://${targetIp}/pstprnt`, {
-            method: "POST",
-            mode: "no-cors",
-            body: json.zpl,
-          });
-          setActionStatus(`Sent ${Number(json.created || 0)} label(s) directly to local printer ${targetIp}.`);
+          const method = await sendZplToLocalPrinter(targetIp, targetPort, String(json.zpl || ""));
+          setActionStatus(
+            `Delivered ${Number(json.created || 0)} label payload(s) to printer endpoint at ${targetIp}:${targetPort}.`
+          );
           completeProgress(
             "Print completed.",
-            `Sent ${Number(json.created || 0)} label(s) securely to ${targetIp} via local network browser fetch.`
+            `Delivered ${Number(json.created || 0)} label payload(s) to ${targetIp}:${targetPort} via browser ${
+              method === "fetch" ? "fetch" : method === "beacon" ? "beacon" : "local bridge"
+            } transport.`
           );
         } catch (printErr: any) {
           console.error("Local network print error:", printErr);
-          throw new Error(`Browser failed to reach printer at ${targetIp}. Please ensure you are on the same Wi-Fi network and allow 'Insecure content' for this site.`);
+          throw new Error(
+            `Browser failed to reach printer at ${targetIp}. Allow insecure content for this site, or run local bridge with "npm run printer:bridge" and retry.`
+          );
         }
       } else {
         setActionStatus(`Saved ${Number(json.created || 0)} label mapping(s).`);
@@ -1115,7 +1185,7 @@ export default function RfidPriceTagWorkspace() {
               />
             </label>
             <label>
-              <span className="control-label">Default Printer Port</span>
+              <span className="control-label">Default Printer Port (HTTP /pstprnt)</span>
               <input
                 value={settingsDraft.printerPort}
                 onChange={(e) => setSettingField("printerPort", e.target.value)}

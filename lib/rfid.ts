@@ -21,7 +21,8 @@ export const DEFAULT_RFID_SETTINGS: RfidSettings = {
   itemNumberBits: 40,
   serialBits: 36,
   printerIp: "192.168.1.3",
-  printerPort: 9100,
+  // Browser print flow uses Zebra web print endpoint (/pstprnt), typically on HTTP port 80.
+  printerPort: 80,
   labelWidthDots: LABEL_WIDTH_DOTS,
   labelHeightDots: LABEL_HEIGHT_DOTS,
   labelShiftX: 0,

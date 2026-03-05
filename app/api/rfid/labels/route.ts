@@ -113,6 +113,7 @@ export async function POST(req: Request) {
         })),
         zpl: result.batchZpl,
         printerIp, // Include resolved IP for the frontend to route locally
+        printerPort,
         printStatus,
       },
       { status: 201 }

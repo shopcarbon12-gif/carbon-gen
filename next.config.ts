@@ -17,7 +17,8 @@ const nextConfig: NextConfig = {
         ? "script-src 'self' 'unsafe-inline'"
         : "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
       "style-src 'self' 'unsafe-inline'",
-      isProd ? "connect-src 'self'" : "connect-src 'self' ws: http: https:",
+      // Allow local-network printer endpoints (http://<LAN-IP>/pstprnt) from HTTPS app pages.
+      isProd ? "connect-src 'self' http: https:" : "connect-src 'self' ws: http: https:",
       "font-src 'self'",
       "object-src 'none'",
       "base-uri 'self'",
