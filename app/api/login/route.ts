@@ -1,8 +1,34 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { authenticateUser, normalizeUsername } from "@/lib/userAuth";
 
 const DEFAULT_SESSION_USER_ID = "00000000-0000-0000-0000-000000000001";
+
+function normalizeText(value: unknown) {
+  return String(value ?? "").trim();
+}
+
+function readHashCandidates() {
+  const direct = [
+    normalizeText(process.env.APP_PASSWORD_HASH),
+    normalizeText(process.env.APP_ADMIN_PASSWORD_HASH),
+    normalizeText(process.env.APP_PASSWORD_HASH_PREV),
+  ].filter(Boolean);
+
+  const extra = normalizeText(process.env.APP_PASSWORD_HASHES)
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean);
+
+  return [...direct, ...extra];
+}
+
+function readPlainPasswordCandidates() {
+  return [
+    normalizeText(process.env.APP_PASSWORD),
+    normalizeText(process.env.APP_ADMIN_PASSWORD),
+  ].filter(Boolean);
+}
 
 function setSessionCookies(
   req: Request,
@@ -92,33 +118,33 @@ export async function POST(req: Request) {
     }
 
     // Controlled fallback mode: admin username + master password.
-    if (username !== adminUsername) {
+    const adminAliases = new Set([adminUsername, "admin", "eliorp1"]);
+    if (!adminAliases.has(username)) {
       return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
     }
 
-    const hash = process.env.APP_PASSWORD_HASH;
-    const plainPassword = process.env.APP_PASSWORD;
-
-    if (!hash && !plainPassword) {
+    const hashCandidates = readHashCandidates();
+    const plainCandidates = readPlainPasswordCandidates();
+    if (hashCandidates.length === 0 && plainCandidates.length === 0) {
       return NextResponse.json(
-        { error: "Server misconfigured (missing APP_PASSWORD_HASH/APP_PASSWORD)" },
+        {
+          error:
+            "Server misconfigured (missing APP_PASSWORD_HASH/APP_ADMIN_PASSWORD_HASH/APP_PASSWORD/APP_ADMIN_PASSWORD).",
+        },
         { status: 500 }
       );
     }
 
     let isValid = false;
-    if (hash && hash.length >= 50) {
-      isValid = await bcrypt.compare(password, hash);
-    } else if (plainPassword) {
-      isValid = password === plainPassword;
-    } else {
-      return NextResponse.json(
-        {
-          error:
-            "APP_PASSWORD_HASH looks truncated. In .env.local, escape $ like \\$ and restart dev server.",
-        },
-        { status: 500 }
-      );
+    for (const hash of hashCandidates) {
+      if (!hash || hash.length < 50) continue;
+      if (await bcrypt.compare(password, hash)) {
+        isValid = true;
+        break;
+      }
+    }
+    if (!isValid) {
+      isValid = plainCandidates.some((plain) => password === plain);
     }
 
     if (!isValid) {
