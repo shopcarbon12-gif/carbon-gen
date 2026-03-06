@@ -7,6 +7,7 @@ import {
   type ShopifyOrder,
 } from "@/lib/lightspeedSaleCreate";
 import { normalizeShopDomain } from "@/lib/shopify";
+import { buildOrderLabelZpl, maybePrintWebhookLabel } from "@/lib/shopifyPrinter";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,6 +48,7 @@ export async function POST(req: NextRequest) {
   const hmacHeader = normalizeText(req.headers.get("x-shopify-hmac-sha256"));
   const shopDomain = normalizeText(req.headers.get("x-shopify-shop-domain"));
   const topic = normalizeText(req.headers.get("x-shopify-topic"));
+  const webhookId = normalizeText(req.headers.get("x-shopify-webhook-id"));
 
   const secret = resolveWebhookSecret();
 
@@ -81,6 +83,21 @@ export async function POST(req: NextRequest) {
   );
 
   try {
+    try {
+      const printResult = await maybePrintWebhookLabel({
+        shop,
+        topic: "orders/create",
+        webhookId,
+        zpl: buildOrderLabelZpl(order),
+        title: `Shopify order ${normalizeText(order.name || order.id)}`,
+      });
+      if (!printResult.skipped) {
+        console.log(`[webhook/orders-create] Shopify printer: label sent for ${order.name}`);
+      }
+    } catch (printErr: unknown) {
+      console.warn("[webhook/orders-create] Shopify printer failed:", printErr);
+    }
+
     const posConfig = await loadPosConfig();
     const result = await createLightspeedSale(order, posConfig, shop);
 

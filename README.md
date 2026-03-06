@@ -143,7 +143,7 @@ APP_ADMIN_PASSWORD_HASH=<paste same hash or another bcrypt hash>
 On first login, if `app_users` is empty, this admin account is auto-created.
 
 ## Multi-User + Roles Setup
-1. Run `scripts/supabase_schema.sql` in Supabase SQL editor (includes `app_users` table).
+1. Run the core SQL bootstrap script in `scripts/` (includes `app_users` table).
 2. Restart app.
 3. Login at `/login` with admin credentials.
 4. Go to `/settings` and use **User & Role Management (Admin)**:

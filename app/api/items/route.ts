@@ -28,6 +28,28 @@ function sanitizeFolderPrefix(input: unknown) {
   return raw;
 }
 
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>
+) {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+
+  const runWorker = async () => {
+    while (true) {
+      const current = nextIndex;
+      nextIndex += 1;
+      if (current >= items.length) return;
+      results[current] = await worker(items[current], current);
+    }
+  };
+
+  const concurrency = Math.max(1, Math.min(limit, items.length));
+  await Promise.all(Array.from({ length: concurrency }, () => runWorker()));
+  return results;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const isAuthed =
@@ -53,16 +75,14 @@ export async function POST(req: NextRequest) {
       const folderPrefix = sanitizeFolderPrefix(body?.folderPrefix);
 
       const batchId = crypto.randomUUID();
-      const urls: string[] = [];
-
-      for (let i = 0; i < inputUrls.length; i += 1) {
-        const sourceUrl = inputUrls[i];
+      const importConcurrency = Number.parseInt(process.env.ITEM_IMPORT_CONCURRENCY || "4", 10) || 4;
+      const urls = await mapWithConcurrency<string, string>(
+        inputUrls,
+        importConcurrency,
+        async (sourceUrl, i) => {
         const remote = await fetch(sourceUrl);
         if (!remote.ok) {
-          return NextResponse.json(
-            { error: `Failed to fetch catalog image (${remote.status})` },
-            { status: 502 }
-          );
+          throw new Error(`Failed to fetch catalog image (${remote.status})`);
         }
 
         const arrayBuffer = await remote.arrayBuffer();
@@ -76,8 +96,9 @@ export async function POST(req: NextRequest) {
           bytes,
           contentType: remoteContentType,
         });
-        urls.push(uploaded.url);
-      }
+        return uploaded.url;
+        }
+      );
 
       return NextResponse.json({ urls });
     }
@@ -91,9 +112,8 @@ export async function POST(req: NextRequest) {
     }
 
     const batchId = crypto.randomUUID();
-    const urls: string[] = [];
-
-    for (const file of files) {
+    const uploadConcurrency = Number.parseInt(process.env.ITEM_UPLOAD_CONCURRENCY || "4", 10) || 4;
+    const urls = await mapWithConcurrency<File, string>(files, uploadConcurrency, async (file) => {
       const arrayBuffer = await file.arrayBuffer();
       const bytes = new Uint8Array(arrayBuffer);
       const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
@@ -104,8 +124,8 @@ export async function POST(req: NextRequest) {
         bytes,
         contentType: file.type || "application/octet-stream",
       });
-      urls.push(uploaded.url);
-    }
+      return uploaded.url;
+    });
 
     return NextResponse.json({ urls });
   } catch (e: any) {

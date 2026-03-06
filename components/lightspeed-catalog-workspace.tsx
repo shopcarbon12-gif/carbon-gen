@@ -38,6 +38,8 @@ type CatalogResponse = {
   truncated?: boolean;
   options?: CatalogOptions;
   rows?: CatalogRow[];
+  bootstrap?: boolean;
+  bootstrapEstimatedTotal?: number;
 };
 
 type CatalogFilters = {
@@ -238,6 +240,7 @@ export default function LightspeedCatalogWorkspace() {
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const [bootstrapPending, setBootstrapPending] = useState(false);
   const [selectedRows, setSelectedRows] = useState<Record<string, boolean>>({});
 
   const allShopOptions = useMemo(
@@ -372,11 +375,22 @@ export default function LightspeedCatalogWorkspace() {
           itemTypes: Array.isArray(nextOptions.itemTypes) ? nextOptions.itemTypes : [],
         });
         setSelectedRows({});
+        const isBootstrap = Boolean(json?.bootstrap);
+        setBootstrapPending(isBootstrap);
+        if (isBootstrap) {
+          const estimated = Math.max(0, Number(json?.bootstrapEstimatedTotal || 0));
+          setStatus(
+            estimated > 0
+              ? `Loaded first ${nextRows.length} products quickly. Full catalog (${estimated.toLocaleString()}) is warming in background...`
+              : `Loaded first ${nextRows.length} products quickly. Full catalog is warming in background...`
+          );
+        }
       } catch (e: any) {
         setRows([]);
         setTotal(0);
         setTotalPages(1);
         setSelectedRows({});
+        setBootstrapPending(false);
         setError(String(e?.message || "Failed to load Lightspeed catalog."));
       } finally {
         setBusy(false);
@@ -385,6 +399,14 @@ export default function LightspeedCatalogWorkspace() {
     },
     [buildCatalogParams]
   );
+
+  useEffect(() => {
+    if (!bootstrapPending || busy) return;
+    const timer = setTimeout(() => {
+      void loadCatalogPage(1, appliedFilters);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [appliedFilters, bootstrapPending, busy, loadCatalogPage]);
 
   useEffect(() => {
     void loadCatalogPage(page, appliedFilters);

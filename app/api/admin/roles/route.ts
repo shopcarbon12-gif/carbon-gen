@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { insertRole, listRolePermissions, listRoles, upsertRolePermissions, upsertRoles } from "@/lib/authRepository";
 import {
   defaultAllowedForRole,
   normalizeRoleName,
@@ -13,20 +13,14 @@ function missingTablesMessage(err: unknown) {
   const message = String((err as any)?.message || "");
   const low = message.toLowerCase();
   if (low.includes("app_roles") || low.includes("app_role_permissions")) {
-    return "Missing roles tables. Run scripts/supabase_schema.sql in Supabase SQL editor.";
+    return "Missing roles tables. Run SQL auth bootstrap/migrations.";
   }
   return message || "Roles operation failed.";
 }
 
 async function seedSystemRoles() {
-  const supabase = getSupabaseAdmin();
-
   const rolesPayload = SYSTEM_ROLES.map((name) => ({ name, is_system: true }));
-  const { error: roleErr } = await supabase.from("app_roles").upsert(rolesPayload, {
-    onConflict: "name",
-    ignoreDuplicates: false,
-  });
-  if (roleErr) throw new Error(roleErr.message);
+  await upsertRoles(rolesPayload);
 
   const permsPayload = SYSTEM_ROLES.flatMap((roleName) =>
     PERMISSION_OPTIONS.map((perm) => ({
@@ -35,11 +29,7 @@ async function seedSystemRoles() {
       allowed: defaultAllowedForRole(roleName, perm.key),
     }))
   );
-  const { error: permErr } = await supabase.from("app_role_permissions").upsert(permsPayload, {
-    onConflict: "role_name,permission_key",
-    ignoreDuplicates: false,
-  });
-  if (permErr) throw new Error(permErr.message);
+  await upsertRolePermissions(permsPayload);
 }
 
 export async function GET(req: NextRequest) {
@@ -48,13 +38,7 @@ export async function GET(req: NextRequest) {
   }
   try {
     await seedSystemRoles();
-    const supabase = getSupabaseAdmin();
-    const [{ data: roles, error: rolesErr }, { data: perms, error: permsErr }] = await Promise.all([
-      supabase.from("app_roles").select("name,is_system,created_at,updated_at").order("name"),
-      supabase.from("app_role_permissions").select("role_name,permission_key,allowed"),
-    ]);
-    if (rolesErr) throw new Error(rolesErr.message);
-    if (permsErr) throw new Error(permsErr.message);
+    const [roles, perms] = await Promise.all([listRoles(), listRolePermissions()]);
 
     const permissionsByRole: Record<string, Record<string, boolean>> = {};
     for (const role of roles || []) {
@@ -101,20 +85,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const supabase = getSupabaseAdmin();
-    const { error: insertErr } = await supabase
-      .from("app_roles")
-      .insert({ name, is_system: false });
-    if (insertErr) {
-      return NextResponse.json({ error: insertErr.message }, { status: 500 });
-    }
+    await insertRole(name, false);
 
     const sourcePermissions: Record<string, boolean> = {};
     if (cloneFrom) {
-      const { data } = await supabase
-        .from("app_role_permissions")
-        .select("permission_key,allowed")
-        .eq("role_name", cloneFrom);
+      const data = await listRolePermissions(cloneFrom);
       for (const row of data || []) {
         sourcePermissions[String((row as any).permission_key || "")] = Boolean((row as any).allowed);
       }
@@ -127,11 +102,7 @@ export async function POST(req: NextRequest) {
         ? Boolean(sourcePermissions[perm.key])
         : false,
     }));
-    const { error: permErr } = await supabase.from("app_role_permissions").upsert(payload, {
-      onConflict: "role_name,permission_key",
-      ignoreDuplicates: false,
-    });
-    if (permErr) throw new Error(permErr.message);
+    await upsertRolePermissions(payload);
 
     return NextResponse.json({ ok: true, role: name }, { status: 201 });
   } catch (e: any) {

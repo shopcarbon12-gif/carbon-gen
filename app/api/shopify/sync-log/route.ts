@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isRequestAuthed, isCronAuthed } from "@/lib/auth";
-import { neonQuery, ensureNeonReady } from "@/lib/neonDb";
+import { sqlQuery, ensureSqlReady } from "@/lib/sqlDb";
 import { resolveShop } from "@/lib/shopifyCartConfig";
 
 export const runtime = "nodejs";
@@ -17,8 +17,8 @@ export async function GET(req: NextRequest) {
     const shop = resolveShop(url.searchParams.get("shop"));
     const limit = Math.min(parseInt(url.searchParams.get("limit") || "20", 10) || 20, 100);
 
-    await ensureNeonReady();
-    const data = await neonQuery(
+    await ensureSqlReady();
+    const data = await sqlQuery(
       `SELECT * FROM shopify_cart_sync_activity
        WHERE shop = $1
        ORDER BY synced_at DESC

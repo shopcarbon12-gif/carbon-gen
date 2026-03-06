@@ -20,6 +20,27 @@ async function fetchDropboxAccountInfo(accessToken: string) {
   };
 }
 
+function resolveSafeSettingsOrigin(req: NextRequest) {
+  const configuredRedirect = (process.env.DROPBOX_REDIRECT_URI || "").trim();
+  if (configuredRedirect) {
+    try {
+      const origin = new URL(configuredRedirect).origin;
+      if (/^https:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) {
+        return origin.replace(/^https:/i, "http:");
+      }
+      return origin;
+    } catch {
+      // fall through to request origin
+    }
+  }
+
+  const incoming = req.nextUrl.origin;
+  if (/^https:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(incoming)) {
+    return incoming.replace(/^https:/i, "http:");
+  }
+  return incoming;
+}
+
 export async function GET(req: NextRequest) {
   const session = readSession(req);
   if (!session.isAuthed) {
@@ -37,7 +58,7 @@ export async function GET(req: NextRequest) {
   const returnTo = String(req.cookies.get("carbon_gen_dropbox_oauth_return_to")?.value || "/settings");
 
   const clearAndRedirect = (path: string) => {
-    const out = NextResponse.redirect(new URL(path, req.url));
+    const out = NextResponse.redirect(new URL(path, resolveSafeSettingsOrigin(req)));
     out.cookies.delete("carbon_gen_dropbox_oauth_state");
     out.cookies.delete("carbon_gen_dropbox_oauth_return_to");
     return out;

@@ -1,9 +1,12 @@
 import { lsPost, lsGet, lsPut } from "@/lib/lightspeedApi";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { listCartCatalogParents, type StagingParent, type StagingVariant } from "@/lib/shopifyCartStaging";
 import { findOrCreateCustomer, syncCustomerLsHistory } from "@/lib/lightspeedCustomerSync";
-
-const PROCESSED_TABLE = "shopify_order_sync_log";
+import {
+  getOrderSyncRecord,
+  insertOrderProcessing,
+  upsertOrderSyncRecord,
+  loadLightspeedPosConfig,
+} from "@/lib/lightspeedRepository";
 
 function normalizeText(value: unknown) {
   return String(value ?? "").trim();
@@ -109,12 +112,7 @@ type SaleResult = {
 
 export async function isOrderAlreadyProcessed(shopifyOrderId: number): Promise<boolean> {
   try {
-    const supabase = getSupabaseAdmin();
-    const { data } = await supabase
-      .from(PROCESSED_TABLE)
-      .select("id, status")
-      .eq("shopify_order_id", shopifyOrderId)
-      .maybeSingle();
+    const data = await getOrderSyncRecord(shopifyOrderId);
     if (!data) return false;
     // Block if completed OR if another process is actively working on it
     if (data.status === "completed" || data.status === "processing") return true;
@@ -129,20 +127,11 @@ async function claimOrderForProcessing(
   shopifyOrderName: string,
 ): Promise<boolean> {
   try {
-    const supabase = getSupabaseAdmin();
-    const { error } = await supabase.from(PROCESSED_TABLE).insert({
-      shopify_order_id: shopifyOrderId,
-      shopify_order_name: shopifyOrderName,
-      status: "processing",
-      processed_at: new Date().toISOString(),
-    });
-    if (error) {
-      // Unique constraint violation = another process already claimed it
-      if (error.code === "23505") return false;
-      console.warn(`[saleCreate] claimOrderForProcessing warning: ${error.message}`);
-    }
+    await insertOrderProcessing(shopifyOrderId, shopifyOrderName);
     return true;
-  } catch {
+  } catch (error: any) {
+    // Unique constraint violation = another process already claimed it
+    if (String(error?.message || "").toLowerCase().includes("duplicate")) return false;
     return true; // proceed on error (fail open)
   }
 }
@@ -155,18 +144,13 @@ export async function markOrderProcessed(
   errorMessage?: string
 ): Promise<void> {
   try {
-    const supabase = getSupabaseAdmin();
-    await supabase.from(PROCESSED_TABLE).upsert(
-      {
-        shopify_order_id: shopifyOrderId,
-        shopify_order_name: shopifyOrderName,
-        ls_sale_id: lsSaleId,
-        status,
-        error_message: errorMessage || null,
-        processed_at: new Date().toISOString(),
-      },
-      { onConflict: "shopify_order_id" }
-    );
+    await upsertOrderSyncRecord({
+      shopifyOrderId,
+      shopifyOrderName,
+      lsSaleId,
+      status,
+      errorMessage: errorMessage || null,
+    });
   } catch {
     // best-effort logging
   }
@@ -446,14 +430,7 @@ export async function createLightspeedSale(
 export async function loadPosConfig(): Promise<PosConfig> {
   const key = normalizeText(process.env.LS_ACCOUNT_ID) || "default";
   try {
-    const supabase = getSupabaseAdmin();
-    const { data } = await supabase
-      .from("lightspeed_pos_config")
-      .select("config")
-      .eq("id", key)
-      .maybeSingle();
-
-    const cfg = (data?.config && typeof data.config === "object" ? data.config : {}) as Record<string, unknown>;
+    const cfg = (await loadLightspeedPosConfig(key)) || {};
 
     const ds = (cfg.downloadSettings && typeof cfg.downloadSettings === "object"
       ? cfg.downloadSettings

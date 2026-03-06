@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import { createClient } from "@supabase/supabase-js";
 import {
   DeleteObjectsCommand,
   ListObjectsV2Command,
@@ -35,7 +34,6 @@ function env(name) {
 function normalizeProvider() {
   const raw = env("IMAGE_STORAGE_PROVIDER").toLowerCase();
   if (raw === "r2") return "r2";
-  if (raw === "supabase") return "supabase";
   return "auto";
 }
 
@@ -113,61 +111,6 @@ async function runR2(prefixes) {
   console.log(`Deleted ${deleted} object(s) from R2.`);
 }
 
-async function listSupabaseFiles(supabase, bucket, prefix) {
-  const queue = [prefix || ""];
-  const files = [];
-  while (queue.length) {
-    const current = queue.shift() || "";
-    const { data, error } = await supabase.storage.from(bucket).list(current, {
-      limit: 1000,
-      sortBy: { column: "name", order: "asc" },
-    });
-    if (error) throw new Error(error.message);
-    for (const entry of data || []) {
-      const childPath = `${current}/${entry.name}`.replace(/^\/+/, "");
-      if (!entry.id) {
-        queue.push(childPath);
-      } else {
-        files.push(childPath);
-      }
-    }
-  }
-  return files;
-}
-
-async function runSupabase(prefixes) {
-  const url = env("NEXT_PUBLIC_SUPABASE_URL");
-  const key = env("SUPABASE_SERVICE_ROLE_KEY");
-  const bucket = env("SUPABASE_STORAGE_BUCKET_ITEMS");
-  if (!url || !key || !bucket) {
-    throw new Error(
-      "Missing Supabase config. Set NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_STORAGE_BUCKET_ITEMS."
-    );
-  }
-  const supabase = createClient(url, key, { auth: { persistSession: false } });
-
-  const allFiles = [];
-  for (const prefix of prefixes) {
-    const listed = await listSupabaseFiles(supabase, bucket, prefix);
-    allFiles.push(...listed);
-  }
-
-  const deduped = Array.from(new Set(allFiles));
-  if (!deduped.length) {
-    console.log("No objects found to delete.");
-    return;
-  }
-
-  let deleted = 0;
-  for (let i = 0; i < deduped.length; i += 1000) {
-    const chunk = deduped.slice(i, i + 1000);
-    const { error } = await supabase.storage.from(bucket).remove(chunk);
-    if (error) throw new Error(error.message);
-    deleted += chunk.length;
-  }
-  console.log(`Deleted ${deleted} object(s) from Supabase storage.`);
-}
-
 async function main() {
   const provider = normalizeProvider();
   const prefixes = parsePrefixes();
@@ -180,11 +123,10 @@ async function main() {
     Boolean(env("R2_SECRET_ACCESS_KEY"));
 
   const useR2 = provider === "r2" || (provider === "auto" && hasR2);
-  if (useR2) {
-    await runR2(prefixes);
-  } else {
-    await runSupabase(prefixes);
+  if (!useR2) {
+    throw new Error("R2 is required for storage cleanup in the SQL-only runtime.");
   }
+  await runR2(prefixes);
 }
 
 main().catch((err) => {

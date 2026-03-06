@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isRequestAuthed } from "@/lib/auth";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { getShopifyAdminToken, normalizeShopDomain } from "@/lib/shopify";
+import { deleteShopifyToken } from "@/lib/shopifyTokenRepository";
 
 export async function POST(req: NextRequest) {
   try {
@@ -19,11 +19,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const supabase = getSupabaseAdmin();
-    const { error } = await supabase.from("shopify_tokens").delete().eq("shop", shop);
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+    await deleteShopifyToken(shop);
 
     const envTokenStillConfigured = Boolean(getShopifyAdminToken(shop));
 

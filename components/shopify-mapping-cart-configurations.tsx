@@ -395,7 +395,7 @@ export default function ShopifyMappingCartConfigurations() {
       const loadWarning = typeof (json as { warning?: string })?.warning === "string" ? (json as { warning?: string }).warning : "";
       if (backend === "memory" && loadWarning) {
         setPersistenceWarning(
-          "Config is not persisted. Run scripts/migrations/add_shopify_cart_config.sql in your Supabase SQL editor to enable persistence."
+          "Config is not persisted. Run scripts/migrations/add_shopify_cart_config.sql in your Postgres SQL console to enable persistence."
         );
       }
       const cfg = json.config as Record<string, unknown>;
@@ -502,9 +502,9 @@ export default function ShopifyMappingCartConfigurations() {
       }
       const warning = typeof json?.warning === "string" ? json.warning : "";
       const backend = (json as { backend?: string })?.backend;
-      if (backend === "memory" || (warning && /memory|supabase|unavailable/i.test(warning))) {
+      if (backend === "memory" || (warning && /memory|unavailable/i.test(warning))) {
         setPersistenceWarning(
-          "Config was saved to memory only and will not persist across refreshes. Run scripts/supabase_schema.sql in your Supabase SQL editor to create the shopify_cart_config table."
+          "Config was saved to memory only and will not persist across refreshes. Run the SQL schema migration to create the shopify_cart_config table."
         );
       }
       const msg = `${section} saved.`;

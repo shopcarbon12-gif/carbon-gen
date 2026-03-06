@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isRequestAuthed } from "@/lib/auth";
 import { checkGenerateRateLimit } from "@/lib/ratelimit";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { getOpenAiApiKey } from "@/lib/openaiConfig";
 import {
   fetchRemoteImageBytes,
   getImageFetchMaxBytes,
@@ -61,30 +61,6 @@ async function downloadReferenceAsFile(url: string, index: number) {
     } catch (err: any) {
       lastError = err?.message || "Image fetch failed";
     }
-  }
-
-  try {
-    const parsed = new URL(url);
-    const marker = "/storage/v1/object/public/";
-    const pos = parsed.pathname.indexOf(marker);
-    if (pos >= 0) {
-      const rest = parsed.pathname.slice(pos + marker.length);
-      const slash = rest.indexOf("/");
-      if (slash > 0) {
-        const bucket = rest.slice(0, slash);
-        const objectPath = decodeURIComponent(rest.slice(slash + 1));
-        const supabase = getSupabaseAdmin();
-        const { data, error } = await supabase.storage.from(bucket).download(objectPath);
-        if (!error && data) {
-          const contentType = data.type || "image/png";
-          const ext = extFromContentType(contentType);
-          const bytes = Buffer.from(await data.arrayBuffer());
-          return toFile(bytes, `item-ref-${index + 1}.${ext}`, { type: contentType });
-        }
-      }
-    }
-  } catch {
-    // Keep original error below.
   }
 
   throw new Error(
@@ -160,7 +136,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const apiKey = normalizeText(process.env.OPENAI_API_KEY);
+    const apiKey = normalizeText(getOpenAiApiKey());
     if (!apiKey) {
       return NextResponse.json({ error: "Missing OPENAI_API_KEY on server." }, { status: 500 });
     }

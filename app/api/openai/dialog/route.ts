@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isRequestAuthed } from "@/lib/auth";
+import { getOpenAiApiKey } from "@/lib/openaiConfig";
 
 type DialogMessage = {
   role: "user" | "assistant";
@@ -55,7 +56,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing dialog messages" }, { status: 400 });
     }
 
-    const apiKey = normalizeText(process.env.OPENAI_API_KEY);
+    const apiKey = normalizeText(getOpenAiApiKey());
     if (!apiKey) {
       return NextResponse.json(
         {

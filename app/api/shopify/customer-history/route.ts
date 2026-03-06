@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { getCustomerLsHistory } from "@/lib/lightspeedRepository";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,21 +41,14 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
-      .from("customer_ls_history")
-      .select("sales_json, synced_at")
-      .eq("shopify_email", email)
-      .maybeSingle();
-
-    if (error || !data) {
-      if (error) console.warn("[customer-history] Supabase error (table may not exist yet):", error.message);
+    const data = await getCustomerLsHistory(email);
+    if (!data || !Array.isArray(data.salesJson)) {
       return NextResponse.json(empty, { headers });
     }
 
     return NextResponse.json({
-      sales: data.sales_json || [],
-      synced_at: data.synced_at,
+      sales: data.salesJson || [],
+      synced_at: data.syncedAt,
     }, { headers });
   } catch (err: any) {
     console.warn("[customer-history] Caught error:", err?.message || err);

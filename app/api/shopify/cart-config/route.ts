@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { normalizeShopDomain } from "@/lib/shopify";
+import {
+  loadShopifyCartConfig,
+  upsertShopifyCartConfig,
+} from "@/lib/shopifyCartConfigRepository";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const TABLE = "shopify_cart_config";
 const memoryConfigs = new Map<string, Record<string, unknown>>();
 
 function normalizeText(value: unknown) {
@@ -21,17 +23,9 @@ function resolveShop(raw: string | null | undefined) {
 
 async function loadConfig(shop: string): Promise<{ data: Record<string, unknown>; backend: string; warning?: string }> {
   try {
-    const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
-      .from(TABLE)
-      .select("config")
-      .eq("shop", shop)
-      .maybeSingle();
-
-    if (error) throw error;
-
-    if (data?.config && typeof data.config === "object") {
-      return { data: data.config as Record<string, unknown>, backend: "supabase" };
+    const loaded = await loadShopifyCartConfig(shop);
+    if (loaded && typeof loaded === "object" && Object.keys(loaded).length > 0) {
+      return { data: loaded, backend: "database" };
     }
     const mem = memoryConfigs.get(shop);
     return { data: mem || {}, backend: mem ? "memory" : "none" };
@@ -40,12 +34,12 @@ async function loadConfig(shop: string): Promise<{ data: Record<string, unknown>
     const msg = normalizeText((e as { message?: string } | null)?.message);
     const hint =
       /does not exist|relation.*shopify_cart_config|undefined_table/i.test(msg)
-        ? " Run scripts/migrations/add_shopify_cart_config.sql in Supabase SQL editor."
+        ? " Run scripts/migrations/add_shopify_cart_config.sql in your Postgres SQL console."
         : "";
     return {
       data: mem || {},
       backend: "memory",
-      warning: `Supabase unavailable (${msg}). Using in-memory config.${hint}`,
+      warning: `SQL persistence unavailable (${msg}). Using in-memory config.${hint}`,
     };
   }
 }
@@ -55,28 +49,20 @@ async function saveConfig(shop: string, section: string, values: Record<string, 
   const merged = { ...existing.data, [section]: values };
 
   try {
-    const supabase = getSupabaseAdmin();
-    const { error } = await supabase
-      .from(TABLE)
-      .upsert(
-        { shop, config: merged, updated_at: new Date().toISOString() },
-        { onConflict: "shop" }
-      );
-
-    if (error) throw error;
+    await upsertShopifyCartConfig(shop, merged);
     memoryConfigs.set(shop, merged);
-    return { ok: true, backend: "supabase" };
+    return { ok: true, backend: "database" };
   } catch (e: unknown) {
     memoryConfigs.set(shop, merged);
     const msg = normalizeText((e as { message?: string } | null)?.message);
     const hint =
       /does not exist|relation.*shopify_cart_config|undefined_table/i.test(msg)
-        ? " Run scripts/migrations/add_shopify_cart_config.sql in Supabase SQL editor."
+        ? " Run scripts/migrations/add_shopify_cart_config.sql in your Postgres SQL console."
         : "";
     return {
       ok: true,
       backend: "memory",
-      warning: `Supabase unavailable (${msg}). Saved in-memory only.${hint}`,
+      warning: `SQL persistence unavailable (${msg}). Saved in-memory only.${hint}`,
     };
   }
 }

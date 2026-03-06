@@ -1,16 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const usernameRef = useRef<HTMLInputElement | null>(null);
+  const passwordRef = useRef<HTMLInputElement | null>(null);
 
   async function onLogin() {
-    const un = username.trim().toLowerCase();
-    const pw = password;
+    const un = (username || usernameRef.current?.value || "").trim().toLowerCase();
+    const pw = password || passwordRef.current?.value || "";
 
     if (!un) {
       setStatus("Enter your username.");
@@ -57,10 +59,13 @@ export default function LoginPage() {
 
         <input
           type="text"
+          ref={usernameRef}
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           placeholder="Enter Username"
           autoComplete="username"
+          autoCapitalize="none"
+          autoCorrect="off"
           onKeyDown={(e) => {
             if (e.key === "Enter") onLogin();
           }}
@@ -68,6 +73,7 @@ export default function LoginPage() {
 
         <input
           type="password"
+          ref={passwordRef}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="Enter Password"

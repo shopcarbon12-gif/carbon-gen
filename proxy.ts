@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const loginPreview = req.nextUrl.searchParams.get("preview") === "1";
   const isProd = process.env.NODE_ENV === "production";

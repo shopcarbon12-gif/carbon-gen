@@ -1,5 +1,6 @@
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { normalizeUsername } from "@/lib/userAuth";
+import { ensureSqlReady, hasSqlDatabaseConfigured, sqlQuery } from "@/lib/sqlDb";
+import { findUserByUsername } from "@/lib/authRepository";
 
 export type DropboxTokenRow = {
   user_id: string;
@@ -10,8 +11,48 @@ export type DropboxTokenRow = {
   updated_at: string | null;
 };
 
+type DropboxDbMode = "sql";
+
+let sqlTableEnsured = false;
+
 function env(name: string) {
   return String(process.env[name] || "").trim();
+}
+
+function hasCoolifySqlHint() {
+  return Boolean(
+    (process.env.COOLIFY_DATABASE_URL || "").trim() ||
+      (process.env.COOLIFY_DATABASE_URL_FILE || "").trim() ||
+      (process.env.DATABASE_URL_FILE || "").trim() ||
+      process.env.COOLIFY_FQDN
+  );
+}
+
+function getDbMode(): DropboxDbMode {
+  const hasSql = hasSqlDatabaseConfigured();
+  if (!hasSql && !hasCoolifySqlHint()) {
+    throw new Error("SQL database is not configured.");
+  }
+  return "sql";
+}
+
+async function ensureSqlTable() {
+  if (sqlTableEnsured) return;
+  await ensureSqlReady();
+  await sqlQuery(`
+    CREATE TABLE IF NOT EXISTS dropbox_tokens (
+      user_id TEXT PRIMARY KEY,
+      refresh_token TEXT NOT NULL,
+      account_id TEXT,
+      email TEXT,
+      connected_at TIMESTAMPTZ DEFAULT now(),
+      updated_at TIMESTAMPTZ DEFAULT now()
+    )
+  `);
+  await sqlQuery(
+    `CREATE INDEX IF NOT EXISTS idx_dropbox_tokens_connected_at ON dropbox_tokens(connected_at DESC NULLS LAST)`
+  );
+  sqlTableEnsured = true;
 }
 
 export function getDropboxConfig() {
@@ -24,39 +65,35 @@ export function getDropboxConfig() {
 }
 
 export async function getDropboxTokenRow(userId: string) {
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from("dropbox_tokens")
-    .select("user_id,refresh_token,account_id,email,connected_at,updated_at")
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  return (data as DropboxTokenRow | null) || null;
+  getDbMode();
+  await ensureSqlTable();
+  const rows = await sqlQuery<DropboxTokenRow>(
+    `SELECT user_id, refresh_token, account_id, email, connected_at, updated_at
+     FROM dropbox_tokens
+     WHERE user_id = $1
+     LIMIT 1`,
+    [userId]
+  );
+  return rows[0] || null;
 }
 
 async function getLatestDropboxTokenRow() {
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from("dropbox_tokens")
-    .select("user_id,refresh_token,account_id,email,connected_at,updated_at")
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  return (data as DropboxTokenRow | null) || null;
+  getDbMode();
+  await ensureSqlTable();
+  const rows = await sqlQuery<DropboxTokenRow>(
+    `SELECT user_id, refresh_token, account_id, email, connected_at, updated_at
+     FROM dropbox_tokens
+     ORDER BY updated_at DESC NULLS LAST
+     LIMIT 1`
+  );
+  return rows[0] || null;
 }
 
 async function getUserIdByUsername(username: string) {
   const normalized = normalizeUsername(username);
   if (!normalized) return null;
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from("app_users")
-    .select("id")
-    .eq("username", normalized)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  return String((data as any)?.id || "").trim() || null;
+  const user = await findUserByUsername(normalized);
+  return String((user as any)?.id || "").trim() || null;
 }
 
 export async function getDropboxTokenRowForSession(args: {
@@ -88,23 +125,24 @@ export async function upsertDropboxToken(args: {
   accountId?: string | null;
   email?: string | null;
 }) {
-  const supabase = getSupabaseAdmin();
-  const payload = {
-    user_id: args.userId,
-    refresh_token: args.refreshToken,
-    account_id: args.accountId || null,
-    email: args.email || null,
-    connected_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  };
-  const { error } = await supabase.from("dropbox_tokens").upsert(payload, { onConflict: "user_id" });
-  if (error) throw new Error(error.message);
+  getDbMode();
+  await ensureSqlTable();
+  await sqlQuery(
+    `INSERT INTO dropbox_tokens (user_id, refresh_token, account_id, email, connected_at, updated_at)
+     VALUES ($1, $2, $3, $4, now(), now())
+     ON CONFLICT (user_id) DO UPDATE SET
+       refresh_token = EXCLUDED.refresh_token,
+       account_id = EXCLUDED.account_id,
+       email = EXCLUDED.email,
+       updated_at = now()`,
+    [args.userId, args.refreshToken, args.accountId || null, args.email || null]
+  );
 }
 
 export async function deleteDropboxToken(userId: string) {
-  const supabase = getSupabaseAdmin();
-  const { error } = await supabase.from("dropbox_tokens").delete().eq("user_id", userId);
-  if (error) throw new Error(error.message);
+  getDbMode();
+  await ensureSqlTable();
+  await sqlQuery(`DELETE FROM dropbox_tokens WHERE user_id = $1`, [userId]);
 }
 
 export async function refreshDropboxAccessToken(refreshToken: string) {

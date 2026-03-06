@@ -1,7 +1,11 @@
-﻿import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import {
+  deleteAllModelsForUser,
+  deleteModelsByIds,
+  listAllModelsAsc,
+  listModelsForUser,
+} from "@/lib/modelsRepository";
 
 const DEFAULT_SESSION_USER_ID = "00000000-0000-0000-0000-000000000001";
 
@@ -17,10 +21,14 @@ export async function POST() {
       store.get("carbon_gen_username")?.value?.trim() ||
       DEFAULT_SESSION_USER_ID;
 
-    const supabase = getSupabaseAdmin();
-    const { error } = await supabase.from("models").delete().eq("user_id", userId);
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    const scopedModels = await listModelsForUser(userId);
+    if (scopedModels.length > 0) {
+      await deleteAllModelsForUser(userId);
+    } else {
+      // Legacy/cross-domain sessions can show global models when no scoped rows exist.
+      const allRows = await listAllModelsAsc();
+      const ids = allRows.map((row: any) => String(row?.model_id || "").trim()).filter(Boolean);
+      await deleteModelsByIds(ids, null);
     }
 
     return NextResponse.json({ success: true });

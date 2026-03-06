@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isRequestAuthed, isCronAuthed } from "@/lib/auth";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import {
   getShopifyAdminToken,
   normalizeShopDomain,
@@ -12,6 +11,7 @@ import {
   type StagingParent,
   type StagingVariant,
 } from "@/lib/shopifyCartStaging";
+import { getShopifyAccessToken } from "@/lib/shopifyTokenRepository";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,13 +35,7 @@ function toVariantGid(cartId: string): string {
 }
 
 async function getToken(shop: string): Promise<string | null> {
-  const supabase = getSupabaseAdmin();
-  const { data } = await supabase
-    .from("shopify_tokens")
-    .select("access_token")
-    .eq("shop", shop)
-    .maybeSingle();
-  const dbToken = norm((data as { access_token?: string } | null)?.access_token);
+  const dbToken = await getShopifyAccessToken(shop);
   if (dbToken) return dbToken;
   return getShopifyAdminToken(shop) || null;
 }

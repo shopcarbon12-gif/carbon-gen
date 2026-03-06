@@ -8,9 +8,10 @@ export async function GET() {
     return NextResponse.json(
       {
         ok: true,
-        degraded: true,
+        degraded: false,
         redis: {
           ok: false,
+          optional: true,
           error: "Upstash env vars missing (rate limiting disabled)",
         },
       },

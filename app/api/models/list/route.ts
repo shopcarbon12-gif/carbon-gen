@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { getStoragePublicUrl } from "@/lib/storageProvider";
+import { listModelsForUser } from "@/lib/modelsRepository";
 
 const DEFAULT_SESSION_USER_ID = "00000000-0000-0000-0000-000000000001";
 
@@ -18,7 +19,7 @@ function sanitizeReferenceUrl(value: unknown) {
 function isTemporaryReferenceUrl(raw: string) {
   const v = String(raw || "").toLowerCase();
   if (!v) return false;
-  // Supabase signed object URLs
+  // Legacy signed object URLs
   if (v.includes("/storage/v1/object/sign/")) return true;
   // Typical signed query fragments
   if (v.includes("token=") || v.includes("x-amz-signature=") || v.includes("x-amz-security-token="))
@@ -26,6 +27,73 @@ function isTemporaryReferenceUrl(raw: string) {
   // Dropbox temporary links
   if (v.includes("dl.dropboxusercontent.com")) return true;
   return false;
+}
+
+function extractPathFromStorageUrl(url: string) {
+  try {
+    const u = new URL(url);
+    const markers = [
+      "/storage/v1/object/public/",
+      "/storage/v1/object/sign/",
+      "/storage/v1/object/authenticated/",
+    ];
+    for (const marker of markers) {
+      const idx = u.pathname.indexOf(marker);
+      if (idx < 0) continue;
+      const rest = u.pathname.slice(idx + marker.length);
+      const slash = rest.indexOf("/");
+      if (slash < 0) continue;
+      return decodeURIComponent(rest.slice(slash + 1));
+    }
+    return "";
+  } catch {
+    return "";
+  }
+}
+
+function extractPathFromR2StorageUrl(url: string) {
+  try {
+    const u = new URL(url);
+    const host = String(u.hostname || "").toLowerCase();
+    const configuredBucket = String(process.env.R2_BUCKET || "").trim();
+    const configuredPublicBase = String(process.env.R2_PUBLIC_URL_BASE || "").trim();
+    const parts = u.pathname.split("/").filter(Boolean).map((p) => decodeURIComponent(p));
+
+    if (host.includes("r2.cloudflarestorage.com")) {
+      if (parts.length >= 2) return parts.slice(1).join("/");
+      if (configuredBucket && parts.length >= 1) return parts.join("/");
+      return "";
+    }
+    if (host.endsWith(".r2.dev")) return parts.join("/");
+    if (configuredPublicBase) {
+      try {
+        const base = new URL(configuredPublicBase);
+        if (host !== String(base.hostname || "").toLowerCase()) return "";
+        const baseParts = base.pathname.split("/").filter(Boolean).map((p) => decodeURIComponent(p));
+        let objectParts = parts;
+        if (baseParts.length && parts.length >= baseParts.length) {
+          const isPrefix = baseParts.every((seg, idx) => parts[idx] === seg);
+          if (isPrefix) objectParts = parts.slice(baseParts.length);
+        }
+        return objectParts.join("/");
+      } catch {
+        return "";
+      }
+    }
+    return "";
+  } catch {
+    return "";
+  }
+}
+
+function normalizeReferenceUrl(raw: string) {
+  const objectPath = extractPathFromStorageUrl(raw) || extractPathFromR2StorageUrl(raw);
+  if (!objectPath) return sanitizeReferenceUrl(raw);
+  try {
+    return getStoragePublicUrl(objectPath);
+  } catch {
+    return sanitizeReferenceUrl(raw);
+  }
 }
 
 export async function GET(req: NextRequest) {
@@ -42,20 +110,8 @@ export async function GET(req: NextRequest) {
       req.cookies.get("carbon_gen_username")?.value?.trim() ||
       DEFAULT_SESSION_USER_ID;
 
-    const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
-      .from("models")
-      .select("model_id,name,gender,ref_image_urls,created_at")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    const rows = Array.isArray(data) ? data : [];
+    const rows = await listModelsForUser(userId);
     const cleaned: any[] = [];
-    const staleModelIds: string[] = [];
 
     for (const row of rows) {
       const urls = Array.isArray(row?.ref_image_urls)
@@ -64,25 +120,21 @@ export async function GET(req: NextRequest) {
             .filter((v: string) => v.length > 0)
         : [];
 
-      const hasTemporaryRefs = urls.some((u) => isTemporaryReferenceUrl(u));
-      if (hasTemporaryRefs) {
-        const modelId = String(row?.model_id || "").trim();
-        if (modelId) staleModelIds.push(modelId);
-        continue;
-      }
+      const normalizedUrls: string[] = Array.from(
+        new Set<string>(
+          urls
+            .map((u: string) =>
+              isTemporaryReferenceUrl(u) ? normalizeReferenceUrl(u) : sanitizeReferenceUrl(u)
+            )
+            .filter((value: unknown): value is string => Boolean(value))
+        )
+      );
+      if (normalizedUrls.length < 1) continue;
 
       cleaned.push({
         ...row,
-        ref_image_urls: urls,
+        ref_image_urls: normalizedUrls,
       });
-    }
-
-    if (staleModelIds.length) {
-      await supabase
-        .from("models")
-        .delete()
-        .eq("user_id", userId)
-        .in("model_id", Array.from(new Set(staleModelIds)));
     }
 
     return NextResponse.json({ models: cleaned });

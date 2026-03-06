@@ -1,4 +1,4 @@
-import { neonQuery, ensureNeonReady } from "@/lib/neonDb";
+import { sqlQuery, ensureSqlReady, hasSqlDatabaseConfigured } from "@/lib/sqlDb";
 import { normalizeShopDomain } from "@/lib/shopify";
 
 export type SyncStatus = "PENDING" | "PROCESSED" | "ERROR";
@@ -72,7 +72,7 @@ type PersistedRow = {
 
 type PersistResult<T> = {
   ok: boolean;
-  backend: "neon" | "memory";
+  backend: "sql" | "memory";
   warning?: string;
   data: T;
 };
@@ -233,10 +233,10 @@ function toMemoryRows(shopKey: string) {
   return Array.from(bucket.values()).sort((a, b) => a.sku.localeCompare(b.sku));
 }
 
-async function tryNeon(): Promise<boolean> {
+async function trySql(): Promise<boolean> {
   try {
-    if (!(process.env.NEON_DATABASE_URL || "").trim()) return false;
-    await ensureNeonReady();
+    if (!hasSqlDatabaseConfigured()) return false;
+    await ensureSqlReady();
     return true;
   } catch {
     return false;
@@ -246,17 +246,17 @@ async function tryNeon(): Promise<boolean> {
 export async function listCartCatalogParents(shop: string): Promise<PersistResult<StagingParent[]>> {
   const shopKey = normalizeShopKey(shop);
 
-  if (!(await tryNeon())) {
+  if (!(await trySql())) {
     return {
       ok: true,
       backend: "memory",
-      warning: "Neon is not configured. Cart Inventory staging is running in memory for this session.",
+      warning: "SQL database is not configured. Cart Inventory staging is running in memory for this session.",
       data: toMemoryRows(shopKey),
     };
   }
 
   try {
-    const rows = await neonQuery<PersistedRow>(
+    const rows = await sqlQuery<PersistedRow>(
       `SELECT shop, parent_id, parent_sku, title, category, brand, stock, price,
               image, description, status, error_message, variants, created_at, updated_at
        FROM shopify_cart_inventory_staging
@@ -265,13 +265,13 @@ export async function listCartCatalogParents(shop: string): Promise<PersistResul
       [shopKey]
     );
     const parsed = rows.map((row) => parsePersistedRow(row));
-    return { ok: true, backend: "neon", data: parsed };
+    return { ok: true, backend: "sql", data: parsed };
   } catch (err) {
-    console.warn("[cart-staging] Neon query failed, falling back to memory:", (err as Error)?.message);
+    console.warn("[cart-staging] SQL query failed, falling back to memory:", (err as Error)?.message);
     return {
       ok: true,
       backend: "memory",
-      warning: `Neon staging table unavailable (${(err as Error)?.message}). Using in-memory staging instead.`,
+      warning: `SQL staging table unavailable (${(err as Error)?.message}). Using in-memory staging instead.`,
       data: toMemoryRows(shopKey),
     };
   }
@@ -280,11 +280,75 @@ export async function listCartCatalogParents(shop: string): Promise<PersistResul
 export async function listCartCatalogParentIds(
   shop: string
 ): Promise<PersistResult<Set<string>>> {
-  const listed = await listCartCatalogParents(shop);
-  return {
-    ...listed,
-    data: new Set(listed.data.map((row) => normalizeLower(row.id))),
-  };
+  const shopKey = normalizeShopKey(shop);
+  if (!(await trySql())) {
+    const listed = await listCartCatalogParents(shopKey);
+    return {
+      ...listed,
+      data: new Set(listed.data.map((row) => normalizeLower(row.id))),
+    };
+  }
+
+  try {
+    const rows = await sqlQuery<{ parent_id: string }>(
+      `SELECT parent_id
+       FROM shopify_cart_inventory_staging
+       WHERE shop = $1`,
+      [shopKey]
+    );
+    return {
+      ok: true,
+      backend: "sql",
+      data: new Set(rows.map((row) => normalizeLower(row.parent_id))),
+    };
+  } catch (err) {
+    console.warn("[cart-staging] Parent ID query failed, falling back to memory:", (err as Error)?.message);
+    const listed = await listCartCatalogParents(shopKey);
+    return {
+      ...listed,
+      data: new Set(listed.data.map((row) => normalizeLower(row.id))),
+    };
+  }
+}
+
+async function listCartCatalogParentsByIds(
+  shop: string,
+  parentIds: string[]
+): Promise<PersistResult<StagingParent[]>> {
+  const shopKey = normalizeShopKey(shop);
+  const ids = Array.from(new Set(parentIds.map((id) => normalizeText(id)).filter(Boolean)));
+  if (ids.length < 1) {
+    return { ok: true, backend: "memory", data: [] };
+  }
+
+  if (!(await trySql())) {
+    const listed = await listCartCatalogParents(shopKey);
+    const wanted = new Set(ids.map((id) => normalizeLower(id)));
+    return {
+      ...listed,
+      data: listed.data.filter((row) => wanted.has(normalizeLower(row.id))),
+    };
+  }
+
+  try {
+    const rows = await sqlQuery<PersistedRow>(
+      `SELECT shop, parent_id, parent_sku, title, category, brand, stock, price,
+              image, description, status, error_message, variants, created_at, updated_at
+       FROM shopify_cart_inventory_staging
+       WHERE shop = $1 AND parent_id = ANY($2::text[])
+       ORDER BY updated_at DESC`,
+      [shopKey, ids]
+    );
+    return { ok: true, backend: "sql", data: rows.map((row) => parsePersistedRow(row)) };
+  } catch (err) {
+    console.warn("[cart-staging] Parent subset query failed, falling back to memory:", (err as Error)?.message);
+    const listed = await listCartCatalogParents(shopKey);
+    const wanted = new Set(ids.map((id) => normalizeLower(id)));
+    return {
+      ...listed,
+      data: listed.data.filter((row) => wanted.has(normalizeLower(row.id))),
+    };
+  }
 }
 
 export async function upsertCartCatalogParents(
@@ -300,7 +364,7 @@ export async function upsertCartCatalogParents(
     return { ok: true, backend: "memory", data: { upserted: 0 } };
   }
 
-  if (!(await tryNeon())) {
+  if (!(await trySql())) {
     const bucket = getMemoryBucket(shopKey);
     for (const parent of sanitized) {
       bucket.set(normalizeLower(parent.id), parent);
@@ -308,7 +372,7 @@ export async function upsertCartCatalogParents(
     return {
       ok: true,
       backend: "memory",
-      warning: "Neon is not configured. Cart Inventory staging is running in memory for this session.",
+      warning: "SQL database is not configured. Cart Inventory staging is running in memory for this session.",
       data: { upserted: sanitized.length },
     };
   }
@@ -345,7 +409,7 @@ export async function upsertCartCatalogParents(
         );
       }
 
-      await neonQuery(
+      await sqlQuery(
         `INSERT INTO shopify_cart_inventory_staging
            (shop, parent_id, parent_sku, title, category, brand, stock, price, image, description, status, error_message, variants, updated_at)
          VALUES ${placeholders.join(", ")}
@@ -366,9 +430,9 @@ export async function upsertCartCatalogParents(
       );
     }
 
-    return { ok: true, backend: "neon", data: { upserted: sanitized.length } };
+    return { ok: true, backend: "sql", data: { upserted: sanitized.length } };
   } catch (err) {
-    console.warn("[cart-staging] Neon upsert failed, falling back to memory:", (err as Error)?.message);
+    console.warn("[cart-staging] SQL upsert failed, falling back to memory:", (err as Error)?.message);
     const bucket = getMemoryBucket(shopKey);
     for (const parent of sanitized) {
       bucket.set(normalizeLower(parent.id), parent);
@@ -376,7 +440,7 @@ export async function upsertCartCatalogParents(
     return {
       ok: true,
       backend: "memory",
-      warning: `Neon upsert unavailable (${(err as Error)?.message}). Using in-memory staging instead.`,
+      warning: `SQL upsert unavailable (${(err as Error)?.message}). Using in-memory staging instead.`,
       data: { upserted: sanitized.length },
     };
   }
@@ -385,32 +449,32 @@ export async function upsertCartCatalogParents(
 export async function clearCartCatalogForShop(shop: string): Promise<PersistResult<{ removed: number }>> {
   const shopKey = normalizeShopKey(shop);
 
-  if (!(await tryNeon())) {
+  if (!(await trySql())) {
     const bucket = getMemoryBucket(shopKey);
     const count = bucket.size;
     bucket.clear();
     return {
       ok: true,
       backend: "memory",
-      warning: "Neon is not configured. Cleared in-memory staging for this shop.",
+      warning: "SQL database is not configured. Cleared in-memory staging for this shop.",
       data: { removed: count },
     };
   }
 
   try {
-    const result = await neonQuery<{ cnt: string }>(
+    const result = await sqlQuery<{ cnt: string }>(
       `WITH deleted AS (
          DELETE FROM shopify_cart_inventory_staging WHERE shop = $1 RETURNING parent_id
        ) SELECT count(*)::text AS cnt FROM deleted`,
       [shopKey]
     );
     const removed = parseInt(result[0]?.cnt || "0", 10);
-    return { ok: true, backend: "neon", data: { removed } };
+    return { ok: true, backend: "sql", data: { removed } };
   } catch (err) {
     console.error("[cart-staging] Clear failed:", (err as Error)?.message);
     return {
       ok: false,
-      backend: "neon",
+      backend: "sql",
       warning: `Failed to clear Carts Inventory: ${(err as Error)?.message}`,
       data: { removed: 0 },
     };
@@ -431,7 +495,7 @@ export async function removeCartCatalogParents(
     return { ok: true, backend: "memory", data: { removed: 0 } };
   }
 
-  if (!(await tryNeon())) {
+  if (!(await trySql())) {
     const bucket = getMemoryBucket(shopKey);
     let removed = 0;
     for (const id of ids) {
@@ -440,7 +504,7 @@ export async function removeCartCatalogParents(
     return {
       ok: true,
       backend: "memory",
-      warning: "Neon is not configured. Cart Inventory staging is running in memory for this session.",
+      warning: "SQL database is not configured. Cart Inventory staging is running in memory for this session.",
       data: { removed },
     };
   }
@@ -450,7 +514,7 @@ export async function removeCartCatalogParents(
     for (let i = 0; i < ids.length; i += REMOVE_BATCH_SIZE) {
       const batch = ids.slice(i, i + REMOVE_BATCH_SIZE);
       const placeholders = batch.map((_, idx) => `$${idx + 2}`).join(", ");
-      const result = await neonQuery<{ cnt: string }>(
+      const result = await sqlQuery<{ cnt: string }>(
         `WITH deleted AS (
            DELETE FROM shopify_cart_inventory_staging
            WHERE shop = $1 AND parent_id IN (${placeholders})
@@ -460,12 +524,12 @@ export async function removeCartCatalogParents(
       );
       removed += parseInt(result[0]?.cnt || "0", 10);
     }
-    return { ok: true, backend: "neon", data: { removed } };
+    return { ok: true, backend: "sql", data: { removed } };
   } catch (err) {
     console.error("[cart-staging] Delete failed:", (err as Error)?.message);
     return {
       ok: false,
-      backend: "neon",
+      backend: "sql",
       warning: `Failed to remove from staging: ${(err as Error)?.message}`,
       data: { removed: 0 },
     };
@@ -485,7 +549,7 @@ export async function updateCartCatalogStatus(
     return { ok: true, backend: "memory", data: { updated: 0 } };
   }
 
-  const listed = await listCartCatalogParents(shopKey);
+  const listed = await listCartCatalogParentsByIds(shopKey, ids);
   const byId = new Map(
     listed.data.map((parent) => [normalizeLower(parent.id), parent] as [string, StagingParent])
   );
@@ -523,10 +587,10 @@ export async function updateCartCatalogParentId(
   const oldId = normalizeText(oldParentId);
   const newId = normalizeText(updatedParent.id);
   if (!oldId || !newId || normalizeLower(oldId) === normalizeLower(newId)) {
-    return { ok: true, backend: "neon", data: { updated: 0 } };
+    return { ok: true, backend: "sql", data: { updated: 0 } };
   }
 
-  if (!(await tryNeon())) {
+  if (!(await trySql())) {
     const bucket = getMemoryBucket(shopKey);
     const existing = bucket.get(normalizeLower(oldId));
     if (!existing) return { ok: true, backend: "memory", data: { updated: 0 } };
@@ -538,11 +602,11 @@ export async function updateCartCatalogParentId(
   try {
     await removeCartCatalogParents(shop, [oldId]);
     await upsertCartCatalogParents(shop, [updatedParent]);
-    return { ok: true, backend: "neon", data: { updated: 1 } };
+    return { ok: true, backend: "sql", data: { updated: 1 } };
   } catch (err) {
     return {
       ok: false,
-      backend: "neon",
+      backend: "sql",
       warning: `Failed to update parent_id: ${(err as Error)?.message}`,
       data: { updated: 0 },
     };

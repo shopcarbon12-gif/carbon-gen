@@ -3,12 +3,12 @@
  */
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import {
   getShopifyAdminToken,
   normalizeShopDomain,
   runShopifyGraphql,
 } from "@/lib/shopify";
+import { listShopifyTokenRecords } from "@/lib/shopifyTokenRepository";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,15 +26,9 @@ type DatePoint = { date: string; current: number; previous: number };
 type TopRevenueRow = { sku: string; amount: number };
 
 async function getShopAndToken(): Promise<{ shop: string; token: string } | null> {
-  const supabase = getSupabaseAdmin();
-  const { data } = await supabase
-    .from("shopify_tokens")
-    .select("shop,access_token")
-    .order("installed_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  const shop = norm((data as { shop?: string })?.shop);
-  const token = norm((data as { access_token?: string })?.access_token);
+  const row = (await listShopifyTokenRecords(1))[0];
+  const shop = norm(row?.shop);
+  const token = norm(row?.accessToken);
   if (shop && token) return { shop: normalizeShopDomain(shop) || shop, token };
   const envShop = normalizeShopDomain(norm(process.env.SHOPIFY_SHOP_DOMAIN));
   const envToken = envShop ? getShopifyAdminToken(envShop) : null;

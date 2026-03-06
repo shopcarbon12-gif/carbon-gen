@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { ensureLightspeedEnvLoaded } from "@/lib/loadLightspeedEnv";
 import {
   getShopifyAdminToken,
   normalizeShopDomain,
   runShopifyGraphql,
 } from "@/lib/shopify";
+import {
+  getShopifyTokenRecord,
+  listShopifyTokenRecords,
+} from "@/lib/shopifyTokenRepository";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -329,14 +332,8 @@ async function resolveImageUrl(accessToken: string, itemId: string) {
 
 async function getDbTokenForShop(shop: string) {
   try {
-    const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
-      .from("shopify_tokens")
-      .select("access_token")
-      .eq("shop", shop)
-      .maybeSingle();
-    if (error) return "";
-    return normalizeText((data as any)?.access_token);
+    const row = await getShopifyTokenRecord(shop);
+    return normalizeText(row?.accessToken);
   } catch {
     return "";
   }
@@ -344,14 +341,11 @@ async function getDbTokenForShop(shop: string) {
 
 async function getRecentShopRows(limit = 20) {
   try {
-    const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
-      .from("shopify_tokens")
-      .select("shop,access_token,installed_at")
-      .order("installed_at", { ascending: false })
-      .limit(limit);
-    if (error || !Array.isArray(data)) return [];
-    return data as Array<{ shop?: string; access_token?: string }>;
+    const rows = await listShopifyTokenRecords(limit);
+    return rows.map((row) => ({
+      shop: row.shop,
+      access_token: row.accessToken,
+    }));
   } catch {
     return [];
   }

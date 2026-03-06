@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import {
   getShopifyAdminToken,
   normalizeShopDomain,
   runShopifyGraphql,
 } from "@/lib/shopify";
+import {
+  getShopifyAccessToken,
+  listInstalledShops,
+} from "@/lib/shopifyTokenRepository";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -216,14 +219,7 @@ function buildShopifyOrderQuery(args: { fromDate: string; toDate: string }) {
 }
 
 async function getTokenCandidates(shop: string) {
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from("shopify_tokens")
-    .select("access_token")
-    .eq("shop", shop)
-    .maybeSingle();
-
-  const dbToken = !error ? norm((data as any)?.access_token) : "";
+  const dbToken = await getShopifyAccessToken(shop);
   const envToken = norm(getShopifyAdminToken(shop));
   const candidates: Array<{ token: string; source: "db" | "env_token" }> = [];
   if (dbToken) candidates.push({ token: dbToken, source: "db" });
@@ -232,18 +228,7 @@ async function getTokenCandidates(shop: string) {
 }
 
 async function getAvailableShops() {
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from("shopify_tokens")
-    .select("shop,installed_at")
-    .order("installed_at", { ascending: false })
-    .limit(100);
-
-  const fromDb = !error && Array.isArray(data)
-    ? data
-        .map((row) => normalizeShopDomain(norm((row as any)?.shop) || ""))
-        .filter((shop): shop is string => Boolean(shop))
-    : [];
+  const fromDb = await listInstalledShops(100);
 
   const configured = normalizeShopDomain(norm(process.env.SHOPIFY_SHOP_DOMAIN) || "");
   const unique = new Set<string>(fromDb);

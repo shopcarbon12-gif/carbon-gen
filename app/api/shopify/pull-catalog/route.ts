@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isRequestAuthed } from "@/lib/auth";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { getShopifyAdminToken, normalizeShopDomain } from "@/lib/shopify";
+import {
+  getMostRecentInstalledShop,
+  getShopifyAccessToken,
+} from "@/lib/shopifyTokenRepository";
 import {
   upsertCartCatalogParents,
   clearCartCatalogForShop,
@@ -34,14 +37,7 @@ function parseNumber(value: unknown) {
 }
 
 async function getTokenForShop(shop: string) {
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from("shopify_tokens")
-    .select("access_token")
-    .eq("shop", shop)
-    .maybeSingle();
-
-  const dbToken = !error ? normalizeText(data?.access_token) : "";
+  const dbToken = await getShopifyAccessToken(shop);
   if (dbToken) return dbToken;
 
   const envToken = getShopifyAdminToken(shop);
@@ -55,15 +51,7 @@ async function resolveFallbackShop() {
   if (envShop) return envShop;
 
   try {
-    const supabase = getSupabaseAdmin();
-    const { data } = await supabase
-      .from("shopify_tokens")
-      .select("shop")
-      .order("installed_at", { ascending: false })
-      .limit(1);
-    if (Array.isArray(data) && data.length > 0) {
-      return normalizeShopDomain(normalizeText(data[0]?.shop) || "") || "";
-    }
+    return await getMostRecentInstalledShop();
   } catch {
     // fallback
   }

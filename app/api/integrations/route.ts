@@ -169,15 +169,54 @@ function inferLabel(status: IntegrationStatus, json: unknown) {
   return "Online";
 }
 
+function normalizeProbeOrigin(origin: string) {
+  const trimmed = origin.trim().replace(/\/+$/, "");
+  if (!trimmed) return "";
+  try {
+    const parsed = new URL(trimmed);
+    const isLocalHost =
+      parsed.hostname === "localhost" ||
+      parsed.hostname === "127.0.0.1" ||
+      parsed.hostname === "::1";
+    if (isLocalHost && parsed.protocol === "https:") {
+      parsed.protocol = "http:";
+      return parsed.origin;
+    }
+    return parsed.origin;
+  } catch {
+    return "";
+  }
+}
+
 function getProbeOrigins(req: NextRequest) {
-  const requestOrigin = new URL(req.url).origin.replace(/\/+$/, "");
-  const configuredInternal = String(process.env.INTERNAL_API_ORIGIN || "")
-    .trim()
-    .replace(/\/+$/, "");
+  const requestOrigin = normalizeProbeOrigin(new URL(req.url).origin);
+  const configuredInternal = String(process.env.INTERNAL_API_ORIGIN || "").trim().replace(/\/+$/, "");
   const defaultInternal =
     process.env.NODE_ENV === "production" ? "http://127.0.0.1:3000" : "";
-  const origins = [configuredInternal || defaultInternal, requestOrigin].filter(Boolean);
-  return Array.from(new Set(origins));
+  const normalizedConfigured = normalizeProbeOrigin(configuredInternal);
+  const normalizedDefault = normalizeProbeOrigin(defaultInternal);
+  const origins = [normalizedConfigured || normalizedDefault, requestOrigin]
+    .filter(Boolean)
+    .map((origin) => {
+      try {
+        const parsed = new URL(origin);
+        const isLocal =
+          parsed.hostname === "localhost" ||
+          parsed.hostname === "127.0.0.1" ||
+          parsed.hostname === "::1";
+        if (isLocal && parsed.protocol === "https:") parsed.protocol = "http:";
+        return parsed.origin;
+      } catch {
+        return origin;
+      }
+    });
+  return Array.from(
+    new Set(
+      origins.filter(
+        (origin) => !/^https:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::|\/|$)/i.test(origin)
+      )
+    )
+  );
 }
 
 async function probeEndpoint(req: NextRequest, endpoint: string): Promise<IntegrationRecord> {
@@ -224,7 +263,13 @@ async function probeEndpoint(req: NextRequest, endpoint: string): Promise<Integr
       lastStatus = status;
       lastLabel = inferLabel(status, json);
     } catch (e: any) {
-      console.error(`[Integrations Probe] Failed to fetch ${endpoint} via ${origin}:`, e?.message || e);
+      const message = String(e?.message || e || "");
+      const localOrigin = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::|\/|$)/i.test(origin);
+      const expectedLocalFailure =
+        localOrigin && /fetch failed|ECONNREFUSED|connect|abort|timeout/i.test(message);
+      if (!expectedLocalFailure) {
+        console.error(`[Integrations Probe] Failed to fetch ${endpoint} via ${origin}:`, message);
+      }
       failedOrigins++;
     } finally {
       clearTimeout(timeout);

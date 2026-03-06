@@ -154,6 +154,7 @@ async function setRedisJson(key: string, value: unknown, ttl: number): Promise<v
 
 let lightspeedRequestChain: Promise<void> = Promise.resolve();
 let lightspeedLastRequestAt = 0;
+let catalogWarmPromise: Promise<void> | null = null;
 
 function toArray<T>(value: T | T[] | null | undefined): T[] {
   if (Array.isArray(value)) return value;
@@ -1127,6 +1128,37 @@ async function fetchRawCatalogItems(
   return { rawItems, nextCursor: null };
 }
 
+function triggerCatalogWarmup(params: {
+  accessToken: string;
+  refresh: boolean;
+  maxPagesOverride?: number;
+}) {
+  if (catalogWarmPromise) return;
+  catalogWarmPromise = (async () => {
+    try {
+      const [shopsData, categoriesData, manufacturerData, catalogResult] = await Promise.all([
+        loadShops(params.accessToken, params.refresh),
+        loadCategories(params.accessToken, params.refresh),
+        loadManufacturers(params.accessToken, params.refresh),
+        fetchRawCatalogItems(params.accessToken, params.maxPagesOverride),
+      ]);
+      await loadCatalogSnapshot(
+        params.accessToken,
+        {
+          shopNameById: shopsData.shopNameById,
+          categoryNameById: categoriesData.categoryNameById,
+          manufacturerNameById: manufacturerData.manufacturerNameById,
+        },
+        catalogResult.rawItems
+      );
+    } catch (error: any) {
+      console.warn("[Lightspeed catalog] Background warm failed:", String(error?.message || error));
+    } finally {
+      catalogWarmPromise = null;
+    }
+  })();
+}
+
 async function loadCatalogSnapshot(
   accessToken: string,
   deps: {
@@ -1289,42 +1321,50 @@ function sortRows(
   sortDirection: CatalogSortDirection,
   shopFilters: string[]
 ) {
-  return [...rows].sort((a, b) => {
+  const locationName =
+    sortField.startsWith("location:") ? normalizeText(sortField.slice("location:".length)) : "";
+  const decorated = rows.map((row) => ({
+    row,
+    keyCustomSku: normalizeText(row.customSku),
+    keyItem: toSortableItemName(row),
+    keyQty: toSortableQty(row, shopFilters),
+    keyPrice: toSortablePrice(row),
+    keyCategory: normalizeText(row.category),
+    keyUpc: toSortableUpc(row),
+    keyColor: toSortableColor(row),
+    keySize: toSortableSize(row),
+    keyLocationQty: locationName ? getLocationQty(row.locations, locationName) : null,
+  }));
+
+  decorated.sort((a, b) => {
     let compared = 0;
 
     if (sortField === "customSku") {
-      compared = compareRowsByCustomSku(a, b);
+      compared = compareRowsByCustomSku(a.row, b.row);
       if (sortDirection === "desc") compared *= -1;
     } else if (sortField === "item") {
-      compared = compareNullableText(toSortableItemName(a), toSortableItemName(b), sortDirection);
+      compared = compareNullableText(a.keyItem, b.keyItem, sortDirection);
     } else if (sortField === "qty") {
-      compared = compareNullableNumber(
-        toSortableQty(a, shopFilters),
-        toSortableQty(b, shopFilters),
-        sortDirection
-      );
+      compared = compareNullableNumber(a.keyQty, b.keyQty, sortDirection);
     } else if (sortField === "price") {
-      compared = compareNullableNumber(toSortablePrice(a), toSortablePrice(b), sortDirection);
+      compared = compareNullableNumber(a.keyPrice, b.keyPrice, sortDirection);
     } else if (sortField === "category") {
-      compared = compareNullableText(a.category, b.category, sortDirection);
+      compared = compareNullableText(a.keyCategory, b.keyCategory, sortDirection);
     } else if (sortField === "upc") {
-      compared = compareNullableText(toSortableUpc(a), toSortableUpc(b), sortDirection);
+      compared = compareNullableText(a.keyUpc, b.keyUpc, sortDirection);
     } else if (sortField === "color") {
-      compared = compareNullableText(toSortableColor(a), toSortableColor(b), sortDirection);
+      compared = compareNullableText(a.keyColor, b.keyColor, sortDirection);
     } else if (sortField === "size") {
-      compared = compareNullableText(toSortableSize(a), toSortableSize(b), sortDirection);
-    } else if (sortField.startsWith("location:")) {
-      const locationName = normalizeText(sortField.slice("location:".length));
-      compared = compareNullableNumber(
-        getLocationQty(a.locations, locationName),
-        getLocationQty(b.locations, locationName),
-        sortDirection
-      );
+      compared = compareNullableText(a.keySize, b.keySize, sortDirection);
+    } else if (locationName) {
+      compared = compareNullableNumber(a.keyLocationQty, b.keyLocationQty, sortDirection);
     }
 
     if (compared !== 0) return compared;
-    return compareRowsByCustomSku(a, b);
+    return compareRowsByCustomSku(a.row, b.row);
   });
+
+  return decorated.map((entry) => entry.row);
 }
 
 export async function GET(req: NextRequest) {
@@ -1393,27 +1433,62 @@ export async function GET(req: NextRequest) {
     const cacheWarm = cachedRows !== null && cachedRows.length > 0;
 
     const maxPagesOverride = maxPagesParam > 0 ? Math.min(maxPagesParam, 120) : undefined;
-    const [shopsData, categoriesData, manufacturerData, catalogResult] = await Promise.all([
-      loadShops(accessToken, refresh),
-      loadCategories(accessToken, refresh),
-      loadManufacturers(accessToken, refresh),
-      cacheWarm ? null : fetchRawCatalogItems(accessToken, maxPagesOverride),
-    ]);
+    let bootstrapMode = false;
+    let bootstrapEstimatedTotal = 0;
+    let shopsData: Awaited<ReturnType<typeof loadShops>>;
+    let categoriesData: Awaited<ReturnType<typeof loadCategories>>;
+    let manufacturerData: Awaited<ReturnType<typeof loadManufacturers>>;
+    let snapshot: CatalogRow[];
+    let nextCatalogCursor: string | null = null;
 
-    const rawItemsForSnapshot = cacheWarm ? [] : (catalogResult?.rawItems ?? []);
-    const nextCatalogCursor = cacheWarm ? null : (catalogResult?.nextCursor ?? null);
+    if (!cacheWarm && !allRowsMode && !refresh) {
+      const [shops, categories, manufacturers, firstPageResult] = await Promise.all([
+        loadShops(accessToken, false),
+        loadCategories(accessToken, false),
+        loadManufacturers(accessToken, false),
+        resolvePageLimit(accessToken),
+      ]);
 
-    const snapshot = cacheWarm
-      ? cachedRows
-      : await loadCatalogSnapshot(
+      shopsData = shops;
+      categoriesData = categories;
+      manufacturerData = manufacturers;
+      bootstrapMode = true;
+      bootstrapEstimatedTotal = Math.max(0, Number(firstPageResult.firstPage.totalCount || 0));
+      snapshot = await loadCatalogSnapshot(
         accessToken,
         {
           shopNameById: shopsData.shopNameById,
           categoryNameById: categoriesData.categoryNameById,
           manufacturerNameById: manufacturerData.manufacturerNameById,
         },
-        rawItemsForSnapshot
+        firstPageResult.firstPage.rows,
+        true
       );
+      triggerCatalogWarmup({ accessToken, refresh: false, maxPagesOverride });
+    } else {
+      const [shops, categories, manufacturers, catalogResult] = await Promise.all([
+        loadShops(accessToken, refresh),
+        loadCategories(accessToken, refresh),
+        loadManufacturers(accessToken, refresh),
+        cacheWarm ? null : fetchRawCatalogItems(accessToken, maxPagesOverride),
+      ]);
+      shopsData = shops;
+      categoriesData = categories;
+      manufacturerData = manufacturers;
+      const rawItemsForSnapshot = cacheWarm ? [] : (catalogResult?.rawItems ?? []);
+      nextCatalogCursor = cacheWarm ? null : (catalogResult?.nextCursor ?? null);
+      snapshot = cacheWarm
+        ? cachedRows
+        : await loadCatalogSnapshot(
+          accessToken,
+          {
+            shopNameById: shopsData.shopNameById,
+            categoryNameById: categoriesData.categoryNameById,
+            manufacturerNameById: manufacturerData.manufacturerNameById,
+          },
+          rawItemsForSnapshot
+        );
+    }
 
     const defaultLocation = pickDefaultLocation(shopsData.shopNames);
     const availableShopNames = shopsData.shopNames;
@@ -1509,10 +1584,14 @@ export async function GET(req: NextRequest) {
       effectiveShopFilters
     );
 
-    const total = filtered.length;
-    const totalPages = allRowsMode ? 1 : Math.max(1, Math.ceil(total / pageSize));
-    const currentPage = allRowsMode ? 1 : Math.min(page, totalPages);
-    const startIndex = allRowsMode ? 0 : (currentPage - 1) * pageSize;
+    const total = bootstrapMode ? filtered.length : filtered.length;
+    const totalPages = bootstrapMode
+      ? 1
+      : allRowsMode
+        ? 1
+        : Math.max(1, Math.ceil(total / pageSize));
+    const currentPage = bootstrapMode ? 1 : allRowsMode ? 1 : Math.min(page, totalPages);
+    const startIndex = bootstrapMode ? 0 : allRowsMode ? 0 : (currentPage - 1) * pageSize;
     const slicedRows = allRowsMode
       ? filtered.slice(0, Math.min(total, pageSize))
       : filtered.slice(startIndex, startIndex + pageSize);
@@ -1548,6 +1627,10 @@ export async function GET(req: NextRequest) {
       },
       rows: slicedRows,
     };
+    if (bootstrapMode) {
+      resp.bootstrap = true;
+      resp.bootstrapEstimatedTotal = bootstrapEstimatedTotal;
+    }
     if (allRowsMode && nextCatalogCursor) {
       resp.nextCatalogCursor = nextCatalogCursor;
       resp.hasMoreCatalog = true;

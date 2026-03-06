@@ -1,9 +1,9 @@
 /**
  * Persists "last sync" metadata so Compare works across server instances.
- * Uses Neon (Postgres) instead of Supabase to reduce egress.
+ * Uses SQL (Postgres) persistence for cross-instance consistency.
  */
 
-import { neonQuery, ensureNeonReady } from "@/lib/neonDb";
+import { sqlQuery, ensureSqlReady, hasSqlDatabaseConfigured } from "@/lib/sqlDb";
 import { normalizeShopDomain } from "@/lib/shopify";
 
 function normalizeText(value: unknown) {
@@ -18,10 +18,10 @@ function toShopKey(shop: string) {
   return normalizeShopDomain(normalizeText(shop)) || normalizeText(shop).toLowerCase() || "";
 }
 
-async function tryNeon(): Promise<boolean> {
+async function trySql(): Promise<boolean> {
   try {
-    if (!(process.env.NEON_DATABASE_URL || "").trim()) return false;
-    await ensureNeonReady();
+    if (!hasSqlDatabaseConfigured()) return false;
+    await ensureSqlReady();
     return true;
   } catch {
     return false;
@@ -38,10 +38,10 @@ export async function logStageAdd(shop: string, parentIds: string[]): Promise<vo
   const ids = Array.from(new Set(parentIds.map((id) => normalizeText(id)).filter(Boolean)));
   if (ids.length < 1) return;
 
-  if (!(await tryNeon())) return;
+  if (!(await trySql())) return;
 
   try {
-    await neonQuery(
+    await sqlQuery(
       `INSERT INTO shopify_cart_sync_log (shop, action, parent_ids, created_at)
        VALUES ($1, $2, $3, $4)`,
       [shopKey, "stage-add", JSON.stringify(ids), new Date().toISOString()]
@@ -61,12 +61,12 @@ export async function getRecentStageAddParentIds(
   const shopKey = toShopKey(shop);
   if (!shopKey) return new Set();
 
-  if (!(await tryNeon())) return new Set();
+  if (!(await trySql())) return new Set();
 
   try {
     const cutoff = new Date(Date.now() - withinMinutes * 60 * 1000).toISOString();
 
-    const rows = await neonQuery<{ parent_ids: string | string[] }>(
+    const rows = await sqlQuery<{ parent_ids: string | string[] }>(
       `SELECT parent_ids FROM shopify_cart_sync_log
        WHERE shop = $1 AND action = $2 AND created_at >= $3
        ORDER BY created_at DESC

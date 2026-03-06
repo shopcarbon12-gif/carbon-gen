@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { getShopifyAdminToken } from "@/lib/shopify";
+import { getShopifyAccessToken } from "@/lib/shopifyTokenRepository";
 
 const API_VERSION = (process.env.SHOPIFY_API_VERSION || "2026-01").trim();
 
@@ -17,13 +17,8 @@ function toProductGid(productId: string) {
 }
 
 async function getAccessToken(shop: string) {
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from("shopify_tokens")
-    .select("access_token")
-    .eq("shop", shop)
-    .maybeSingle();
-  if (!error && data?.access_token) return String(data.access_token);
+  const dbToken = await getShopifyAccessToken(shop);
+  if (dbToken) return dbToken;
 
   const fallback = getShopifyAdminToken(shop);
   return fallback || null;

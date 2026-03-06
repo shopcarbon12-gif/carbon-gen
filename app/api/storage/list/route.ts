@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
-import { getActiveStorageProvider, getStoragePublicUrl, listStorageFiles } from "@/lib/storageProvider";
+import { getStoragePublicUrl, listStorageFiles } from "@/lib/storageProvider";
 
 function parseTimestampFromPath(path: string) {
   const fileName = path.split("/").pop() || "";
@@ -11,11 +10,6 @@ function parseTimestampFromPath(path: string) {
   if (!Number.isFinite(ms) || ms <= 0) return null;
   const d = new Date(ms);
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
-}
-
-function shouldSignUrls() {
-  const provider = getActiveStorageProvider();
-  return provider.type === "supabase";
 }
 
 export async function GET(req: NextRequest) {
@@ -36,19 +30,9 @@ export async function GET(req: NextRequest) {
     );
     const allFiles = listedGroups.flat();
 
-    const useSigned = shouldSignUrls();
-    const supabase = useSigned ? getSupabaseAdmin() : null;
-    const bucket = useSigned ? (process.env.SUPABASE_STORAGE_BUCKET_ITEMS || "").trim() : "";
-
     const withUrls = await Promise.all(
       allFiles.map(async (f) => {
-        let url: string | null = null;
-        if (useSigned && supabase && bucket) {
-          const signed = await supabase.storage.from(bucket).createSignedUrl(f.path, 60 * 60);
-          url = signed.data?.signedUrl || null;
-        } else {
-          url = getStoragePublicUrl(f.path);
-        }
+        const url = getStoragePublicUrl(f.path);
         const uploadedAt =
           parseTimestampFromPath(f.path) || f.createdAt || f.updatedAt || null;
         return {

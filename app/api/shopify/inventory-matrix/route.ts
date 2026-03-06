@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import {
   getShopifyAdminToken,
   normalizeShopDomain,
@@ -9,6 +8,10 @@ import {
 import { listCartCatalogParentIds } from "@/lib/shopifyCartStaging";
 import { loadSyncToggles } from "@/lib/shopifyCartConfig";
 import { fetchInternalApi } from "@/lib/internalApiOrigin";
+import {
+  getShopifyAccessToken,
+  listInstalledShops,
+} from "@/lib/shopifyTokenRepository";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -468,16 +471,7 @@ function pickShopifyVariantForRow(
 
 async function getTokenCandidates(shop: string) {
   try {
-    const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
-      .from("shopify_tokens")
-      .select("access_token")
-      .eq("shop", shop)
-      .maybeSingle();
-
-    const dbToken = !error
-      ? normalizeText((data as { access_token?: string } | null)?.access_token)
-      : "";
+    const dbToken = await getShopifyAccessToken(shop);
     const envToken = normalizeText(getShopifyAdminToken(shop));
     const candidates: Array<{ token: string; source: ShopifyTokenSource }> = [];
 
@@ -493,22 +487,9 @@ async function getTokenCandidates(shop: string) {
 async function getAvailableShops() {
   let dbShops: string[] = [];
   try {
-    const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
-      .from("shopify_tokens")
-      .select("shop,installed_at")
-      .order("installed_at", { ascending: false })
-      .limit(100);
-
-    if (!error && Array.isArray(data)) {
-      dbShops = data
-        .map((row) =>
-          normalizeShopDomain(normalizeText((row as { shop?: string } | null)?.shop) || "")
-        )
-        .filter((shop): shop is string => Boolean(shop));
-    }
+    dbShops = await listInstalledShops(100);
   } catch {
-    // Optional fallback path when Supabase is unavailable.
+    // Optional fallback path when DB is unavailable.
   }
 
   const configured = normalizeShopDomain(normalizeText(process.env.SHOPIFY_SHOP_DOMAIN) || "");

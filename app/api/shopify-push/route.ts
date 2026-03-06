@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isRequestAuthed } from "@/lib/auth";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { uploadBytesToStorage } from "@/lib/storageProvider";
 import {
   getShopifyAdminToken,
@@ -9,6 +8,7 @@ import {
   runShopifyGraphql,
   toProductGid,
 } from "@/lib/shopify";
+import { getShopifyAccessToken } from "@/lib/shopifyTokenRepository";
 
 const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
 
@@ -126,45 +126,13 @@ function parseDataImage(value: string) {
   return { contentType, bytes, ext };
 }
 
-function parseSupabaseStorageObjectPath(sourceUrl: string) {
-  const supabaseBase = norm(process.env.NEXT_PUBLIC_SUPABASE_URL).replace(/\/+$/, "");
-  if (!supabaseBase) return null;
-  const raw = norm(sourceUrl);
-  if (!raw.startsWith(`${supabaseBase}/storage/v1/object/`)) return null;
-  try {
-    const parsed = new URL(raw);
-    const marker = "/storage/v1/object/";
-    const idx = parsed.pathname.indexOf(marker);
-    if (idx < 0) return null;
-    const tail = parsed.pathname.slice(idx + marker.length); // public|authenticated|sign/<bucket>/<path>
-    const parts = tail.split("/").filter(Boolean);
-    if (parts.length < 3) return null;
-    const mode = parts[0];
-    if (!["public", "authenticated", "sign"].includes(mode)) return null;
-    const bucket = decodeURIComponent(parts[1] || "");
-    const objectPath = decodeURIComponent(parts.slice(2).join("/"));
-    if (!bucket || !objectPath) return null;
-    return { bucket, objectPath };
-  } catch {
-    return null;
-  }
-}
-
-async function getShopifySourceUrl(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
-  sourceUrl: string
-) {
+async function getShopifySourceUrl(sourceUrl: string) {
   const raw = norm(sourceUrl);
   if (!/^https?:\/\//i.test(raw)) return "";
 
-  const storageRef = parseSupabaseStorageObjectPath(raw);
-  if (!storageRef) return raw;
-
-  const { data } = await supabase.storage
-    .from(storageRef.bucket)
-    .createSignedUrl(storageRef.objectPath, 60 * 60);
-  const signed = norm(data?.signedUrl || "");
-  return signed || raw;
+  // Keep legacy storage URLs usable by passing them through unchanged.
+  // Public R2/S3 URLs and already-signed URLs work directly with Shopify.
+  return raw;
 }
 
 function toNumericId(value: string) {
@@ -175,13 +143,7 @@ function toNumericId(value: string) {
 }
 
 async function getTokenCandidates(shop: string) {
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from("shopify_tokens")
-    .select("access_token")
-    .eq("shop", shop)
-    .maybeSingle();
-  const dbToken = !error ? norm(data?.access_token) : "";
+  const dbToken = await getShopifyAccessToken(shop);
   const envToken = norm(getShopifyAdminToken(shop));
   const out: string[] = [];
   if (dbToken) out.push(dbToken);
@@ -326,7 +288,6 @@ async function createProductImages(
   productGid: string,
   images: Array<{ url: string; altText?: string }>
 ) {
-  const supabase = getSupabaseAdmin();
   const preparedImages: Array<{ url: string; altText?: string }> = [];
   for (const image of images) {
     const sourceUrl = norm(image.url);
@@ -348,7 +309,7 @@ async function createProductImages(
     }
 
     if (/^https?:\/\//i.test(sourceUrl)) {
-      const shopifySourceUrl = await getShopifySourceUrl(supabase, sourceUrl);
+      const shopifySourceUrl = await getShopifySourceUrl(sourceUrl);
       if (!shopifySourceUrl) {
         throw new Error("Unable to prepare source image URL for Shopify push.");
       }

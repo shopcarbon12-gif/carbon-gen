@@ -6,8 +6,8 @@ import {
   getRecentStageAddSessions,
   extractParentIdsFromStageAddSession,
 } from "@/lib/shopifySyncSessionUndo";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { normalizeShopDomain } from "@/lib/shopify";
+import { listInstalledShops } from "@/lib/shopifyTokenRepository";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,23 +29,9 @@ function resolveFallbackShop(availableShops: string[]) {
 async function getAvailableShops(): Promise<string[]> {
   let dbShops: string[] = [];
   try {
-    const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
-      .from("shopify_tokens")
-      .select("shop,installed_at")
-      .order("installed_at", { ascending: false })
-      .limit(100);
-    if (!error && Array.isArray(data)) {
-      dbShops = data
-        .map((row) =>
-          normalizeShopDomain(
-            normalizeText((row as { shop?: string } | null)?.shop) || ""
-          )
-        )
-        .filter((shop): shop is string => Boolean(shop));
-    }
+    dbShops = await listInstalledShops(100);
   } catch {
-    // fallback when Supabase unavailable
+    // fallback when DB unavailable
   }
   const out = new Set<string>(dbShops);
   const envShop =

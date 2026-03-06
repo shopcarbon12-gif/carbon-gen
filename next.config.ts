@@ -16,10 +16,10 @@ const nextConfig: NextConfig = {
       isProd
         ? "script-src 'self' 'unsafe-inline'"
         : "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-      "style-src 'self' 'unsafe-inline'",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com",
       // Allow local-network printer endpoints (http://<LAN-IP>/pstprnt) from HTTPS app pages.
       isProd ? "connect-src 'self' http: https:" : "connect-src 'self' ws: http: https:",
-      "font-src 'self'",
+      "font-src 'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com",
       "object-src 'none'",
       "base-uri 'self'",
       "frame-ancestors 'none'",

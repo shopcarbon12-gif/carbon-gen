@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { getShopifyAdminToken, normalizeShopDomain } from "@/lib/shopify";
+import { getShopifyAccessToken } from "@/lib/shopifyTokenRepository";
 
 const API_VERSION =
   (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
@@ -88,14 +88,13 @@ function matchesQuery(product: CatalogProduct, q: string) {
 }
 
 async function getTokenCandidates(shop: string) {
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from("shopify_tokens")
-    .select("access_token")
-    .eq("shop", shop)
-    .maybeSingle();
-
-  const dbToken = !error ? String(data?.access_token || "").trim() : "";
+  let dbToken = "";
+  try {
+    dbToken = (await getShopifyAccessToken(shop)) || "";
+  } catch {
+    // Allow env-token fallback when DB-backed token storage is unavailable.
+    dbToken = "";
+  }
   const envToken = getShopifyAdminToken(shop);
   const tokens: Array<{ token: string; source: "db" | "env_token" }> = [];
 
@@ -111,7 +110,8 @@ async function fetchCatalogWithToken(
   token: string,
   rawQuery: string | null,
   first: number,
-  after: string | null
+  after: string | null,
+  includeCount: boolean
 ) {
   const queryFilter = buildShopifyCatalogQuery(rawQuery);
   const query = `
@@ -176,7 +176,9 @@ async function fetchCatalogWithToken(
       };
     }
 
-    const totalCount = await fetchCatalogCountWithToken(shop, token, rawQuery);
+    const totalCount = includeCount
+      ? await fetchCatalogCountWithToken(shop, token, rawQuery)
+      : null;
 
     return {
       ok: true as const,
@@ -254,6 +256,8 @@ export async function GET(req: NextRequest) {
     const shop = normalizeShopDomain(rawShop) || "";
     const q = String(searchParams.get("q") || "").trim();
     const after = String(searchParams.get("after") || "").trim() || null;
+    const includeCountParam = String(searchParams.get("includeCount") || "").trim().toLowerCase();
+    const includeCount = includeCountParam === "1" || includeCountParam === "true";
     const firstRaw = Number(searchParams.get("first") || "100");
     const first = Number.isFinite(firstRaw)
       ? Math.max(1, Math.min(250, Math.trunc(firstRaw)))
@@ -270,7 +274,14 @@ export async function GET(req: NextRequest) {
 
     let lastFailure: any = null;
     for (const candidate of candidates) {
-      const attempt = await fetchCatalogWithToken(shop, candidate.token, q || null, first, after);
+      const attempt = await fetchCatalogWithToken(
+        shop,
+        candidate.token,
+        q || null,
+        first,
+        after,
+        includeCount
+      );
       if (!attempt.ok) {
         lastFailure = attempt;
         continue;
@@ -280,7 +291,7 @@ export async function GET(req: NextRequest) {
       let pageInfo = attempt.pageInfo;
       // Shopify query syntax can be strict; fallback to broad fetch + local contains filter.
       if (q && !after && products.length === 0) {
-        const broad = await fetchCatalogWithToken(shop, candidate.token, "", 250, null);
+        const broad = await fetchCatalogWithToken(shop, candidate.token, "", 250, null, false);
         if (broad.ok) {
           products = broad.products.filter((product) => matchesQuery(product, q));
           pageInfo = {
@@ -307,6 +318,10 @@ export async function GET(req: NextRequest) {
       { status: 401 }
     );
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || "Catalog fetch failed" }, { status: 500 });
+    const message = String(e?.message || "Catalog fetch failed");
+    return NextResponse.json(
+      { error: message },
+      { status: 500 }
+    );
   }
 }

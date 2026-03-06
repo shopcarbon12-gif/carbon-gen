@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { uploadBytesToStorage } from "@/lib/storageProvider";
+import { insertModelRow, modelNameExistsForUser } from "@/lib/modelsRepository";
+import { getStoragePublicUrl } from "@/lib/storageProvider";
 
 const DEFAULT_SESSION_USER_ID = "00000000-0000-0000-0000-000000000001";
+const modelSaveInFlight = new Set<string>();
 
 function normalizeModelName(value: string) {
   return String(value || "")
@@ -33,22 +35,75 @@ function isTemporaryReferenceUrl(raw: string) {
   return false;
 }
 
-async function modelNameExistsForUser(userId: string, candidateName: string) {
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from("models")
-    .select("name")
-    .eq("user_id", userId);
-
-  if (error) {
-    throw new Error(error.message);
+function extractPathFromStorageUrl(url: string) {
+  try {
+    const u = new URL(url);
+    const markers = [
+      "/storage/v1/object/public/",
+      "/storage/v1/object/sign/",
+      "/storage/v1/object/authenticated/",
+    ];
+    for (const marker of markers) {
+      const idx = u.pathname.indexOf(marker);
+      if (idx < 0) continue;
+      const rest = u.pathname.slice(idx + marker.length);
+      const slash = rest.indexOf("/");
+      if (slash < 0) continue;
+      return decodeURIComponent(rest.slice(slash + 1));
+    }
+    return "";
+  } catch {
+    return "";
   }
+}
 
-  const normalizedCandidate = normalizeModelName(candidateName);
-  return (data || []).some((row: any) => normalizeModelName(row?.name || "") === normalizedCandidate);
+function extractPathFromR2StorageUrl(url: string) {
+  try {
+    const u = new URL(url);
+    const host = String(u.hostname || "").toLowerCase();
+    const configuredBucket = String(process.env.R2_BUCKET || "").trim();
+    const configuredPublicBase = String(process.env.R2_PUBLIC_URL_BASE || "").trim();
+    const parts = u.pathname.split("/").filter(Boolean).map((p) => decodeURIComponent(p));
+
+    if (host.includes("r2.cloudflarestorage.com")) {
+      if (parts.length >= 2) return parts.slice(1).join("/");
+      if (configuredBucket && parts.length >= 1) return parts.join("/");
+      return "";
+    }
+    if (host.endsWith(".r2.dev")) return parts.join("/");
+    if (configuredPublicBase) {
+      try {
+        const base = new URL(configuredPublicBase);
+        if (host !== String(base.hostname || "").toLowerCase()) return "";
+        const baseParts = base.pathname.split("/").filter(Boolean).map((p) => decodeURIComponent(p));
+        let objectParts = parts;
+        if (baseParts.length && parts.length >= baseParts.length) {
+          const isPrefix = baseParts.every((seg, idx) => parts[idx] === seg);
+          if (isPrefix) objectParts = parts.slice(baseParts.length);
+        }
+        return objectParts.join("/");
+      } catch {
+        return "";
+      }
+    }
+    return "";
+  } catch {
+    return "";
+  }
+}
+
+function normalizeReferenceUrl(raw: string) {
+  const objectPath = extractPathFromStorageUrl(raw) || extractPathFromR2StorageUrl(raw);
+  if (!objectPath) return sanitizeReferenceUrl(raw);
+  try {
+    return getStoragePublicUrl(objectPath);
+  } catch {
+    return sanitizeReferenceUrl(raw);
+  }
 }
 
 export async function POST(req: NextRequest) {
+  let inFlightKey = "";
   try {
     const isAuthed =
       (process.env.NODE_ENV !== "production" &&
@@ -68,6 +123,7 @@ export async function POST(req: NextRequest) {
     let gender = "";
     let urls: string[] = [];
 
+    let alreadyCheckedDuplicate = false;
     if (isJson) {
       const body = await req.json();
       name = String(body?.name || "").trim();
@@ -76,7 +132,12 @@ export async function POST(req: NextRequest) {
         ? body.urls
             .map((v: unknown) => sanitizeReferenceUrl(v))
             .filter((v: string) => v.length > 0)
+            .map((url: string) =>
+              isTemporaryReferenceUrl(url) ? normalizeReferenceUrl(url) : sanitizeReferenceUrl(url)
+            )
+            .filter((v: string) => v.length > 0)
         : [];
+      urls = Array.from(new Set(urls));
 
       if (urls.some((u) => isTemporaryReferenceUrl(u))) {
         return NextResponse.json(
@@ -116,6 +177,7 @@ export async function POST(req: NextRequest) {
           { status: 409 }
         );
       }
+      alreadyCheckedDuplicate = true;
 
       const tempId = crypto.randomUUID();
       const uploadJobs = files.map(async (file) => {
@@ -153,33 +215,38 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const duplicateExists = await modelNameExistsForUser(userId, name);
-    if (duplicateExists) {
+    inFlightKey = `${userId}::${normalizeModelName(name)}`;
+    if (modelSaveInFlight.has(inFlightKey)) {
       return NextResponse.json(
-        { error: "A model with this name already exists. Please choose a different name." },
+        { error: "This model is already being saved. Please wait a moment." },
         { status: 409 }
       );
     }
+    modelSaveInFlight.add(inFlightKey);
 
-    const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
-      .from("models")
-      .insert({
-        model_id: crypto.randomUUID(),
-        user_id: userId,
-        name,
-        gender,
-        ref_image_urls: urls,
-      })
-      .select()
-      .maybeSingle();
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!alreadyCheckedDuplicate) {
+      const duplicateExists = await modelNameExistsForUser(userId, name);
+      if (duplicateExists) {
+        return NextResponse.json(
+          { error: "A model with this name already exists. Please choose a different name." },
+          { status: 409 }
+        );
+      }
     }
 
+    const data = await insertModelRow({
+      model_id: crypto.randomUUID(),
+      user_id: userId,
+      name,
+      gender,
+      ref_image_urls: urls,
+    });
     return NextResponse.json({ model: data });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Model upload failed" }, { status: 500 });
+  } finally {
+    if (inFlightKey) {
+      modelSaveInFlight.delete(inFlightKey);
+    }
   }
 }

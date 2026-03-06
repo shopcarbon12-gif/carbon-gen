@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { cookies } from "next/headers";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { deleteModelByIdForUser, deleteModelsByIds, listModelsForUser } from "@/lib/modelsRepository";
 
 const DEFAULT_SESSION_USER_ID = "00000000-0000-0000-0000-000000000001";
 
@@ -23,15 +23,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing model_id" }, { status: 400 });
     }
 
-    const supabase = getSupabaseAdmin();
-    const { error } = await supabase
-      .from("models")
-      .delete()
-      .eq("model_id", modelId)
-      .eq("user_id", userId);
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    const scopedModels = await listModelsForUser(userId);
+    if (scopedModels.length > 0) {
+      await deleteModelByIdForUser(modelId, userId);
+    } else {
+      // Legacy/cross-domain sessions can show global models when no scoped rows exist.
+      await deleteModelsByIds([modelId], null);
     }
 
     return NextResponse.json({ success: true });

@@ -1,20 +1,62 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createHmac, timingSafeEqual } from "crypto";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { normalizeShopDomain } from "@/lib/shopify";
+import { upsertShopifyToken } from "@/lib/shopifyTokenRepository";
 
-function verifyHmac(query: URLSearchParams, secret: string) {
-  const hmac = (query.get("hmac") || "").trim().toLowerCase();
+function verifyHmac(rawSearch: string, secret: string) {
+  const search = String(rawSearch || "").replace(/^\?/, "");
+  const params = new URLSearchParams(search);
+  const hmac = (params.get("hmac") || "").trim().toLowerCase();
   if (!/^[a-f0-9]{64}$/.test(hmac)) return false;
 
-  const entries = Array.from(query.entries())
-    .filter(([key]) => key !== "hmac" && key !== "signature")
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([k, v]) => `${k}=${v}`)
+  const entries = search
+    .split("&")
+    .map((pair) => pair.trim())
+    .filter(Boolean)
+    .filter((pair) => {
+      const key = pair.split("=")[0] || "";
+      return key !== "hmac" && key !== "signature";
+    })
+    .sort()
     .join("&");
   const digest = createHmac("sha256", secret).update(entries).digest("hex");
   return timingSafeEqual(Buffer.from(digest, "utf8"), Buffer.from(hmac, "utf8"));
+}
+
+function resolveSettingsOrigin(req: NextRequest) {
+  const redirectUri = (process.env.SHOPIFY_REDIRECT_URI || "").trim();
+  if (redirectUri) {
+    try {
+      const origin = new URL(redirectUri).origin;
+      if (/^https:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) {
+        return origin.replace(/^https:/i, "http:");
+      }
+      return origin;
+    } catch {
+      // fall through
+    }
+  }
+  const incoming = req.nextUrl.origin;
+  if (/^https:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(incoming)) {
+    return incoming.replace(/^https:/i, "http:");
+  }
+  return incoming;
+}
+
+function redirectToSettings(req: NextRequest, opts: { shop?: string | null; connected?: boolean; error?: string }) {
+  const target = new URL("/settings", resolveSettingsOrigin(req));
+  if (opts.shop) target.searchParams.set("shop", opts.shop);
+  if (opts.connected) target.searchParams.set("connected", "1");
+  if (opts.error) target.searchParams.set("shopify_error", opts.error.slice(0, 200));
+  const res = NextResponse.redirect(target.toString());
+  res.cookies.set("shopify_oauth_state", "", {
+    maxAge: 0,
+    sameSite: "none",
+    secure: true,
+    path: "/",
+  });
+  return res;
 }
 
 export async function GET(req: NextRequest) {
@@ -31,22 +73,26 @@ export async function GET(req: NextRequest) {
     const redirectUri = (process.env.SHOPIFY_REDIRECT_URI || "").trim();
 
     if (!clientId || !clientSecret || !redirectUri) {
-      return NextResponse.json({ error: "Missing Shopify app config." }, { status: 500 });
+      return redirectToSettings(req, { shop, error: "Missing Shopify app config." });
     }
     if (!shop) {
-      return NextResponse.json({ error: "Invalid OAuth shop." }, { status: 400 });
+      return redirectToSettings(req, { error: "Invalid OAuth shop." });
     }
     if (!code) {
-      return NextResponse.json({ error: "Missing OAuth code." }, { status: 400 });
+      return redirectToSettings(req, { shop, error: "Missing OAuth code." });
     }
 
     const cookieState = req.cookies.get("shopify_oauth_state")?.value || "";
-    if (!cookieState || !state || cookieState !== state) {
-      return NextResponse.json({ error: "Invalid OAuth state." }, { status: 400 });
+    if (!state) {
+      return redirectToSettings(req, { shop, error: "Missing OAuth state." });
+    }
+    // If state cookie exists, enforce exact match; if cookie is absent, rely on HMAC verification.
+    if (cookieState && cookieState !== state) {
+      return redirectToSettings(req, { shop, error: "Invalid OAuth state." });
     }
 
-    if (!verifyHmac(searchParams, clientSecret)) {
-      return NextResponse.json({ error: "Invalid OAuth HMAC." }, { status: 400 });
+    if (!verifyHmac(url.search, clientSecret)) {
+      return redirectToSettings(req, { shop, error: "Invalid OAuth HMAC." });
     }
 
     const tokenResp = await fetch(`https://${shop}/admin/oauth/access_token`, {
@@ -74,51 +120,19 @@ export async function GET(req: NextRequest) {
       const jsonError =
         tokenJson?.error_description || tokenJson?.error || tokenJson?.errors || null;
       const htmlSnippet = !tokenJson ? tokenText.slice(0, 160) : null;
-      return NextResponse.json(
-        {
-          error: "Failed to fetch access token.",
-          details: jsonError || "Unexpected non-JSON response from Shopify.",
-          shop,
-          status: tokenResp.status,
-          contentType,
-          shopifyFailureReason: shopifyFailureReason || null,
-          responseSnippet: htmlSnippet,
-        },
-        { status: 400 }
-      );
+      const detailText = String(jsonError || shopifyFailureReason || contentType || htmlSnippet || "Token exchange failed");
+      return redirectToSettings(req, { shop, error: `Shopify token exchange failed: ${detailText}` });
     }
 
-    const supabase = getSupabaseAdmin();
-    const { error } = await supabase.from("shopify_tokens").upsert(
-      {
-        shop,
-        access_token: tokenJson.access_token,
-        scope: tokenJson.scope || null,
-        installed_at: new Date().toISOString(),
-      },
-      { onConflict: "shop" }
-    );
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    const publicBase = new URL(redirectUri).origin;
-    const redirectTarget = new URL("/settings", publicBase);
-    redirectTarget.searchParams.set("shop", shop);
-    redirectTarget.searchParams.set("connected", "1");
-    const res = NextResponse.redirect(redirectTarget.toString());
-    res.cookies.set("shopify_oauth_state", "", {
-      maxAge: 0,
-      sameSite: "none",
-      secure: true,
-      path: "/",
+    await upsertShopifyToken({
+      shop,
+      accessToken: tokenJson.access_token,
+      scope: tokenJson.scope || null,
+      installedAt: new Date().toISOString(),
     });
-    return res;
+
+    return redirectToSettings(req, { shop, connected: true });
   } catch (e: any) {
-    return NextResponse.json(
-      { error: e?.message || "Shopify callback failed." },
-      { status: 500 }
-    );
+    return redirectToSettings(req, { error: e?.message || "Shopify callback failed." });
   }
 }

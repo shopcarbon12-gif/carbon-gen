@@ -5,7 +5,7 @@
  * Also handles removed items/matrices and new variants (on a slower cadence).
  */
 import { lsGet } from "@/lib/lightspeedApi";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { upsertShopifyCartConfig } from "@/lib/shopifyCartConfigRepository";
 import {
   listCartCatalogParents,
   upsertCartCatalogParents,
@@ -19,12 +19,33 @@ import {
   getShopifyAdminToken,
   runShopifyGraphql,
 } from "@/lib/shopify";
+import { getShopifyAccessToken } from "@/lib/shopifyTokenRepository";
 
 const LS_PAGE_SIZE = 100;
 const LS_MAX_DELTA_PAGES = 50;
 const FULL_CHECK_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
 const FULL_CHECK_BATCH_SIZE = parseInt(process.env.FULL_CHECK_BATCH_SIZE || "10", 10);
 const SALE_TRIGGER_PARENT_BATCH_SIZE = parseInt(process.env.SALE_TRIGGER_PARENT_BATCH_SIZE || "2", 10);
+const SALE_ITEM_LOOKUP_CONCURRENCY = parseInt(process.env.SALE_ITEM_LOOKUP_CONCURRENCY || "6", 10);
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const safeLimit = Math.max(1, Math.floor(limit));
+  const out: R[] = new Array(items.length);
+  let index = 0;
+  const run = async () => {
+    while (index < items.length) {
+      const current = index++;
+      out[current] = await worker(items[current], current);
+    }
+  };
+  const workers = Array.from({ length: Math.min(safeLimit, items.length) }, () => run());
+  await Promise.all(workers);
+  return out;
+}
 
 function normalizeText(value: unknown) {
   return String(value ?? "").trim();
@@ -137,10 +158,7 @@ function getSize(item: LSItem): string {
 }
 
 async function saveConfig(shop: string, config: Record<string, unknown>) {
-  const supabase = getSupabaseAdmin();
-  await supabase
-    .from("shopify_cart_config")
-    .upsert({ shop, config }, { onConflict: "shop" });
+  await upsertShopifyCartConfig(shop, config);
 }
 
 async function fetchChangedItems(since: string): Promise<LSItem[]> {
@@ -359,13 +377,7 @@ function cartParentIdForItem(item: LSItem): string {
 
 async function getShopifyToken(shop: string): Promise<string | null> {
   try {
-    const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
-      .from("shopify_tokens")
-      .select("access_token")
-      .eq("shop", shop)
-      .maybeSingle();
-    const dbToken = !error ? normalizeText((data as { access_token?: string })?.access_token) : "";
+    const dbToken = await getShopifyAccessToken(shop);
     if (dbToken) return dbToken;
   } catch { /* fallback */ }
   return getShopifyAdminToken(shop) || null;
@@ -435,11 +447,11 @@ async function lookupShopifyProductForVariant(
 
 async function writeSyncLog(shop: string, result: DeltaSyncResult) {
   try {
-    const { neonQuery, ensureNeonReady } = await import("@/lib/neonDb");
-    await ensureNeonReady();
+    const { sqlQuery, ensureSqlReady } = await import("@/lib/sqlDb");
+    await ensureSqlReady();
     const now = new Date().toISOString();
 
-    const rows = await neonQuery<{ id: string }>(
+    const rows = await sqlQuery<{ id: string }>(
       `INSERT INTO shopify_cart_sync_activity
          (shop, synced_at, items_checked, items_updated, variants_added, variants_deleted, products_archived, errors, error_details, duration_ms)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
@@ -469,7 +481,7 @@ async function writeSyncLog(shop: string, result: DeltaSyncResult) {
           );
           values.push(syncId, c.parentId, c.productTitle, c.variantSku, c.field, c.oldValue, c.newValue);
         }
-        await neonQuery(
+        await sqlQuery(
           `INSERT INTO shopify_cart_sync_changes (sync_id, parent_id, product_title, variant_sku, field, old_value, new_value)
            VALUES ${placeholders.join(", ")}`,
           values
@@ -511,10 +523,23 @@ export async function runDeltaSync(shop: string, opts?: { forceFullCheck?: boole
       const destructiveRules = await loadDestructiveSyncRules(shop);
       const recentSales = await fetchRecentSales(lastSaleSyncAt);
       const affectedItemIds = extractItemIdsFromSales(recentSales);
+      const itemLookupCache = new Map<string, Promise<LSItem | null>>();
+      const getCachedItemById = (itemId: string) => {
+        const key = normalizeText(itemId);
+        const existing = itemLookupCache.get(key);
+        if (existing) return existing;
+        const created = fetchItemById(key);
+        itemLookupCache.set(key, created);
+        return created;
+      };
+      const affectedItems = await mapWithConcurrency(
+        affectedItemIds,
+        SALE_ITEM_LOOKUP_CONCURRENCY,
+        async (itemId) => getCachedItemById(itemId)
+      );
       const affectedParentsOrdered: string[] = [];
       const affectedSeen = new Set<string>();
-      for (const itemId of affectedItemIds) {
-        const item = await fetchItemById(itemId);
+      for (const item of affectedItems) {
         if (!item) continue;
         const parentId = cartParentIdForItem(item);
         if (!parentId) continue;

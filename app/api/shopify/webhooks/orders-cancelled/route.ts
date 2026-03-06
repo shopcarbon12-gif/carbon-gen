@@ -2,8 +2,11 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createHmac, timingSafeEqual } from "crypto";
 import { lsGet, lsPost, lsPut, lsDelete } from "@/lib/lightspeedApi";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { loadPosConfig } from "@/lib/lightspeedSaleCreate";
+import {
+  getOrderSyncRecord,
+  updateOrderCancelledStatus,
+} from "@/lib/lightspeedRepository";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,13 +28,8 @@ function verifyWebhookHmac(body: string, hmacHeader: string, secret: string): bo
 
 async function findSyncRecord(shopifyOrderId: number): Promise<{ lsSaleId: string | null; status: string | null }> {
   try {
-    const supabase = getSupabaseAdmin();
-    const { data } = await supabase
-      .from("shopify_order_sync_log")
-      .select("ls_sale_id, status")
-      .eq("shopify_order_id", shopifyOrderId)
-      .maybeSingle();
-    return { lsSaleId: data?.ls_sale_id || null, status: data?.status || null };
+    const row = await getOrderSyncRecord(shopifyOrderId);
+    return { lsSaleId: row.lsSaleId || null, status: row.status || null };
   } catch {
     return { lsSaleId: null, status: null };
   }
@@ -39,17 +37,13 @@ async function findSyncRecord(shopifyOrderId: number): Promise<{ lsSaleId: strin
 
 async function markOrderCancelled(shopifyOrderId: number, returnSaleId?: string, errorDetail?: string): Promise<void> {
   try {
-    const supabase = getSupabaseAdmin();
-    const update: Record<string, unknown> = {
+    const errorMessage = returnSaleId
+      ? `Return sale: ${returnSaleId}`
+      : errorDetail || null;
+    await updateOrderCancelledStatus(shopifyOrderId, {
       status: "cancelled",
-      processed_at: new Date().toISOString(),
-    };
-    if (returnSaleId) update.error_message = `Return sale: ${returnSaleId}`;
-    else if (errorDetail) update.error_message = errorDetail;
-    await supabase
-      .from("shopify_order_sync_log")
-      .update(update)
-      .eq("shopify_order_id", shopifyOrderId);
+      errorMessage,
+    });
   } catch { /* best effort */ }
 }
 

@@ -1,10 +1,15 @@
 import { config } from "dotenv";
 config({ path: ".env.local" });
 
-import { Pool } from "@neondatabase/serverless";
+import { Pool } from "pg";
 
 async function main() {
-  const pool = new Pool({ connectionString: process.env.NEON_DATABASE_URL });
+  const connectionString =
+    process.env.COOLIFY_DATABASE_URL || process.env.POSTGRES_URL || process.env.DATABASE_URL || "";
+  if (!connectionString) {
+    throw new Error("Missing SQL connection string (COOLIFY_DATABASE_URL/POSTGRES_URL/DATABASE_URL).");
+  }
+  const pool = new Pool({ connectionString });
 
   const { rows } = await pool.query(
     `SELECT sync_id, parent_id, product_title, variant_sku, field, old_value, new_value

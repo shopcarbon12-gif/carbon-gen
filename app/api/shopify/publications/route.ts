@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import {
   getShopifyAdminToken,
   normalizeShopDomain,
   runShopifyGraphql,
   getShopifyConfig,
 } from "@/lib/shopify";
+import { getShopifyAccessToken } from "@/lib/shopifyTokenRepository";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -78,13 +78,7 @@ async function getBlockedPublicationIds(shop: string, token: string, apiVersion:
 }
 
 async function getToken(shop: string): Promise<string | null> {
-  const supabase = getSupabaseAdmin();
-  const { data } = await supabase
-    .from("shopify_tokens")
-    .select("access_token")
-    .eq("shop", shop)
-    .maybeSingle();
-  const dbToken = String(data?.access_token || "").trim();
+  const dbToken = await getShopifyAccessToken(shop);
   if (dbToken) return dbToken;
   const envToken = getShopifyAdminToken(shop);
   return envToken || null;
@@ -290,15 +284,15 @@ export async function POST(req: NextRequest) {
       if (parentIds.length === 0)
         return NextResponse.json({ ok: false, error: "parentIds[] required." }, { status: 400 });
 
-      const { neonQuery, ensureNeonReady } = await import("@/lib/neonDb");
-      await ensureNeonReady();
+      const { sqlQuery, ensureSqlReady } = await import("@/lib/sqlDb");
+      await ensureSqlReady();
       const PAGE = 500;
       const allProductGids = new Set<string>();
 
       for (let offset = 0; offset < parentIds.length; offset += PAGE) {
         const batch = parentIds.slice(offset, offset + PAGE);
         const placeholders = batch.map((_, idx) => `$${idx + 2}`).join(", ");
-        const dbRows = await neonQuery<{ variants: unknown }>(
+        const dbRows = await sqlQuery<{ variants: unknown }>(
           `SELECT variants FROM shopify_cart_inventory_staging
            WHERE shop = $1 AND parent_id IN (${placeholders})`,
           [shop, ...batch]

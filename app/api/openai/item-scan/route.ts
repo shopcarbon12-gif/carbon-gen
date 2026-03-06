@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isRequestAuthed } from "@/lib/auth";
+import { getOpenAiApiKey } from "@/lib/openaiConfig";
 import {
   MALE_POSE_LIBRARY,
   FEMALE_POSE_LIBRARY,
@@ -66,8 +67,29 @@ export async function POST(req: NextRequest) {
     const includeMale = genders.includes("male");
     const includeFemale = genders.includes("female");
 
-    const apiKey = normalizeText(process.env.OPENAI_API_KEY);
+    const apiKey = normalizeText(getOpenAiApiKey());
     if (!apiKey) {
+      const geminiKey = normalizeText(process.env.GEMINI_API_KEY);
+      if (geminiKey) {
+        const host = normalizeText(req.headers.get("x-forwarded-host") || req.headers.get("host"));
+        const proto = normalizeText(req.headers.get("x-forwarded-proto")) || "https";
+        if (!host) {
+          return NextResponse.json(
+            { error: "Missing OPENAI_API_KEY and unable to resolve fallback host." },
+            { status: 500 }
+          );
+        }
+        const fallbackResp = await fetch(`${proto}://${host}/api/gemini/item-scan`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Cookie: req.headers.get("cookie") || "",
+          },
+          body: JSON.stringify(body),
+        });
+        const fallbackJson = await fallbackResp.json().catch(() => ({}));
+        return NextResponse.json(fallbackJson, { status: fallbackResp.status });
+      }
       return NextResponse.json({ error: "Missing OPENAI_API_KEY" }, { status: 500 });
     }
 

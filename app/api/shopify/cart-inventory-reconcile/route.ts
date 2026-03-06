@@ -11,9 +11,9 @@ import {
   upsertCartCatalogParents,
   type StagingParent,
 } from "@/lib/shopifyCartStaging";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { createShopifyProductFromCart } from "@/lib/shopifyCartProductCreate";
 import { loadConfig } from "@/lib/shopifyCartConfig";
+import { getShopifyAccessToken } from "@/lib/shopifyTokenRepository";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,15 +27,7 @@ function norm(v: unknown) {
 }
 
 async function getToken(shop: string): Promise<string | null> {
-  const supabase = getSupabaseAdmin();
-  const { data } = await supabase
-    .from("shopify_tokens")
-    .select("access_token")
-    .eq("shop", shop)
-    .maybeSingle();
-  const dbToken = norm(
-    (data as { access_token?: string } | null)?.access_token
-  );
+  const dbToken = await getShopifyAccessToken(shop);
   if (dbToken) return dbToken;
   return getShopifyAdminToken(shop) || null;
 }

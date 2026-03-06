@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { getShopifyAdminToken } from "@/lib/shopify";
+import { upsertShopifyToken } from "@/lib/shopifyTokenRepository";
 
 function isValidShop(shop: string) {
   return /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(shop);
@@ -44,16 +44,12 @@ export async function GET(req: NextRequest) {
   // Only auto-use static token mode when OAuth config is missing.
   const directToken = getShopifyAdminToken(shop);
   if (directToken && !hasOauthConfig) {
-    const supabase = getSupabaseAdmin();
-    await supabase.from("shopify_tokens").upsert(
-      {
-        shop,
-        access_token: directToken,
-        scope: scopes || null,
-        installed_at: new Date().toISOString(),
-      },
-      { onConflict: "shop" }
-    );
+    await upsertShopifyToken({
+      shop,
+      accessToken: directToken,
+      scope: scopes || null,
+      installedAt: new Date().toISOString(),
+    });
 
     const safeOrigin = resolveSafeDashboardOrigin(req);
     const redirectTarget = new URL(`/settings?shop=${encodeURIComponent(shop)}&connected=1`, safeOrigin);

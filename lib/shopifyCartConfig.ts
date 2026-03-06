@@ -1,7 +1,5 @@
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { normalizeShopDomain } from "@/lib/shopify";
-
-const TABLE = "shopify_cart_config";
+import { loadShopifyCartConfig } from "@/lib/shopifyCartConfigRepository";
 
 function normalizeText(value: unknown) {
   return String(value ?? "").trim();
@@ -15,19 +13,7 @@ export function resolveShop(raw: string | null | undefined) {
 
 export async function loadConfig(shop: string): Promise<Record<string, unknown>> {
   try {
-    const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
-      .from(TABLE)
-      .select("config")
-      .eq("shop", shop)
-      .maybeSingle();
-
-    if (error) throw error;
-
-    if (data?.config && typeof data.config === "object") {
-      return data.config as Record<string, unknown>;
-    }
-    return {};
+    return await loadShopifyCartConfig(shop);
   } catch {
     return {};
   }

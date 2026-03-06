@@ -16,13 +16,13 @@ All auth flows, UI interfaces, and DNS routing are strictly verified as green on
 - [ ] Confirm Lightspeed `sale.update` is successfully arriving at `https://app.shopcarbon.com/api/lightspeed/webhooks/sale-update`.
 - [ ] Disable/Pause the project in Vercel to fully cut off the legacy route.
 
-## 4. Cancel Neon Checklist
-Only proceed once Supabase scaling is complete and all queries use Supabase.
-- [ ] Verify all Neon data/schemas are completely mirrored in Supabase.
-- [ ] Ensure `NEON_DATABASE_URL` is removed from Coolify Environment Variables.
+## 4. SQL Runtime Checklist
+Only proceed once SQL migration is complete and all queries use the local SQL runtime.
+- [ ] Verify all required data/schemas are present in Postgres.
+- [ ] Ensure legacy external SQL URL variables are removed from runtime environment variables.
 - [ ] Confirm no errors occur in the application related to Postgres query failures.
-- [ ] Pause the Neon cluster to test for any silent failures.
-- [ ] After 1 week of stability on Supabase, cancel the Neon paid plan and delete the Neon project.
+- [ ] Validate startup and cron jobs with only `COOLIFY_DATABASE_URL`/`DATABASE_URL` configured.
+- [ ] After 1 week of stability, delete any legacy external SQL project references.
 
 ## 5. Gemini Report - Red API Statuses Fix
 

@@ -1,8 +1,12 @@
 [phases.install]
 # Optimize npm install by running ci without audit
-cmds = ["npm ci --prefer-offline --no-audit"]
+cmds = ["npm ci --prefer-offline --no-audit --no-fund"]
+cacheDirectories = ["/root/.npm"]
 
 [phases.build]
 cmds = ["npm run build"]
 # Cache Next.js build output to vastly speed up subsequent builds
 cacheDirectories = [".next/cache"]
+
+[start]
+cmd = "npm run start:standalone"

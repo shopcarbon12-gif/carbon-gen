@@ -1,11 +1,11 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { lsGet } from "@/lib/lightspeedApi";
 import { runDeltaSync } from "@/lib/cartInventoryDeltaSync";
 import { loadSyncToggles } from "@/lib/shopifyCartConfig";
 import { normalizeShopDomain } from "@/lib/shopify";
+import { getMostRecentInstalledShop } from "@/lib/shopifyTokenRepository";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -74,15 +74,7 @@ async function resolveShopForSync(): Promise<string> {
   const envShop = normalizeShopDomain(normalizeText(process.env.SHOPIFY_SHOP_DOMAIN));
   if (envShop) return envShop;
   try {
-    const supabase = getSupabaseAdmin();
-    const { data } = await supabase
-      .from("shopify_tokens")
-      .select("shop")
-      .order("installed_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const shop = normalizeShopDomain(normalizeText((data as { shop?: string } | null)?.shop));
-    return shop || "";
+    return await getMostRecentInstalledShop();
   } catch {
     return "";
   }

@@ -34,17 +34,6 @@ function getAllowedHosts() {
   if (r2Host && !entries.includes(r2Host.toLowerCase())) {
     entries.push(r2Host.toLowerCase());
   }
-  const supabaseBase = String(process.env.NEXT_PUBLIC_SUPABASE_URL || "").trim();
-  if (supabaseBase) {
-    try {
-      const host = new URL(supabaseBase).hostname.toLowerCase();
-      if (host && !entries.includes(host)) {
-        entries.push(host);
-      }
-    } catch {
-      // ignore malformed url
-    }
-  }
   return { entries, allowAny };
 }
 

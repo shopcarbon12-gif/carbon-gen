@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { ensureNeonReady, neonQuery } from "@/lib/neonDb";
+import { ensureSqlReady, sqlQuery } from "@/lib/sqlDb";
 import { lsGet } from "@/lib/lightspeedApi";
 import { runDeltaSync } from "@/lib/cartInventoryDeltaSync";
 import { loadSyncToggles } from "@/lib/shopifyCartConfig";
 import { normalizeShopDomain } from "@/lib/shopify";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { getMostRecentInstalledShop } from "@/lib/shopifyTokenRepository";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -22,15 +22,7 @@ async function resolveShopForSync(): Promise<string> {
     const envShop = normalizeShopDomain(normalizeText(process.env.SHOPIFY_SHOP_DOMAIN));
     if (envShop) return envShop;
     try {
-        const supabase = getSupabaseAdmin();
-        const { data } = await supabase
-            .from("shopify_tokens")
-            .select("shop")
-            .order("installed_at", { ascending: false })
-            .limit(1)
-            .maybeSingle();
-        const shop = normalizeShopDomain(normalizeText((data as { shop?: string } | null)?.shop));
-        return shop || "";
+        return await getMostRecentInstalledShop();
     } catch {
         return "";
     }
@@ -67,7 +59,7 @@ async function fetchItemById(itemId: string): Promise<LsItem | null> {
 }
 
 async function getLastSyncTime(): Promise<string> {
-    const rows = await neonQuery<{ last_sync_time: string }>(
+    const rows = await sqlQuery<{ last_sync_time: string }>(
         `SELECT last_sync_time FROM lightspeed_sales_sync_state WHERE id = 1`
     );
     if (rows.length > 0) {
@@ -76,7 +68,7 @@ async function getLastSyncTime(): Promise<string> {
     }
     // Default to 1 hour ago
     const t = new Date(Date.now() - 3600000).toISOString();
-    await neonQuery(
+    await sqlQuery(
         `INSERT INTO lightspeed_sales_sync_state (id, last_sync_time) VALUES (1, $1) ON CONFLICT (id) DO NOTHING`,
         [t]
     );
@@ -96,7 +88,7 @@ export async function GET(req: Request) {
             }
         }
 
-        await ensureNeonReady();
+        await ensureSqlReady();
 
         const shop = await resolveShopForSync();
         if (!shop) {
@@ -139,7 +131,7 @@ export async function GET(req: Request) {
 
         if (salesList.length === 0) {
             // Advance the pointer since there were no sales.
-            await neonQuery(`UPDATE lightspeed_sales_sync_state SET last_sync_time = $1 WHERE id = 1`, [newMaxTime]);
+            await sqlQuery(`UPDATE lightspeed_sales_sync_state SET last_sync_time = $1 WHERE id = 1`, [newMaxTime]);
             return NextResponse.json({ ok: true, message: "No new sales to sync.", runs: 0, errors: 0 });
         }
 
@@ -186,7 +178,7 @@ export async function GET(req: Request) {
         }
 
         // After attempting all sync tasks, advance the pointer to avoid re-syncing the same sales.
-        await neonQuery(`UPDATE lightspeed_sales_sync_state SET last_sync_time = $1 WHERE id = 1`, [newMaxTime]);
+        await sqlQuery(`UPDATE lightspeed_sales_sync_state SET last_sync_time = $1 WHERE id = 1`, [newMaxTime]);
 
         return NextResponse.json({
             ok: errors === 0,

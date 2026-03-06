@@ -43,6 +43,28 @@ type LightspeedStatusResponse = {
   error?: string;
 };
 
+type ShopifyPrinterConfigResponse = {
+  ok?: boolean;
+  shop?: string;
+  backend?: string;
+  warning?: string;
+  statusError?: string;
+  printerStatus?: {
+    online?: boolean;
+    state?: string;
+    name?: string;
+  } | null;
+  config?: {
+    enabled?: boolean;
+    triggerTopic?: "orders/create" | "fulfillments/create";
+    printerId?: number | null;
+    copies?: number;
+    hasApiKey?: boolean;
+    apiKeyMasked?: string;
+  };
+  error?: string;
+};
+
 type SessionUser = {
   id: string | null;
   username: string | null;
@@ -96,6 +118,17 @@ export default function SettingsPage() {
   const [lightspeedLoading, setLightspeedLoading] = useState(true);
   const [lightspeedBusy, setLightspeedBusy] = useState(false);
   const [lightspeedStatusData, setLightspeedStatusData] = useState<LightspeedStatusResponse | null>(null);
+  const [printerLoading, setPrinterLoading] = useState(true);
+  const [printerBusy, setPrinterBusy] = useState(false);
+  const [printerEnabled, setPrinterEnabled] = useState(false);
+  const [printerTriggerTopic, setPrinterTriggerTopic] = useState<"orders/create" | "fulfillments/create">("fulfillments/create");
+  const [printerId, setPrinterId] = useState("");
+  const [printerCopies, setPrinterCopies] = useState("1");
+  const [printerApiKey, setPrinterApiKey] = useState("");
+  const [printerApiKeyMasked, setPrinterApiKeyMasked] = useState("");
+  const [printerHasApiKey, setPrinterHasApiKey] = useState(false);
+  const [printerOnline, setPrinterOnline] = useState<boolean | null>(null);
+  const [printerName, setPrinterName] = useState<string | null>(null);
 
 
   const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
@@ -209,6 +242,35 @@ export default function SettingsPage() {
     }
   }, []);
 
+  const refreshPrinterConfig = useCallback(async (manual = false) => {
+    if (manual) setPrinterBusy(true);
+    setPrinterLoading(true);
+    try {
+      const endpoint = `/api/shopify/printer/config${manual ? "?refresh=1" : ""}`;
+      const resp = await fetch(endpoint, { cache: "no-store" });
+      const json = (await resp.json().catch(() => ({}))) as ShopifyPrinterConfigResponse;
+      if (!resp.ok) throw new Error(json?.error || "Failed to load printer config.");
+      const cfg = json?.config || {};
+      setPrinterEnabled(cfg.enabled === true);
+      setPrinterTriggerTopic(cfg.triggerTopic === "orders/create" ? "orders/create" : "fulfillments/create");
+      setPrinterId(cfg.printerId ? String(cfg.printerId) : "");
+      setPrinterCopies(String(Math.min(5, Math.max(1, Number(cfg.copies || 1)))));
+      setPrinterHasApiKey(cfg.hasApiKey === true);
+      setPrinterApiKeyMasked(String(cfg.apiKeyMasked || ""));
+      setPrinterOnline(
+        typeof json?.printerStatus?.online === "boolean" ? Boolean(json?.printerStatus?.online) : null
+      );
+      setPrinterName(json?.printerStatus?.name || null);
+      if (json?.warning) setStatus(`Shopify Printer: ${json.warning}`);
+      if (json?.statusError) setError(`Shopify Printer: ${json.statusError}`);
+    } catch (e: any) {
+      setError(e?.message || "Failed to load Shopify Printer config.");
+    } finally {
+      setPrinterLoading(false);
+      if (manual) setPrinterBusy(false);
+    }
+  }, []);
+
 
   const refreshSession = useCallback(async () => {
     setAdminLoading(true);
@@ -277,6 +339,14 @@ export default function SettingsPage() {
     }
     const dropboxConnectedFlag = params.get("dropbox_connected");
     const dropboxError = params.get("dropbox_error");
+    const shopifyConnectedFlag = params.get("connected");
+    const shopifyError = params.get("shopify_error");
+    if (shopifyConnectedFlag === "1") {
+      setStatus("Shopify connected.");
+      setError(null);
+    } else if (shopifyError) {
+      setError(`Shopify: ${shopifyError}`);
+    }
     if (dropboxConnectedFlag === "1") {
       setStatus("Dropbox connected.");
     } else if (dropboxError) {
@@ -284,8 +354,9 @@ export default function SettingsPage() {
     }
     void refreshDropboxStatus();
     void refreshLightspeedStatus();
+    void refreshPrinterConfig();
     void refreshSession();
-  }, [refreshDropboxStatus, refreshLightspeedStatus, refreshSession, refreshStatus]);
+  }, [refreshDropboxStatus, refreshLightspeedStatus, refreshPrinterConfig, refreshSession, refreshStatus]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -374,6 +445,57 @@ export default function SettingsPage() {
       setStatus(null);
     } finally {
       setDropboxBusy(false);
+    }
+  }
+
+  async function handleSavePrinter() {
+    setPrinterBusy(true);
+    setError(null);
+    setStatus("Saving Shopify Printer config...");
+    try {
+      const resp = await fetch("/api/shopify/printer/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          enabled: printerEnabled,
+          triggerTopic: printerTriggerTopic,
+          apiKey: printerApiKey.trim(),
+          printerId: printerId.trim(),
+          copies: printerCopies.trim(),
+        }),
+      });
+      const json = (await resp.json().catch(() => ({}))) as ShopifyPrinterConfigResponse;
+      if (!resp.ok) throw new Error(json?.error || "Failed to save Shopify Printer config.");
+      setPrinterApiKey("");
+      setStatus("Shopify Printer config saved.");
+      await refreshPrinterConfig(true);
+    } catch (e: any) {
+      setError(e?.message || "Failed to save Shopify Printer config.");
+      setStatus(null);
+    } finally {
+      setPrinterBusy(false);
+    }
+  }
+
+  async function handleTestPrinter() {
+    setPrinterBusy(true);
+    setError(null);
+    setStatus("Sending test label to PrintNode...");
+    try {
+      const resp = await fetch("/api/shopify/printer/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const json = (await resp.json().catch(() => ({}))) as { error?: string };
+      if (!resp.ok) throw new Error(json?.error || "Test print failed.");
+      setStatus("Test label sent to printer.");
+      await refreshPrinterConfig(true);
+    } catch (e: any) {
+      setError(e?.message || "Test print failed.");
+      setStatus(null);
+    } finally {
+      setPrinterBusy(false);
     }
   }
 
@@ -630,6 +752,83 @@ export default function SettingsPage() {
         </div>
       </section>
 
+      <section id="integration-shopify-printer" className="card">
+        <div className="card-title">Shopify Printer</div>
+        <p className="muted">
+          Print labels automatically through PrintNode, including USB printers shared from your computer.
+        </p>
+        <div className="status-row">
+          <span className={`status-dot ${printerOnline ? "on" : "off"}`} />
+          <span>
+            {printerLoading
+              ? "Loading printer config..."
+              : printerOnline === null
+                ? "Status not checked"
+                : printerOnline
+                  ? "Printer online"
+                  : "Printer offline / unreachable"}
+            {printerName ? <em> - {printerName}</em> : null}
+          </span>
+        </div>
+
+        <div className="printer-grid">
+          <label className="active-toggle">
+            <input
+              type="checkbox"
+              checked={printerEnabled}
+              onChange={(e) => setPrinterEnabled(e.target.checked)}
+            />
+            Enable auto label printing
+          </label>
+          <select
+            value={printerTriggerTopic}
+            onChange={(e) =>
+              setPrinterTriggerTopic(
+                e.target.value === "orders/create" ? "orders/create" : "fulfillments/create"
+              )
+            }
+          >
+            <option value="fulfillments/create">Trigger: fulfillments/create</option>
+            <option value="orders/create">Trigger: orders/create</option>
+          </select>
+          <input
+            value={printerId}
+            onChange={(e) => setPrinterId(e.target.value)}
+            placeholder="PrintNode printer ID"
+            inputMode="numeric"
+          />
+          <input
+            value={printerCopies}
+            onChange={(e) => setPrinterCopies(e.target.value)}
+            placeholder="Copies (1-5)"
+            inputMode="numeric"
+          />
+          <input
+            type="password"
+            value={printerApiKey}
+            onChange={(e) => setPrinterApiKey(e.target.value)}
+            placeholder={printerHasApiKey ? `API key saved (${printerApiKeyMasked})` : "PrintNode API key"}
+            autoComplete="off"
+          />
+        </div>
+
+        <p className="muted">
+          Webhooks registered: <code>orders/create</code>, <code>orders/cancelled</code>, <code>fulfillments/create</code>.
+        </p>
+
+        <div className="actions">
+          <button className="btn primary" onClick={() => void handleSavePrinter()} disabled={printerBusy}>
+            {printerBusy ? "Saving..." : "Save Printer Config"}
+          </button>
+          <button className="btn ghost" onClick={() => void handleTestPrinter()} disabled={printerBusy}>
+            {printerBusy ? "Sending..." : "Send Test Label"}
+          </button>
+          <button className="btn ghost" onClick={() => void refreshPrinterConfig(true)} disabled={printerBusy}>
+            {printerBusy ? "Refreshing..." : "Refresh Printer Status"}
+          </button>
+        </div>
+      </section>
+
       {isAdmin ? (
         <section className="card">
           <div className="card-title">User Management (Admin)</div>
@@ -880,6 +1079,11 @@ export default function SettingsPage() {
           display: grid;
           gap: 4px;
         }
+        .printer-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 8px;
+        }
         .error {
           color: #fca5a5;
           font-weight: 700;
@@ -889,6 +1093,9 @@ export default function SettingsPage() {
             grid-template-columns: 1fr;
           }
           .user-row {
+            grid-template-columns: 1fr;
+          }
+          .printer-grid {
             grid-template-columns: 1fr;
           }
         }

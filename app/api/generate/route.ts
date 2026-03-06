@@ -2,7 +2,7 @@ import OpenAI, { toFile } from "openai";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { checkGenerateRateLimit } from "@/lib/ratelimit";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { getOpenAiApiKey } from "@/lib/openaiConfig";
 import {
   fetchRemoteImageBytes,
   getImageFetchMaxBytes,
@@ -60,31 +60,6 @@ async function downloadReferenceAsFile(url: string, index: number) {
       lastError = err?.message || "Image fetch failed";
     }
   }
-  // Fallback for Supabase public URLs that may fail with 400 in this environment.
-  try {
-    const parsed = new URL(url);
-    const marker = "/storage/v1/object/public/";
-    const pos = parsed.pathname.indexOf(marker);
-    if (pos >= 0) {
-      const rest = parsed.pathname.slice(pos + marker.length);
-      const slash = rest.indexOf("/");
-      if (slash > 0) {
-        const bucket = rest.slice(0, slash);
-        const objectPath = decodeURIComponent(rest.slice(slash + 1));
-        const supabase = getSupabaseAdmin();
-        const { data, error } = await supabase.storage.from(bucket).download(objectPath);
-        if (!error && data) {
-          const contentType = data.type || "image/png";
-          const ext = extFromContentType(contentType);
-          const bytes = Buffer.from(await data.arrayBuffer());
-          return toFile(bytes, `ref-${index + 1}.${ext}`, { type: contentType });
-        }
-      }
-    }
-  } catch {
-    // Keep original error below.
-  }
-
   throw new Error(
     `Reference image fetch failed at index ${index + 1}${
       lastError ? ` (${lastError})` : ""
@@ -714,7 +689,7 @@ export async function POST(req: NextRequest) {
         ? (size as ImageSize)
         : ("1536x1024" as ImageSize);
 
-    const apiKey = (process.env.OPENAI_API_KEY || "").trim();
+    const apiKey = getOpenAiApiKey();
     if (!apiKey) {
       return fallbackGenerateResponse("OPENAI_API_KEY is not set. Returned local fallback image.");
     }

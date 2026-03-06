@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { getStoragePublicUrl } from "@/lib/storageProvider";
+import {
+  listAllModelsAsc,
+  listModelsForUser,
+} from "@/lib/modelsRepository";
 
 function extractPathFromStorageUrl(url: string) {
   try {
@@ -20,6 +24,59 @@ function extractPathFromStorageUrl(url: string) {
       const bucket = rest.slice(0, slash);
       const objectPath = decodeURIComponent(rest.slice(slash + 1));
       return { bucket, objectPath };
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function extractPathFromR2StorageUrl(url: string) {
+  try {
+    const u = new URL(url);
+    const host = String(u.hostname || "").toLowerCase();
+    const configuredBucket = String(process.env.R2_BUCKET || "").trim();
+    const configuredPublicBase = String(process.env.R2_PUBLIC_URL_BASE || "").trim();
+    const parts = u.pathname.split("/").filter(Boolean).map((p) => decodeURIComponent(p));
+
+    if (host.includes("r2.cloudflarestorage.com")) {
+      if (parts.length >= 2) {
+        const bucket = parts[0];
+        const objectPath = parts.slice(1).join("/");
+        if (bucket && objectPath) return { bucket, objectPath };
+      }
+      if (configuredBucket && parts.length >= 1) {
+        const objectPath = parts.join("/");
+        if (objectPath) return { bucket: configuredBucket, objectPath };
+      }
+      return null;
+    }
+
+    if (host.endsWith(".r2.dev")) {
+      const objectPath = parts.join("/");
+      if (!objectPath) return null;
+      return { bucket: configuredBucket || "r2", objectPath };
+    }
+
+    if (configuredPublicBase) {
+      try {
+        const base = new URL(configuredPublicBase);
+        if (host === String(base.hostname || "").toLowerCase()) {
+          const baseParts = base.pathname.split("/").filter(Boolean).map((p) => decodeURIComponent(p));
+          let objectParts = parts;
+          if (baseParts.length && parts.length >= baseParts.length) {
+            const isBasePrefix = baseParts.every((seg, idx) => parts[idx] === seg);
+            if (isBasePrefix) {
+              objectParts = parts.slice(baseParts.length);
+            }
+          }
+          const objectPath = objectParts.join("/");
+          if (objectPath) return { bucket: configuredBucket || "r2", objectPath };
+        }
+      } catch {
+        // Ignore malformed configured base and continue to fallback.
+      }
     }
 
     return null;
@@ -110,32 +167,15 @@ function normalizeGender(value: unknown) {
 }
 
 async function loadModelRowsForSession(userId: string | null) {
-  const supabase = getSupabaseAdmin();
   if (userId) {
-    const { data, error } = await supabase
-      .from("models")
-      .select("model_id,name,gender,created_at,ref_image_urls")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: true });
-    if (error) {
-      throw new Error(error.message);
-    }
+    const data = await listModelsForUser(userId);
     if ((data || []).length) {
-      return data || [];
+      return [...data].reverse();
     }
   }
 
   // Fallback for legacy/cross-domain sessions that do not map to the current cookie user_id.
-  const { data, error } = await supabase
-    .from("models")
-    .select("model_id,name,gender,created_at,ref_image_urls")
-    .order("created_at", { ascending: true });
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return data || [];
+  return listAllModelsAsc();
 }
 
 export async function GET(req: NextRequest) {
@@ -148,7 +188,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const bucket = (process.env.SUPABASE_STORAGE_BUCKET_ITEMS || "").trim();
+    const r2Bucket = String(process.env.R2_BUCKET || "").trim();
     const userId = req.cookies.get("carbon_gen_user_id")?.value?.trim() || null;
     const modelRows = await loadModelRowsForSession(userId);
 
@@ -164,11 +204,9 @@ export async function GET(req: NextRequest) {
       __bucket?: string | null;
       __objectPath?: string | null;
     }> = [];
-    const staleModelIds = new Set<string>();
 
     for (const row of modelRows || []) {
       const urls = Array.isArray((row as any).ref_image_urls) ? (row as any).ref_image_urls : [];
-      const modelId = String((row as any).model_id || "").trim();
       const modelName = String((row as any).name || "");
       const gender = normalizeGender((row as any).gender);
       const createdAt = String((row as any).created_at || "") || null;
@@ -176,20 +214,44 @@ export async function GET(req: NextRequest) {
         .map((raw: unknown) => sanitizeReferenceUrl(raw))
         .filter((raw: string) => raw.length > 0);
 
-      const hasTemporaryRefs = cleanedUrls.some((rawUrl: string) => isTemporaryReferenceUrl(rawUrl));
-      if (hasTemporaryRefs) {
-        if (modelId) staleModelIds.add(modelId);
-        continue;
-      }
+      const normalizedUrls: string[] = Array.from(
+        new Set<string>(
+          cleanedUrls
+            .map((rawUrl: string) => {
+              if (!isTemporaryReferenceUrl(rawUrl)) return sanitizeReferenceUrl(rawUrl);
+              const legacyParsed = extractPathFromStorageUrl(rawUrl);
+              const r2Parsed = legacyParsed ? null : extractPathFromR2StorageUrl(rawUrl);
+              const parsed = legacyParsed || r2Parsed;
+              if (parsed?.objectPath) {
+                try {
+                  return getStoragePublicUrl(parsed.objectPath);
+                } catch {
+                  return sanitizeReferenceUrl(rawUrl);
+                }
+              }
+              return sanitizeReferenceUrl(rawUrl);
+            })
+            .filter((value: unknown): value is string => Boolean(value))
+        )
+      );
+      if (normalizedUrls.length < 1) continue;
 
-      for (const rawUrl of cleanedUrls) {
+      for (const rawUrl of normalizedUrls) {
 
-        const parsed = extractPathFromStorageUrl(rawUrl);
-        // Keep only the configured bucket when parseable; otherwise keep legacy URL entries.
-        if (parsed && bucket && parsed.bucket !== bucket) continue;
+        const legacyParsed = extractPathFromStorageUrl(rawUrl);
+        const r2Parsed = legacyParsed ? null : extractPathFromR2StorageUrl(rawUrl);
+        const parsed = legacyParsed || r2Parsed;
+        // Keep legacy storage-path entries when parseable to support old rows after migration.
+        // Keep only the configured R2 bucket when parseable.
+        if (r2Parsed && r2Bucket && r2Parsed.bucket !== r2Bucket) continue;
 
         const path = parsed?.objectPath || rawUrl;
         const fileName = parsed ? fileNameFromPath(parsed.objectPath) : fileNameFromUrl(rawUrl);
+        const rebuiltUrl = parsed?.objectPath ? getStoragePublicUrl(parsed.objectPath) : "";
+        const preferredPreviewUrl = parsed?.objectPath
+          ? `/api/storage/preview?path=${encodeURIComponent(parsed.objectPath)}`
+          : rawUrl;
+        const fallbackUrl = rebuiltUrl || rawUrl;
 
         entries.push({
           id: parsed ? `${parsed.bucket}/${parsed.objectPath}` : `url:${rawUrl}`,
@@ -198,22 +260,12 @@ export async function GET(req: NextRequest) {
           modelName,
           gender,
           uploadedAt: timestampFromFileName(fileName) || createdAt || null,
-          url: rawUrl,
-          previewUrl: rawUrl,
+          url: fallbackUrl,
+          previewUrl: preferredPreviewUrl,
           __bucket: parsed?.bucket || null,
           __objectPath: parsed?.objectPath || null,
         });
       }
-    }
-
-    if (staleModelIds.size) {
-      const supabase = getSupabaseAdmin();
-      const userCookieId = req.cookies.get("carbon_gen_user_id")?.value?.trim() || null;
-      let staleDelete = supabase.from("models").delete().in("model_id", Array.from(staleModelIds));
-      if (userCookieId) {
-        staleDelete = staleDelete.eq("user_id", userCookieId);
-      }
-      await staleDelete;
     }
 
     // Deduplicate repeated uploads by source filename only.
@@ -234,35 +286,6 @@ export async function GET(req: NextRequest) {
     }
 
     const deduped = Array.from(byCanonical.values());
-
-    // Generate signed preview URLs for private buckets while preserving original stored URLs.
-    if (bucket) {
-      const supabase = getSupabaseAdmin();
-      const signTargets = deduped.filter(
-        (entry) => entry.__bucket === bucket && entry.__objectPath
-      );
-
-      if (signTargets.length) {
-        const paths = signTargets.map((entry) => String(entry.__objectPath));
-        const { data: signedData } = await supabase.storage
-          .from(bucket)
-          .createSignedUrls(paths, 60 * 60 * 24 * 7);
-
-        const signedByPath = new Map<string, string>();
-        for (const row of signedData || []) {
-          if (row?.path && row?.signedUrl) {
-            signedByPath.set(String(row.path), String(row.signedUrl));
-          }
-        }
-
-        for (const entry of deduped) {
-          const objectPath = entry.__objectPath || "";
-          if (objectPath && signedByPath.has(objectPath)) {
-            entry.previewUrl = signedByPath.get(objectPath) || entry.previewUrl;
-          }
-        }
-      }
-    }
 
     return NextResponse.json({
       files: deduped.map((entry) => ({

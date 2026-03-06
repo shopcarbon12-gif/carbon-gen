@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import bcrypt from "bcryptjs";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { countActiveAdmins, findUserByUsername } from "@/lib/authRepository";
 
 export type AppRole = string;
 
@@ -46,16 +46,8 @@ export function isAdminSession(req: NextRequest) {
 export async function getUserByUsername(username: string): Promise<AppUserRow | null> {
   const normalized = normalizeUsername(username);
   if (!normalized) return null;
-
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from("app_users")
-    .select("id,username,password_hash,role,is_active,created_at,updated_at")
-    .eq("username", normalized)
-    .maybeSingle();
-
-  if (error) throw new Error(error.message);
-  return (data as AppUserRow | null) || null;
+  const row = await findUserByUsername(normalized);
+  return (row as AppUserRow | null) || null;
 }
 
 export async function authenticateUser(username: string, password: string): Promise<AppUserRow | null> {
@@ -66,12 +58,5 @@ export async function authenticateUser(username: string, password: string): Prom
 }
 
 export async function countAdmins(): Promise<number> {
-  const supabase = getSupabaseAdmin();
-  const { count, error } = await supabase
-    .from("app_users")
-    .select("id", { count: "exact", head: true })
-    .eq("role", "admin")
-    .eq("is_active", true);
-  if (error) throw new Error(error.message);
-  return count || 0;
+  return countActiveAdmins();
 }

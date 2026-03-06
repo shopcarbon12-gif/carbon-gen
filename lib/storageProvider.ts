@@ -1,12 +1,12 @@
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import {
   DeleteObjectsCommand,
+  GetObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
 
-type StorageProviderType = "supabase" | "r2";
+type StorageProviderType = "r2";
 
 type R2Config = {
   accountId: string;
@@ -24,28 +24,11 @@ type StorageFile = {
   createdAt?: string | null;
 };
 
-const DEFAULT_BUCKET_FALLBACK = "items";
-
 let cachedR2Client: S3Client | null = null;
 let cachedR2Key = "";
 
-function normalizeProvider(value: string | undefined) {
-  const raw = String(value || "").trim().toLowerCase();
-  if (raw === "r2") return "r2";
-  if (raw === "supabase") return "supabase";
-  return "auto";
-}
-
 function normalizePath(value: string) {
   return String(value || "").replace(/^\/+/, "");
-}
-
-function getSupabaseBucket(required: boolean) {
-  const bucket = (process.env.SUPABASE_STORAGE_BUCKET_ITEMS || "").trim();
-  if (!bucket && required) {
-    throw new Error("Missing SUPABASE_STORAGE_BUCKET_ITEMS.");
-  }
-  return bucket || DEFAULT_BUCKET_FALLBACK;
 }
 
 function getR2Config(): R2Config | null {
@@ -68,6 +51,16 @@ function getR2Config(): R2Config | null {
     endpoint,
     publicBaseUrl,
   };
+}
+
+function getRequiredR2Config() {
+  const cfg = getR2Config();
+  if (!cfg) {
+    throw new Error(
+      "Missing R2 configuration. Set R2_ACCOUNT_ID, R2_BUCKET, R2_ACCESS_KEY_ID, and R2_SECRET_ACCESS_KEY."
+    );
+  }
+  return cfg;
 }
 
 function getR2PublicBase(config: R2Config) {
@@ -93,36 +86,16 @@ function getR2Client(config: R2Config) {
   return cachedR2Client;
 }
 
-export function getActiveStorageProvider(): { type: StorageProviderType; r2?: R2Config } {
-  const desired = normalizeProvider(process.env.IMAGE_STORAGE_PROVIDER);
-  const r2 = getR2Config();
-  if (desired === "r2") {
-    if (!r2) {
-      throw new Error(
-        "IMAGE_STORAGE_PROVIDER is set to r2 but R2_ACCOUNT_ID/R2_BUCKET/R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY are missing."
-      );
-    }
-    return { type: "r2", r2 };
-  }
-  if (desired === "supabase") {
-    return { type: "supabase" };
-  }
-  if (r2) {
-    return { type: "r2", r2 };
-  }
-  return { type: "supabase" };
+export function getActiveStorageProvider(): { type: StorageProviderType; r2: R2Config } {
+  const r2 = getRequiredR2Config();
+  return { type: "r2", r2 };
 }
 
 export function getStoragePublicUrl(path: string) {
   const provider = getActiveStorageProvider();
   const normalized = normalizePath(path);
-  if (provider.type === "r2" && provider.r2) {
-    const base = getR2PublicBase(provider.r2);
-    return `${base}/${normalized}`;
-  }
-  const bucket = getSupabaseBucket(true);
-  const supabase = getSupabaseAdmin();
-  return supabase.storage.from(bucket).getPublicUrl(normalized).data.publicUrl;
+  const base = getR2PublicBase(provider.r2);
+  return `${base}/${normalized}`;
 }
 
 export async function uploadBytesToStorage(params: {
@@ -134,29 +107,16 @@ export async function uploadBytesToStorage(params: {
   const normalized = normalizePath(params.path);
   const contentType = params.contentType || "application/octet-stream";
 
-  if (provider.type === "r2" && provider.r2) {
-    const client = getR2Client(provider.r2);
-    await client.send(
-      new PutObjectCommand({
-        Bucket: provider.r2.bucket,
-        Key: normalized,
-        Body: params.bytes,
-        ContentType: contentType,
-      })
-    );
-    const publicUrl = getStoragePublicUrl(normalized);
-    return { url: publicUrl, path: normalized };
-  }
-
-  const bucket = getSupabaseBucket(true);
-  const supabase = getSupabaseAdmin();
-  const { error } = await supabase.storage
-    .from(bucket)
-    .upload(normalized, params.bytes, { contentType });
-  if (error) {
-    throw new Error(error.message);
-  }
-  const publicUrl = supabase.storage.from(bucket).getPublicUrl(normalized).data.publicUrl;
+  const client = getR2Client(provider.r2);
+  await client.send(
+    new PutObjectCommand({
+      Bucket: provider.r2.bucket,
+      Key: normalized,
+      Body: params.bytes,
+      ContentType: contentType,
+    })
+  );
+  const publicUrl = getStoragePublicUrl(normalized);
   return { url: publicUrl, path: normalized };
 }
 
@@ -165,32 +125,17 @@ export async function deleteStorageObjects(paths: string[]) {
   const normalized = Array.from(new Set(paths.map(normalizePath))).filter(Boolean);
   if (!normalized.length) return { deleted: 0 };
 
-  if (provider.type === "r2" && provider.r2) {
-    const client = getR2Client(provider.r2);
-    const chunkSize = 1000;
-    let deleted = 0;
-    for (let i = 0; i < normalized.length; i += chunkSize) {
-      const chunk = normalized.slice(i, i + chunkSize);
-      await client.send(
-        new DeleteObjectsCommand({
-          Bucket: provider.r2.bucket,
-          Delete: { Objects: chunk.map((Key) => ({ Key })) },
-        })
-      );
-      deleted += chunk.length;
-    }
-    return { deleted };
-  }
-
-  const bucket = getSupabaseBucket(true);
-  const supabase = getSupabaseAdmin();
+  const client = getR2Client(provider.r2);
+  const chunkSize = 1000;
   let deleted = 0;
-  for (let i = 0; i < normalized.length; i += 1000) {
-    const chunk = normalized.slice(i, i + 1000);
-    const { error } = await supabase.storage.from(bucket).remove(chunk);
-    if (error) {
-      throw new Error(error.message);
-    }
+  for (let i = 0; i < normalized.length; i += chunkSize) {
+    const chunk = normalized.slice(i, i + chunkSize);
+    await client.send(
+      new DeleteObjectsCommand({
+        Bucket: provider.r2.bucket,
+        Delete: { Objects: chunk.map((Key) => ({ Key })) },
+      })
+    );
     deleted += chunk.length;
   }
   return { deleted };
@@ -199,69 +144,58 @@ export async function deleteStorageObjects(paths: string[]) {
 export async function listStorageFiles(prefix: string) {
   const provider = getActiveStorageProvider();
   const normalizedPrefix = normalizePath(prefix);
-
-  if (provider.type === "r2" && provider.r2) {
-    const client = getR2Client(provider.r2);
-    const files: StorageFile[] = [];
-    let continuationToken: string | undefined;
-    do {
-      const resp = await client.send(
-        new ListObjectsV2Command({
-          Bucket: provider.r2.bucket,
-          Prefix: normalizedPrefix ? `${normalizedPrefix.replace(/\/+$/, "")}/` : undefined,
-          ContinuationToken: continuationToken,
-        })
-      );
-      for (const entry of resp.Contents || []) {
-        if (!entry.Key) continue;
-        files.push({
-          path: entry.Key,
-          size: typeof entry.Size === "number" ? entry.Size : null,
-          updatedAt: entry.LastModified ? entry.LastModified.toISOString() : null,
-          createdAt: entry.LastModified ? entry.LastModified.toISOString() : null,
-        });
-      }
-      continuationToken = resp.IsTruncated ? resp.NextContinuationToken : undefined;
-    } while (continuationToken);
-    return files;
-  }
-
-  const bucket = getSupabaseBucket(true);
-  const supabase = getSupabaseAdmin();
-  const queue: string[] = [normalizedPrefix || ""];
+  const client = getR2Client(provider.r2);
   const files: StorageFile[] = [];
+  let continuationToken: string | undefined;
 
-  while (queue.length) {
-    const current = queue.shift() as string;
-    const { data, error } = await supabase.storage.from(bucket).list(current, {
-      limit: 1000,
-      sortBy: { column: "name", order: "asc" },
-    });
-    if (error) {
-      throw new Error(error.message);
+  do {
+    const resp = await client.send(
+      new ListObjectsV2Command({
+        Bucket: provider.r2.bucket,
+        Prefix: normalizedPrefix ? `${normalizedPrefix.replace(/\/+$/, "")}/` : undefined,
+        ContinuationToken: continuationToken,
+      })
+    );
+    for (const entry of resp.Contents || []) {
+      if (!entry.Key) continue;
+      files.push({
+        path: entry.Key,
+        size: typeof entry.Size === "number" ? entry.Size : null,
+        updatedAt: entry.LastModified ? entry.LastModified.toISOString() : null,
+        createdAt: entry.LastModified ? entry.LastModified.toISOString() : null,
+      });
     }
-    for (const entry of (data || []) as Array<{
-      name: string;
-      id: string | null;
-      metadata?: { size?: number } | null;
-      created_at?: string | null;
-      updated_at?: string | null;
-    }>) {
-      const childPath = `${current}/${entry.name}`.replace(/^\/+/, "");
-      if (!entry.id) {
-        queue.push(childPath);
-      } else {
-        files.push({
-          path: childPath,
-          size: entry.metadata?.size ?? null,
-          createdAt: entry.created_at || entry.updated_at || null,
-          updatedAt: entry.updated_at || entry.created_at || null,
-        });
-      }
-    }
-  }
+    continuationToken = resp.IsTruncated ? resp.NextContinuationToken : undefined;
+  } while (continuationToken);
 
   return files;
+}
+
+export async function downloadStorageObject(path: string): Promise<{
+  body: ArrayBuffer;
+  contentType: string;
+}> {
+  const provider = getActiveStorageProvider();
+  const normalized = normalizePath(path);
+  if (!normalized) {
+    throw new Error("Missing storage object path.");
+  }
+
+  const client = getR2Client(provider.r2);
+  const resp = await client.send(
+    new GetObjectCommand({
+      Bucket: provider.r2.bucket,
+      Key: normalized,
+    })
+  );
+  if (!resp.Body) {
+    throw new Error("Storage object body is empty.");
+  }
+  const bytes = await resp.Body.transformToByteArray();
+  const body = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(body).set(bytes);
+  const contentType = String(resp.ContentType || "").trim() || "application/octet-stream";
+  return { body, contentType };
 }
 
 export function getR2AllowedHost() {

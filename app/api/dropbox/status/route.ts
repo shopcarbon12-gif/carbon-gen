@@ -27,9 +27,12 @@ export async function GET(req: NextRequest) {
       updatedAt: row.updated_at || null,
     });
   } catch (e: any) {
-    return NextResponse.json(
-      { connected: false, reason: "error", error: e?.message || "Failed to read Dropbox status" },
-      { status: 500 }
-    );
+    const message = String(e?.message || "");
+    const isConfigMissing =
+      /sql database is not configured|missing/i.test(message);
+    return NextResponse.json({
+      connected: false,
+      reason: isConfigMissing ? "not_connected" : "error",
+    });
   }
 }

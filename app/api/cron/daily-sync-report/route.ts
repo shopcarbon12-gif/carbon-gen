@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isRequestAuthed } from "@/lib/auth";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { normalizeShopDomain } from "@/lib/shopify";
 import { Resend } from "resend";
+import { getMostRecentInstalledShop } from "@/lib/shopifyTokenRepository";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -31,9 +31,7 @@ async function getShop(): Promise<string> {
   const envShop = normalizeShopDomain((process.env.SHOPIFY_SHOP_DOMAIN || "").trim());
   if (envShop) return envShop;
   try {
-    const supabase = getSupabaseAdmin();
-    const { data } = await supabase.from("shopify_tokens").select("shop").order("installed_at", { ascending: false }).limit(1).maybeSingle();
-    if (data?.shop) return normalizeShopDomain(data.shop) || data.shop;
+    return await getMostRecentInstalledShop();
   } catch { /* */ }
   return "";
 }
@@ -72,13 +70,13 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "No shop configured" }, { status: 400 });
     }
 
-    const { neonQuery, ensureNeonReady } = await import("@/lib/neonDb");
-    await ensureNeonReady();
+    const { sqlQuery, ensureSqlReady } = await import("@/lib/sqlDb");
+    await ensureSqlReady();
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
     const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59).toISOString();
 
-    const activities = await neonQuery<SyncActivity>(
+    const activities = await sqlQuery<SyncActivity>(
       `SELECT id, synced_at, items_checked, items_updated, variants_added, variants_deleted, products_archived, errors, duration_ms
        FROM shopify_cart_sync_activity
        WHERE shop = $1 AND synced_at >= $2 AND synced_at <= $3
@@ -94,7 +92,7 @@ export async function GET(req: NextRequest) {
     const totalArchived = runs.reduce((s, r) => s + r.products_archived, 0);
     const totalErrors = runs.reduce((s, r) => s + r.errors, 0);
 
-    const allChangesRaw = await neonQuery<SyncChange>(
+    const allChangesRaw = await sqlQuery<SyncChange>(
       `SELECT c.sync_id, c.parent_id, c.product_title, c.variant_sku, c.field, c.old_value, c.new_value, c.changed_at
        FROM shopify_cart_sync_changes c
        JOIN shopify_cart_sync_activity a ON a.id = c.sync_id
@@ -217,7 +215,7 @@ export async function GET(req: NextRequest) {
     let deletedChanges = 0;
     try {
       const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59).toISOString();
-      const ccRes = await neonQuery<{ cnt: string }>(
+      const ccRes = await sqlQuery<{ cnt: string }>(
         `SELECT count(*)::text AS cnt
          FROM shopify_cart_sync_changes c
          JOIN shopify_cart_sync_activity a ON a.id = c.sync_id
@@ -226,7 +224,7 @@ export async function GET(req: NextRequest) {
       );
       deletedChanges = parseInt(ccRes[0]?.cnt || "0", 10);
 
-      const acRes = await neonQuery<{ cnt: string }>(
+      const acRes = await sqlQuery<{ cnt: string }>(
         `WITH d AS (DELETE FROM shopify_cart_sync_activity WHERE shop = $1 AND synced_at <= $2 RETURNING id)
          SELECT count(*)::text AS cnt FROM d`,
         [shop, endOfDay]

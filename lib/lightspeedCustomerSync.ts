@@ -1,5 +1,5 @@
 import { lsGet, lsPost, lsPut, lsDelete } from "@/lib/lightspeedApi";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { upsertCustomerLsHistory } from "@/lib/lightspeedRepository";
 
 function normalizeText(value: unknown) {
   return String(value ?? "").trim();
@@ -327,7 +327,7 @@ async function createCustomer(
   }
 }
 
-// ── LS Sale History → Supabase cache (Part 3b) ─────────────────────────
+// ── LS Sale History → SQL cache (Part 3b) ──────────────────────────────
 
 export async function syncCustomerLsHistory(
   lsCustomerId: string,
@@ -361,16 +361,11 @@ export async function syncCustomerLsHistory(
       saleLines: extractSaleLinesSummary(s),
     }));
 
-    const supabase = getSupabaseAdmin();
-    await supabase.from("customer_ls_history").upsert(
-      {
-        shopify_email: normalizeLower(shopifyEmail),
-        ls_customer_id: lsCustomerId,
-        sales_json: history,
-        synced_at: new Date().toISOString(),
-      },
-      { onConflict: "shopify_email" },
-    );
+    await upsertCustomerLsHistory({
+      shopifyEmail: normalizeLower(shopifyEmail),
+      lsCustomerId,
+      salesJson: history,
+    });
   } catch (err) {
     console.error(`[customerSync] Failed to sync LS history for ${shopifyEmail}:`, err);
   }

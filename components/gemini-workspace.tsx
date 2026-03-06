@@ -369,6 +369,7 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
   const [modelUploadTotal, setModelUploadTotal] = useState(0);
   const [modelUploadDone, setModelUploadDone] = useState(0);
   const [modelUploading, setModelUploading] = useState(false);
+  const [modelSaving, setModelSaving] = useState(false);
   const [modelUploadPending, setModelUploadPending] = useState(0);
   const [modelDraftId, setModelDraftId] = useState<string | null>(null);
   const [modelUploads, setModelUploads] = useState<
@@ -394,6 +395,7 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
   >([]);
   const selectedCatalogImagesRef = useRef<SelectedCatalogImage[]>([]);
   const modelUploadingRef = useRef(false);
+  const modelSavingRef = useRef(false);
   const modelUploadPendingRef = useRef(0);
   const [models, setModels] = useState<
     Array<{
@@ -481,6 +483,9 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
     "all"
   );
   const [brokenPreviousUploadIds, setBrokenPreviousUploadIds] = useState<string[]>([]);
+  const [previousPreviewRetryById, setPreviousPreviewRetryById] = useState<Record<string, number>>(
+    {}
+  );
   const [previousUploadsVisible, setPreviousUploadsVisible] = useState(false);
   const [emptyingBucket, setEmptyingBucket] = useState(false);
   const [connected, setConnected] = useState<boolean | null>(null);
@@ -1245,6 +1250,9 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
   }
 
   async function createModel() {
+    if (modelSavingRef.current) return;
+    modelSavingRef.current = true;
+    setModelSaving(true);
     setError(null);
     setStatus("Uploading model...");
     try {
@@ -1308,6 +1316,8 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
       setStatus(null);
     } finally {
       setModelUploading(false);
+      modelSavingRef.current = false;
+      setModelSaving(false);
     }
   }
 
@@ -2314,6 +2324,24 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
     return Array.from(files).filter((file) => isImageLikeFile(file));
   }
 
+  async function runWithConcurrency<T>(
+    items: T[],
+    limit: number,
+    worker: (item: T, index: number) => Promise<void>
+  ) {
+    let nextIndex = 0;
+    const size = Math.max(1, Math.min(limit, items.length));
+    const runners = Array.from({ length: size }, async () => {
+      while (true) {
+        const current = nextIndex;
+        nextIndex += 1;
+        if (current >= items.length) return;
+        await worker(items[current], current);
+      }
+    });
+    await Promise.all(runners);
+  }
+
   async function handlePushFilesSelected(files: File[]) {
     const filtered = filterImages(files);
     if (!filtered.length) return;
@@ -2372,41 +2400,41 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
     }));
     setModelPreviewItems((prev) => [...prev, ...localItems]);
 
-    const results = await Promise.allSettled(
-      filtered.map(async (file, index) => {
-        const preview = localItems[index];
-        const uploadForm = new FormData();
-        uploadForm.append("batchId", batchId);
-        uploadForm.append("file", file);
-        try {
-          const resp = await fetch("/api/models/upload", {
-            method: "POST",
-            body: uploadForm,
-          });
-          const json = await parseJsonResponse(resp);
-          if (!resp.ok) {
-            throw new Error(json.error || "File upload failed");
-          }
-          setModelPreviewItems((prev) =>
-            prev.map((item) =>
-              item.id === preview.id
-                ? { ...item, uploadedUrl: json.url, path: json.path }
-                : item
-            )
-          );
-          setModelUploads((prev) => [
-            ...prev,
-            { name: file.name, url: json.url, path: json.path },
-          ]);
-          setModelUploadDone((prev) => prev + 1);
-        } finally {
-          setModelUploadPending((prev) => Math.max(0, prev - 1));
+    const failures: string[] = [];
+    await runWithConcurrency(filtered, 3, async (file, index) => {
+      const preview = localItems[index];
+      const uploadForm = new FormData();
+      uploadForm.append("batchId", batchId);
+      uploadForm.append("file", file);
+      try {
+        const resp = await fetch("/api/models/upload", {
+          method: "POST",
+          body: uploadForm,
+        });
+        const json = await parseJsonResponse(resp);
+        if (!resp.ok) {
+          throw new Error(json.error || "File upload failed");
         }
-      })
-    );
-    const failures = results.filter((r) => r.status === "rejected") as PromiseRejectedResult[];
+        setModelPreviewItems((prev) =>
+          prev.map((item) =>
+            item.id === preview.id
+              ? { ...item, uploadedUrl: json.url, path: json.path }
+              : item
+          )
+        );
+        setModelUploads((prev) => [
+          ...prev,
+          { name: file.name, url: json.url, path: json.path },
+        ]);
+        setModelUploadDone((prev) => prev + 1);
+      } catch (error: any) {
+        failures.push(error?.message || "File upload failed");
+      } finally {
+        setModelUploadPending((prev) => Math.max(0, prev - 1));
+      }
+    });
     if (failures.length) {
-      setError(failures[0].reason?.message || "Some uploads failed.");
+      setError(failures[0] || "Some uploads failed.");
     }
   }
 
@@ -2427,17 +2455,33 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
   }
 
   async function removeModel(modelId: string) {
-    await fetch("/api/models/delete", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model_id: modelId }),
-    });
-    refreshModels();
+    setError(null);
+    try {
+      const resp = await fetch("/api/models/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model_id: modelId }),
+      });
+      const json = await parseJsonResponse(resp);
+      if (!resp.ok) throw new Error(json?.error || "Failed to remove model.");
+      setStatus("Model removed.");
+      refreshModels();
+    } catch (e: any) {
+      setError(e?.message || "Failed to remove model.");
+    }
   }
 
   async function resetModels() {
-    await fetch("/api/models/reset", { method: "POST" });
-    refreshModels();
+    setError(null);
+    try {
+      const resp = await fetch("/api/models/reset", { method: "POST" });
+      const json = await parseJsonResponse(resp);
+      if (!resp.ok) throw new Error(json?.error || "Failed to reset models.");
+      setStatus("All models reset.");
+      refreshModels();
+    } catch (e: any) {
+      setError(e?.message || "Failed to reset models.");
+    }
   }
 
   async function loadPreviousModelUploads() {
@@ -2479,6 +2523,7 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
 
       setPreviousModelUploads(Array.from(dedupedByName.values()));
       setBrokenPreviousUploadIds([]);
+      setPreviousPreviewRetryById({});
     } catch (e: any) {
       setError(e?.message || "Failed to load previous model uploads");
       setPreviousModelUploads([]);
@@ -4601,8 +4646,13 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
             </button>
           </div>
           <div className="row" style={{ justifyContent: "center" }}>
-            <button className="btn primary" onClick={createModel}>
-              Save Model
+            <button
+              className="btn primary"
+              type="button"
+              onClick={createModel}
+              disabled={modelSaving}
+            >
+              {modelSaving ? "Saving..." : "Save Model"}
             </button>
           </div>
           {(modelUploading || modelPreviewItems.some((p) => !p.uploadedUrl)) && (
@@ -4657,6 +4707,12 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
                 <div className="preview-grid previous-upload-grid">
                   {sortedPreviousModelUploads.map((file) => {
                     const selected = addedPreviousPaths.has(file.path);
+                    const previewSrc = String(file.previewUrl || file.url || "").trim();
+                    const previewRetryVersion = previousPreviewRetryById[file.id] || 0;
+                    const previewSrcWithRetry = previewRetryVersion
+                      ? `${previewSrc}${previewSrc.includes("?") ? "&" : "?"}previewRetry=${previewRetryVersion}`
+                      : previewSrc;
+                    const previewBroken = brokenPreviousUploadIds.includes(file.id);
                     return (
                       <div
                         key={file.id}
@@ -4665,17 +4721,47 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
                         }`}
                         onClick={() => addPreviousUploadToRegistry(file)}
                       >
-                        {file.previewUrl && !brokenPreviousUploadIds.includes(file.id) ? (
+                        {previewSrc && !previewBroken ? (
                           <img
                             className="previous-upload-image"
-                            src={file.previewUrl}
+                            src={previewSrcWithRetry}
                             alt="Previous upload preview"
-                            onError={() =>
+                            loading="lazy"
+                            decoding="async"
+                            onError={(e) => {
+                              const fallback = String(file.url || "").trim();
+                              const target = e.currentTarget;
+                              const triedFallback = target.dataset.fallbackTried === "true";
+                              if (!triedFallback && fallback && target.src !== fallback) {
+                                target.dataset.fallbackTried = "true";
+                                target.src = fallback;
+                                return;
+                              }
                               setBrokenPreviousUploadIds((prev) =>
                                 prev.includes(file.id) ? prev : [...prev, file.id]
-                              )
-                            }
+                              );
+                            }}
                           />
+                        ) : previewBroken ? (
+                          <div className="previous-preview-failed">
+                            <div className="muted centered">Preview failed</div>
+                            <button
+                              className="preview-retry-btn"
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setBrokenPreviousUploadIds((prev) =>
+                                  prev.filter((id) => id !== file.id)
+                                );
+                                setPreviousPreviewRetryById((prev) => ({
+                                  ...prev,
+                                  [file.id]: (prev[file.id] || 0) + 1,
+                                }));
+                              }}
+                            >
+                              Retry
+                            </button>
+                          </div>
                         ) : (
                           <div className="muted centered">Preview unavailable</div>
                         )}
@@ -5944,11 +6030,24 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
                         }
                       }}
                     >
-                      {file.previewUrl ? (
+                      {String(file.previewUrl || file.url || "").trim() ? (
                         <img
                           className="previous-upload-image"
-                          src={file.previewUrl}
+                          src={String(file.previewUrl || file.url || "").trim()}
                           alt={file.fileName || "Final result preview"}
+                          loading="lazy"
+                          decoding="async"
+                          onError={(e) => {
+                            const fallback = String(file.url || "").trim();
+                            const target = e.currentTarget;
+                            const triedFallback = target.dataset.fallbackTried === "true";
+                            if (!triedFallback && fallback && target.src !== fallback) {
+                              target.dataset.fallbackTried = "true";
+                              target.src = fallback;
+                              return;
+                            }
+                            target.style.display = "none";
+                          }}
                         />
                       ) : (
                         <div className="muted centered">Preview unavailable</div>
@@ -6269,7 +6368,7 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
           color: #0f172a;
         }
         .page.is-hydrating {
-          visibility: hidden;
+          visibility: visible;
         }
         .page.is-hydrated {
           visibility: visible;
@@ -7121,6 +7220,28 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
           object-fit: contain;
           border-radius: 8px;
           background: #f8fafc;
+        }
+        .previous-preview-failed {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          align-items: center;
+          justify-content: center;
+          min-height: 84px;
+        }
+        .preview-retry-btn {
+          border: 1px solid rgba(148, 163, 184, 0.45);
+          border-radius: 999px;
+          padding: 2px 10px;
+          font-size: 0.68rem;
+          line-height: 1.15;
+          font-weight: 600;
+          color: #e2e8f0;
+          background: rgba(15, 23, 42, 0.28);
+          cursor: pointer;
+        }
+        .preview-retry-btn:hover {
+          background: rgba(15, 23, 42, 0.42);
         }
         .preview-name {
           font-size: 0.75rem;

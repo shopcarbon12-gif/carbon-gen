@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isRequestAuthed, isCronAuthed } from "@/lib/auth";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import {
   getShopifyAdminToken,
   normalizeShopDomain,
   runShopifyGraphql,
 } from "@/lib/shopify";
+import { getShopifyAccessToken, listInstalledShops } from "@/lib/shopifyTokenRepository";
 import {
   listCartCatalogParents,
   removeCartCatalogParents,
@@ -597,13 +597,7 @@ async function getTokenForShop(
 ): Promise<string | null> {
   const allowEnvFallback = options.allowEnvFallback !== false;
   try {
-    const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
-      .from("shopify_tokens")
-      .select("access_token")
-      .eq("shop", shop)
-      .maybeSingle();
-    const dbToken = !error ? normalizeText((data as { access_token?: string } | null)?.access_token) : "";
+    const dbToken = await getShopifyAccessToken(shop);
     if (dbToken) return dbToken;
   } catch {
     // fallback to env
@@ -616,21 +610,9 @@ async function getTokenForShop(
 async function getAvailableShops() {
   let dbShops: string[] = [];
   try {
-    const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
-      .from("shopify_tokens")
-      .select("shop,installed_at")
-      .order("installed_at", { ascending: false })
-      .limit(100);
-    if (!error && Array.isArray(data)) {
-      dbShops = data
-        .map((row) =>
-          normalizeShopDomain(normalizeText((row as { shop?: string } | null)?.shop) || "")
-        )
-        .filter((shop): shop is string => Boolean(shop));
-    }
+    dbShops = await listInstalledShops(100);
   } catch {
-    // Optional fallback path when Supabase is unavailable.
+    // Optional fallback path when the DB is unavailable.
   }
 
   const out = new Set<string>(dbShops);
@@ -705,15 +687,21 @@ export async function GET(req: NextRequest) {
         { status: 503 }
       );
     }
-    const sorted = [...listed.data].sort((a, b) => compareText(a.sku, b.sku));
-    const filtered = sorted.filter((row) => rowMatchesFilters(row, filters, coverageData.skuSet));
-    const paged = toPagedRows(filtered, page, pageSize);
+    const filtered = listed.data.filter((row) =>
+      rowMatchesFilters(row, filters, coverageData.skuSet)
+    );
+    const sortedFiltered = [...filtered].sort((a, b) => compareText(a.sku, b.sku));
+    const paged = toPagedRows(sortedFiltered, page, pageSize);
 
     const categories = Array.from(
-      new Set(sorted.map((row) => normalizeText(row.category).replace(/[\\\/]/g, " >> ")).filter(Boolean))
+      new Set(
+        listed.data
+          .map((row) => normalizeText(row.category).replace(/[\\\/]/g, " >> "))
+          .filter(Boolean)
+      )
     ).sort(compareText);
     const brands = Array.from(
-      new Set(sorted.map((row) => normalizeText(row.brand)).filter(Boolean))
+      new Set(listed.data.map((row) => normalizeText(row.brand)).filter(Boolean))
     ).sort(compareText);
     const totalItems = filtered.reduce((sum, row) => sum + row.variations, 0);
     const totalProcessed = filtered.reduce((sum, row) => sum + row.processedCount, 0);
@@ -731,7 +719,7 @@ export async function GET(req: NextRequest) {
         statuses: ["All", "Processed", "Pending", "Error"],
       },
       summary: {
-        totalProducts: filtered.length,
+        totalProducts: sortedFiltered.length,
         totalItems,
         totalProcessed,
         totalPending,
@@ -1662,8 +1650,8 @@ export async function POST(req: NextRequest) {
 
       // Write activity row so UI can poll progress/completion for manual background pushes.
       try {
-        const { neonQuery, ensureNeonReady } = await import("@/lib/neonDb");
-        await ensureNeonReady();
+        const { sqlQuery, ensureSqlReady } = await import("@/lib/sqlDb");
+        await ensureSqlReady();
         const debug = (result.debug || {}) as {
           variantsAddedToExisting?: number;
           addVariantErrors?: string[];
@@ -1679,7 +1667,7 @@ export async function POST(req: NextRequest) {
           .join("; ")
           .slice(0, 2000);
 
-        await neonQuery(
+        await sqlQuery(
           `INSERT INTO shopify_cart_sync_activity
              (shop, synced_at, items_checked, items_updated, variants_added, variants_deleted, products_archived, errors, error_details, duration_ms)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,

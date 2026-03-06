@@ -10,7 +10,7 @@ import {
   syncImagesToLsMatrix,
 } from "@/lib/lightspeedImageSync";
 import { lsGet } from "@/lib/lightspeedApi";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { loadLightspeedPosConfig } from "@/lib/lightspeedRepository";
 import {
   listCartCatalogParents,
   type StagingParent,
@@ -21,6 +21,7 @@ import {
   getShopifyConfig,
   normalizeShopDomain,
 } from "@/lib/shopify";
+import { getShopifyAccessToken } from "@/lib/shopifyTokenRepository";
 
 function normalizeText(v: unknown) {
   return String(v ?? "").trim();
@@ -33,13 +34,7 @@ interface ShopifyProductImages {
 
 async function getShopifyToken(shop: string): Promise<string | null> {
   try {
-    const supabase = getSupabaseAdmin();
-    const { data } = await supabase
-      .from("shopify_tokens")
-      .select("access_token")
-      .eq("shop", shop)
-      .maybeSingle();
-    const dbToken = normalizeText(data?.access_token);
+    const dbToken = await getShopifyAccessToken(shop);
     if (dbToken) return dbToken;
   } catch { /* fallback */ }
   return getShopifyAdminToken(shop) || null;
@@ -205,15 +200,9 @@ export async function loadImageSyncSettings(posConfigKey?: string): Promise<Imag
     deleteExistingLSImages: false,
   };
   try {
-    const supabase = getSupabaseAdmin();
     const key = normalizeText(posConfigKey) || normalizeText(process.env.LS_ACCOUNT_ID) || "default";
-    const { data } = await supabase
-      .from("lightspeed_pos_config")
-      .select("config")
-      .eq("id", key)
-      .maybeSingle();
-    if (data?.config && typeof data.config === "object") {
-      const cfg = data.config as Record<string, unknown>;
+    const cfg = await loadLightspeedPosConfig(key);
+    if (cfg && typeof cfg === "object") {
       const is = cfg.imageSyncSettings as Partial<ImageSyncSettings> | undefined;
       if (is) return { ...defaults, ...is };
     }

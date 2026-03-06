@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isRequestAuthed } from "@/lib/auth";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { normalizeShopDomain } from "@/lib/shopify";
 import { runCartPushAll } from "@/lib/cartInventoryPush";
 import { runDeltaSync } from "@/lib/cartInventoryDeltaSync";
 import { loadSyncToggles } from "@/lib/shopifyCartConfig";
+import { getMostRecentInstalledShop } from "@/lib/shopifyTokenRepository";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -32,17 +32,7 @@ async function getShopForSync(): Promise<string> {
   if (envShop) return envShop;
 
   try {
-    const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
-      .from("shopify_tokens")
-      .select("shop")
-      .order("installed_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (!error && data) {
-      const shop = (data as { shop?: string })?.shop;
-      if (shop) return normalizeShopDomain(shop) || shop;
-    }
+    return await getMostRecentInstalledShop();
   } catch {
     // fallback
   }

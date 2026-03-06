@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { countUsersWithRole, deleteRole, touchRoleUpdatedAt, upsertRolePermissions } from "@/lib/authRepository";
 import { normalizeRoleName, PERMISSION_OPTIONS, SYSTEM_ROLES } from "@/lib/rolePermissions";
 import { isAdminSession } from "@/lib/userAuth";
 
@@ -35,21 +35,14 @@ export async function PATCH(
       return NextResponse.json({ error: "No valid permission keys supplied." }, { status: 400 });
     }
 
-    const supabase = getSupabaseAdmin();
     const payload = updates.map((u) => ({
       role_name: roleName,
       permission_key: u.key,
       allowed: u.value,
     }));
-    const { error: upsertErr } = await supabase.from("app_role_permissions").upsert(payload, {
-      onConflict: "role_name,permission_key",
-      ignoreDuplicates: false,
-    });
-    if (upsertErr) {
-      return NextResponse.json({ error: upsertErr.message }, { status: 500 });
-    }
+    await upsertRolePermissions(payload);
 
-    await supabase.from("app_roles").update({ updated_at: new Date().toISOString() }).eq("name", roleName);
+    await touchRoleUpdatedAt(roleName);
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {
@@ -74,16 +67,10 @@ export async function DELETE(
       return NextResponse.json({ error: "System roles cannot be deleted." }, { status: 400 });
     }
 
-    const supabase = getSupabaseAdmin();
-    const { data: inUseUsers } = await supabase
-      .from("app_users")
-      .select("id", { count: "exact", head: true })
-      .eq("role", roleName);
-    void inUseUsers;
+    await countUsersWithRole(roleName);
     // If app_users has legacy role constraint, custom roles are not assignable anyway.
     // Keep delete simple and rely on FK cascade for permissions.
-    const { error } = await supabase.from("app_roles").delete().eq("name", roleName);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    await deleteRole(roleName);
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Failed to delete role." }, { status: 500 });

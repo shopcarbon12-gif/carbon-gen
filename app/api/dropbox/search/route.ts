@@ -12,6 +12,27 @@ type DropboxFile = {
 const DEFAULT_DROPBOX_SEARCH_ROOT = "/carbon";
 const DROPBOX_SEARCH_ROOT = process.env.DROPBOX_SEARCH_ROOT || DEFAULT_DROPBOX_SEARCH_ROOT;
 const MAX_FALLBACK_SCAN_ENTRIES = 4000;
+const DROPBOX_LINK_CONCURRENCY = 8;
+const DROPBOX_FOLDER_CONCURRENCY = 4;
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const safeLimit = Math.max(1, Math.floor(limit));
+  const out: R[] = new Array(items.length);
+  let index = 0;
+  const run = async () => {
+    while (index < items.length) {
+      const current = index++;
+      out[current] = await worker(items[current], current);
+    }
+  };
+  const workers = Array.from({ length: Math.min(safeLimit, items.length) }, () => run());
+  await Promise.all(workers);
+  return out;
+}
 
 function normalizePath(path: string) {
   let v = String(path || "").trim().toLowerCase();
@@ -171,21 +192,22 @@ export async function POST(req: NextRequest) {
 
     const rootPath = await resolveSearchRoot(accessToken, DROPBOX_SEARCH_ROOT);
     const barcodeCandidates = buildBarcodeCandidates(barcode);
-    const searchMatches: any[] = [];
-    for (const query of barcodeCandidates.slice(0, 2)) {
-      const search = await dropboxRpc(accessToken, "files/search_v2", {
-        query,
-        options: {
-          path: rootPath,
-          max_results: 50,
-          filename_only: false,
-        },
-      });
-      const matches = Array.isArray(search?.matches) ? search.matches : [];
-      searchMatches.push(...matches);
-    }
-
-    const matches = searchMatches;
+    const searchQueries = barcodeCandidates.slice(0, 2);
+    const searchResults = await Promise.all(
+      searchQueries.map((query) =>
+        dropboxRpc(accessToken, "files/search_v2", {
+          query,
+          options: {
+            path: rootPath,
+            max_results: 50,
+            filename_only: false,
+          },
+        })
+      )
+    );
+    const matches = searchResults.flatMap((search) =>
+      Array.isArray(search?.matches) ? search.matches : []
+    );
     const matchedFiles: DropboxFile[] = [];
     const matchedFolders: string[] = [];
     for (const match of matches) {
@@ -237,51 +259,84 @@ export async function POST(req: NextRequest) {
       webUrl: string;
       images: Array<{ id: string; title: string; pathLower: string; temporaryLink: string }>;
     }> = [];
+    const temporaryLinkCache = new Map<string, Promise<string>>();
+    const getCachedTemporaryLink = (pathLower: string) => {
+      const key = normalizePath(pathLower);
+      const existing = temporaryLinkCache.get(key);
+      if (existing) return existing;
+      const created = getTemporaryLink(accessToken, key).catch(() => "");
+      temporaryLinkCache.set(key, created);
+      return created;
+    };
     const imageByPath = new Map<
       string,
       { id: string; title: string; pathLower: string; temporaryLink: string }
     >();
 
-    for (const file of matchedFiles) {
-      const link = await getTemporaryLink(accessToken, file.path_lower);
-      if (!link) continue;
-      imageByPath.set(file.path_lower, {
-        id: file.id,
-        title: file.name,
-        pathLower: file.path_lower,
-        temporaryLink: link,
-      });
+    const matchedFileLinks = await mapWithConcurrency(
+      matchedFiles,
+      DROPBOX_LINK_CONCURRENCY,
+      async (file) => {
+        const link = await getCachedTemporaryLink(file.path_lower);
+        if (!link) return null;
+        return {
+          id: file.id,
+          title: file.name,
+          pathLower: file.path_lower,
+          temporaryLink: link,
+        };
+      }
+    );
+    for (const row of matchedFileLinks) {
+      if (!row) continue;
+      imageByPath.set(row.pathLower, row);
     }
 
-    for (const folderPath of folderPaths) {
-      const list = await dropboxRpc(accessToken, "files/list_folder", {
-        path: folderPath,
-        recursive: false,
-        include_media_info: false,
-        include_deleted: false,
-        limit: 200,
-      });
-      const entries = Array.isArray(list?.entries) ? list.entries : [];
-      const imageEntries = entries
-        .filter((e: any) => {
-          if (e?.[".tag"] !== "file") return false;
-          const p = normalizePath(String(e?.path_lower || ""));
-          return p.startsWith(rootPath) && isImageName(String(e?.name || ""));
-        })
-        .map((e: any) => ({
-          id: String(e.id || ""),
-          title: String(e.name || ""),
-          pathLower: String(e.path_lower || ""),
-        }))
-        .slice(0, 80);
+    const folderResults = await mapWithConcurrency(
+      folderPaths,
+      DROPBOX_FOLDER_CONCURRENCY,
+      async (folderPath) => {
+        const list = await dropboxRpc(accessToken, "files/list_folder", {
+          path: folderPath,
+          recursive: false,
+          include_media_info: false,
+          include_deleted: false,
+          limit: 200,
+        });
+        const entries = Array.isArray(list?.entries) ? list.entries : [];
+        const imageEntries: Array<{ id: string; title: string; pathLower: string }> = entries
+          .filter((e: any) => {
+            if (e?.[".tag"] !== "file") return false;
+            const p = normalizePath(String(e?.path_lower || ""));
+            return p.startsWith(rootPath) && isImageName(String(e?.name || ""));
+          })
+          .map((e: any) => ({
+            id: String(e.id || ""),
+            title: String(e.name || ""),
+            pathLower: String(e.path_lower || ""),
+          }))
+          .slice(0, 80);
 
-      const withLinks = [];
-      for (const entry of imageEntries) {
-        const link = await getTemporaryLink(accessToken, entry.pathLower);
-        if (!link) continue;
-        const row = { ...entry, temporaryLink: link };
-        withLinks.push(row);
-        imageByPath.set(entry.pathLower, row);
+        const withLinksRaw = await mapWithConcurrency(
+          imageEntries,
+          DROPBOX_LINK_CONCURRENCY,
+          async (entry: { id: string; title: string; pathLower: string }) => {
+            const link = await getCachedTemporaryLink(entry.pathLower);
+            if (!link) return null;
+            return { ...entry, temporaryLink: link };
+          }
+        );
+        const withLinks = withLinksRaw.filter(
+          (row): row is { id: string; title: string; pathLower: string; temporaryLink: string } =>
+            Boolean(row)
+        );
+        return { folderPath, withLinks };
+      }
+    );
+
+    for (const { folderPath, withLinks } of folderResults) {
+      for (const row of withLinks) {
+        imageByPath.set(row.pathLower, row);
       }
       if (withLinks.length) {
         folderImages.push({

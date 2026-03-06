@@ -2,12 +2,12 @@
  * Shared push logic for Cart Inventory → Shopify.
  * Used by both the cart-inventory API route and the cron sync.
  */
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import {
   getShopifyAdminToken,
   normalizeShopDomain,
   runShopifyGraphql,
 } from "@/lib/shopify";
+import { getShopifyAccessToken } from "@/lib/shopifyTokenRepository";
 import {
   listCartCatalogParents,
   updateCartCatalogStatus,
@@ -17,7 +17,13 @@ import {
 } from "@/lib/shopifyCartStaging";
 import { sendPushNotificationEmail } from "@/lib/email";
 import { createShopifyProductFromCart } from "@/lib/shopifyCartProductCreate";
-import { loadProductUpdateRules, loadDestructiveSyncRules, type ProductUpdateRules, type DestructiveSyncRules } from "@/lib/shopifyCartConfig";
+import {
+  loadConfig,
+  loadProductUpdateRules,
+  loadDestructiveSyncRules,
+  type ProductUpdateRules,
+  type DestructiveSyncRules,
+} from "@/lib/shopifyCartConfig";
 
 type ProductsPageNode = { id: string; variants?: { nodes?: Array<{ id: string }> } };
 type ProductsPageEdges = Array<{ node?: ProductsPageNode }>;
@@ -51,6 +57,30 @@ function normalizeText(value: unknown) {
 function normalizeLower(value: unknown) {
   return normalizeText(value).toLowerCase();
 }
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const safeLimit = Math.max(1, Math.floor(limit));
+  const out: R[] = new Array(items.length);
+  let index = 0;
+  const run = async () => {
+    while (index < items.length) {
+      const current = index++;
+      out[current] = await worker(items[current], current);
+    }
+  };
+  const workers = Array.from({ length: Math.min(safeLimit, items.length) }, () => run());
+  await Promise.all(workers);
+  return out;
+}
+
+const SHOPIFY_VARIANT_LOOKUP_CONCURRENCY = parseInt(
+  process.env.SHOPIFY_VARIANT_LOOKUP_CONCURRENCY || "6",
+  10
+);
 
 const SIZE_ORDER: Record<string, number> = {
   XXS: 0, XS: 1, S: 2, M: 3, L: 4,
@@ -94,13 +124,7 @@ function collectOptionsFromVariants(variants: Array<{ color?: string; size?: str
 
 async function getTokenForShop(shop: string): Promise<string | null> {
   try {
-    const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
-      .from("shopify_tokens")
-      .select("access_token")
-      .eq("shop", shop)
-      .maybeSingle();
-    const dbToken = !error ? normalizeText((data as { access_token?: string } | null)?.access_token) : "";
+    const dbToken = await getShopifyAccessToken(shop);
     if (dbToken) return dbToken;
   } catch {
     /* fallback to env */
@@ -236,6 +260,46 @@ export async function runCartPushAll(
   let variantsLinkedByBarcode = 0;
   let variantsAddedToExisting = 0;
   const addVariantErrors: string[] = [];
+  const variantLookupCache = new Map<string, Promise<{
+    ok: boolean;
+    data?: {
+      productVariant?: {
+        sku?: string | null;
+        barcode?: string | null;
+        selectedOptions?: Array<{ name?: string; value?: string }>;
+        product?: { status?: string };
+      } | null;
+    } | null;
+  }>>();
+
+  const lookupVariantState = (variantGid: string) => {
+    const key = normalizeText(variantGid);
+    const existing = variantLookupCache.get(key);
+    if (existing) return existing;
+    const created = runShopifyGraphql<{
+      productVariant?: {
+        sku?: string | null;
+        barcode?: string | null;
+        selectedOptions?: Array<{ name?: string; value?: string }>;
+        product?: { status?: string };
+      } | null;
+    }>({
+      shop,
+      token,
+      query: `query($id: ID!) {
+        productVariant(id: $id) {
+          sku
+          barcode
+          selectedOptions { name value }
+          product { status }
+        }
+      }`,
+      variables: { id: key },
+      apiVersion: API_VERSION,
+    });
+    variantLookupCache.set(key, created);
+    return created;
+  };
 
   for (const parent of toPush) {
     let staleCleaned = false;
@@ -268,101 +332,88 @@ export async function runCartPushAll(
       }
     }
 
-    for (const v of parent.variants) {
-      const cid = normalizeText(v.cartId);
-      if (!cid) continue;
-      const vGid = cid.startsWith("gid://") ? cid
-        : `gid://shopify/ProductVariant/${cid.includes("~") ? cid.split("~")[1] || cid : cid}`;
-      const sc = await runShopifyGraphql<{
-        productVariant?: {
-          sku?: string | null;
-          barcode?: string | null;
-          selectedOptions?: Array<{ name?: string; value?: string }>;
-          product?: { status?: string };
-        } | null;
-      }>({
-        shop, token,
-        query: `query($id: ID!) {
-          productVariant(id: $id) {
-            sku
-            barcode
-            selectedOptions { name value }
-            product { status }
-          }
-        }`,
-        variables: { id: vGid },
-        apiVersion: API_VERSION,
-      });
-      if (!sc.ok) {
-        console.warn("[cart-inventory] Skipping stale check for", cid, "- API error (will not clear link)");
-        continue;
-      }
-      const ps = normalizeLower(sc.data?.productVariant?.product?.status);
-      if (!sc.data?.productVariant || ps === "archived" || ps === "draft") {
-        console.log("[cart-inventory] Clearing stale cartId", cid, "for variant", v.id, "(product status:", ps || "not found", ")");
-        v.cartId = "";
-        staleCleaned = true;
-        staleLinksCleared += 1;
-        continue;
-      }
+    await mapWithConcurrency(
+      parent.variants,
+      SHOPIFY_VARIANT_LOOKUP_CONCURRENCY,
+      async (v) => {
+        const cid = normalizeText(v.cartId);
+        if (!cid) return;
+        const vGid = cid.startsWith("gid://")
+          ? cid
+          : `gid://shopify/ProductVariant/${cid.includes("~") ? cid.split("~")[1] || cid : cid}`;
+        const sc = await lookupVariantState(vGid);
+        if (!sc.ok) {
+          console.warn("[cart-inventory] Skipping stale check for", cid, "- API error (will not clear link)");
+          return;
+        }
+        const ps = normalizeLower(sc.data?.productVariant?.product?.status);
+        if (!sc.data?.productVariant || ps === "archived" || ps === "draft") {
+          console.log("[cart-inventory] Clearing stale cartId", cid, "for variant", v.id, "(product status:", ps || "not found", ")");
+          v.cartId = "";
+          staleCleaned = true;
+          staleLinksCleared += 1;
+          return;
+        }
 
-      // Guardrail: cartId must represent the same variant identity (SKU first, barcode second).
-      // If a cartId points at a different Shopify variant, clear it so the variant can be re-linked/created.
-      const linkedSku = normalizeLower(sc.data.productVariant.sku);
-      const linkedBarcode = normalizeText(sc.data.productVariant.barcode);
-      const linkedColor = normalizeLower(
-        sc.data.productVariant.selectedOptions?.find((o) => normalizeLower(o?.name) === "color")?.value
-      );
-      const linkedSize = normalizeLower(
-        sc.data.productVariant.selectedOptions?.find((o) => normalizeLower(o?.name) === "size")?.value
-      );
-      const expectedSku = normalizeLower(v.sku);
-      const expectedBarcode = normalizeText(v.upc);
-      const expectedColor = normalizeLower(v.color);
-      const expectedSize = normalizeLower(v.size);
-      const skuMismatch = Boolean(expectedSku) && Boolean(linkedSku) && expectedSku !== linkedSku;
-      const barcodeMismatch = !expectedSku && Boolean(expectedBarcode) && Boolean(linkedBarcode) && expectedBarcode !== linkedBarcode;
-      const colorMismatch =
-        Boolean(expectedColor) &&
-        Boolean(linkedColor) &&
-        expectedColor !== linkedColor;
-      const sizeMismatch =
-        Boolean(expectedSize) &&
-        Boolean(linkedSize) &&
-        expectedSize !== linkedSize;
-      // SKU is primary identity for variants. Option mismatches are only a
-      // stale-link signal for non-SKU fallback links.
-      const optionMismatchForFallbackOnly =
-        !expectedSku && (colorMismatch || sizeMismatch);
-      if (skuMismatch || barcodeMismatch || optionMismatchForFallbackOnly) {
-        console.log(
-          "[cart-inventory] Clearing mismatched cartId",
-          cid,
-          "for variant",
-          v.id,
-          "(expected sku/barcode/color/size:",
-          expectedSku || "-",
-          "/",
-          expectedBarcode || "-",
-          "/",
-          expectedColor || "-",
-          "/",
-          expectedSize || "-",
-          "got:",
-          linkedSku || "-",
-          "/",
-          linkedBarcode || "-",
-          "/",
-          linkedColor || "-",
-          "/",
-          linkedSize || "-",
-          ")"
+        // Guardrail: cartId must represent the same variant identity (SKU first, barcode second).
+        // If a cartId points at a different Shopify variant, clear it so the variant can be re-linked/created.
+        const linkedSku = normalizeLower(sc.data.productVariant.sku);
+        const linkedBarcode = normalizeText(sc.data.productVariant.barcode);
+        const linkedColor = normalizeLower(
+          sc.data.productVariant.selectedOptions?.find((o) => normalizeLower(o?.name) === "color")?.value
         );
-        v.cartId = "";
-        staleCleaned = true;
-        staleLinksCleared += 1;
+        const linkedSize = normalizeLower(
+          sc.data.productVariant.selectedOptions?.find((o) => normalizeLower(o?.name) === "size")?.value
+        );
+        const expectedSku = normalizeLower(v.sku);
+        const expectedBarcode = normalizeText(v.upc);
+        const expectedColor = normalizeLower(v.color);
+        const expectedSize = normalizeLower(v.size);
+        const skuMismatch = Boolean(expectedSku) && Boolean(linkedSku) && expectedSku !== linkedSku;
+        const barcodeMismatch =
+          !expectedSku && Boolean(expectedBarcode) && Boolean(linkedBarcode) && expectedBarcode !== linkedBarcode;
+        const colorMismatch =
+          Boolean(expectedColor) &&
+          Boolean(linkedColor) &&
+          expectedColor !== linkedColor;
+        const sizeMismatch =
+          Boolean(expectedSize) &&
+          Boolean(linkedSize) &&
+          expectedSize !== linkedSize;
+        // SKU is primary identity for variants. Option mismatches are only a
+        // stale-link signal for non-SKU fallback links.
+        const optionMismatchForFallbackOnly =
+          !expectedSku && (colorMismatch || sizeMismatch);
+        if (skuMismatch || barcodeMismatch || optionMismatchForFallbackOnly) {
+          console.log(
+            "[cart-inventory] Clearing mismatched cartId",
+            cid,
+            "for variant",
+            v.id,
+            "(expected sku/barcode/color/size:",
+            expectedSku || "-",
+            "/",
+            expectedBarcode || "-",
+            "/",
+            expectedColor || "-",
+            "/",
+            expectedSize || "-",
+            "got:",
+            linkedSku || "-",
+            "/",
+            linkedBarcode || "-",
+            "/",
+            linkedColor || "-",
+            "/",
+            linkedSize || "-",
+            ")"
+          );
+          v.cartId = "";
+          staleCleaned = true;
+          staleLinksCleared += 1;
+        }
       }
-    }
+    );
     if (staleCleaned) {
       await upsertCartCatalogParents(shop, [{ ...parent }]).catch((e) =>
         console.warn("[cart-inventory] Failed to persist cleared stale links:", (e as Error)?.message)
@@ -521,13 +572,7 @@ export async function runCartPushAll(
   const productGidsUpdated = new Set<string>();
 
   try {
-    const supabase = getSupabaseAdmin();
-    const { data: configRow } = await supabase
-      .from("shopify_cart_config")
-      .select("config")
-      .eq("shop", shopKey)
-      .maybeSingle();
-    const config = (configRow?.config as Record<string, unknown>) || {};
+    const config = await loadConfig(shopKey);
     const cartConfig = {
       newProductMapping: (config.newProductMapping as Record<string, unknown>) || {},
       newProductRules: (config.newProductRules as Record<string, unknown>) || {},

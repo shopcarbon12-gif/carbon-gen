@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import {
+  loadLightspeedPosConfig,
+  upsertLightspeedPosConfig,
+} from "@/lib/lightspeedRepository";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const TABLE = "lightspeed_pos_config";
 const memoryConfigs = new Map<string, Record<string, unknown>>();
 
 function normalizeText(value: unknown) {
@@ -23,17 +25,9 @@ async function loadConfig(key: string): Promise<{
   warning?: string;
 }> {
   try {
-    const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
-      .from(TABLE)
-      .select("config")
-      .eq("id", key)
-      .maybeSingle();
-
-    if (error) throw error;
-
-    if (data?.config && typeof data.config === "object") {
-      return { data: data.config as Record<string, unknown>, backend: "supabase" };
+    const loaded = await loadLightspeedPosConfig(key);
+    if (loaded && typeof loaded === "object" && Object.keys(loaded).length > 0) {
+      return { data: loaded, backend: "database" };
     }
     const mem = memoryConfigs.get(key);
     return { data: mem || {}, backend: mem ? "memory" : "none" };
@@ -43,7 +37,7 @@ async function loadConfig(key: string): Promise<{
     return {
       data: mem || {},
       backend: mem ? "memory" : "none",
-      warning: `Supabase unavailable (${msg}). Using in-memory config.`,
+      warning: `SQL persistence unavailable (${msg}). Using in-memory config.`,
     };
   }
 }
@@ -57,22 +51,16 @@ async function saveConfig(
   const merged = { ...existing.data, [section]: values };
 
   try {
-    const supabase = getSupabaseAdmin();
-    const { error } = await supabase.from(TABLE).upsert(
-      { id: key, config: merged, updated_at: new Date().toISOString() },
-      { onConflict: "id" }
-    );
-
-    if (error) throw error;
+    await upsertLightspeedPosConfig(key, merged);
     memoryConfigs.set(key, merged);
-    return { ok: true, backend: "supabase" };
+    return { ok: true, backend: "database" };
   } catch (e: unknown) {
     memoryConfigs.set(key, merged);
     const msg = normalizeText((e as { message?: string } | null)?.message);
     return {
       ok: true,
       backend: "memory",
-      warning: `Supabase unavailable (${msg}). Saved in-memory only.`,
+      warning: `SQL persistence unavailable (${msg}). Saved in-memory only.`,
     };
   }
 }

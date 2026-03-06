@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getShopifyAdminToken, normalizeShopDomain, runShopifyGraphql } from "@/lib/shopify";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { getShopifyAccessToken } from "@/lib/shopifyTokenRepository";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,19 +12,13 @@ function normalizeText(value: unknown) {
 
 async function getTokenForShop(shop: string): Promise<string | null> {
   try {
-    const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
-      .from("shopify_tokens")
-      .select("access_token")
-      .eq("shop", shop)
-      .maybeSingle();
-    const dbToken = !error ? normalizeText((data as { access_token?: string } | null)?.access_token) : "";
+    const dbToken = await getShopifyAccessToken(shop);
     if (dbToken) return dbToken;
   } catch { /* fallback */ }
   return getShopifyAdminToken(shop) || null;
 }
 
-const WEBHOOK_TOPICS = ["ORDERS_CREATE", "ORDERS_CANCELLED"] as const;
+const WEBHOOK_TOPICS = ["ORDERS_CREATE", "ORDERS_CANCELLED", "FULFILLMENTS_CREATE"] as const;
 
 type WebhookNode = {
   id: string;
@@ -95,6 +89,7 @@ export async function POST(req: NextRequest) {
     const topicToPath: Record<string, string> = {
       ORDERS_CREATE: "orders-create",
       ORDERS_CANCELLED: "orders-cancelled",
+      FULFILLMENTS_CREATE: "fulfillments-create",
     };
 
     for (const topic of WEBHOOK_TOPICS) {

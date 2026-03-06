@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import bcrypt from "bcryptjs";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { deleteUserById, findUserById, roleExists, updateUserById } from "@/lib/authRepository";
 import { countAdmins, isAdminSession, normalizeUsername, parseRole, readSession } from "@/lib/userAuth";
 
 function toUser(row: any) {
@@ -32,31 +32,9 @@ function adminUsersErrorMessage(err: any) {
     message.toLowerCase().includes("app_users") &&
     message.toLowerCase().includes("does not exist")
   ) {
-    return "Missing app_users table. Run scripts/supabase_schema.sql in Supabase SQL editor.";
+    return "Missing app_users table. Run SQL auth bootstrap/migrations.";
   }
   return message || "Admin users operation failed";
-}
-
-async function loadTargetUser(id: string) {
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from("app_users")
-    .select("id,username,role,is_active,created_at,updated_at")
-    .eq("id", id)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  return data;
-}
-
-async function roleExists(roleName: string) {
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from("app_roles")
-    .select("name")
-    .eq("name", roleName)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  return Boolean(data?.name);
 }
 
 export async function PATCH(
@@ -70,10 +48,9 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await req.json().catch(() => ({}));
-    const supabase = getSupabaseAdmin();
     const session = readSession(req);
 
-    const target = await loadTargetUser(id);
+    const target = await findUserById(id);
     if (!target) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
@@ -137,17 +114,7 @@ export async function PATCH(
       }
     }
 
-    const { data, error } = await supabase
-      .from("app_users")
-      .update(updates)
-      .eq("id", id)
-      .select("id,username,role,is_active,created_at,updated_at")
-      .maybeSingle();
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
+    const data = await updateUserById(id, updates);
     return NextResponse.json({ user: toUser(data) });
   } catch (e: any) {
     return NextResponse.json({ error: adminUsersErrorMessage(e) }, { status: 500 });
@@ -169,7 +136,7 @@ export async function DELETE(
       return NextResponse.json({ error: "You cannot delete your own active account." }, { status: 400 });
     }
 
-    const target = await loadTargetUser(id);
+    const target = await findUserById(id);
     if (!target) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
@@ -181,11 +148,7 @@ export async function DELETE(
       }
     }
 
-    const supabase = getSupabaseAdmin();
-    const { error } = await supabase.from("app_users").delete().eq("id", id);
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+    await deleteUserById(id);
 
     return NextResponse.json({ success: true });
   } catch (e: any) {

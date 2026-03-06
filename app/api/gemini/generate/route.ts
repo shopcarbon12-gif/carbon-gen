@@ -2,7 +2,6 @@ import { GoogleGenAI } from "@google/genai";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { checkGenerateRateLimit } from "@/lib/ratelimit";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import {
   fetchRemoteImageBytes,
   getImageFetchMaxBytes,
@@ -65,27 +64,6 @@ async function downloadReferenceAsBase64(url: string, index: number): Promise<Re
       lastError = err?.message || "Image fetch failed";
     }
   }
-
-  try {
-    const parsed = new URL(url);
-    const marker = "/storage/v1/object/public/";
-    const pos = parsed.pathname.indexOf(marker);
-    if (pos >= 0) {
-      const rest = parsed.pathname.slice(pos + marker.length);
-      const slash = rest.indexOf("/");
-      if (slash > 0) {
-        const bucket = rest.slice(0, slash);
-        const objectPath = decodeURIComponent(rest.slice(slash + 1));
-        const supabase = getSupabaseAdmin();
-        const { data, error } = await supabase.storage.from(bucket).download(objectPath);
-        if (!error && data) {
-          const contentType = data.type || "image/png";
-          const bytes = Buffer.from(await data.arrayBuffer());
-          return { mimeType: contentType, data: bytes.toString("base64"), url };
-        }
-      }
-    }
-  } catch { /* keep original error */ }
 
   throw new Error(
     `Reference image fetch failed at index ${index + 1}${lastError ? ` (${lastError})` : ""}`
