@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "next build",
+    "build": "next build && node scripts/prepare-standalone.mjs",
     "dev": "powershell -ExecutionPolicy Bypass -File scripts/dev-local.ps1",
     "dev:raw": "next dev --webpack",
     "dev:3000": "next dev --webpack -p 3000",
