@@ -7,24 +7,23 @@ export type ShopifyPrinterTriggerTopic = "orders/create" | "fulfillments/create"
 export type ShopifyPrinterConfig = {
   enabled: boolean;
   triggerTopic: ShopifyPrinterTriggerTopic;
-  apiKey: string;
-  printerId: number | null;
   copies: number;
   labelSize: "4x6";
 };
 
 export type ShopifyPrinterResolvedConfig = ShopifyPrinterConfig & {
+  apiKey: string;
+  printerId: number | null;
   hasApiKey: boolean;
   apiKeyMasked: string;
   backend: "database" | "memory";
+  envManaged: true;
   warning?: string;
 };
 
 const DEFAULT_CONFIG: ShopifyPrinterConfig = {
   enabled: false,
   triggerTopic: "fulfillments/create",
-  apiKey: "",
-  printerId: null,
   copies: 1,
   labelSize: "4x6",
 };
@@ -63,25 +62,21 @@ function normalizeTriggerTopic(value: unknown): ShopifyPrinterTriggerTopic {
 
 function normalizeConfig(raw: Record<string, unknown> | null | undefined): ShopifyPrinterConfig {
   const section = (raw || {}) as Record<string, unknown>;
-  const printerIdRaw = normalizeText(section.printerId);
-  const printerId = printerIdRaw ? toPositiveInt(printerIdRaw, 0) : 0;
   return {
     enabled: section.enabled === true,
     triggerTopic: normalizeTriggerTopic(section.triggerTopic),
-    apiKey: normalizeText(section.apiKey),
-    printerId: printerId > 0 ? printerId : null,
     copies: Math.min(5, Math.max(1, toPositiveInt(section.copies, 1))),
     labelSize: "4x6",
   };
 }
 
-function withEnvFallback(config: ShopifyPrinterConfig): ShopifyPrinterConfig {
+function withEnvConfig(config: ShopifyPrinterConfig) {
   const envApiKey = normalizeText(process.env.PRINTNODE_API_KEY);
   const envPrinterId = toPositiveInt(process.env.PRINTNODE_PRINTER_ID, 0);
   return {
     ...config,
-    apiKey: config.apiKey || envApiKey,
-    printerId: config.printerId || (envPrinterId > 0 ? envPrinterId : null),
+    apiKey: envApiKey,
+    printerId: envPrinterId > 0 ? envPrinterId : null,
   };
 }
 
@@ -89,20 +84,22 @@ export async function loadShopifyPrinterConfig(shop: string): Promise<ShopifyPri
   try {
     const config = await loadShopifyCartConfig(shop);
     const section = normalizeConfig((config.shopifyPrinter || {}) as Record<string, unknown>);
-    const resolved = withEnvFallback(section);
+    const resolved = withEnvConfig(section);
     return {
       ...resolved,
       hasApiKey: Boolean(resolved.apiKey),
       apiKeyMasked: maskApiKey(resolved.apiKey),
       backend: "database",
+      envManaged: true,
     };
   } catch (e: unknown) {
-    const fallback = withEnvFallback(DEFAULT_CONFIG);
+    const fallback = withEnvConfig(DEFAULT_CONFIG);
     return {
       ...fallback,
       hasApiKey: Boolean(fallback.apiKey),
       apiKeyMasked: maskApiKey(fallback.apiKey),
       backend: "memory",
+      envManaged: true,
       warning: normalizeText((e as { message?: string } | null)?.message) || "Failed to load printer config.",
     };
   }
@@ -110,17 +107,12 @@ export async function loadShopifyPrinterConfig(shop: string): Promise<ShopifyPri
 
 export async function saveShopifyPrinterConfig(
   shop: string,
-  input: Partial<ShopifyPrinterConfig> & { clearApiKey?: boolean }
+  input: Partial<ShopifyPrinterConfig>
 ): Promise<{ backend: "database" | "memory"; warning?: string }> {
   const existing = await loadShopifyPrinterConfig(shop);
   const next: ShopifyPrinterConfig = {
     enabled: input.enabled === true,
     triggerTopic: normalizeTriggerTopic(input.triggerTopic || existing.triggerTopic),
-    apiKey: input.clearApiKey ? "" : normalizeText(input.apiKey) || existing.apiKey,
-    printerId:
-      input.printerId && Number.isFinite(Number(input.printerId))
-        ? Math.max(1, toPositiveInt(input.printerId, 1))
-        : existing.printerId,
     copies: Math.min(5, Math.max(1, toPositiveInt(input.copies, existing.copies || 1))),
     labelSize: "4x6",
   };

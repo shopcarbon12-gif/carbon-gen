@@ -61,6 +61,7 @@ type ShopifyPrinterConfigResponse = {
     copies?: number;
     hasApiKey?: boolean;
     apiKeyMasked?: string;
+    envManaged?: boolean;
   };
   error?: string;
 };
@@ -122,11 +123,10 @@ export default function SettingsPage() {
   const [printerBusy, setPrinterBusy] = useState(false);
   const [printerEnabled, setPrinterEnabled] = useState(false);
   const [printerTriggerTopic, setPrinterTriggerTopic] = useState<"orders/create" | "fulfillments/create">("fulfillments/create");
-  const [printerId, setPrinterId] = useState("");
   const [printerCopies, setPrinterCopies] = useState("1");
-  const [printerApiKey, setPrinterApiKey] = useState("");
   const [printerApiKeyMasked, setPrinterApiKeyMasked] = useState("");
   const [printerHasApiKey, setPrinterHasApiKey] = useState(false);
+  const [printerId, setPrinterId] = useState("");
   const [printerOnline, setPrinterOnline] = useState<boolean | null>(null);
   const [printerName, setPrinterName] = useState<string | null>(null);
 
@@ -459,14 +459,11 @@ export default function SettingsPage() {
         body: JSON.stringify({
           enabled: printerEnabled,
           triggerTopic: printerTriggerTopic,
-          apiKey: printerApiKey.trim(),
-          printerId: printerId.trim(),
           copies: printerCopies.trim(),
         }),
       });
       const json = (await resp.json().catch(() => ({}))) as ShopifyPrinterConfigResponse;
       if (!resp.ok) throw new Error(json?.error || "Failed to save Shopify Printer config.");
-      setPrinterApiKey("");
       setStatus("Shopify Printer config saved.");
       await refreshPrinterConfig(true);
     } catch (e: any) {
@@ -803,14 +800,13 @@ export default function SettingsPage() {
             placeholder="Copies (1-5)"
             inputMode="numeric"
           />
-          <input
-            type="password"
-            value={printerApiKey}
-            onChange={(e) => setPrinterApiKey(e.target.value)}
-            placeholder={printerHasApiKey ? `API key saved (${printerApiKeyMasked})` : "PrintNode API key"}
-            autoComplete="off"
-          />
         </div>
+
+        <p className="muted">
+          Credentials are managed via environment variables only: <code>PRINTNODE_API_KEY</code> and <code>PRINTNODE_PRINTER_ID</code>.
+          {printerHasApiKey ? ` API key detected (${printerApiKeyMasked}).` : " API key not detected."}
+          {printerId ? ` Printer ID detected (${printerId}).` : " Printer ID not detected."}
+        </p>
 
         <p className="muted">
           Webhooks registered: <code>orders/create</code>, <code>orders/cancelled</code>, <code>fulfillments/create</code>.

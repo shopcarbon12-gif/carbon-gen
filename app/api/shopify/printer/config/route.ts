@@ -46,6 +46,7 @@ export async function GET(req: NextRequest) {
         labelSize: config.labelSize,
         hasApiKey: config.hasApiKey,
         apiKeyMasked: config.apiKeyMasked,
+        envManaged: true,
       },
       backend: config.backend,
       warning: config.warning || "",
@@ -67,17 +68,12 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
     const shop = resolvePrinterShop(body?.shop);
-    const printerIdRaw = normalizeText(body?.printerId);
-    const printerId = printerIdRaw ? Number.parseInt(printerIdRaw, 10) : null;
     const copiesRaw = normalizeText(body?.copies);
     const copies = copiesRaw ? Number.parseInt(copiesRaw, 10) : 1;
 
     const result = await saveShopifyPrinterConfig(shop, {
       enabled: body?.enabled === true,
       triggerTopic: body?.triggerTopic,
-      apiKey: typeof body?.apiKey === "string" ? body.apiKey : "",
-      clearApiKey: body?.clearApiKey === true,
-      printerId: Number.isFinite(printerId as number) ? printerId : null,
       copies: Number.isFinite(copies) ? copies : 1,
     });
 
