@@ -14,3 +14,14 @@ README.md
 .agents
 backups
 docs
+tests
+test-results
+playwright-report
+PLAYWRIGHT-BEGINNER.md
+all_chats_chronological.txt
+docx_raw.txt
+chat_control_extract.md
+Today_Changes_Summary_*.docx
+Shopify_Mapping_Inventory_Manual_v1.docx
+carbon_studio_backup_web_copy.docx
+*.docx
