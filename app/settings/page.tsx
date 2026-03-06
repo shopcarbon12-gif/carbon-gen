@@ -120,6 +120,7 @@ export default function SettingsPage() {
   const [lightspeedBusy, setLightspeedBusy] = useState(false);
   const [lightspeedStatusData, setLightspeedStatusData] = useState<LightspeedStatusResponse | null>(null);
   const [printerLoading, setPrinterLoading] = useState(true);
+  const [printerBusy, setPrinterBusy] = useState(false);
   const [printerOnline, setPrinterOnline] = useState<boolean | null>(null);
   const [printerName, setPrinterName] = useState<string | null>(null);
 
@@ -242,9 +243,9 @@ export default function SettingsPage() {
       const resp = await fetch(endpoint, { cache: "no-store" });
       const json = (await resp.json().catch(() => ({}))) as ShopifyPrinterConfigResponse;
       if (!resp.ok) throw new Error(json?.error || "Failed to load printer config.");
-      setPrinterOnline(
-        typeof json?.printerStatus?.online === "boolean" ? Boolean(json?.printerStatus?.online) : null
-      );
+      if (typeof json?.printerStatus?.online === "boolean") {
+        setPrinterOnline(Boolean(json?.printerStatus?.online));
+      }
       setPrinterName(json?.printerStatus?.name || null);
       if (json?.warning) setStatus(`Shopify Printer: ${json.warning}`);
       if (json?.statusError) setError(`Shopify Printer: ${json.statusError}`);
@@ -254,6 +255,29 @@ export default function SettingsPage() {
       setPrinterLoading(false);
     }
   }, []);
+
+  async function handleTestPrinter() {
+    setPrinterBusy(true);
+    setError(null);
+    setStatus("Sending test label to PrintNode...");
+    try {
+      const resp = await fetch("/api/shopify/printer/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const json = (await resp.json().catch(() => ({}))) as { error?: string };
+      if (!resp.ok) throw new Error(json?.error || "Test print failed.");
+      setPrinterOnline(true);
+      setStatus("Test label sent to printer.");
+      await refreshPrinterConfig();
+    } catch (e: any) {
+      setError(e?.message || "Test print failed.");
+      setStatus(null);
+    } finally {
+      setPrinterBusy(false);
+    }
+  }
 
 
   const refreshSession = useCallback(async () => {
@@ -705,6 +729,11 @@ export default function SettingsPage() {
                 : "Printer offline / unreachable"}
             {printerName ? <em> - {printerName}</em> : null}
           </span>
+        </div>
+        <div className="actions">
+          <button className="btn ghost" onClick={() => void handleTestPrinter()} disabled={printerBusy}>
+            {printerBusy ? "Sending..." : "Send Test Label"}
+          </button>
         </div>
       </section>
 

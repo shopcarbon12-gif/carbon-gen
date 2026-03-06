@@ -183,11 +183,23 @@ export async function getPrintNodePrinterStatus(apiKey: string, printerId: numbe
   if (!res.ok) {
     throw new Error(normalizeText(body?.message || body?.error || `PrintNode status failed (${res.status})`));
   }
+  const raw = Array.isArray(body) ? body[0] || {} : body || {};
+  const state = normalizeText(raw?.state || raw?.status || raw?.computer?.state || "unknown").toLowerCase();
+  const offlineStates = new Set(["offline", "disconnected", "unreachable", "error", "unknown"]);
+  const explicitOnline = state === "online" || state === "connected" || state === "idle" || state === "ready";
+  const online =
+    typeof raw?.online === "boolean"
+      ? Boolean(raw.online)
+      : typeof raw?.isOnline === "boolean"
+        ? Boolean(raw.isOnline)
+        : state
+          ? !offlineStates.has(state)
+          : true;
   return {
-    id: Number(body?.id || printerId),
-    name: normalizeText(body?.name),
-    state: normalizeText(body?.state || "unknown"),
-    online: normalizeText(body?.state).toLowerCase() === "online",
+    id: Number(raw?.id || printerId),
+    name: normalizeText(raw?.name || raw?.computer?.name || ""),
+    state: explicitOnline ? "online" : state || "unknown",
+    online,
   };
 }
 
