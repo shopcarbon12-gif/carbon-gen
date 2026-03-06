@@ -22,11 +22,10 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const shop = resolvePrinterShop(searchParams.get("shop"));
-    const refresh = normalizeText(searchParams.get("refresh")) === "1";
     const config = await loadShopifyPrinterConfig(shop);
     let printerStatus: { online: boolean; state: string; name: string } | null = null;
     let statusError = "";
-    if (refresh && config.hasApiKey && config.printerId) {
+    if (config.hasApiKey && config.printerId) {
       try {
         const status = await getPrintNodePrinterStatus(config.apiKey, config.printerId);
         printerStatus = { online: status.online, state: status.state, name: status.name };
@@ -68,13 +67,9 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
     const shop = resolvePrinterShop(body?.shop);
-    const copiesRaw = normalizeText(body?.copies);
-    const copies = copiesRaw ? Number.parseInt(copiesRaw, 10) : 1;
 
     const result = await saveShopifyPrinterConfig(shop, {
       enabled: body?.enabled === true,
-      triggerTopic: body?.triggerTopic,
-      copies: Number.isFinite(copies) ? copies : 1,
     });
 
     return NextResponse.json({

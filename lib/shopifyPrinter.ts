@@ -54,18 +54,13 @@ export function maskApiKey(raw: string) {
   return `${key.slice(0, 4)}${"*".repeat(Math.max(4, key.length - 8))}${key.slice(-4)}`;
 }
 
-function normalizeTriggerTopic(value: unknown): ShopifyPrinterTriggerTopic {
-  const v = normalizeText(value).toLowerCase();
-  if (v === "orders/create") return "orders/create";
-  return "fulfillments/create";
-}
-
 function normalizeConfig(raw: Record<string, unknown> | null | undefined): ShopifyPrinterConfig {
-  const section = (raw || {}) as Record<string, unknown>;
   return {
-    enabled: section.enabled === true,
-    triggerTopic: normalizeTriggerTopic(section.triggerTopic),
-    copies: Math.min(5, Math.max(1, toPositiveInt(section.copies, 1))),
+    enabled: (raw || {}).enabled === true,
+    // Fixed default trigger: print only after Shopify shipping label is created.
+    triggerTopic: "fulfillments/create",
+    // Fixed default: one label copy.
+    copies: 1,
     labelSize: "4x6",
   };
 }
@@ -109,11 +104,10 @@ export async function saveShopifyPrinterConfig(
   shop: string,
   input: Partial<ShopifyPrinterConfig>
 ): Promise<{ backend: "database" | "memory"; warning?: string }> {
-  const existing = await loadShopifyPrinterConfig(shop);
   const next: ShopifyPrinterConfig = {
     enabled: input.enabled === true,
-    triggerTopic: normalizeTriggerTopic(input.triggerTopic || existing.triggerTopic),
-    copies: Math.min(5, Math.max(1, toPositiveInt(input.copies, existing.copies || 1))),
+    triggerTopic: "fulfillments/create",
+    copies: 1,
     labelSize: "4x6",
   };
   try {

@@ -120,13 +120,6 @@ export default function SettingsPage() {
   const [lightspeedBusy, setLightspeedBusy] = useState(false);
   const [lightspeedStatusData, setLightspeedStatusData] = useState<LightspeedStatusResponse | null>(null);
   const [printerLoading, setPrinterLoading] = useState(true);
-  const [printerBusy, setPrinterBusy] = useState(false);
-  const [printerEnabled, setPrinterEnabled] = useState(false);
-  const [printerTriggerTopic, setPrinterTriggerTopic] = useState<"orders/create" | "fulfillments/create">("fulfillments/create");
-  const [printerCopies, setPrinterCopies] = useState("1");
-  const [printerApiKeyMasked, setPrinterApiKeyMasked] = useState("");
-  const [printerHasApiKey, setPrinterHasApiKey] = useState(false);
-  const [printerId, setPrinterId] = useState("");
   const [printerOnline, setPrinterOnline] = useState<boolean | null>(null);
   const [printerName, setPrinterName] = useState<string | null>(null);
 
@@ -242,21 +235,13 @@ export default function SettingsPage() {
     }
   }, []);
 
-  const refreshPrinterConfig = useCallback(async (manual = false) => {
-    if (manual) setPrinterBusy(true);
+  const refreshPrinterConfig = useCallback(async () => {
     setPrinterLoading(true);
     try {
-      const endpoint = `/api/shopify/printer/config${manual ? "?refresh=1" : ""}`;
+      const endpoint = "/api/shopify/printer/config";
       const resp = await fetch(endpoint, { cache: "no-store" });
       const json = (await resp.json().catch(() => ({}))) as ShopifyPrinterConfigResponse;
       if (!resp.ok) throw new Error(json?.error || "Failed to load printer config.");
-      const cfg = json?.config || {};
-      setPrinterEnabled(cfg.enabled === true);
-      setPrinterTriggerTopic(cfg.triggerTopic === "orders/create" ? "orders/create" : "fulfillments/create");
-      setPrinterId(cfg.printerId ? String(cfg.printerId) : "");
-      setPrinterCopies(String(Math.min(5, Math.max(1, Number(cfg.copies || 1)))));
-      setPrinterHasApiKey(cfg.hasApiKey === true);
-      setPrinterApiKeyMasked(String(cfg.apiKeyMasked || ""));
       setPrinterOnline(
         typeof json?.printerStatus?.online === "boolean" ? Boolean(json?.printerStatus?.online) : null
       );
@@ -267,7 +252,6 @@ export default function SettingsPage() {
       setError(e?.message || "Failed to load Shopify Printer config.");
     } finally {
       setPrinterLoading(false);
-      if (manual) setPrinterBusy(false);
     }
   }, []);
 
@@ -360,6 +344,14 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    const interval = window.setInterval(() => {
+      void refreshPrinterConfig();
+    }, 30000);
+    return () => window.clearInterval(interval);
+  }, [refreshPrinterConfig]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
     if (!normalizedShop) return;
     window.localStorage.setItem("shopify_shop", normalizedShop);
   }, [normalizedShop]);
@@ -445,54 +437,6 @@ export default function SettingsPage() {
       setStatus(null);
     } finally {
       setDropboxBusy(false);
-    }
-  }
-
-  async function handleSavePrinter() {
-    setPrinterBusy(true);
-    setError(null);
-    setStatus("Saving Shopify Printer config...");
-    try {
-      const resp = await fetch("/api/shopify/printer/config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          enabled: printerEnabled,
-          triggerTopic: printerTriggerTopic,
-          copies: printerCopies.trim(),
-        }),
-      });
-      const json = (await resp.json().catch(() => ({}))) as ShopifyPrinterConfigResponse;
-      if (!resp.ok) throw new Error(json?.error || "Failed to save Shopify Printer config.");
-      setStatus("Shopify Printer config saved.");
-      await refreshPrinterConfig(true);
-    } catch (e: any) {
-      setError(e?.message || "Failed to save Shopify Printer config.");
-      setStatus(null);
-    } finally {
-      setPrinterBusy(false);
-    }
-  }
-
-  async function handleTestPrinter() {
-    setPrinterBusy(true);
-    setError(null);
-    setStatus("Sending test label to PrintNode...");
-    try {
-      const resp = await fetch("/api/shopify/printer/test", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      const json = (await resp.json().catch(() => ({}))) as { error?: string };
-      if (!resp.ok) throw new Error(json?.error || "Test print failed.");
-      setStatus("Test label sent to printer.");
-      await refreshPrinterConfig(true);
-    } catch (e: any) {
-      setError(e?.message || "Test print failed.");
-      setStatus(null);
-    } finally {
-      setPrinterBusy(false);
     }
   }
 
@@ -751,71 +695,16 @@ export default function SettingsPage() {
 
       <section id="integration-shopify-printer" className="card">
         <div className="card-title">Shopify Printer</div>
-        <p className="muted">
-          Print labels automatically through PrintNode, including USB printers shared from your computer.
-        </p>
         <div className="status-row">
-          <span className={`status-dot ${printerOnline ? "on" : "off"}`} />
+          <span className={`status-dot ${printerOnline === true ? "on" : "off"}`} />
           <span>
             {printerLoading
-              ? "Loading printer config..."
-              : printerOnline === null
-                ? "Status not checked"
-                : printerOnline
-                  ? "Printer online"
-                  : "Printer offline / unreachable"}
+              ? "Checking printer status..."
+              : printerOnline === true
+                ? "Printer online"
+                : "Printer offline / unreachable"}
             {printerName ? <em> - {printerName}</em> : null}
           </span>
-        </div>
-
-        <div className="printer-grid">
-          <label className="active-toggle">
-            <input
-              type="checkbox"
-              checked={printerEnabled}
-              onChange={(e) => setPrinterEnabled(e.target.checked)}
-            />
-            Enable auto label printing
-          </label>
-          <select
-            value={printerTriggerTopic}
-            onChange={(e) =>
-              setPrinterTriggerTopic(
-                e.target.value === "orders/create" ? "orders/create" : "fulfillments/create"
-              )
-            }
-          >
-            <option value="fulfillments/create">Trigger: fulfillments/create</option>
-            <option value="orders/create">Trigger: orders/create</option>
-          </select>
-          <input
-            value={printerCopies}
-            onChange={(e) => setPrinterCopies(e.target.value)}
-            placeholder="Copies (1-5)"
-            inputMode="numeric"
-          />
-        </div>
-
-        <p className="muted">
-          Credentials are managed via environment variables only: <code>PRINTNODE_API_KEY</code> and <code>PRINTNODE_PRINTER_ID</code>.
-          {printerHasApiKey ? ` API key detected (${printerApiKeyMasked}).` : " API key not detected."}
-          {printerId ? ` Printer ID detected (${printerId}).` : " Printer ID not detected."}
-        </p>
-
-        <p className="muted">
-          Webhooks registered: <code>orders/create</code>, <code>orders/cancelled</code>, <code>fulfillments/create</code>.
-        </p>
-
-        <div className="actions">
-          <button className="btn primary" onClick={() => void handleSavePrinter()} disabled={printerBusy}>
-            {printerBusy ? "Saving..." : "Save Printer Config"}
-          </button>
-          <button className="btn ghost" onClick={() => void handleTestPrinter()} disabled={printerBusy}>
-            {printerBusy ? "Sending..." : "Send Test Label"}
-          </button>
-          <button className="btn ghost" onClick={() => void refreshPrinterConfig(true)} disabled={printerBusy}>
-            {printerBusy ? "Refreshing..." : "Refresh Printer Status"}
-          </button>
         </div>
       </section>
 

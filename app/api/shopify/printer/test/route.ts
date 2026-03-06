@@ -15,7 +15,17 @@ function normalizeText(value: unknown) {
 }
 
 function buildTestLabelZpl(shop: string) {
-  const now = new Date().toLocaleString();
+  const now = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+    timeZoneName: "short",
+  }).format(new Date());
   return `^XA
 ^PW812
 ^LL1218
