@@ -789,12 +789,6 @@ export default function SettingsPage() {
             <option value="orders/create">Trigger: orders/create</option>
           </select>
           <input
-            value={printerId}
-            onChange={(e) => setPrinterId(e.target.value)}
-            placeholder="PrintNode printer ID"
-            inputMode="numeric"
-          />
-          <input
             value={printerCopies}
             onChange={(e) => setPrinterCopies(e.target.value)}
             placeholder="Copies (1-5)"
