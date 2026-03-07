@@ -174,7 +174,44 @@ async function captureLabelPdfBytes(page, orderId) {
     { timeout: 15000 }
   ).catch(() => null);
 
+  const waitForPdf = async () => {
+    const download = await waitDownload;
+    if (download) {
+      const filePath = path.join(tmpDir, `${orderId}-${Date.now()}.pdf`);
+      await download.saveAs(filePath);
+      return fs.readFile(filePath);
+    }
+
+    const popup = await waitPopup;
+    if (popup) {
+      await popup.waitForLoadState("domcontentloaded", { timeout: 10000 }).catch(() => {});
+      const popupUrl = popup.url();
+      if (/\.pdf(\?|$)/i.test(popupUrl) || popupUrl.includes("shipping_labels")) {
+        const response = await popup.request.get(popupUrl);
+        if (response.ok()) {
+          const bytes = await response.body();
+          await popup.close().catch(() => {});
+          return bytes;
+        }
+      }
+    }
+
+    const pdfResponse = await pdfResponsePromise;
+    if (pdfResponse) {
+      const bytes = await pdfResponse.body();
+      if (bytes && bytes.length > 100) return bytes;
+    }
+    return null;
+  };
+
   const clickPrintAction = async () => {
+    // Primary action on order page fulfillment card.
+    const fulfillmentPrint = page.locator("button:has-text(\"Print label\")").first();
+    if (await fulfillmentPrint.count()) {
+      await fulfillmentPrint.click({ timeout: 10000 });
+      return true;
+    }
+
     const genericPrint = page.locator("button, a").filter({ hasText: /print 1 shipping label|print shipping label|print label/i }).first();
     if (await genericPrint.count()) {
       await genericPrint.click({ timeout: 10000 });
@@ -228,32 +265,17 @@ async function captureLabelPdfBytes(page, orderId) {
     throw new Error(`Print label action not found. Debug saved: ${png}`);
   }
 
-  const download = await waitDownload;
-  if (download) {
-    const filePath = path.join(tmpDir, `${orderId}-${Date.now()}.pdf`);
-    await download.saveAs(filePath);
-    return fs.readFile(filePath);
-  }
-
-  const popup = await waitPopup;
-  if (popup) {
-    await popup.waitForLoadState("domcontentloaded", { timeout: 10000 }).catch(() => {});
-    const popupUrl = popup.url();
-    if (/\.pdf(\?|$)/i.test(popupUrl) || popupUrl.includes("shipping_labels")) {
-      const response = await popup.request.get(popupUrl);
-      if (response.ok()) {
-        const bytes = await response.body();
-        await popup.close().catch(() => {});
-        return bytes;
-      }
+  // If click landed on Shopify's shipping-label purchase page, click print there.
+  const currentUrl = page.url();
+  if (/\/shipping_labels\/purchase\//i.test(currentUrl) || /shipping_labels/i.test(currentUrl)) {
+    const printOne = page.locator("button:has-text(\"Print 1 shipping label\"), button:has-text(\"Print shipping label\")").first();
+    if (await printOne.count()) {
+      await printOne.click({ timeout: 10000 }).catch(() => {});
     }
   }
 
-  const pdfResponse = await pdfResponsePromise;
-  if (pdfResponse) {
-    const bytes = await pdfResponse.body();
-    if (bytes && bytes.length > 100) return bytes;
-  }
+  const bytes = await waitForPdf();
+  if (bytes) return bytes;
 
   throw new Error("Could not capture PDF from Shopify print action.");
 }
