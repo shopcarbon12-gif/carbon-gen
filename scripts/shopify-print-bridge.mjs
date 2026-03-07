@@ -178,6 +178,36 @@ async function captureLabelPdfBytes(page, orderId) {
   throw new Error("Could not capture PDF from Shopify print action.");
 }
 
+async function openShippingLabelsAndPrint(page, job) {
+  await page.goto(`https://admin.shopify.com/store/${encodeURIComponent(STORE_HANDLE)}/shipping_labels`, {
+    waitUntil: "domcontentloaded",
+    timeout: 30000,
+  });
+  await page.waitForTimeout(1200);
+
+  const q = String(job.trackingNumber || job.orderName || job.orderId || "").trim();
+  const search = page.getByRole("searchbox").first();
+  if (q && (await search.count())) {
+    await search.click({ timeout: 6000 }).catch(() => {});
+    await search.fill(q).catch(() => {});
+    await search.press("Enter").catch(() => {});
+    await page.waitForTimeout(1200);
+  }
+
+  const openCandidate = page.getByText(new RegExp(`${job.trackingNumber || job.orderName || job.orderId}`, "i")).first();
+  if (await openCandidate.count()) {
+    await openCandidate.click({ timeout: 6000 }).catch(() => {});
+    await page.waitForTimeout(1000);
+  }
+
+  const printBtn = page.getByRole("button", { name: /print 1 shipping label|print shipping label|print label/i }).first();
+  if (await printBtn.count()) {
+    await printBtn.click({ timeout: 8000 });
+    return true;
+  }
+  return false;
+}
+
 async function processJob(context, job) {
   const page = await context.newPage();
   try {
@@ -188,20 +218,36 @@ async function processJob(context, job) {
     if (/\/auth\/login|\/account\/login/i.test(currentUrl)) {
       throw new Error("Shopify admin login required in bridge browser profile.");
     }
-    const pdfBytes = await captureLabelPdfBytes(page, job.orderId);
+    let pdfBytes;
+    try {
+      pdfBytes = await captureLabelPdfBytes(page, job.orderId);
+    } catch (primaryErr) {
+      const fallbackWorked = await openShippingLabelsAndPrint(page, job).catch(() => false);
+      if (!fallbackWorked) throw primaryErr;
+      const r = await page.waitForResponse(
+        (resp) => String(resp.headers()["content-type"] || "").toLowerCase().includes("application/pdf"),
+        { timeout: 15000 }
+      ).catch(() => null);
+      if (!r) throw primaryErr;
+      pdfBytes = await r.body();
+    }
     await sendPdfToPrintNode(pdfBytes, `Shopify ${job.orderName || job.orderId}`);
   } finally {
     await page.close().catch(() => {});
   }
 }
 
-async function main() {
+async function createContext() {
   await fs.mkdir(USER_DATA_DIR, { recursive: true });
-  const context = await chromium.launchPersistentContext(USER_DATA_DIR, {
+  return chromium.launchPersistentContext(USER_DATA_DIR, {
     headless: HEADLESS,
     acceptDownloads: true,
     viewport: { width: 1360, height: 900 },
   });
+}
+
+async function main() {
+  let context = await createContext();
   console.log(`[bridge] started worker=${WORKER_ID} base=${BASE_URL}`);
   console.log("[bridge] if first run, sign into Shopify admin in opened browser profile.");
 
@@ -220,6 +266,13 @@ async function main() {
         const msg = String(err?.message || err);
         await completeJob({ id: job.id, success: false, error: msg });
         console.error(`[bridge] failed order=${job.orderId}: ${msg}`);
+        if (/context or browser has been closed|target page, context or browser has been closed/i.test(msg)) {
+          try {
+            await context.close().catch(() => {});
+          } catch {}
+          context = await createContext();
+          console.log("[bridge] browser context recreated after close/crash.");
+        }
       }
     } catch (err) {
       console.error(`[bridge] loop error: ${String(err?.message || err)}`);
