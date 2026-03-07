@@ -9,6 +9,8 @@ const WORKER_ID = String(process.env.SHOPIFY_PRINT_BRIDGE_WORKER_ID || `bridge-$
 const POLL_MS = Number.parseInt(String(process.env.SHOPIFY_PRINT_BRIDGE_POLL_MS || "4000"), 10) || 4000;
 const HEADLESS = String(process.env.SHOPIFY_PRINT_BRIDGE_HEADLESS || "true").trim().toLowerCase() !== "false";
 const STORE_HANDLE = String(process.env.SHOPIFY_ADMIN_STORE_HANDLE || "shopcarbon").trim();
+const SHOPIFY_SHOP_DOMAIN = String(process.env.SHOPIFY_SHOP_DOMAIN || "").trim().toLowerCase();
+const SHOPIFY_ADMIN_BASE_URL = String(process.env.SHOPIFY_ADMIN_BASE_URL || "").trim();
 const USER_DATA_DIR = String(
   process.env.SHOPIFY_PRINT_BRIDGE_USER_DATA_DIR ||
     path.join(process.cwd(), ".bridge", "playwright-user-data")
@@ -60,7 +62,34 @@ async function completeJob({ id, success, error }) {
 }
 
 function orderAdminUrl(orderId) {
-  return `https://admin.shopify.com/store/${encodeURIComponent(STORE_HANDLE)}/orders/${encodeURIComponent(String(orderId || ""))}`;
+  const id = encodeURIComponent(String(orderId || ""));
+  if (SHOPIFY_ADMIN_BASE_URL) {
+    return `${SHOPIFY_ADMIN_BASE_URL.replace(/\/+$/, "")}/orders/${id}`;
+  }
+  if (SHOPIFY_SHOP_DOMAIN) {
+    return `https://${SHOPIFY_SHOP_DOMAIN}/admin/orders/${id}`;
+  }
+  return `https://admin.shopify.com/store/${encodeURIComponent(STORE_HANDLE)}/orders/${id}`;
+}
+
+function ordersAdminUrl() {
+  if (SHOPIFY_ADMIN_BASE_URL) {
+    return `${SHOPIFY_ADMIN_BASE_URL.replace(/\/+$/, "")}/orders`;
+  }
+  if (SHOPIFY_SHOP_DOMAIN) {
+    return `https://${SHOPIFY_SHOP_DOMAIN}/admin/orders`;
+  }
+  return `https://admin.shopify.com/store/${encodeURIComponent(STORE_HANDLE)}/orders`;
+}
+
+function shippingLabelsAdminUrl() {
+  if (SHOPIFY_ADMIN_BASE_URL) {
+    return `${SHOPIFY_ADMIN_BASE_URL.replace(/\/+$/, "")}/shipping_labels`;
+  }
+  if (SHOPIFY_SHOP_DOMAIN) {
+    return `https://${SHOPIFY_SHOP_DOMAIN}/admin/shipping_labels`;
+  }
+  return `https://admin.shopify.com/store/${encodeURIComponent(STORE_HANDLE)}/shipping_labels`;
 }
 
 function isLoginUrl(url) {
@@ -68,7 +97,7 @@ function isLoginUrl(url) {
 }
 
 async function ensureAuthenticated(context) {
-  const target = `https://admin.shopify.com/store/${encodeURIComponent(STORE_HANDLE)}/orders`;
+  const target = ordersAdminUrl();
   let loginPromptShown = false;
   const started = Date.now();
   let page = context.pages()[0] || null;
@@ -216,7 +245,7 @@ async function captureLabelPdfBytes(page, orderId) {
 }
 
 async function openShippingLabelsAndPrint(page, job) {
-  await page.goto(`https://admin.shopify.com/store/${encodeURIComponent(STORE_HANDLE)}/shipping_labels`, {
+  await page.goto(shippingLabelsAdminUrl(), {
     waitUntil: "domcontentloaded",
     timeout: 30000,
   });
