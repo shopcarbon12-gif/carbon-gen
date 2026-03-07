@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { createHmac, timingSafeEqual } from "crypto";
 import { lsGet, lsPost, lsPut, lsDelete } from "@/lib/lightspeedApi";
 import { loadPosConfig } from "@/lib/lightspeedSaleCreate";
 import {
   getOrderSyncRecord,
   updateOrderCancelledStatus,
 } from "@/lib/lightspeedRepository";
+import { hasShopifyWebhookSecretConfigured, verifyShopifyWebhookHmac } from "@/lib/shopifyWebhookAuth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,16 +14,6 @@ export const maxDuration = 60;
 
 function normalizeText(value: unknown) {
   return String(value ?? "").trim();
-}
-
-function verifyWebhookHmac(body: string, hmacHeader: string, secret: string): boolean {
-  if (!hmacHeader || !secret) return false;
-  const digest = createHmac("sha256", secret).update(body, "utf8").digest("base64");
-  try {
-    return timingSafeEqual(Buffer.from(digest), Buffer.from(hmacHeader));
-  } catch {
-    return false;
-  }
 }
 
 async function findSyncRecord(shopifyOrderId: number): Promise<{ lsSaleId: string | null; status: string | null }> {
@@ -139,9 +129,7 @@ export async function POST(req: NextRequest) {
   const hmacHeader = normalizeText(req.headers.get("x-shopify-hmac-sha256"));
   const topic = normalizeText(req.headers.get("x-shopify-topic"));
 
-  const secret = normalizeText(process.env.SHOPIFY_WEBHOOK_SECRET);
-
-  if (secret && !verifyWebhookHmac(rawBody, hmacHeader, secret)) {
+  if (hasShopifyWebhookSecretConfigured() && !verifyShopifyWebhookHmac(rawBody, hmacHeader)) {
     console.error("[webhook/orders-cancelled] HMAC verification failed");
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

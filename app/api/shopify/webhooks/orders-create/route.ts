@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { createHmac, timingSafeEqual } from "crypto";
 import {
   createLightspeedSale,
   loadPosConfig,
@@ -8,6 +7,7 @@ import {
 } from "@/lib/lightspeedSaleCreate";
 import { normalizeShopDomain } from "@/lib/shopify";
 import { buildOrderLabelZpl, maybePrintWebhookLabel } from "@/lib/shopifyPrinter";
+import { hasShopifyWebhookSecretConfigured, verifyShopifyWebhookHmac } from "@/lib/shopifyWebhookAuth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,31 +15,6 @@ export const maxDuration = 60;
 
 function normalizeText(value: unknown) {
   return String(value ?? "").trim();
-}
-
-function normalizeSecret(value: unknown): string {
-  const raw = String(value ?? "");
-  return raw
-    .trim()
-    .replace(/^['"]|['"]$/g, "")
-    .replace(/\\r\\n|\\n|\\r/g, "")
-    .trim();
-}
-
-function resolveWebhookSecret(): string {
-  return normalizeSecret(process.env.SHOPIFY_WEBHOOK_SECRET);
-}
-
-function verifyWebhookHmac(body: string, hmacHeader: string, secret: string): boolean {
-  if (!hmacHeader || !secret) return false;
-  const provided = Buffer.from(hmacHeader, "base64");
-  const expected = createHmac("sha256", secret).update(body, "utf8").digest();
-  try {
-    if (provided.length !== expected.length) return false;
-    return timingSafeEqual(provided, expected);
-  } catch {
-    return false;
-  }
 }
 
 export async function POST(req: NextRequest) {
@@ -50,9 +25,7 @@ export async function POST(req: NextRequest) {
   const topic = normalizeText(req.headers.get("x-shopify-topic"));
   const webhookId = normalizeText(req.headers.get("x-shopify-webhook-id"));
 
-  const secret = resolveWebhookSecret();
-
-  if (secret && !verifyWebhookHmac(rawBody, hmacHeader, secret)) {
+  if (hasShopifyWebhookSecretConfigured() && !verifyShopifyWebhookHmac(rawBody, hmacHeader)) {
     console.error("[webhook/orders-create] HMAC verification failed");
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
