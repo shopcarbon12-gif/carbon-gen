@@ -96,6 +96,14 @@ function isLoginUrl(url) {
   return /accounts\.shopify\.com|\/auth\/login|\/account\/login/i.test(String(url || ""));
 }
 
+function escapeRegex(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function looksLikeOrdersListUrl(url) {
+  return /\/orders(?:\?|$)/i.test(String(url || "")) && !/\/orders\/\d+/i.test(String(url || ""));
+}
+
 async function ensureAuthenticated(context) {
   const target = ordersAdminUrl();
   let loginPromptShown = false;
@@ -167,6 +175,12 @@ async function captureLabelPdfBytes(page, orderId) {
   ).catch(() => null);
 
   const clickPrintAction = async () => {
+    const genericPrint = page.locator("button, a").filter({ hasText: /print 1 shipping label|print shipping label|print label/i }).first();
+    if (await genericPrint.count()) {
+      await genericPrint.click({ timeout: 10000 });
+      return true;
+    }
+
     const directButton = page.getByRole("button", { name: /print label|print shipping label/i }).first();
     if (await directButton.count()) {
       await directButton.click({ timeout: 10000 });
@@ -274,12 +288,39 @@ async function openShippingLabelsAndPrint(page, job) {
   return false;
 }
 
+async function openOrderFromList(page, job) {
+  const q = String(job.orderName || `#${job.orderId}` || job.trackingNumber || "").trim();
+  const search = page.getByRole("searchbox").first();
+  if (q && (await search.count())) {
+    await search.click({ timeout: 6000 }).catch(() => {});
+    await search.fill(q).catch(() => {});
+    await search.press("Enter").catch(() => {});
+    await page.waitForTimeout(1200);
+  }
+  const orderByName = page.getByText(new RegExp(escapeRegex(String(job.orderName || "")), "i")).first();
+  if (await orderByName.count()) {
+    await orderByName.click({ timeout: 7000 }).catch(() => {});
+    await page.waitForTimeout(1400);
+    return true;
+  }
+  const orderById = page.getByText(new RegExp(`#${escapeRegex(String(job.orderId || ""))}`, "i")).first();
+  if (await orderById.count()) {
+    await orderById.click({ timeout: 7000 }).catch(() => {});
+    await page.waitForTimeout(1400);
+    return true;
+  }
+  return false;
+}
+
 async function processJob(context, job) {
   const page = await context.newPage();
   try {
     const url = orderAdminUrl(job.orderId);
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
     await page.waitForTimeout(1500);
+    if (looksLikeOrdersListUrl(page.url())) {
+      await openOrderFromList(page, job);
+    }
     const currentUrl = page.url();
     if (isLoginUrl(currentUrl)) {
       throw new Error("AUTH_REQUIRED: Shopify admin login required in bridge browser profile.");
