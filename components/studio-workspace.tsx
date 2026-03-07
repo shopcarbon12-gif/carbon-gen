@@ -5234,7 +5234,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               </div>
             ) : null}
           </div>
-          <div className="row">
+          <div className="row" style={{ justifyContent: "center" }}>
             <button
               className="btn ghost"
               type="button"
@@ -5411,7 +5411,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                 </div>
               ) : null}
           </div>
-          <div className="row">
+          <div className="row" style={{ justifyContent: "center" }}>
             <button className="btn primary" type="button" onClick={uploadItems}>
               Save Item References + Type
             </button>
@@ -6535,13 +6535,18 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           color: #0b6b58;
           font-weight: 800;
           margin-bottom: 2px;
+          text-align: left;
         }
         .section-header {
           display: flex;
           align-items: center;
-          justify-content: center;
+          justify-content: space-between;
           gap: 10px;
-          flex-wrap: wrap;
+          flex-wrap: nowrap;
+        }
+        .section-header .card-title {
+          flex: 1;
+          text-align: left;
         }
         h1 {
           margin: 8px 0;
@@ -6920,9 +6925,16 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         .model-selected-header {
           display: flex;
           align-items: center;
-          justify-content: center;
+          justify-content: space-between;
           gap: 10px;
-          flex-wrap: wrap;
+          flex-wrap: nowrap;
+        }
+        .model-selected-header .card-title {
+          text-align: left;
+        }
+        .model-selected-header .muted {
+          margin-left: auto;
+          text-align: right;
         }
         .source-note {
           margin-top: 2px;
@@ -8225,12 +8237,18 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           gap: 8px;
         }
         .pose-scan-gender-select {
-          padding: 5px 8px;
-          font-size: 0.82rem;
-          border-radius: 6px;
-          border: 1px solid rgba(255,255,255,0.15);
-          background: rgba(255,255,255,0.06);
-          color: #fff;
+          min-height: 38px;
+          min-width: 110px;
+          padding: 0 14px;
+          font-size: 0.84rem;
+          font-weight: 600;
+          border-radius: 8px;
+          border: 1px solid rgba(255, 255, 255, 0.18);
+          background: rgba(0, 0, 0, 0.15);
+          color: rgba(255, 255, 255, 0.85);
+          line-height: 1;
+          text-align: center;
+          text-align-last: center;
           cursor: pointer;
         }
         .pose-scan-single-label {
