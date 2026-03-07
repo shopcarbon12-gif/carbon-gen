@@ -5424,7 +5424,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               <div className="pose-scan-controls">
                 <select
                   suppressHydrationWarning
-                  className="pose-scan-gender-select"
+                  className="ghost-btn pose-scan-gender-select"
                   value={poseScanManualGender}
                   onChange={(e) => setPoseScanManualGender(e.target.value as "male" | "female")}
                 >
@@ -6540,13 +6540,14 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         .section-header {
           display: flex;
           align-items: center;
-          justify-content: space-between;
+          justify-content: space-between !important;
           gap: 10px;
-          flex-wrap: nowrap;
+          flex-wrap: nowrap !important;
         }
         .section-header .card-title {
           flex: 1;
-          text-align: left;
+          margin-right: auto;
+          text-align: left !important;
         }
         h1 {
           margin: 8px 0;
