@@ -212,6 +212,19 @@ async function captureLabelPdfBytes(page, orderId) {
       return true;
     }
 
+    const topPrintButton = page.getByRole("button", { name: /^print$/i }).first();
+    if (await topPrintButton.count()) {
+      await topPrintButton.click({ timeout: 8000 }).catch(() => {});
+      const printMenuOption = page
+        .locator("[role='menu'] button, [role='menu'] a, [role='menuitem']")
+        .filter({ hasText: /shipping label|print label|print 1 shipping label/i })
+        .first();
+      if (await printMenuOption.count()) {
+        await printMenuOption.click({ timeout: 8000 });
+        return true;
+      }
+    }
+
     const genericPrint = page.locator("button, a").filter({ hasText: /print 1 shipping label|print shipping label|print label/i }).first();
     if (await genericPrint.count()) {
       await genericPrint.click({ timeout: 10000 });
