@@ -12,6 +12,19 @@ function normalizeText(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+async function fetchImageAsDataUrl(url: string): Promise<string | null> {
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) return null;
+    const contentType = normalizeText(resp.headers.get("content-type")) || "image/png";
+    const buffer = Buffer.from(await resp.arrayBuffer());
+    if (!buffer.length) return null;
+    return `data:${contentType};base64,${buffer.toString("base64")}`;
+  } catch {
+    return null;
+  }
+}
+
 const POSE_NAMES_MALE = [
   "Full Body Front (Neutral Hero)",
   "Full Body Lifestyle (Controlled)",
@@ -125,7 +138,14 @@ export async function POST(req: NextRequest) {
       imageInputs.push({ type: "input_image", image_url: dataUrl, detail: "low" });
     }
     for (const url of imageUrls) {
-      imageInputs.push({ type: "input_image", image_url: url, detail: "low" });
+      const dataUrl = await fetchImageAsDataUrl(url);
+      if (dataUrl) {
+        imageInputs.push({ type: "input_image", image_url: dataUrl, detail: "low" });
+      }
+    }
+
+    if (!imageInputs.length) {
+      return NextResponse.json(buildSafeFallbackResult());
     }
 
     const genderLabel = includeMale && includeFemale
