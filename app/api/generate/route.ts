@@ -144,6 +144,18 @@ function isOpenAiImagesEditModelError(err: unknown) {
   );
 }
 
+function compactPromptForDalle2(prompt: string, maxLen = 1000) {
+  const normalized = String(prompt || "").replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLen) return normalized;
+  // Keep a small suffix from the original prompt where hard locks are often appended.
+  const suffixLen = Math.min(320, Math.max(120, Math.floor(maxLen * 0.32)));
+  const prefixLen = maxLen - suffixLen - 3;
+  const prefix = normalized.slice(0, Math.max(0, prefixLen)).trim();
+  const suffix = normalized.slice(Math.max(0, normalized.length - suffixLen)).trim();
+  const merged = `${prefix}...${suffix}`;
+  return merged.length <= maxLen ? merged : merged.slice(0, maxLen);
+}
+
 function buildSwimwearSafetyRetryPrompt(basePrompt: string) {
   return [
     basePrompt,
@@ -790,7 +802,10 @@ export async function POST(req: NextRequest) {
             model: modelName,
             // OpenAI edits for dall-e-2 expects a single file (not an array).
             image: modelName === "dall-e-2" ? referenceFiles[0] : referenceFiles,
-            prompt: params.prompt,
+            prompt:
+              modelName === "dall-e-2"
+                ? compactPromptForDalle2(params.prompt, 1000)
+                : params.prompt,
             // dall-e-2 supports square edit sizes only.
             size: modelName === "dall-e-2" ? "1024x1024" : finalSize,
           };
