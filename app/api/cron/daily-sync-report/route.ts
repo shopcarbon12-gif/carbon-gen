@@ -4,11 +4,13 @@ import { isRequestAuthed } from "@/lib/auth";
 import { normalizeShopDomain } from "@/lib/shopify";
 import { Resend } from "resend";
 import { getMostRecentInstalledShop } from "@/lib/shopifyTokenRepository";
+import { deleteStorageObjects, listStorageFiles } from "@/lib/storageProvider";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const REPORT_EMAIL = "elior@carbonjeanscompany.com";
+const STORAGE_CLEANUP_PREFIXES = ["models/uploads"];
 
 function isAuthorized(req: NextRequest) {
   if (isRequestAuthed(req)) return true;
@@ -213,6 +215,7 @@ export async function GET(req: NextRequest) {
 
     let deletedActivity = 0;
     let deletedChanges = 0;
+    let deletedStorageUploads = 0;
     try {
       const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59).toISOString();
       const ccRes = await sqlQuery<{ cnt: string }>(
@@ -234,6 +237,17 @@ export async function GET(req: NextRequest) {
       // best-effort cleanup
     }
 
+    try {
+      const groups = await Promise.all(STORAGE_CLEANUP_PREFIXES.map((prefix) => listStorageFiles(prefix)));
+      const allPaths = Array.from(new Set(groups.flat().map((f) => f.path)));
+      if (allPaths.length) {
+        const deleted = await deleteStorageObjects(allPaths);
+        deletedStorageUploads = deleted.deleted;
+      }
+    } catch {
+      // best-effort cleanup
+    }
+
     return NextResponse.json({
       ok: true,
       totalRuns,
@@ -242,7 +256,7 @@ export async function GET(req: NextRequest) {
       netChanges: netChanges.length,
       productsChanged: byProduct.size,
       emailSentTo: REPORT_EMAIL,
-      cleanup: { deletedActivity, deletedChanges },
+      cleanup: { deletedActivity, deletedChanges, deletedStorageUploads },
     });
   } catch (e: unknown) {
     return NextResponse.json({ ok: false, error: (e as Error)?.message || "Report failed" }, { status: 500 });

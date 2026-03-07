@@ -15,6 +15,7 @@ export async function POST(req: NextRequest) {
     const form = await req.formData();
     const file = form.get("file") as File | null;
     const batchId = String(form.get("batchId") || "").trim() || crypto.randomUUID();
+    const userId = req.cookies.get("carbon_gen_user_id")?.value?.trim() || "anonymous";
 
     if (!file) {
       return NextResponse.json({ error: "Missing file." }, { status: 400 });
@@ -23,7 +24,7 @@ export async function POST(req: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const bytes = new Uint8Array(arrayBuffer);
     const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
-    const path = `models/${batchId}/${Date.now()}-${safeName}`;
+    const path = `models/uploads/${userId}/${batchId}/${Date.now()}-${safeName}`;
 
     const uploaded = await uploadBytesToStorage({
       path,

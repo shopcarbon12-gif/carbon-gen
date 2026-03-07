@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getStoragePublicUrl } from "@/lib/storageProvider";
+import { getStoragePublicUrl, listStorageFiles } from "@/lib/storageProvider";
 import {
   listAllModelsAsc,
   listModelsForUser,
@@ -166,6 +166,16 @@ function normalizeGender(value: unknown) {
   return "";
 }
 
+function parseTimestampFromPath(path: string) {
+  const fileName = path.split("/").pop() || "";
+  const m = fileName.match(/^(\d{10,})-/);
+  if (!m) return null;
+  const ms = Number(m[1]);
+  if (!Number.isFinite(ms) || ms <= 0) return null;
+  const d = new Date(ms);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
 async function loadModelRowsForSession(userId: string | null) {
   if (userId) {
     const data = await listModelsForUser(userId);
@@ -191,6 +201,8 @@ export async function GET(req: NextRequest) {
     const r2Bucket = String(process.env.R2_BUCKET || "").trim();
     const userId = req.cookies.get("carbon_gen_user_id")?.value?.trim() || null;
     const modelRows = await loadModelRowsForSession(userId);
+    const uploadPrefix = userId ? `models/uploads/${userId}` : "models/uploads";
+    const storageFiles = await listStorageFiles(uploadPrefix).catch(() => []);
 
     const entries: Array<{
       id: string;
@@ -266,6 +278,22 @@ export async function GET(req: NextRequest) {
           __objectPath: parsed?.objectPath || null,
         });
       }
+    }
+
+    for (const file of storageFiles) {
+      const fileName = fileNameFromPath(file.path);
+      entries.push({
+        id: `storage:${file.path}`,
+        path: file.path,
+        fileName,
+        modelName: "",
+        gender: "",
+        uploadedAt: parseTimestampFromPath(file.path) || file.createdAt || file.updatedAt || null,
+        url: getStoragePublicUrl(file.path),
+        previewUrl: `/api/storage/preview?path=${encodeURIComponent(file.path)}`,
+        __bucket: null,
+        __objectPath: file.path,
+      });
     }
 
     // Deduplicate repeated uploads by source filename only.
