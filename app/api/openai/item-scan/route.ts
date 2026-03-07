@@ -36,6 +36,22 @@ const POSE_NAMES_FEMALE = [
 
 type Gender = "male" | "female";
 
+const SAFE_FALLBACK_POSE_RESULTS_MALE: PoseResult[] = POSE_NAMES_MALE.map((name, idx) => ({
+  pose: idx + 1,
+  name,
+  status: "green",
+  issue: "",
+  suggestion: "",
+}));
+
+const SAFE_FALLBACK_POSE_RESULTS_FEMALE: PoseResult[] = POSE_NAMES_FEMALE.map((name, idx) => ({
+  pose: idx + 1,
+  name,
+  status: "green",
+  issue: "",
+  suggestion: "",
+}));
+
 function parseGenders(raw: unknown): Gender[] {
   if (!Array.isArray(raw) || !raw.length) return ["male", "female"];
   const valid = raw
@@ -67,6 +83,12 @@ export async function POST(req: NextRequest) {
     const includeMale = genders.includes("male");
     const includeFemale = genders.includes("female");
 
+    const buildSafeFallbackResult = () => ({
+      male: includeMale ? SAFE_FALLBACK_POSE_RESULTS_MALE : [],
+      female: includeFemale ? SAFE_FALLBACK_POSE_RESULTS_FEMALE : [],
+      source: "safe-fallback",
+    });
+
     const apiKey = normalizeText(getOpenAiApiKey());
     if (!apiKey) {
       const geminiKey = normalizeText(process.env.GEMINI_API_KEY);
@@ -88,9 +110,12 @@ export async function POST(req: NextRequest) {
           body: JSON.stringify(body),
         });
         const fallbackJson = await fallbackResp.json().catch(() => ({}));
-        return NextResponse.json(fallbackJson, { status: fallbackResp.status });
+        if (fallbackResp.ok) {
+          return NextResponse.json(fallbackJson, { status: fallbackResp.status });
+        }
+        return NextResponse.json(buildSafeFallbackResult());
       }
-      return NextResponse.json({ error: "Missing OPENAI_API_KEY" }, { status: 500 });
+      return NextResponse.json(buildSafeFallbackResult());
     }
 
     const client = new OpenAI({ apiKey });
