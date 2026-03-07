@@ -8,6 +8,7 @@
     "dev:raw": "next dev --webpack",
     "dev:3000": "next dev --webpack -p 3000",
     "printer:bridge": "node scripts/local-printer-bridge.mjs",
+    "shopify:print-bridge": "node scripts/shopify-print-bridge.mjs",
     "start": "node .next/standalone/server.js -H 0.0.0.0",
     "start:standalone": "node .next/standalone/server.js -H 0.0.0.0",
     "lint": "eslint",

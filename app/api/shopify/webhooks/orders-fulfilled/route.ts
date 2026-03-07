@@ -4,6 +4,7 @@ import { normalizeShopDomain } from "@/lib/shopify";
 import { buildOrderLabelWithTrackingZpl, buildOrderLabelZpl, maybePrintWebhookLabel } from "@/lib/shopifyPrinter";
 import { hasShopifyWebhookSecretConfigured, verifyShopifyWebhookHmac } from "@/lib/shopifyWebhookAuth";
 import { getCarrierLabelPdfUrlForOrder } from "@/lib/shopifyShippingLabel";
+import { enqueueShopifyPrintBridgeJob } from "@/lib/shopifyPrintBridgeQueue";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,6 +12,10 @@ export const maxDuration = 60;
 
 function normalizeText(value: unknown) {
   return String(value ?? "").trim();
+}
+
+function isBridgeEnabled() {
+  return normalizeText(process.env.SHOPIFY_PRINT_BRIDGE_ENABLED).toLowerCase() === "true";
 }
 
 export async function POST(req: NextRequest) {
@@ -52,9 +57,33 @@ export async function POST(req: NextRequest) {
       orderId: normalizeText(order?.id),
     });
 
+    if (webhookId) {
+      await enqueueShopifyPrintBridgeJob({
+        webhookId,
+        shop,
+        orderId: normalizeText(order?.id),
+        orderName: normalizeText(order?.name),
+        trackingNumber: carrier.trackingNumber || "",
+        payload: {
+          topic: "orders/fulfilled",
+          trackingUrl: normalizeText(order?.tracking_url || ""),
+        },
+      });
+    }
+
     const zpl = carrier.trackingNumber
       ? buildOrderLabelWithTrackingZpl(order, carrier.trackingNumber)
       : buildOrderLabelZpl(order);
+
+    if (isBridgeEnabled()) {
+      return NextResponse.json({
+        ok: true,
+        orderId: order.id,
+        orderName: normalizeText(order?.name),
+        printed: false,
+        reason: "bridge_queued",
+      });
+    }
 
     const result = await maybePrintWebhookLabel({
       shop,
