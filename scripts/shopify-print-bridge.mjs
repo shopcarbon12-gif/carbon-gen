@@ -71,23 +71,24 @@ async function ensureAuthenticated(context) {
   const target = `https://admin.shopify.com/store/${encodeURIComponent(STORE_HANDLE)}/orders`;
   let loginPromptShown = false;
   const started = Date.now();
+  let page = context.pages()[0] || null;
   while (Date.now() - started < 10 * 60 * 1000) {
-    let page = null;
     try {
-      page = await context.newPage();
+      if (!page || page.isClosed()) {
+        page = await context.newPage();
+      }
       await page.goto(target, { waitUntil: "domcontentloaded", timeout: 30000 });
-      await page.waitForTimeout(1200);
+      await new Promise((r) => setTimeout(r, 1200));
       if (!isLoginUrl(page.url())) return;
       if (!loginPromptShown) {
         console.log("[bridge] Shopify login required. Please complete login in the opened browser window.");
         loginPromptShown = true;
       }
-      await page.waitForTimeout(2500);
+      // Keep the login page open so the user can finish auth/MFA.
+      await new Promise((r) => setTimeout(r, 2500));
     } catch {
       // Browser/page can be closed by user while signing in; keep waiting.
       await new Promise((r) => setTimeout(r, 1500));
-    } finally {
-      if (page) await page.close().catch(() => {});
     }
   }
   throw new Error("Shopify login was not completed within timeout.");
