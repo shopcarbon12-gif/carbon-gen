@@ -63,6 +63,38 @@ function orderAdminUrl(orderId) {
   return `https://admin.shopify.com/store/${encodeURIComponent(STORE_HANDLE)}/orders/${encodeURIComponent(String(orderId || ""))}`;
 }
 
+function isLoginUrl(url) {
+  return /accounts\.shopify\.com|\/auth\/login|\/account\/login/i.test(String(url || ""));
+}
+
+async function ensureAuthenticated(context) {
+  const page = await context.newPage();
+  try {
+    const target = `https://admin.shopify.com/store/${encodeURIComponent(STORE_HANDLE)}/orders`;
+    await page.goto(target, { waitUntil: "domcontentloaded", timeout: 30000 });
+    await page.waitForTimeout(1200);
+    if (!isLoginUrl(page.url())) return;
+
+    console.log("[bridge] Shopify login required. Please complete login in the opened browser window.");
+    const started = Date.now();
+    while (Date.now() - started < 10 * 60 * 1000) {
+      await page.waitForTimeout(3000);
+      try {
+        await page.goto(target, { waitUntil: "domcontentloaded", timeout: 30000 });
+      } catch {
+        // continue retry loop while user completes auth / MFA
+      }
+      if (!isLoginUrl(page.url())) {
+        console.log("[bridge] Shopify login detected as complete.");
+        return;
+      }
+    }
+    throw new Error("Shopify login was not completed within timeout.");
+  } finally {
+    await page.close().catch(() => {});
+  }
+}
+
 async function sendPdfToPrintNode(pdfBytes, title) {
   const auth = Buffer.from(`${PRINTNODE_API_KEY}:`).toString("base64");
   const content = Buffer.from(pdfBytes).toString("base64");
@@ -215,8 +247,8 @@ async function processJob(context, job) {
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
     await page.waitForTimeout(1500);
     const currentUrl = page.url();
-    if (/\/auth\/login|\/account\/login/i.test(currentUrl)) {
-      throw new Error("Shopify admin login required in bridge browser profile.");
+    if (isLoginUrl(currentUrl)) {
+      throw new Error("AUTH_REQUIRED: Shopify admin login required in bridge browser profile.");
     }
     let pdfBytes;
     try {
@@ -250,6 +282,7 @@ async function main() {
   let context = await createContext();
   console.log(`[bridge] started worker=${WORKER_ID} base=${BASE_URL}`);
   console.log("[bridge] if first run, sign into Shopify admin in opened browser profile.");
+  await ensureAuthenticated(context);
 
   for (;;) {
     try {
@@ -266,6 +299,9 @@ async function main() {
         const msg = String(err?.message || err);
         await completeJob({ id: job.id, success: false, error: msg });
         console.error(`[bridge] failed order=${job.orderId}: ${msg}`);
+        if (/AUTH_REQUIRED/i.test(msg)) {
+          await ensureAuthenticated(context);
+        }
         if (/context or browser has been closed|target page, context or browser has been closed/i.test(msg)) {
           try {
             await context.close().catch(() => {});
