@@ -18,6 +18,7 @@ const USER_DATA_DIR = String(
 const PRINTNODE_API_KEY = String(process.env.PRINTNODE_API_KEY || "").trim();
 const PRINTNODE_PRINTER_ID = Number.parseInt(String(process.env.PRINTNODE_PRINTER_ID || "0"), 10) || 0;
 const PRINTNODE_COPIES = Math.min(5, Math.max(1, Number.parseInt(String(process.env.PRINTNODE_COPIES || "1"), 10) || 1));
+const seenPdfUrls = new Set();
 
 if (!CRON_SECRET) {
   console.error("[bridge] Missing CRON_SECRET");
@@ -158,6 +159,48 @@ async function sendPdfToPrintNode(pdfBytes, title) {
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(body?.message || body?.error || `PrintNode error (${res.status})`);
   }
+}
+
+function isLikelyShippingLabelPdfUrl(rawUrl) {
+  const url = String(rawUrl || "").toLowerCase();
+  if (!url) return false;
+  if (!url.startsWith("http")) return false;
+  return (
+    (url.includes("shipping_label") && url.includes(".pdf")) ||
+    (url.includes("/labels/") && url.includes(".pdf")) ||
+    (url.includes("shopify-shipping") && url.includes(".pdf"))
+  );
+}
+
+async function tryBridgePdfFromUrl(page, rawUrl) {
+  const url = String(rawUrl || "").trim();
+  if (!isLikelyShippingLabelPdfUrl(url)) return false;
+  if (seenPdfUrls.has(url)) return false;
+  seenPdfUrls.add(url);
+  try {
+    const response = await page.request.get(url);
+    if (!response.ok()) return false;
+    const bytes = await response.body();
+    if (!bytes || bytes.length < 100) return false;
+    await sendPdfToPrintNode(bytes, "Shopify manual shipping label");
+    console.log("[bridge] done manual reprint via PDF URL");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function attachPassivePdfWatchers(context) {
+  const attachToPage = (page) => {
+    tryBridgePdfFromUrl(page, page.url()).catch(() => {});
+    page.on("framenavigated", (frame) => {
+      if (frame === page.mainFrame()) {
+        tryBridgePdfFromUrl(page, frame.url()).catch(() => {});
+      }
+    });
+  };
+  for (const page of context.pages()) attachToPage(page);
+  context.on("page", (page) => attachToPage(page));
 }
 
 async function captureLabelPdfBytes(page, orderId) {
@@ -397,6 +440,7 @@ async function main() {
     try {
       if (!context) {
         context = await createContext();
+        attachPassivePdfWatchers(context);
       }
       await ensureAuthenticated(context);
       const job = await claimJob();
