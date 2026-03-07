@@ -18,7 +18,7 @@ async function getTokenForShop(shop: string): Promise<string | null> {
   return getShopifyAdminToken(shop) || null;
 }
 
-const WEBHOOK_TOPICS = ["ORDERS_CREATE", "ORDERS_CANCELLED", "FULFILLMENTS_CREATE"] as const;
+const WEBHOOK_TOPICS = ["ORDERS_CREATE", "ORDERS_CANCELLED", "ORDERS_FULFILLED"] as const;
 
 type WebhookNode = {
   id: string;
@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
     const topicToPath: Record<string, string> = {
       ORDERS_CREATE: "orders-create",
       ORDERS_CANCELLED: "orders-cancelled",
-      FULFILLMENTS_CREATE: "fulfillments-create",
+      ORDERS_FULFILLED: "orders-fulfilled",
     };
 
     for (const topic of WEBHOOK_TOPICS) {

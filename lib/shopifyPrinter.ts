@@ -2,7 +2,7 @@ import { normalizeShopDomain } from "@/lib/shopify";
 import { loadShopifyCartConfig, upsertShopifyCartConfig } from "@/lib/shopifyCartConfigRepository";
 import { ensureSqlReady, hasSqlDatabaseConfigured, sqlQuery } from "@/lib/sqlDb";
 
-export type ShopifyPrinterTriggerTopic = "orders/create" | "fulfillments/create";
+export type ShopifyPrinterTriggerTopic = "orders/create" | "orders/fulfilled" | "fulfillments/create";
 
 export type ShopifyPrinterConfig = {
   enabled: boolean;
@@ -23,7 +23,7 @@ export type ShopifyPrinterResolvedConfig = ShopifyPrinterConfig & {
 
 const DEFAULT_CONFIG: ShopifyPrinterConfig = {
   enabled: false,
-  triggerTopic: "fulfillments/create",
+  triggerTopic: "orders/fulfilled",
   copies: 1,
   labelSize: "4x6",
 };
@@ -57,8 +57,8 @@ export function maskApiKey(raw: string) {
 function normalizeConfig(raw: Record<string, unknown> | null | undefined): ShopifyPrinterConfig {
   return {
     enabled: (raw || {}).enabled === true,
-    // Fixed default trigger: print only after Shopify shipping label is created.
-    triggerTopic: "fulfillments/create",
+    // Preferred trigger: print after order is fulfilled (shipping label generated flow).
+    triggerTopic: "orders/fulfilled",
     // Fixed default: one label copy.
     copies: 1,
     labelSize: "4x6",
@@ -106,7 +106,7 @@ export async function saveShopifyPrinterConfig(
 ): Promise<{ backend: "database" | "memory"; warning?: string }> {
   const next: ShopifyPrinterConfig = {
     enabled: input.enabled === true,
-    triggerTopic: "fulfillments/create",
+    triggerTopic: "orders/fulfilled",
     copies: 1,
     labelSize: "4x6",
   };
