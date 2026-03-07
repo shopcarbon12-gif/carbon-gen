@@ -5164,7 +5164,17 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               </span>
             </button>
           </div>
-          <div className="model-selected-area item-selected-area">
+          <div
+            className="model-selected-area item-selected-area"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={async (e) => {
+              e.preventDefault();
+              const directDropFiles = filterImages(e.dataTransfer?.files || []);
+              const extractedDropFiles = await extractImagesFromDrop(e);
+              const filtered = mergeUniqueFiles(directDropFiles, extractedDropFiles);
+              if (filtered.length) setItemFiles((prev) => mergeUniqueFiles(prev, filtered));
+            }}
+          >
             <div className="model-selected-header">
               <div className="card-title">Selected Pictures</div>
               <div className="muted">
