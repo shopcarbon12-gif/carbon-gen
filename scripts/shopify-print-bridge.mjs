@@ -76,16 +76,22 @@ async function ensureAuthenticated(context) {
     try {
       if (!page || page.isClosed()) {
         page = await context.newPage();
+        await page.goto(target, { waitUntil: "domcontentloaded", timeout: 30000 });
       }
-      await page.goto(target, { waitUntil: "domcontentloaded", timeout: 30000 });
-      await new Promise((r) => setTimeout(r, 1200));
+      if (!page.url() || page.url() === "about:blank") {
+        await page.goto(target, { waitUntil: "domcontentloaded", timeout: 30000 });
+      }
+      await new Promise((r) => setTimeout(r, 800));
       if (!isLoginUrl(page.url())) return;
       if (!loginPromptShown) {
         console.log("[bridge] Shopify login required. Please complete login in the opened browser window.");
         loginPromptShown = true;
       }
-      // Keep the login page open so the user can finish auth/MFA.
-      await new Promise((r) => setTimeout(r, 2500));
+      // Keep login page stable; wait for user-driven URL change instead of forced nav loop.
+      await Promise.race([
+        page.waitForURL((url) => !isLoginUrl(String(url || "")), { timeout: 5000 }).catch(() => null),
+        new Promise((r) => setTimeout(r, 5000)),
+      ]);
     } catch {
       // Browser/page can be closed by user while signing in; keep waiting.
       await new Promise((r) => setTimeout(r, 1500));
