@@ -68,31 +68,29 @@ function isLoginUrl(url) {
 }
 
 async function ensureAuthenticated(context) {
-  const page = await context.newPage();
-  try {
-    const target = `https://admin.shopify.com/store/${encodeURIComponent(STORE_HANDLE)}/orders`;
-    await page.goto(target, { waitUntil: "domcontentloaded", timeout: 30000 });
-    await page.waitForTimeout(1200);
-    if (!isLoginUrl(page.url())) return;
-
-    console.log("[bridge] Shopify login required. Please complete login in the opened browser window.");
-    const started = Date.now();
-    while (Date.now() - started < 10 * 60 * 1000) {
-      await page.waitForTimeout(3000);
-      try {
-        await page.goto(target, { waitUntil: "domcontentloaded", timeout: 30000 });
-      } catch {
-        // continue retry loop while user completes auth / MFA
+  const target = `https://admin.shopify.com/store/${encodeURIComponent(STORE_HANDLE)}/orders`;
+  let loginPromptShown = false;
+  const started = Date.now();
+  while (Date.now() - started < 10 * 60 * 1000) {
+    let page = null;
+    try {
+      page = await context.newPage();
+      await page.goto(target, { waitUntil: "domcontentloaded", timeout: 30000 });
+      await page.waitForTimeout(1200);
+      if (!isLoginUrl(page.url())) return;
+      if (!loginPromptShown) {
+        console.log("[bridge] Shopify login required. Please complete login in the opened browser window.");
+        loginPromptShown = true;
       }
-      if (!isLoginUrl(page.url())) {
-        console.log("[bridge] Shopify login detected as complete.");
-        return;
-      }
+      await page.waitForTimeout(2500);
+    } catch {
+      // Browser/page can be closed by user while signing in; keep waiting.
+      await new Promise((r) => setTimeout(r, 1500));
+    } finally {
+      if (page) await page.close().catch(() => {});
     }
-    throw new Error("Shopify login was not completed within timeout.");
-  } finally {
-    await page.close().catch(() => {});
   }
+  throw new Error("Shopify login was not completed within timeout.");
 }
 
 async function sendPdfToPrintNode(pdfBytes, title) {
@@ -279,13 +277,16 @@ async function createContext() {
 }
 
 async function main() {
-  let context = await createContext();
+  let context = null;
   console.log(`[bridge] started worker=${WORKER_ID} base=${BASE_URL}`);
   console.log("[bridge] if first run, sign into Shopify admin in opened browser profile.");
-  await ensureAuthenticated(context);
 
   for (;;) {
     try {
+      if (!context) {
+        context = await createContext();
+      }
+      await ensureAuthenticated(context);
       const job = await claimJob();
       if (!job) {
         await new Promise((r) => setTimeout(r, POLL_MS));
@@ -306,12 +307,18 @@ async function main() {
           try {
             await context.close().catch(() => {});
           } catch {}
-          context = await createContext();
+          context = null;
           console.log("[bridge] browser context recreated after close/crash.");
         }
       }
     } catch (err) {
       console.error(`[bridge] loop error: ${String(err?.message || err)}`);
+      if (context) {
+        try {
+          await context.close().catch(() => {});
+        } catch {}
+        context = null;
+      }
       await new Promise((r) => setTimeout(r, POLL_MS * 2));
     }
   }
