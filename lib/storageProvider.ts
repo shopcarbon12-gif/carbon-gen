@@ -210,3 +210,66 @@ export function getR2AllowedHost() {
   }
   return `${cfg.accountId}.r2.cloudflarestorage.com`;
 }
+
+export function tryGetStoragePathFromUrl(rawUrl: string) {
+  const input = String(rawUrl || "").trim();
+  if (!input) return "";
+  const cfg = getR2Config();
+  if (!cfg) return "";
+
+  try {
+    const parsed = new URL(input);
+    const host = String(parsed.hostname || "").toLowerCase();
+    const parts = parsed.pathname
+      .split("/")
+      .filter(Boolean)
+      .map((segment) => decodeURIComponent(segment));
+
+    // Default R2 endpoint URL:
+    // https://<account>.r2.cloudflarestorage.com/<bucket>/<object-path>
+    if (host.includes("r2.cloudflarestorage.com")) {
+      if (parts.length >= 2) {
+        const bucket = parts[0];
+        if (!cfg.bucket || bucket === cfg.bucket) {
+          return normalizePath(parts.slice(1).join("/"));
+        }
+      }
+      // Some setups can expose object path without bucket prefix.
+      return normalizePath(parts.join("/"));
+    }
+
+    // Public dev URL:
+    // https://<bucket>.<subdomain>.r2.dev/<object-path>
+    if (host.endsWith(".r2.dev")) {
+      return normalizePath(parts.join("/"));
+    }
+
+    // Custom public base URL support (with optional path prefix).
+    if (cfg.publicBaseUrl) {
+      try {
+        const base = new URL(cfg.publicBaseUrl);
+        const baseHost = String(base.hostname || "").toLowerCase();
+        if (host !== baseHost) return "";
+        const baseParts = base.pathname
+          .split("/")
+          .filter(Boolean)
+          .map((segment) => decodeURIComponent(segment));
+        if (
+          baseParts.length > 0 &&
+          (parts.length < baseParts.length ||
+            !baseParts.every((segment, index) => parts[index] === segment))
+        ) {
+          return "";
+        }
+        const relativeParts = baseParts.length ? parts.slice(baseParts.length) : parts;
+        return normalizePath(relativeParts.join("/"));
+      } catch {
+        return "";
+      }
+    }
+  } catch {
+    return "";
+  }
+
+  return "";
+}
