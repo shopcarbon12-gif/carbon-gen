@@ -133,6 +133,17 @@ function isOpenAiAuthError(err: unknown) {
   return /incorrect api key|invalid api key|api key provided/i.test(message);
 }
 
+function isOpenAiImagesEditModelError(err: unknown) {
+  const status = Number((err as any)?.status || (err as any)?.statusCode || 0);
+  const message = String((err as any)?.message || "");
+  if (status !== 400) return false;
+  return (
+    /value must be ['"]dall-e-2['"]/i.test(message) ||
+    /invalid value.*model/i.test(message) ||
+    /invalid model/i.test(message)
+  );
+}
+
 function buildSwimwearSafetyRetryPrompt(basePrompt: string) {
   return [
     basePrompt,
@@ -766,17 +777,47 @@ export async function POST(req: NextRequest) {
     }
 
     let b64: string | null = null;
+    const modelCandidates = Array.from(new Set([imageModel, "dall-e-2"])).filter(Boolean);
+    async function runImageEditWithFallback(params: {
+      prompt: string;
+      inputFidelity?: "high";
+      timeoutLabel: string;
+    }) {
+      let lastErr: any = null;
+      for (const modelName of modelCandidates) {
+        try {
+          const request: any = {
+            model: modelName,
+            image: referenceFiles,
+            prompt: params.prompt,
+            size: finalSize,
+          };
+          if (params.inputFidelity && modelName !== "dall-e-2") {
+            request.input_fidelity = params.inputFidelity;
+          }
+          const edited = await withTimeout(
+            openai.images.edit(request),
+            imageTimeoutMs,
+            params.timeoutLabel
+          );
+          return edited;
+        } catch (err: any) {
+          lastErr = err;
+          const canFallbackToDalle2 =
+            modelName !== "dall-e-2" &&
+            modelCandidates.includes("dall-e-2") &&
+            isOpenAiImagesEditModelError(err);
+          if (canFallbackToDalle2) continue;
+          throw err;
+        }
+      }
+      throw lastErr || new Error("OpenAI image generation failed");
+    }
     try {
-      const edited = await withTimeout(
-        openai.images.edit({
-          model: imageModel,
-          image: referenceFiles,
-          prompt: lockedPrompt,
-          size: finalSize,
-        }),
-        imageTimeoutMs,
-        "OpenAI image generation"
-      );
+      const edited = await runImageEditWithFallback({
+        prompt: lockedPrompt,
+        timeoutLabel: "OpenAI image generation",
+      });
       b64 = edited.data?.[0]?.b64_json ?? null;
     } catch (err: any) {
       const code = String(err?.code || "");
@@ -820,17 +861,11 @@ export async function POST(req: NextRequest) {
       let retryErr: any = null;
       for (let i = 0; i < retryPrompts.length; i += 1) {
         try {
-          const retry = await withTimeout(
-            openai.images.edit({
-              model: imageModel,
-              image: referenceFiles,
-              prompt: retryPrompts[i],
-              size: finalSize,
-              input_fidelity: "high",
-            }),
-            imageTimeoutMs,
-            i === 0 ? "OpenAI safe retry" : "OpenAI swimwear retry"
-          );
+          const retry = await runImageEditWithFallback({
+            prompt: retryPrompts[i],
+            inputFidelity: "high",
+            timeoutLabel: i === 0 ? "OpenAI safe retry" : "OpenAI swimwear retry",
+          });
           b64 = retry.data?.[0]?.b64_json ?? null;
           if (b64) break;
         } catch (e: any) {
