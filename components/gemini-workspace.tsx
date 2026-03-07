@@ -4560,9 +4560,11 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
             onDragOver={(e) => e.preventDefault()}
             onDrop={async (e) => {
               e.preventDefault();
-              const filtered = await extractImagesFromDrop(e);
+              const directDropFiles = filterImages(e.dataTransfer?.files || []);
+              const extractedDropFiles = await extractImagesFromDrop(e);
+              const filtered = mergeUniqueFiles(directDropFiles, extractedDropFiles);
               if (filtered.length) {
-                setModelFiles(filtered);
+                setModelFiles((prev) => mergeUniqueFiles(prev, filtered));
                 handleModelFilesSelected(filtered);
               }
             }}
@@ -4577,7 +4579,7 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
             style={{ display: "none" }}
             onChange={(e) => {
               const filtered = filterImages(e.target.files || []);
-              setModelFiles(filtered);
+              setModelFiles((prev) => mergeUniqueFiles(prev, filtered));
               handleModelFilesSelected(filtered);
             }}
           />
@@ -4588,7 +4590,7 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
             style={{ display: "none" }}
             onChange={(e) => {
               const filtered = filterImages(e.target.files || []);
-              setModelFiles(filtered);
+              setModelFiles((prev) => mergeUniqueFiles(prev, filtered));
               handleModelFilesSelected(filtered);
             }}
           />
@@ -4925,8 +4927,6 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
           ) : null}
           <div className="muted centered">
             Dropbox: {dropboxConnected ? "Connected" : "Not connected"}
-            {dropboxEmail ? ` (${dropboxEmail})` : ""}
-            {!dropboxConnected ? " - connect from Settings." : ""}
           </div>
           {dropboxSearched && !dropboxSearching && !dropboxResults.length ? (
             <div className="muted centered">No Dropbox images found for this barcode.</div>
@@ -4975,7 +4975,9 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
             onDragOver={(e) => e.preventDefault()}
             onDrop={async (e) => {
               e.preventDefault();
-              const filtered = await extractImagesFromDrop(e);
+              const directDropFiles = filterImages(e.dataTransfer?.files || []);
+              const extractedDropFiles = await extractImagesFromDrop(e);
+              const filtered = mergeUniqueFiles(directDropFiles, extractedDropFiles);
               if (filtered.length) setItemFiles((prev) => mergeUniqueFiles(prev, filtered));
             }}
           >
@@ -5064,7 +5066,7 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
             {itemPreviews.length ? (
               <div className="preview-grid item-selected-grid">
                 {itemPreviews.map((file, idx) => (
-                  <div className="preview-card" key={file.url}>
+                  <div className="preview-card item-device-selected-card" key={file.url}>
                     <button
                       type="button"
                       className="preview-remove-corner"
@@ -5073,8 +5075,7 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
                     >
                       X
                     </button>
-                    <img src={file.url} alt={file.name} />
-                    <div className="preview-name">{file.name}</div>
+                    <img className="item-device-selected-image" src={file.url} alt={file.name} />
                     <div className="preview-source">Source: Device upload</div>
                   </div>
                 ))}
@@ -6420,8 +6421,9 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
         .section-header {
           display: flex;
           align-items: center;
-          justify-content: space-between;
+          justify-content: center;
           gap: 10px;
+          flex-wrap: wrap;
         }
         h1 {
           margin: 8px 0;
@@ -6434,6 +6436,8 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
           padding: 16px;
           display: grid;
           gap: 12px;
+          text-align: center;
+          justify-items: center;
         }
         .card {
           border: 1px solid rgba(255, 255, 255, 0.12);
@@ -6448,6 +6452,12 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
           min-width: 0;
           overflow: hidden;
           word-break: break-word;
+          text-align: center;
+          justify-items: center;
+        }
+        .connect-card > *,
+        .card > * {
+          width: 100%;
         }
         .status-bar {
           position: fixed;
@@ -6674,6 +6684,7 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
           width: 100%;
           min-height: 52px;
           text-transform: none;
+          text-align: center;
         }
         select {
           border: 1px solid rgba(255, 255, 255, 0.28);
@@ -6684,6 +6695,8 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
           min-height: 52px;
           background: #fff;
           text-transform: none;
+          text-align: center;
+          text-align-last: center;
         }
         .dropzone {
           border: 1px dashed #cbd5f5;
@@ -6789,7 +6802,7 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
         .model-selected-header {
           display: flex;
           align-items: center;
-          justify-content: space-between;
+          justify-content: center;
           gap: 10px;
           flex-wrap: wrap;
         }
@@ -7191,6 +7204,19 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
           width: 200px;
         }
         .item-catalog-selected-card img.item-catalog-selected-image {
+          width: 100%;
+          height: 240px;
+          object-fit: contain;
+          object-position: center;
+          display: block;
+          margin: 0 auto;
+          border-radius: 8px;
+          background: #f8fafc;
+        }
+        .item-device-selected-card {
+          width: 200px;
+        }
+        .item-device-selected-card img.item-device-selected-image {
           width: 100%;
           height: 240px;
           object-fit: contain;
