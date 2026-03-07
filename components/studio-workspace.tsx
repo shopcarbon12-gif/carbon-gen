@@ -423,6 +423,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   const barcodeScannerStreamRef = useRef<MediaStream | null>(null);
   const finalResultPickerRef = useRef<HTMLInputElement | null>(null);
   const finalResultFolderRef = useRef<HTMLInputElement | null>(null);
+  const externalSplitPickerRef = useRef<HTMLInputElement | null>(null);
   const pushPickerRef = useRef<HTMLInputElement | null>(null);
   const pushFolderRef = useRef<HTMLInputElement | null>(null);
   const [itemPreviews, setItemPreviews] = useState<Array<{ name: string; url: string }>>(
@@ -446,6 +447,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   const [selectedSplitKeys, setSelectedSplitKeys] = useState<string[]>([]);
   const [splitSendingToPush, setSplitSendingToPush] = useState(false);
   const [pushUploading, setPushUploading] = useState(false);
+  const [externalSplitFiles, setExternalSplitFiles] = useState<File[]>([]);
   const [finalResultFiles, setFinalResultFiles] = useState<File[]>([]);
   const [finalResultPreviews, setFinalResultPreviews] = useState<Array<{ id: string; name: string; url: string }>>([]);
   const [savingFinalResults, setSavingFinalResults] = useState(false);
@@ -920,15 +922,16 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       if (rows.length) {
         setPushImages((prev) => (prev.length ? prev : rows));
         if (mode === "ops-seo") {
+          setShopifyPushCollapsed(false);
           setStatus(`Loaded ${rows.length} transferred image(s) for Shopify Push.`);
         }
       }
 
       const transferredBarcode = sanitizeBarcodeInput(String(parsed?.barcode || "")).trim();
       if (transferredBarcode && isValidBarcode(transferredBarcode)) {
-        setItemBarcode((prev) => (prev.trim() ? prev : transferredBarcode));
-        setItemBarcodeSaved((prev) => (prev.trim() ? prev : transferredBarcode));
-        setPushSearchQuery((prev) => (prev.trim() ? prev : transferredBarcode));
+        setItemBarcode(transferredBarcode);
+        setItemBarcodeSaved(transferredBarcode);
+        setPushSearchQuery(transferredBarcode);
       }
     } catch {
       // Ignore malformed transfer payloads.
@@ -3729,13 +3732,20 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     setStatus(`Approved all generated panels: ${allGenerated.join(", ")}.`);
   }
 
-  function loadBase64Image(b64: string) {
+  function loadImageSource(src: string, errorMessage: string) {
     return new Promise<HTMLImageElement>((resolve, reject) => {
       const img = new Image();
       img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error("Failed to load generated panel image"));
-      img.src = `data:image/png;base64,${b64}`;
+      img.onerror = () => reject(new Error(errorMessage));
+      img.src = src;
     });
+  }
+
+  function loadBase64Image(b64: string) {
+    return loadImageSource(
+      `data:image/png;base64,${b64}`,
+      "Failed to load generated panel image"
+    );
   }
 
   async function splitPanelToThreeByFour(panel: number, b64: string) {
@@ -3994,12 +4004,12 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       });
 
       const inferredBarcode =
-        sanitizeBarcodeInput(itemBarcodeSaved).trim() ||
+        sanitizeBarcodeInput(itemBarcodeSaved || itemBarcode).trim() ||
         extractBarcodeFromText(pushRows.map((row) => row.title).join(" "));
       if (inferredBarcode && isValidBarcode(inferredBarcode)) {
         setItemBarcode(inferredBarcode);
         setItemBarcodeSaved(inferredBarcode);
-        setPushSearchQuery((prev) => (prev.trim() ? prev : inferredBarcode));
+        setPushSearchQuery(inferredBarcode);
       }
 
       if (typeof window !== "undefined") {
@@ -4019,8 +4029,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
 
       setStatus(`Prepared ${pushRows.length} image(s) for Shopify Push.`);
 
-      if (!showOpsSections && typeof window !== "undefined") {
-        window.location.href = "/studio/seo";
+      if (typeof window !== "undefined") {
+        window.location.href = "/studio/seo#publish-section";
       }
     } catch (e: any) {
       setError(e?.message || "Failed to send split images to Shopify Push.");
@@ -4035,8 +4045,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       const targetPanels = (approvedPanels.length ? approvedPanels : selectedPanels).filter(
         (panel) => Boolean(generatedPanels[panel])
       );
-      if (!targetPanels.length) {
-        throw new Error("No existing generated panels available to split (split never regenerates).");
+      if (!targetPanels.length && !externalSplitFiles.length) {
+        throw new Error("No generated or external images are available to split.");
       }
 
       const selectedModel = models.find((m) => m.model_id === selectedModelId);
@@ -4066,6 +4076,57 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           }
         );
       }
+      for (let idx = 0; idx < externalSplitFiles.length; idx += 1) {
+        const file = externalSplitFiles[idx];
+        const dataUrl = await fileToDataUrl(file);
+        const image = await loadImageSource(dataUrl, `Failed to load external file ${file.name}`);
+        const halfW = Math.floor(image.width / 2);
+        const halfH = image.height;
+        const targetRatio = SPLIT_TARGET_WIDTH / SPLIT_TARGET_HEIGHT;
+        const cropExternalSide = (side: "left" | "right") => {
+          const sideOffsetX = side === "left" ? 0 : image.width - halfW;
+          let srcX = sideOffsetX;
+          let srcY = 0;
+          let srcW = halfW;
+          let srcH = halfH;
+          const sourceRatio = halfW / halfH;
+          if (sourceRatio > targetRatio) {
+            srcW = Math.max(1, Math.round(halfH * targetRatio));
+            srcX = sideOffsetX + Math.floor((halfW - srcW) / 2);
+          } else if (sourceRatio < targetRatio) {
+            srcH = Math.max(1, Math.round(halfW / targetRatio));
+            srcY = Math.floor((halfH - srcH) / 2);
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = SPLIT_TARGET_WIDTH;
+          canvas.height = SPLIT_TARGET_HEIGHT;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) throw new Error("Unable to initialize crop canvas");
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, SPLIT_TARGET_WIDTH, SPLIT_TARGET_HEIGHT);
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = "high";
+          ctx.drawImage(image, srcX, srcY, srcW, srcH, 0, 0, SPLIT_TARGET_WIDTH, SPLIT_TARGET_HEIGHT);
+          return canvas.toDataURL("image/png").replace(/^data:image\/png;base64,/, "");
+        };
+        const safeBarcode = normalizeBarcodeForFileName(barcode);
+        allCrops.push(
+          {
+            panel: 1000 + idx,
+            side: "left",
+            poseNumber: idx * 2 + 1,
+            fileName: `${safeBarcode}-external-${idx + 1}-left.png`,
+            imageBase64: cropExternalSide("left"),
+          },
+          {
+            panel: 1000 + idx,
+            side: "right",
+            poseNumber: idx * 2 + 2,
+            fileName: `${safeBarcode}-external-${idx + 1}-right.png`,
+            imageBase64: cropExternalSide("right"),
+          }
+        );
+      }
       setSplitCrops(allCrops);
       // Auto-open section 04 so split results are immediately visible.
       setResultsCollapsed(false);
@@ -4078,6 +4139,12 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
 
   function downloadSplitCrop(crop: SplitCrop) {
     downloadBase64Png(crop.fileName, crop.imageBase64);
+  }
+
+  function onExternalSplitFilesSelected(files: File[]) {
+    if (!files.length) return;
+    setExternalSplitFiles((prev) => mergeUniqueByNameAndSize(prev, files));
+    setError(null);
   }
 
   function downloadAllSplitCrops() {
@@ -5837,6 +5904,33 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             <button className="btn ghost" onClick={splitToThreeByFour}>
               Split to 3:4
             </button>
+            <button
+              className="btn ghost"
+              type="button"
+              onClick={() => openInputPickerWithMask(externalSplitPickerRef.current)}
+            >
+              Add External Files
+            </button>
+          </div>
+          <input
+            ref={externalSplitPickerRef}
+            type="file"
+            multiple
+            style={{ display: "none" }}
+            onChange={(e) => onExternalSplitFilesSelected(filterImages(e.target.files || []))}
+          />
+          <div className="muted centered">
+            External files selected: {externalSplitFiles.length}
+            {externalSplitFiles.length ? (
+              <button
+                type="button"
+                className="ghost-btn"
+                style={{ marginLeft: 8 }}
+                onClick={() => setExternalSplitFiles([])}
+              >
+                Clear
+              </button>
+            ) : null}
           </div>
           <div className="card chat-inline-fallback">
             <div className="chat-side-head">
@@ -5988,17 +6082,17 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               <div className="preview-grid final-extra-grid">
                 {finalResultPreviews.map((file, idx) => (
                   <div className="preview-card split-result-card" key={file.id}>
-                    <button
-                      type="button"
-                      className="preview-remove-corner"
-                      onClick={() => removeFinalResultFileAt(idx)}
-                      aria-label={`Remove ${file.name}`}
-                    >
-                      X
-                    </button>
                     <img className="split-result-image" src={file.url} alt={file.name} />
                     <div className="preview-name">{file.name}</div>
                     <div className="preview-source">Source: Device/Cloud</div>
+                    <button
+                      type="button"
+                      className="preview-remove"
+                      onClick={() => removeFinalResultFileAt(idx)}
+                      aria-label={`Remove ${file.name}`}
+                    >
+                      Remove
+                    </button>
                   </div>
                 ))}
               </div>
@@ -6035,7 +6129,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
 
         {showOpsSections ? (
           <>
-        <section className="card">
+        <section id="publish-section" className="card">
           <div className="eyebrow">05 — Publish</div>
           <div className="section-header">
             <div className="card-title">Shopify Push (Images)</div>
