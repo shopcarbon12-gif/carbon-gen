@@ -5067,16 +5067,16 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
               <div className="preview-grid item-selected-grid">
                 {itemPreviews.map((file, idx) => (
                   <div className="preview-card item-device-selected-card" key={file.url}>
+                    <img className="item-device-selected-image" src={file.url} alt={file.name} />
+                    <div className="preview-source">Source: Device upload</div>
                     <button
                       type="button"
-                      className="preview-remove-corner"
+                      className="preview-remove"
                       onClick={() => removeItemFileAt(idx)}
                       aria-label={`Remove ${file.name}`}
                     >
-                      X
+                      Remove
                     </button>
-                    <img className="item-device-selected-image" src={file.url} alt={file.name} />
-                    <div className="preview-source">Source: Device upload</div>
                   </div>
                 ))}
               </div>
@@ -5085,14 +5085,6 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
               <div className="preview-grid item-selected-grid">
                 {selectedCatalogImages.map((img) => (
                   <div className="preview-card item-catalog-selected-card" key={img.id}>
-                    <button
-                      type="button"
-                      className="preview-remove-corner"
-                      onClick={() => removeCatalogSelection(img.id)}
-                      aria-label={`Remove ${img.title}`}
-                    >
-                      X
-                    </button>
                     <img className="item-catalog-selected-image" src={img.url} alt={img.title} />
                     <div className="preview-name">
                       {img.uploading
@@ -5111,6 +5103,14 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
                             ? "Final Results (storage)"
                           : "Shopify catalog"}
                     </div>
+                    <button
+                      type="button"
+                      className="preview-remove"
+                      onClick={() => removeCatalogSelection(img.id)}
+                      aria-label={`Remove ${img.title}`}
+                    >
+                      Remove
+                    </button>
                   </div>
                 ))}
               </div>
