@@ -788,9 +788,11 @@ export async function POST(req: NextRequest) {
         try {
           const request: any = {
             model: modelName,
-            image: referenceFiles,
+            // OpenAI edits for dall-e-2 expects a single file (not an array).
+            image: modelName === "dall-e-2" ? referenceFiles[0] : referenceFiles,
             prompt: params.prompt,
-            size: finalSize,
+            // dall-e-2 supports square edit sizes only.
+            size: modelName === "dall-e-2" ? "1024x1024" : finalSize,
           };
           if (params.inputFidelity && modelName !== "dall-e-2") {
             request.input_fidelity = params.inputFidelity;
