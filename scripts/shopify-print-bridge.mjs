@@ -25,6 +25,10 @@ if (!PRINTNODE_API_KEY || !PRINTNODE_PRINTER_ID) {
   console.error("[bridge] Missing PRINTNODE_API_KEY or PRINTNODE_PRINTER_ID");
   process.exit(1);
 }
+if (/YOUR_PRINTNODE_API_KEY/i.test(PRINTNODE_API_KEY)) {
+  console.error("[bridge] PRINTNODE_API_KEY is still placeholder text. Set your real key.");
+  process.exit(1);
+}
 
 function authHeaders(extra = {}) {
   return {
@@ -96,13 +100,52 @@ async function captureLabelPdfBytes(page, orderId) {
     { timeout: 15000 }
   ).catch(() => null);
 
-  const printLabelButton = page
-    .getByRole("button", { name: /print label|print shipping label/i })
-    .first();
-  if (await printLabelButton.count()) {
-    await printLabelButton.click({ timeout: 10000 });
-  } else {
-    throw new Error("Print label button not found on order page.");
+  const clickPrintAction = async () => {
+    const directButton = page.getByRole("button", { name: /print label|print shipping label/i }).first();
+    if (await directButton.count()) {
+      await directButton.click({ timeout: 10000 });
+      return true;
+    }
+
+    const directLink = page.getByRole("link", { name: /print label|print shipping label/i }).first();
+    if (await directLink.count()) {
+      await directLink.click({ timeout: 10000 });
+      return true;
+    }
+
+    const moreActions = page.getByRole("button", { name: /more actions|more/i }).first();
+    if (await moreActions.count()) {
+      await moreActions.click({ timeout: 8000 }).catch(() => {});
+      const menuPrint = page.getByRole("menuitem", { name: /print label|print shipping label/i }).first();
+      if (await menuPrint.count()) {
+        await menuPrint.click({ timeout: 8000 });
+        return true;
+      }
+      const menuPrintButton = page.locator("[role='menu'] button, [role='menu'] a").filter({ hasText: /print label/i }).first();
+      if (await menuPrintButton.count()) {
+        await menuPrintButton.click({ timeout: 8000 });
+        return true;
+      }
+    }
+
+    const hrefPrint = page.locator("a[href*='shipping_labels'], a[href*='print']").filter({ hasText: /print/i }).first();
+    if (await hrefPrint.count()) {
+      await hrefPrint.click({ timeout: 10000 });
+      return true;
+    }
+
+    return false;
+  };
+
+  const clicked = await clickPrintAction();
+  if (!clicked) {
+    const debugDir = path.join(process.cwd(), ".bridge", "debug");
+    await fs.mkdir(debugDir, { recursive: true });
+    const png = path.join(debugDir, `print-action-missing-${orderId}-${Date.now()}.png`);
+    const html = path.join(debugDir, `print-action-missing-${orderId}-${Date.now()}.html`);
+    await page.screenshot({ path: png, fullPage: true }).catch(() => {});
+    await fs.writeFile(html, await page.content(), "utf8").catch(() => {});
+    throw new Error(`Print label action not found. Debug saved: ${png}`);
   }
 
   const download = await waitDownload;
@@ -141,6 +184,10 @@ async function processJob(context, job) {
     const url = orderAdminUrl(job.orderId);
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
     await page.waitForTimeout(1500);
+    const currentUrl = page.url();
+    if (/\/auth\/login|\/account\/login/i.test(currentUrl)) {
+      throw new Error("Shopify admin login required in bridge browser profile.");
+    }
     const pdfBytes = await captureLabelPdfBytes(page, job.orderId);
     await sendPdfToPrintNode(pdfBytes, `Shopify ${job.orderName || job.orderId}`);
   } finally {
