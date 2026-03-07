@@ -14,11 +14,21 @@ export function toProductGid(productId: string) {
 }
 
 export function getShopifyConfig(baseUrl: string) {
+  const rawScopes =
+    (process.env.SHOPIFY_SCOPES || "").trim() ||
+    "read_products,write_products,write_files,read_locations,write_inventory,read_orders,read_customers,read_publications,write_publications,read_shipping,write_shipping";
+  const requiredScopes = ["read_shipping", "write_shipping"];
+  const mergedScopes = new Set(
+    rawScopes
+      .split(",")
+      .map((scope) => scope.trim())
+      .filter(Boolean)
+  );
+  for (const scope of requiredScopes) mergedScopes.add(scope);
+
   return {
     clientId: (process.env.SHOPIFY_APP_CLIENT_ID || "").trim() || "missing-client-id",
-    scopes:
-      (process.env.SHOPIFY_SCOPES || "").trim() ||
-      "read_products,write_products,write_files,read_locations,write_inventory,read_orders,read_customers,read_publications,write_publications",
+    scopes: Array.from(mergedScopes).join(","),
     redirectUri:
       (process.env.SHOPIFY_REDIRECT_URI || "").trim() || `${baseUrl}/api/shopify/callback`,
     apiVersion: (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01",

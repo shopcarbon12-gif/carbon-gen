@@ -130,6 +130,10 @@ function zplSafe(value: unknown) {
   return normalizeText(value).replace(/[\^~]/g, " ").replace(/\s+/g, " ").trim();
 }
 
+function zplBarcodeSafe(value: unknown) {
+  return normalizeText(value).replace(/[^A-Za-z0-9\-_.]/g, "");
+}
+
 function build4x6Zpl(lines: string[]) {
   const clipped = lines.filter(Boolean).slice(0, 8);
   const rows = clipped.map((line, idx) => `^FO50,${110 + idx * 70}^A0N,46,46^FD${zplSafe(line)}^FS`).join("\n");
@@ -157,7 +161,7 @@ export function buildOrderLabelZpl(order: any) {
 
 export function buildFulfillmentLabelZpl(fulfillment: any) {
   const destination = fulfillment?.destination || {};
-  return build4x6Zpl([
+  const lines = [
     `FULFILLMENT ${normalizeText(fulfillment?.name || fulfillment?.id || "")}`,
     `ORDER ${normalizeText(fulfillment?.order_id || "")}`,
     `${normalizeText(destination?.first_name)} ${normalizeText(destination?.last_name)}`.trim(),
@@ -166,7 +170,51 @@ export function buildFulfillmentLabelZpl(fulfillment: any) {
     `${normalizeText(destination?.city)}, ${normalizeText(destination?.province)} ${normalizeText(destination?.zip)}`.trim(),
     normalizeText(destination?.country),
     normalizeText(destination?.phone),
-  ]);
+  ];
+  const trackingNumber = normalizeText(fulfillment?.tracking_number || fulfillment?.tracking_numbers?.[0]);
+  const trackingBarcode = zplBarcodeSafe(trackingNumber);
+  if (!trackingBarcode) return build4x6Zpl(lines);
+  return `^XA
+^PW812
+^LL1218
+^CI28
+^FO50,30^A0N,54,54^FDCARBON - SHOPIFY LABEL^FS
+^FO50,110^A0N,42,42^FDTRACKING: ${zplSafe(trackingNumber)}^FS
+^FO50,165^BY3,3,100^BCN,100,Y,N,N^FD${trackingBarcode}^FS
+${lines
+  .filter(Boolean)
+  .slice(0, 6)
+  .map((line, idx) => `^FO50,${315 + idx * 65}^A0N,42,42^FD${zplSafe(line)}^FS`)
+  .join("\n")}
+^XZ`;
+}
+
+export function buildOrderLabelWithTrackingZpl(order: any, trackingNumber: string) {
+  const shipping = order?.shipping_address || {};
+  const trackingBarcode = zplBarcodeSafe(trackingNumber);
+  const lines = [
+    `ORDER ${normalizeText(order?.name || order?.order_number || order?.id || "")}`,
+    `${normalizeText(shipping?.first_name)} ${normalizeText(shipping?.last_name)}`.trim(),
+    normalizeText(shipping?.address1),
+    normalizeText(shipping?.address2),
+    `${normalizeText(shipping?.city)}, ${normalizeText(shipping?.province)} ${normalizeText(shipping?.zip)}`.trim(),
+    normalizeText(shipping?.country),
+    normalizeText(shipping?.phone),
+  ];
+  if (!trackingBarcode) return buildOrderLabelZpl(order);
+  return `^XA
+^PW812
+^LL1218
+^CI28
+^FO50,30^A0N,54,54^FDCARBON - SHOPIFY LABEL^FS
+^FO50,110^A0N,42,42^FDTRACKING: ${zplSafe(trackingNumber)}^FS
+^FO50,165^BY3,3,100^BCN,100,Y,N,N^FD${trackingBarcode}^FS
+${lines
+  .filter(Boolean)
+  .slice(0, 6)
+  .map((line, idx) => `^FO50,${315 + idx * 65}^A0N,42,42^FD${zplSafe(line)}^FS`)
+  .join("\n")}
+^XZ`;
 }
 
 export async function getPrintNodePrinterStatus(apiKey: string, printerId: number) {
@@ -236,6 +284,38 @@ export async function sendPrintNodeZplJob(params: {
   }
 }
 
+export async function sendPrintNodePdfUriJob(params: {
+  apiKey: string;
+  printerId: number;
+  pdfUrl: string;
+  title: string;
+  copies?: number;
+}) {
+  const auth = Buffer.from(`${params.apiKey}:`).toString("base64");
+  const copies = Math.min(5, Math.max(1, toPositiveInt(params.copies, 1)));
+  for (let i = 0; i < copies; i += 1) {
+    const res = await fetch("https://api.printnode.com/printjobs", {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${auth}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        printerId: params.printerId,
+        title: params.title,
+        contentType: "pdf_uri",
+        content: params.pdfUrl,
+        source: "Carbon Shopify Printer",
+      }),
+      cache: "no-store",
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(normalizeText(body?.message || body?.error || `PrintNode print failed (${res.status})`));
+    }
+  }
+}
+
 async function ensureWebhookLogTable() {
   if (webhookTableEnsured) return;
   await ensureSqlReady();
@@ -281,6 +361,7 @@ export async function maybePrintWebhookLabel(params: {
   webhookId: string;
   zpl: string;
   title: string;
+  labelPdfUrl?: string | null;
 }) {
   const config = await loadShopifyPrinterConfig(params.shop);
   if (!config.enabled) return { ok: true, skipped: true as const, reason: "disabled" };
@@ -292,6 +373,22 @@ export async function maybePrintWebhookLabel(params: {
   }
   const shouldProcess = await shouldProcessWebhook(params.webhookId, params.shop, params.topic);
   if (!shouldProcess) return { ok: true, skipped: true as const, reason: "duplicate_webhook" };
+
+  const pdfUrl = normalizeText(params.labelPdfUrl);
+  if (pdfUrl) {
+    try {
+      await sendPrintNodePdfUriJob({
+        apiKey: config.apiKey,
+        printerId: config.printerId,
+        pdfUrl,
+        title: `${params.title} (carrier label)`,
+        copies: config.copies,
+      });
+      return { ok: true, skipped: false as const, reason: "printed_carrier_pdf_uri" };
+    } catch {
+      // Fallback to ZPL printing when Shopify label URL is unavailable to PrintNode.
+    }
+  }
 
   await sendPrintNodeZplJob({
     apiKey: config.apiKey,

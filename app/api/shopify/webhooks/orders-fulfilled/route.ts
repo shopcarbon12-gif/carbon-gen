@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { normalizeShopDomain } from "@/lib/shopify";
-import { buildOrderLabelZpl, maybePrintWebhookLabel } from "@/lib/shopifyPrinter";
+import { buildOrderLabelWithTrackingZpl, buildOrderLabelZpl, maybePrintWebhookLabel } from "@/lib/shopifyPrinter";
 import { hasShopifyWebhookSecretConfigured, verifyShopifyWebhookHmac } from "@/lib/shopifyWebhookAuth";
+import { getCarrierLabelPdfUrlForOrder } from "@/lib/shopifyShippingLabel";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,12 +47,22 @@ export async function POST(req: NextRequest) {
     "__default__";
 
   try {
+    const carrier = await getCarrierLabelPdfUrlForOrder({
+      shop,
+      orderId: normalizeText(order?.id),
+    });
+
+    const zpl = carrier.trackingNumber
+      ? buildOrderLabelWithTrackingZpl(order, carrier.trackingNumber)
+      : buildOrderLabelZpl(order);
+
     const result = await maybePrintWebhookLabel({
       shop,
       topic: "orders/fulfilled",
       webhookId,
-      zpl: buildOrderLabelZpl(order),
+      zpl,
       title: `Shopify fulfilled order ${normalizeText(order?.name || order?.id)}`,
+      labelPdfUrl: carrier.labelPdfUrl || "",
     });
     return NextResponse.json({
       ok: true,
