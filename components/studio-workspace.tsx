@@ -4067,6 +4067,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         );
       }
       setSplitCrops(allCrops);
+      // Auto-open section 04 so split results are immediately visible.
+      setResultsCollapsed(false);
       setStatus(`Split complete (local crop only). ${allCrops.length} crop image(s) ready to download.`);
     } catch (e: any) {
       setError(e?.message || "Split failed");
