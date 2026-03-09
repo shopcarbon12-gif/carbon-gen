@@ -132,6 +132,7 @@ function canonicalNameFromFileName(name: string) {
     /^img_/,
     /^dalle_/,
     /^openai_/,
+    /^gemini_/,
     /^victor_?\d+\./,
     /^\d+\.(png|jpe?g|webp|gif|avif|heic|heif|tiff?|bmp)$/,
     /^(beige|black|white|gray|grey|blue|red|green|brown|tan|cream|navy)_/,
@@ -177,15 +178,21 @@ function parseTimestampFromPath(path: string) {
 }
 
 async function loadModelRowsForSession(userId: string | null) {
+  const rows = new Map<string, any>();
   if (userId) {
-    const data = await listModelsForUser(userId);
-    if ((data || []).length) {
-      return [...data].reverse();
+    const userRows = await listModelsForUser(userId);
+    for (const row of userRows || []) {
+      const id = String((row as any)?.model_id || "");
+      if (id) rows.set(id, row);
     }
   }
-
-  // Fallback for legacy/cross-domain sessions that do not map to the current cookie user_id.
-  return listAllModelsAsc();
+  // Always merge global rows to ensure cross-workspace/session uploads are visible.
+  const allRows = await listAllModelsAsc();
+  for (const row of allRows || []) {
+    const id = String((row as any)?.model_id || "");
+    if (id && !rows.has(id)) rows.set(id, row);
+  }
+  return Array.from(rows.values()).reverse();
 }
 
 export async function GET(req: NextRequest) {

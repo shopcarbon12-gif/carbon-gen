@@ -304,6 +304,7 @@ function canonicalPreviousUploadName(fileName: string, path: string) {
     /^img_/,
     /^dalle_/,
     /^openai_/,
+    /^gemini_/,
     /^victor_?\d+\./,
     /^\d+\.(png|jpe?g|webp|gif|avif|heic|heif|tiff?|bmp)$/,
     /^(beige|black|white|gray|grey|blue|red|green|brown|tan|cream|navy)_/,
@@ -328,6 +329,14 @@ function normalizeModelName(value: string) {
     .trim()
     .replace(/\s+/g, " ")
     .toLowerCase();
+}
+
+function isLikelyMobileDevice() {
+  if (typeof navigator === "undefined") return false;
+  const uaDataMobile = Boolean((navigator as any).userAgentData?.mobile);
+  if (uaDataMobile) return true;
+  const ua = String(navigator.userAgent || "").toLowerCase();
+  return /android|iphone|ipad|ipod|mobile|windows phone/.test(ua);
 }
 
 function formatElapsedStopwatch(ms: number) {
@@ -2175,11 +2184,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     setError(null);
     setBarcodeScannerError(null);
     setBarcodeScannerRemoteError(null);
-    if (
-      typeof window !== "undefined" &&
-      window.matchMedia("(min-width: 901px)").matches &&
-      window.matchMedia("(pointer: fine)").matches
-    ) {
+    if (!isLikelyMobileDevice()) {
       setBarcodeScannerChooserOpen(true);
       return;
     }
@@ -2226,11 +2231,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   function openItemCameraCapture() {
     setItemCameraRemoteError(null);
     setError(null);
-    if (
-      typeof window !== "undefined" &&
-      window.matchMedia("(min-width: 901px)").matches &&
-      window.matchMedia("(pointer: fine)").matches
-    ) {
+    if (!isLikelyMobileDevice()) {
       setItemCameraChooserOpen(true);
       return;
     }

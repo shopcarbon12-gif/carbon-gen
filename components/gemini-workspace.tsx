@@ -331,6 +331,14 @@ function normalizeModelName(value: string) {
     .toLowerCase();
 }
 
+function isLikelyMobileDevice() {
+  if (typeof navigator === "undefined") return false;
+  const uaDataMobile = Boolean((navigator as any).userAgentData?.mobile);
+  if (uaDataMobile) return true;
+  const ua = String(navigator.userAgent || "").toLowerCase();
+  return /android|iphone|ipad|ipod|mobile|windows phone/.test(ua);
+}
+
 function formatElapsedStopwatch(ms: number) {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
   const minutes = Math.floor(totalSeconds / 60);
@@ -2174,11 +2182,7 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
     setError(null);
     setBarcodeScannerError(null);
     setBarcodeScannerRemoteError(null);
-    if (
-      typeof window !== "undefined" &&
-      window.matchMedia("(min-width: 901px)").matches &&
-      window.matchMedia("(pointer: fine)").matches
-    ) {
+    if (!isLikelyMobileDevice()) {
       setBarcodeScannerChooserOpen(true);
       return;
     }
@@ -2225,11 +2229,7 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
   function openItemCameraCapture() {
     setItemCameraRemoteError(null);
     setError(null);
-    if (
-      typeof window !== "undefined" &&
-      window.matchMedia("(min-width: 901px)").matches &&
-      window.matchMedia("(pointer: fine)").matches
-    ) {
+    if (!isLikelyMobileDevice()) {
       setItemCameraChooserOpen(true);
       return;
     }
