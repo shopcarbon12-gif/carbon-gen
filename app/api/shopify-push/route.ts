@@ -154,6 +154,15 @@ function parseDataImage(value: string) {
 async function getShopifySourceUrl(sourceUrl: string) {
   let raw = norm(sourceUrl);
   if (!/^https?:\/\//i.test(raw)) return "";
+  try {
+    const parsed = new URL(raw);
+    const host = String(parsed.hostname || "").toLowerCase();
+    // Shopify CDN URLs are already public and stable for Shopify ingestion.
+    // Do not re-fetch/re-stage these, as server-side fetches can return 4xx.
+    if (host === "cdn.shopify.com" || host.endsWith(".cdn.shopify.com") || host === "cdn.shopifycdn.net") {
+      return raw;
+    }
+  } catch {}
 
   // Re-stage every remote source into our own public storage so Shopify
   // always reads from a stable host with consistent headers/content-type.
