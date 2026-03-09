@@ -15,6 +15,7 @@ const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
 type ProductMediaNode = {
   id: string;
   mediaContentType: string;
+  status?: string | null;
 };
 
 type ProductMediaImageNode = {
@@ -333,6 +334,7 @@ async function listProductImageMediaIds(shop: string, productGid: string) {
           nodes {
             id
             mediaContentType
+            status
           }
         }
       }
@@ -355,6 +357,64 @@ async function listProductImageMediaIds(shop: string, productGid: string) {
     .filter((n: ProductMediaNode) => String(n.mediaContentType || "").toUpperCase() === "IMAGE")
     .map((n: ProductMediaNode) => String(n.id || "").trim())
     .filter(Boolean);
+}
+
+async function listProductMediaStatusMap(shop: string, productGid: string) {
+  const query = `
+    query ProductMediaStatus($productId: ID!) {
+      product(id: $productId) {
+        media(first: 250) {
+          nodes {
+            id
+            mediaContentType
+            status
+          }
+        }
+      }
+    }
+  `;
+  const result = await runWithAnyToken<ProductMediaQuery>(shop, async (token) =>
+    runShopifyGraphql<ProductMediaQuery>({
+      shop,
+      token,
+      query,
+      variables: { productId: productGid },
+      apiVersion: API_VERSION,
+    })
+  );
+  if (!result.ok) {
+    throw new Error(`Failed to read product media status: ${JSON.stringify(result.errors)}`);
+  }
+  const map = new Map<string, string>();
+  const nodes = result.data?.product?.media?.nodes || [];
+  for (const node of nodes) {
+    const id = norm(node?.id || "");
+    if (!id) continue;
+    map.set(id, String(node?.status || "").toUpperCase());
+  }
+  return map;
+}
+
+async function waitForMediaReady(
+  shop: string,
+  productGid: string,
+  mediaIds: string[],
+  options?: { timeoutMs?: number; intervalMs?: number }
+) {
+  const target = Array.from(new Set(mediaIds.map((id) => norm(id)).filter(Boolean)));
+  if (!target.length) return;
+  const timeoutMs = Math.max(10_000, Number(options?.timeoutMs || 90_000));
+  const intervalMs = Math.max(750, Number(options?.intervalMs || 2_000));
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const statusMap = await listProductMediaStatusMap(shop, productGid);
+    const allReady = target.every((id) => {
+      const status = statusMap.get(id) || "";
+      return status === "READY";
+    });
+    if (allReady) return;
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
 }
 
 async function listProductImageMedia(shop: string, productGid: string) {
@@ -587,6 +647,8 @@ async function assignVariantMedia(
   assignments: Array<{ variantGid: string; mediaId: string }>
 ) {
   if (!assignments.length) return;
+  const assignedMediaIds = Array.from(new Set(assignments.map((row) => norm(row.mediaId)).filter(Boolean)));
+  await waitForMediaReady(shop, productGid, assignedMediaIds);
   const mutation = `
     mutation ProductVariantAppendMedia($productId: ID!, $variantMedia: [ProductVariantAppendMediaInput!]!) {
       productVariantAppendMedia(productId: $productId, variantMedia: $variantMedia) {
@@ -623,6 +685,7 @@ async function assignVariantMedia(
     if (!retryable || attempt >= maxAttempts) {
       throw new Error(`Failed to assign variant media: ${message}`);
     }
+    await waitForMediaReady(shop, productGid, assignedMediaIds, { timeoutMs: 20_000, intervalMs: 1_500 });
     const waitMs = 900 * attempt;
     await new Promise((resolve) => setTimeout(resolve, waitMs));
   }
