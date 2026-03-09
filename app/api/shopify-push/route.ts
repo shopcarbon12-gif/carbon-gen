@@ -54,6 +54,14 @@ type ProductCreateMediaResult = {
   };
 };
 
+type ProductUpdateMediaResult = {
+  productUpdateMedia: {
+    media?: Array<{ id: string; alt?: string | null }>;
+    mediaUserErrors?: Array<{ field?: string[]; message: string }>;
+    userErrors?: Array<{ field?: string[]; message: string }>;
+  };
+};
+
 type ProductVariantsQuery = {
   product: {
     options: Array<{ name: string; position: number }>;
@@ -93,6 +101,14 @@ type VariantOrderUpdateResult = {
   productVariantsBulkUpdate: {
     product: { id: string } | null;
     userErrors: Array<{ field?: string[]; message: string }>;
+  };
+};
+
+type ProductReorderMediaResult = {
+  productReorderMedia: {
+    job?: { id?: string | null } | null;
+    mediaUserErrors?: Array<{ field?: string[]; message: string }>;
+    userErrors?: Array<{ field?: string[]; message: string }>;
   };
 };
 
@@ -203,6 +219,95 @@ async function deleteMedia(shop: string, productGid: string, mediaIds: string[])
   }
   return {
     deletedMediaIds: result.data?.productDeleteMedia?.deletedMediaIds || [],
+  };
+}
+
+async function updateMediaAlt(shop: string, productGid: string, mediaId: string, altText: string) {
+  const mutation = `
+    mutation ProductUpdateMedia($productId: ID!, $media: [UpdateMediaInput!]!) {
+      productUpdateMedia(productId: $productId, media: $media) {
+        media {
+          ... on MediaImage {
+            id
+            alt
+          }
+        }
+        mediaUserErrors {
+          field
+          message
+        }
+      }
+    }
+  `;
+  const media = [{ id: mediaId, alt: normalizeAlt(altText) }];
+  const result = await runWithAnyToken<ProductUpdateMediaResult>(shop, async (token) =>
+    runShopifyGraphql<ProductUpdateMediaResult>({
+      shop,
+      token,
+      query: mutation,
+      variables: { productId: productGid, media },
+      apiVersion: API_VERSION,
+    })
+  );
+  if (!result.ok) {
+    throw new Error(`Failed to update Shopify media alt text: ${JSON.stringify(result.errors)}`);
+  }
+  const errors = [
+    ...(result.data?.productUpdateMedia?.mediaUserErrors || []),
+    ...(result.data?.productUpdateMedia?.userErrors || []),
+  ];
+  if (errors.length) {
+    throw new Error(
+      `Failed to update Shopify media alt text: ${errors
+        .map((e: { message: string }) => e.message)
+        .join("; ")}`
+    );
+  }
+  return { success: true };
+}
+
+async function reorderProductMedia(shop: string, productGid: string, orderedMediaIds: string[]) {
+  if (!orderedMediaIds.length) return { success: true };
+  const moves = orderedMediaIds.map((id, idx) => ({ id, newPosition: idx + 1 }));
+  const mutation = `
+    mutation ProductReorderMedia($id: ID!, $moves: [MoveInput!]!) {
+      productReorderMedia(id: $id, moves: $moves) {
+        job {
+          id
+        }
+        mediaUserErrors {
+          field
+          message
+        }
+      }
+    }
+  `;
+  const result = await runWithAnyToken<ProductReorderMediaResult>(shop, async (token) =>
+    runShopifyGraphql<ProductReorderMediaResult>({
+      shop,
+      token,
+      query: mutation,
+      variables: { id: productGid, moves },
+      apiVersion: API_VERSION,
+    })
+  );
+  if (!result.ok) {
+    throw new Error(`Failed to reorder Shopify media: ${JSON.stringify(result.errors)}`);
+  }
+  const errors = [
+    ...(result.data?.productReorderMedia?.mediaUserErrors || []),
+    ...(result.data?.productReorderMedia?.userErrors || []),
+  ];
+  if (errors.length) {
+    throw new Error(
+      `Failed to reorder Shopify media: ${errors
+        .map((e: { message: string }) => e.message)
+        .join("; ")}`
+    );
+  }
+  return {
+    success: true,
+    jobId: norm(result.data?.productReorderMedia?.job?.id || ""),
   };
 }
 
@@ -549,6 +654,8 @@ export async function POST(req: NextRequest) {
   const shop = normalizeShopDomain(norm(body?.shop));
   const productGid = toProductGid(norm(body?.productId));
   const mediaIds = Array.isArray(body?.mediaIds) ? body.mediaIds.map((v: unknown) => norm(v)).filter(Boolean) : [];
+  const mediaId = norm(body?.mediaId);
+  const altText = normalizeAlt(body?.altText);
   const removeExisting = Boolean(body?.removeExisting);
   const colorAssignments = Array.isArray(body?.colorAssignments)
     ? body.colorAssignments
@@ -598,6 +705,22 @@ export async function POST(req: NextRequest) {
       }
       const deleted = await deleteMedia(shop, productGid, mediaIds);
       return NextResponse.json({ success: true, ...deleted });
+    }
+
+    if (action === "update-media-alt") {
+      if (!mediaId) {
+        return NextResponse.json({ error: "mediaId is required for update-media-alt action." }, { status: 400 });
+      }
+      const updated = await updateMediaAlt(shop, productGid, mediaId, altText);
+      return NextResponse.json(updated);
+    }
+
+    if (action === "reorder-media") {
+      if (!mediaIds.length) {
+        return NextResponse.json({ error: "mediaIds are required for reorder-media action." }, { status: 400 });
+      }
+      const reordered = await reorderProductMedia(shop, productGid, mediaIds);
+      return NextResponse.json(reordered);
     }
 
     if (action !== "replace-product-images") {

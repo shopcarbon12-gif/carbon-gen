@@ -442,6 +442,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     }>
   >([]);
   const selectedCatalogImagesRef = useRef<SelectedCatalogImage[]>([]);
+  const pushReorderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pushReorderInFlightRef = useRef(false);
+  const pushReorderQueuedMediaIdsRef = useRef<string[] | null>(null);
   const modelUploadingRef = useRef(false);
   const modelSavingRef = useRef(false);
   const modelUploadPendingRef = useRef(0);
@@ -1952,6 +1955,30 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     })();
   }
 
+  function isShopifyImageLoadedForProduct(productIdValue: string) {
+    const normalized = String(productIdValue || "").trim();
+    if (!normalized) return false;
+    return pushProductId.trim() === normalized && pushImages.some((img) => img.source === "shopify");
+  }
+
+  function hideCurrentShopifyImages(productIdValue: string) {
+    const normalized = String(productIdValue || "").trim();
+    if (!normalized) return;
+    setPushImages((prev) =>
+      prev.filter(
+        (img) =>
+          !(
+            img.source === "shopify" &&
+            String(img.id || "").startsWith(`push:${normalized}:`)
+          )
+      )
+    );
+    if (pushProductId.trim() === normalized) {
+      setPushVariants([]);
+    }
+    setStatus("Current Shopify images hidden from push queue.");
+  }
+
   function togglePushCatalogImage(
     product: ShopifyCatalogProduct,
     image: { id: string; url: string; altText: string }
@@ -2016,7 +2043,65 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     }
   }
 
+  async function flushQueuedShopifyReorder() {
+    if (pushReorderInFlightRef.current) return;
+    const queued = pushReorderQueuedMediaIdsRef.current;
+    if (!queued || !queued.length) return;
+    pushReorderQueuedMediaIdsRef.current = null;
+    const shopValue = shop.trim();
+    const productIdValue = pushProductId.trim();
+    if (!shopValue || !productIdValue) return;
+    pushReorderInFlightRef.current = true;
+    try {
+      const resp = await fetch("/api/shopify-push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "reorder-media",
+          shop: shopValue,
+          productId: productIdValue,
+          mediaIds: queued,
+        }),
+      });
+      const json = await parseJsonResponse(resp, "/api/shopify-push");
+      if (!resp.ok) {
+        throw new Error(json?.error || "Failed to reorder Shopify media.");
+      }
+      setStatus("Shopify media order updated.");
+    } catch (e: any) {
+      setStatus(`Order updated in preview only. Shopify reorder warning: ${e?.message || "failed"}`);
+    } finally {
+      pushReorderInFlightRef.current = false;
+      if (pushReorderQueuedMediaIdsRef.current?.length) {
+        void flushQueuedShopifyReorder();
+      }
+    }
+  }
+
+  function queueShopifyReorderIfEligible(nextRows: PushQueueImage[]) {
+    if (pushingImages) return;
+    if (!pushProductId.trim()) return;
+    if (!nextRows.length) return;
+    const allExistingShopify = nextRows.every(
+      (row) => row.source === "shopify" && Boolean(String(row.mediaId || "").trim())
+    );
+    if (!allExistingShopify) return;
+    const orderedMediaIds = nextRows
+      .map((row) => String(row.mediaId || "").trim())
+      .filter(Boolean);
+    if (!orderedMediaIds.length) return;
+    pushReorderQueuedMediaIdsRef.current = orderedMediaIds;
+    if (pushReorderTimerRef.current) {
+      clearTimeout(pushReorderTimerRef.current);
+    }
+    pushReorderTimerRef.current = setTimeout(() => {
+      pushReorderTimerRef.current = null;
+      void flushQueuedShopifyReorder();
+    }, 500);
+  }
+
   function movePushImage(fromIndex: number, toIndex: number) {
+    let nextRowsSnapshot: PushQueueImage[] = [];
     setPushImages((prev) => {
       if (
         fromIndex < 0 ||
@@ -2030,8 +2115,12 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       const next = [...prev];
       const [moved] = next.splice(fromIndex, 1);
       next.splice(toIndex, 0, moved);
+      nextRowsSnapshot = next;
       return next;
     });
+    if (nextRowsSnapshot.length) {
+      queueShopifyReorderIfEligible(nextRowsSnapshot);
+    }
   }
 
   async function generateAltForPushImage(imageId: string) {
@@ -2071,9 +2160,31 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     }
   }
 
-  function clearPushImageAltText(imageId: string) {
+  async function clearPushImageAltText(imageId: string) {
+    const target = pushImages.find((img) => img.id === imageId);
     setPushImages((prev) => prev.map((img) => (img.id === imageId ? { ...img, altText: "" } : img)));
     setError(null);
+    if (!target?.mediaId || !pushProductId.trim() || !shop.trim()) return;
+    try {
+      const resp = await fetch("/api/shopify-push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update-media-alt",
+          shop: shop.trim(),
+          productId: pushProductId.trim(),
+          mediaId: String(target.mediaId || "").trim(),
+          altText: "",
+        }),
+      });
+      const json = await parseJsonResponse(resp, "/api/shopify-push");
+      if (!resp.ok) {
+        throw new Error(json?.error || "Failed to clear alt text in Shopify.");
+      }
+      setStatus("Alt text cleared in Shopify.");
+    } catch (e: any) {
+      setStatus(`Alt cleared in preview only. Shopify update warning: ${e?.message || "failed"}`);
+    }
   }
 
   async function generateAltForMissingPushImages() {
@@ -4814,15 +4925,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       deleting: false,
     }));
 
-    setPushImages((prev) => {
-      const merged = [...prev, ...pushRows];
-      const deduped = new Map<string, PushQueueImage>();
-      merged.forEach((img) => {
-        const key = `${img.id}::${img.url}`;
-        if (!deduped.has(key)) deduped.set(key, img);
-      });
-      return [...deduped.values()];
-    });
+    setPushImages(pushRows);
+    setPushVariants([]);
 
     const inferredBarcode =
       sanitizeBarcodeInput(itemBarcodeSaved).trim() ||
@@ -7049,9 +7153,19 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                       <button
                         className="btn ghost"
                         type="button"
-                        onClick={() => upsertPushQueueFromProduct(product)}
+                        onClick={() => {
+                          const productIdValue = String(product.id || "").trim();
+                          if (!productIdValue) return;
+                          if (isShopifyImageLoadedForProduct(productIdValue)) {
+                            hideCurrentShopifyImages(productIdValue);
+                            return;
+                          }
+                          upsertPushQueueFromProduct(product);
+                        }}
                       >
-                        Load Current Shopify Images
+                        {isShopifyImageLoadedForProduct(String(product.id || "").trim())
+                          ? "Hide Current Shopify Images"
+                          : "Load Current Shopify Images"}
                       </button>
                     </div>
                     <div className="preview-grid">
@@ -7224,7 +7338,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               </div>
             </div>
           ) : null}
-          <div className="row">
+          <div className="row push-actions-row">
             <button
               className="btn ghost"
               type="button"
@@ -8483,6 +8597,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         .row > .ghost-btn,
         .row > button {
           flex: 0 0 auto;
+        }
+        .push-actions-row {
+          justify-content: center;
         }
         .generation-actions-layout {
           display: grid;
