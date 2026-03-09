@@ -52,7 +52,7 @@ type SelectedCatalogImage = {
   id: string;
   url: string;
   title: string;
-  source: "shopify" | "dropbox" | "generated_flat" | "final_results_storage";
+  source: "shopify" | "dropbox" | "generated_flat" | "final_results_storage" | "device_upload";
   uploadedUrl: string | null;
   uploading: boolean;
   uploadError: string | null;
@@ -1530,9 +1530,33 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
 
     const merged = Array.from(new Set([...itemReferenceUrls, ...uploadedUrls, ...shopifyUrls]));
     const effectiveItemType = resolvedItemType;
+    const uploadedDeviceSelections: SelectedCatalogImage[] = uploadedUrls.map((uploadedUrl, idx) => {
+      const fallbackName = `Device upload ${idx + 1}`;
+      const title = String(files[idx]?.name || fallbackName).trim() || fallbackName;
+      return {
+        id: `device:${uploadedUrl}`,
+        url: uploadedUrl,
+        title,
+        source: "device_upload",
+        uploadedUrl,
+        uploading: false,
+        uploadError: null,
+      };
+    });
 
     setItemReferenceUrls(merged);
     setItemUploadCount(merged.length);
+    if (uploadedDeviceSelections.length) {
+      setSelectedCatalogImages((prev) => {
+        const existingUploaded = new Set(
+          prev.map((img) => String(img.uploadedUrl || "").trim()).filter(Boolean)
+        );
+        const additions = uploadedDeviceSelections.filter(
+          (img) => !existingUploaded.has(String(img.uploadedUrl || "").trim())
+        );
+        return additions.length ? [...prev, ...additions] : prev;
+      });
+    }
     setItemFiles([]);
 
     if (!silentSuccess) {
@@ -5966,6 +5990,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                         ? "Dropbox"
                         : img.source === "generated_flat"
                           ? "Generated flat (3:4)"
+                          : img.source === "device_upload"
+                            ? "Device upload"
                           : img.source === "final_results_storage"
                             ? "Final Results (storage)"
                           : "Shopify catalog"}
