@@ -102,6 +102,7 @@ type PushQueueImage = {
   mediaId: string | null;
   url: string;
   sourceStorageUrl?: string;
+  sourceStoragePath?: string;
   title: string;
   source: "shopify" | "generated_split" | "device_upload";
   altText: string;
@@ -1927,6 +1928,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       sourceImageId: String(row?.id || ""),
       mediaId: String(row?.id || ""),
       url: String(row?.url || "").trim(),
+      sourceStorageUrl: String(row?.url || "").trim(),
       title: "Current Shopify image",
       source: "shopify" as const,
       altText: String(row?.altText || "").trim(),
@@ -2086,8 +2088,10 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       if (!resp.ok) {
         throw new Error(json?.error || "Failed to reorder Shopify media.");
       }
+      await loadCurrentShopifyImages(productIdValue, false);
       setStatus("Shopify media order updated.");
     } catch (e: any) {
+      setError(e?.message || "Failed to reorder Shopify media.");
       setStatus(`Order updated in preview only. Shopify reorder warning: ${e?.message || "failed"}`);
     } finally {
       pushReorderInFlightRef.current = false;
@@ -2118,25 +2122,45 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   }
 
   function movePushImage(fromIndex: number, toIndex: number) {
-    let nextRowsSnapshot: PushQueueImage[] = [];
-    setPushImages((prev) => {
-      if (
-        fromIndex < 0 ||
-        fromIndex >= prev.length ||
-        toIndex < 0 ||
-        toIndex >= prev.length ||
-        fromIndex === toIndex
-      ) {
-        return prev;
+    if (
+      fromIndex < 0 ||
+      fromIndex >= pushImages.length ||
+      toIndex < 0 ||
+      toIndex >= pushImages.length ||
+      fromIndex === toIndex
+    ) {
+      return;
+    }
+    const nextRowsSnapshot = [...pushImages];
+    const [moved] = nextRowsSnapshot.splice(fromIndex, 1);
+    nextRowsSnapshot.splice(toIndex, 0, moved);
+    setPushImages(nextRowsSnapshot);
+    queueShopifyReorderIfEligible(nextRowsSnapshot);
+  }
+
+  function resolveAltGenerationSource(target: PushQueueImage) {
+    const rawAltSource = String(target.sourceStorageUrl || target.url || "").trim();
+    if (!rawAltSource) return { imageUrl: "", storagePath: "" };
+    try {
+      const parsed =
+        typeof window !== "undefined"
+          ? new URL(
+              rawAltSource.startsWith("/") ? `${window.location.origin}${rawAltSource}` : rawAltSource
+            )
+          : new URL(rawAltSource);
+      if (parsed.pathname === "/api/storage/preview") {
+        const storagePath = String(parsed.searchParams.get("path") || "").trim();
+        if (storagePath) {
+          return { imageUrl: "", storagePath };
+        }
+        const originalUrl = String(parsed.searchParams.get("url") || "").trim();
+        if (originalUrl) {
+          return { imageUrl: originalUrl, storagePath: "" };
+        }
       }
-      const next = [...prev];
-      const [moved] = next.splice(fromIndex, 1);
-      next.splice(toIndex, 0, moved);
-      nextRowsSnapshot = next;
-      return next;
-    });
-    if (nextRowsSnapshot.length) {
-      queueShopifyReorderIfEligible(nextRowsSnapshot);
+      return { imageUrl: parsed.toString(), storagePath: "" };
+    } catch {
+      return { imageUrl: rawAltSource, storagePath: String(target.sourceStoragePath || "").trim() };
     }
   }
 
@@ -2148,16 +2172,16 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     );
     setError(null);
     try {
-      const rawAltSource = String(target.sourceStorageUrl || target.url || "").trim();
-      const altSource =
-        rawAltSource.startsWith("/") && typeof window !== "undefined"
-          ? `${window.location.origin}${rawAltSource}`
-          : rawAltSource;
+      const resolved = resolveAltGenerationSource(target);
+      const altSource = String(resolved.imageUrl || "").trim();
+      const storagePath =
+        String(resolved.storagePath || "").trim() || String(target.sourceStoragePath || "").trim();
       const resp = await fetch("/api/openai/image-alt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           imageUrl: altSource,
+          storagePath,
           itemType: resolvedItemType || "apparel item",
         }),
       });
@@ -2207,8 +2231,10 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       if (!resp.ok) {
         throw new Error(json?.error || "Failed to clear alt text in Shopify.");
       }
+      await loadCurrentShopifyImages(pushProductId.trim(), false);
       setStatus("Alt text cleared in Shopify.");
     } catch (e: any) {
+      setError(e?.message || "Failed to clear alt text in Shopify.");
       setStatus(`Alt cleared in preview only. Shopify update warning: ${e?.message || "failed"}`);
     }
   }
@@ -4635,6 +4661,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         sourceImageId: `selected:${img.id}:${idx}`,
         mediaId: null,
         url: String(img.uploadedUrl || img.url || "").trim(),
+        sourceStorageUrl: String(img.uploadedUrl || img.url || "").trim(),
         title: img.title || `Selected item ${idx + 1}`,
         source: "device_upload",
         altText: "",
@@ -4649,6 +4676,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           sourceImageId: `split:${crop.poseNumber}`,
           mediaId: null,
           url: `data:image/png;base64,${crop.imageBase64}`,
+          sourceStorageUrl: `data:image/png;base64,${crop.imageBase64}`,
           title: crop.fileName,
           source: "generated_split" as const,
           altText: "",
@@ -4961,18 +4989,25 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       return;
     }
 
-    const pushRows: PushQueueImage[] = nextRows.map((row, idx) => ({
-      id: `final-push:${row.id}`,
-      sourceImageId: `final-results:${idx}:${row.id}`,
-      mediaId: null,
-      url: String(row.url || "").trim(),
-      sourceStorageUrl: String(row.uploadedUrl || row.url || "").trim(),
-      title: row.title || "Final result item",
-      source: "device_upload",
-      altText: "",
-      generatingAlt: false,
-      deleting: false,
-    }));
+    const pushRows: PushQueueImage[] = selected
+      .map((file, idx) => {
+        const row = nextRows[idx];
+        if (!row) return null;
+        return {
+          id: `final-push:${row.id}`,
+          sourceImageId: `final-results:${idx}:${row.id}`,
+          mediaId: null,
+          url: String(row.url || "").trim(),
+          sourceStorageUrl: String(row.uploadedUrl || row.url || "").trim(),
+          sourceStoragePath: String(file.path || "").trim(),
+          title: row.title || "Final result item",
+          source: "device_upload" as const,
+          altText: "",
+          generatingAlt: false,
+          deleting: false,
+        };
+      })
+      .filter((row): row is PushQueueImage => Boolean(row));
 
     setPushImages((prev) => {
       const deduped = new Map<string, PushQueueImage>();
