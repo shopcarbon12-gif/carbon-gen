@@ -646,7 +646,7 @@ async function assignVariantMedia(
   productGid: string,
   assignments: Array<{ variantGid: string; mediaId: string }>
 ) {
-  if (!assignments.length) return;
+  if (!assignments.length) return null;
   const assignedMediaIds = Array.from(new Set(assignments.map((row) => norm(row.mediaId)).filter(Boolean)));
   await waitForMediaReady(shop, productGid, assignedMediaIds);
   const mutation = `
@@ -678,7 +678,7 @@ async function assignVariantMedia(
       throw new Error(`Failed to assign variant media: ${JSON.stringify(result.errors)}`);
     }
     const errors = result.data?.productVariantAppendMedia?.userErrors || [];
-    if (!errors.length) return;
+    if (!errors.length) return null;
 
     const message = errors.map((e: { message: string }) => e.message).join("; ");
     const retryable = /non-ready media cannot be attached to variants/i.test(message);
@@ -689,6 +689,7 @@ async function assignVariantMedia(
     const waitMs = 900 * attempt;
     await new Promise((resolve) => setTimeout(resolve, waitMs));
   }
+  return null;
 }
 
 async function reorderVariants(shop: string, productGid: string, orderedVariantGids: string[]) {
@@ -850,8 +851,13 @@ export async function POST(req: NextRequest) {
         }))
         .filter((v) => v.variantGid && v.mediaId);
     });
+    let variantAssignWarning: string | null = null;
     if (assignmentPayload.length) {
-      await assignVariantMedia(shop, productGid, assignmentPayload);
+      try {
+        variantAssignWarning = await assignVariantMedia(shop, productGid, assignmentPayload);
+      } catch (err: any) {
+        variantAssignWarning = String(err?.message || "Variant media assignment failed.");
+      }
     }
 
     const orderedVariantGids = colorOrder.flatMap((color: string) => {
@@ -872,6 +878,7 @@ export async function POST(req: NextRequest) {
       deletedMediaIds,
       createdMediaIds: created.createdIds,
       variantAssignedCount: assignmentPayload.length,
+      variantAssignWarning,
       variantReorderWarning: reorderWarning,
       count: created.createdIds.length,
     });
