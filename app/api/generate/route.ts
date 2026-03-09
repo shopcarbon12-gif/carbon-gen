@@ -202,6 +202,25 @@ function buildNonSwimwearCoverageLock(itemType: string) {
   return lines.join("\n");
 }
 
+function buildNonSwimwearSafetyRetryPrompt(basePrompt: string, itemType: string) {
+  const category = inferItemTypeCategory(itemType);
+  return [
+    basePrompt,
+    "",
+    "NON-SWIMWEAR RETRY SAFETY MODE:",
+    "- Professional ecommerce catalog photo only.",
+    "- Neutral standing fashion-product composition; no sensual framing.",
+    "- Keep model fully clothed and product-focused.",
+    "- Preserve all visible logos/labels/patches exactly as item references.",
+    ...(category === "bottom"
+      ? [
+          "- Locked item category is BOTTOM: keep a standard opaque top from model refs.",
+          "- Bare torso/shirtless presentation is forbidden.",
+        ]
+      : []),
+  ].join("\n");
+}
+
 async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | null = null;
   try {
@@ -549,6 +568,7 @@ async function runPanelComplianceCheck(args: {
               "- Close-up subject lock active for this panel.",
               `- Right-side close-up must match section 0.5 item type exactly: "${args.panelQa.itemType || "apparel item"}".`,
               `- ${closeUpCategoryQaRule}`,
+              "- Right-side close-up must preserve visible brand label/logo/patch details from item refs (same position, shape, and color family).",
             ]
           : []),
         ...(hasBackFacingActivePose
@@ -581,6 +601,7 @@ async function runPanelComplianceCheck(args: {
           ? "For swimwear item type, uncovered feet are allowed; fail only if output is suggestive or mismatched to refs."
           : "If any full-body pose appears barefoot or socks-only, set pass=false.",
         "If close-up subject lock is active and the right close-up clearly focuses on a different item type/category than the locked section 0.5 item type, set pass=false.",
+        "If close-up subject lock is active and visible label/logo/patch details in item refs are missing/replaced/relocated in the right close-up, set pass=false.",
         "If back-view strict lock is active and back-facing design does not clearly match item refs, set pass=false.",
         "If either side appears significantly off-center such that a center 3:4 crop would cut key model/item content, set pass=false.",
         "If facial geometry or skin tone/undertone clearly drifts from MODEL refs, set pass=false.",
@@ -895,7 +916,10 @@ export async function POST(req: NextRequest) {
               ].join("\n")
             ),
           ]
-        : [buildGeneralSafetyRetryPrompt(lockedPrompt)];
+        : [
+            buildGeneralSafetyRetryPrompt(lockedPrompt),
+            buildNonSwimwearSafetyRetryPrompt(lockedPrompt, normalizedPanelQa.itemType),
+          ];
 
       let retryErr: any = null;
       for (let i = 0; i < retryPrompts.length; i += 1) {
