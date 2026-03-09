@@ -367,6 +367,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   const [itemBarcodeSaved, setItemBarcodeSaved] = useState("");
   const [barcodeScannerOpen, setBarcodeScannerOpen] = useState(false);
   const [itemCameraChooserOpen, setItemCameraChooserOpen] = useState(false);
+  const [itemCameraCaptureOpen, setItemCameraCaptureOpen] = useState(false);
+  const [itemCameraCaptureBusy, setItemCameraCaptureBusy] = useState(false);
+  const [itemCameraCaptureError, setItemCameraCaptureError] = useState<string | null>(null);
   const [itemCameraRemoteOpen, setItemCameraRemoteOpen] = useState(false);
   const [itemCameraRemoteBusy, setItemCameraRemoteBusy] = useState(false);
   const [itemCameraRemoteSessionId, setItemCameraRemoteSessionId] = useState("");
@@ -469,6 +472,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   const barcodeScannerFallbackControlsRef = useRef<{ stop: () => void } | null>(null);
   const barcodeScannerRemotePollRef = useRef<number | null>(null);
   const itemCameraRemotePollRef = useRef<number | null>(null);
+  const itemCameraCaptureVideoRef = useRef<HTMLVideoElement | null>(null);
+  const itemCameraCaptureStreamRef = useRef<MediaStream | null>(null);
   const finalResultPickerRef = useRef<HTMLInputElement | null>(null);
   const finalResultFolderRef = useRef<HTMLInputElement | null>(null);
   const externalSplitPickerRef = useRef<HTMLInputElement | null>(null);
@@ -2197,6 +2202,22 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     }
   }
 
+  const stopItemCameraCaptureSession = useCallback(() => {
+    const stream = itemCameraCaptureStreamRef.current;
+    if (stream) {
+      stream.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch {
+          // Best-effort track cleanup.
+        }
+      });
+      itemCameraCaptureStreamRef.current = null;
+    }
+    const video = itemCameraCaptureVideoRef.current;
+    if (video) video.srcObject = null;
+  }, []);
+
   function openItemCameraCapture() {
     setItemCameraRemoteError(null);
     setError(null);
@@ -2215,8 +2236,48 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     setItemCameraChooserOpen(false);
     setItemCameraRemoteOpen(false);
     setItemCameraRemoteError(null);
-    openInputPickerWithMask(itemCameraRef.current);
+    setItemCameraCaptureError(null);
+    setItemCameraCaptureOpen(true);
   }
+
+  const captureItemCameraPhoto = useCallback(async () => {
+    const video = itemCameraCaptureVideoRef.current;
+    if (!video) {
+      setItemCameraCaptureError("Camera preview is unavailable.");
+      return;
+    }
+    const width = video.videoWidth || 1280;
+    const height = video.videoHeight || 720;
+    if (!width || !height) {
+      setItemCameraCaptureError("Camera is still warming up. Try again.");
+      return;
+    }
+    setItemCameraCaptureBusy(true);
+    setItemCameraCaptureError(null);
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Canvas capture is unavailable.");
+      ctx.drawImage(video, 0, 0, width, height);
+      const blob = await new Promise<Blob | null>((resolve) => {
+        canvas.toBlob(resolve, "image/jpeg", 0.92);
+      });
+      if (!blob) throw new Error("Failed to capture photo.");
+      const fileName = `camera-${Date.now()}.jpg`;
+      const file = new File([blob], fileName, { type: "image/jpeg" });
+      setItemFiles((prev) => mergeUniqueFiles(prev, [file]));
+      setStatus(`Camera upload received: ${fileName}`);
+      setError(null);
+      setItemCameraCaptureOpen(false);
+      stopItemCameraCaptureSession();
+    } catch (e: any) {
+      setItemCameraCaptureError(e?.message || "Failed to capture photo.");
+    } finally {
+      setItemCameraCaptureBusy(false);
+    }
+  }, [stopItemCameraCaptureSession]);
 
   async function openItemCameraRemoteQr() {
     setItemCameraRemoteBusy(true);
@@ -2298,6 +2359,53 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       stopItemCameraRemotePolling();
     };
   }, [itemCameraRemoteOpen, itemCameraRemoteSessionId]);
+
+  useEffect(() => {
+    if (!itemCameraCaptureOpen) {
+      stopItemCameraCaptureSession();
+      return;
+    }
+    if (typeof window === "undefined" || typeof navigator === "undefined") {
+      setItemCameraCaptureError("Camera is not available in this environment.");
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setItemCameraCaptureError("Camera access is not available in this browser.");
+      return;
+    }
+    let cancelled = false;
+    const start = async () => {
+      setItemCameraCaptureBusy(true);
+      setItemCameraCaptureError(null);
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" } },
+          audio: false,
+        });
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        itemCameraCaptureStreamRef.current = stream;
+        const video = itemCameraCaptureVideoRef.current;
+        if (!video) throw new Error("Camera preview is unavailable.");
+        video.srcObject = stream;
+        await video.play().catch(() => undefined);
+      } catch (e: any) {
+        setItemCameraCaptureError(
+          e?.message ? `Unable to start camera: ${e.message}` : "Unable to start camera."
+        );
+      } finally {
+        if (!cancelled) setItemCameraCaptureBusy(false);
+      }
+    };
+    void start();
+    return () => {
+      cancelled = true;
+      stopItemCameraCaptureSession();
+      setItemCameraCaptureBusy(false);
+    };
+  }, [itemCameraCaptureOpen, stopItemCameraCaptureSession]);
 
   async function openDesktopRemoteScannerQr() {
     setBarcodeScannerRemoteBusy(true);
@@ -5505,6 +5613,50 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               </div>
             </div>
           ) : null}
+          {itemCameraCaptureOpen ? (
+            <div className="barcode-scanner-overlay" role="dialog" aria-modal="true">
+              <div className="barcode-scanner-card">
+                <div className="barcode-scanner-head">
+                  <div className="card-title">Use This Device Camera</div>
+                  <button
+                    className="ghost-btn"
+                    type="button"
+                    onClick={() => {
+                      setItemCameraCaptureOpen(false);
+                      setItemCameraCaptureError(null);
+                      stopItemCameraCaptureSession();
+                    }}
+                  >
+                    Close
+                  </button>
+                </div>
+                <div className="barcode-scanner-frame">
+                  <video
+                    ref={itemCameraCaptureVideoRef}
+                    className="barcode-scanner-video"
+                    playsInline
+                    muted
+                    autoPlay
+                  />
+                </div>
+                <div className="item-camera-capture-actions">
+                  <button
+                    className="btn primary"
+                    type="button"
+                    onClick={() => {
+                      void captureItemCameraPhoto();
+                    }}
+                    disabled={itemCameraCaptureBusy}
+                  >
+                    {itemCameraCaptureBusy ? "Capturing..." : "Capture Photo"}
+                  </button>
+                </div>
+                {itemCameraCaptureError ? (
+                  <div className="barcode-scanner-error">{itemCameraCaptureError}</div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
           {barcodeScannerChooserOpen ? (
             <div className="barcode-scanner-overlay" role="dialog" aria-modal="true">
               <div className="barcode-scanner-card barcode-scanner-choice-card">
@@ -7540,6 +7692,10 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           border: 1px solid rgba(255, 255, 255, 0.35);
           background: #fff;
           display: block;
+        }
+        .item-camera-capture-actions {
+          display: grid;
+          gap: 8px;
         }
         .model-selected-area {
           border: 1px dashed #cbd5e1;

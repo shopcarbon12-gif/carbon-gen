@@ -27,6 +27,7 @@ export default function BarcodeScanSessionPage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const rafRef = useRef<number | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const fallbackControlsRef = useRef<{ stop: () => void } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState("Point your camera at the barcode.");
@@ -35,6 +36,15 @@ export default function BarcodeScanSessionPage() {
   const [done, setDone] = useState(false);
 
   const cleanup = useCallback(() => {
+    const fallbackControls = fallbackControlsRef.current;
+    if (fallbackControls) {
+      try {
+        fallbackControls.stop();
+      } catch {
+        // Ignore fallback scanner cleanup errors.
+      }
+      fallbackControlsRef.current = null;
+    }
     if (typeof window !== "undefined" && rafRef.current !== null) {
       window.cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
@@ -100,10 +110,6 @@ export default function BarcodeScanSessionPage() {
     }
     const BarcodeDetectorCtor = (window as Window & { BarcodeDetector?: BarcodeDetectorCtorLike })
       .BarcodeDetector;
-    if (!BarcodeDetectorCtor) {
-      setError("Live barcode scan is not supported. Use manual entry below.");
-      return;
-    }
 
     let cancelled = false;
     let detectorBusy = false;
@@ -141,7 +147,7 @@ export default function BarcodeScanSessionPage() {
       });
     };
 
-    const start = async () => {
+    const startWithNativeDetector = async () => {
       setBusy(true);
       setError(null);
       try {
@@ -168,7 +174,59 @@ export default function BarcodeScanSessionPage() {
       }
     };
 
-    void start();
+    const startWithZxingFallback = async () => {
+      setBusy(true);
+      setError(null);
+      try {
+        const video = videoRef.current;
+        if (!video) throw new Error("Camera preview is unavailable.");
+        const zxing = (await import("@zxing/browser")) as any;
+        const ReaderCtor = zxing?.BrowserMultiFormatReader;
+        const NotFoundErrorCtor = zxing?.NotFoundException;
+        if (!ReaderCtor) {
+          throw new Error("Scanner fallback is unavailable.");
+        }
+        const reader = new ReaderCtor();
+        const controls = await reader.decodeFromVideoDevice(
+          undefined,
+          video,
+          (result: any, err: any) => {
+            if (cancelled) return;
+            if (result) {
+              const raw = String(result?.getText?.() || result?.text || "").trim();
+              const normalized = sanitizeBarcodeInput(raw);
+              if (!isValidBarcode(normalized)) return;
+              setManualBarcode(normalized);
+              setStatus(`Detected: ${normalized}. Sending to desktop...`);
+              void submitBarcode(normalized);
+              return;
+            }
+            if (err && NotFoundErrorCtor && err instanceof NotFoundErrorCtor) {
+              return;
+            }
+          }
+        );
+        if (cancelled) {
+          try {
+            controls?.stop?.();
+          } catch {
+            // Ignore stop errors.
+          }
+          return;
+        }
+        fallbackControlsRef.current = controls;
+      } catch (e: any) {
+        setError(e?.message ? `Unable to start camera scanner: ${e.message}` : "Unable to start camera scanner.");
+      } finally {
+        if (!cancelled) setBusy(false);
+      }
+    };
+
+    if (BarcodeDetectorCtor) {
+      void startWithNativeDetector();
+    } else {
+      void startWithZxingFallback();
+    }
     return () => {
       cancelled = true;
       cleanup();
@@ -181,6 +239,7 @@ export default function BarcodeScanSessionPage() {
       style={{
         position: "fixed",
         inset: 0,
+        zIndex: 2147483000,
         overflowY: "auto",
         background: "#020617",
         color: "#f8fafc",
