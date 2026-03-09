@@ -114,6 +114,25 @@ type ProductReorderMediaResult = {
   };
 };
 
+function getPublicRequestOrigin(req: NextRequest) {
+  const configured =
+    norm(process.env.APP_PUBLIC_URL) ||
+    norm(process.env.NEXT_PUBLIC_APP_URL) ||
+    norm(process.env.PUBLIC_APP_URL) ||
+    norm(process.env.SITE_URL);
+  if (configured) {
+    return configured.replace(/\/+$/, "");
+  }
+  const forwardedHostRaw = String(req.headers.get("x-forwarded-host") || "").trim();
+  const forwardedProtoRaw = String(req.headers.get("x-forwarded-proto") || "").trim();
+  const forwardedHost = forwardedHostRaw.split(",")[0]?.trim();
+  const forwardedProto = forwardedProtoRaw.split(",")[0]?.trim() || "https";
+  if (forwardedHost) {
+    return `${forwardedProto}://${forwardedHost}`;
+  }
+  return req.nextUrl.origin.replace(/\/+$/, "");
+}
+
 function norm(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -1014,7 +1033,7 @@ export async function POST(req: NextRequest) {
       existingImageMediaIds = await listProductImageMediaIds(shop, productGid);
     }
 
-    const created = await createProductImages(shop, productGid, images, req.nextUrl.origin);
+    const created = await createProductImages(shop, productGid, images, getPublicRequestOrigin(req));
     if (removeExisting && existingImageMediaIds.length) {
       const deleted = await deleteMedia(shop, productGid, existingImageMediaIds);
       deletedMediaIds = deleted.deletedMediaIds || [];
