@@ -239,7 +239,8 @@ async function updateMediaAlt(shop: string, productGid: string, mediaId: string,
       }
     }
   `;
-  const media = [{ id: mediaId, alt: normalizeAlt(altText) }];
+  const normalizedAlt = normalizeAlt(altText);
+  const media = [{ id: mediaId, alt: normalizedAlt ? normalizedAlt : null }];
   const result = await runWithAnyToken<ProductUpdateMediaResult>(shop, async (token) =>
     runShopifyGraphql<ProductUpdateMediaResult>({
       shop,

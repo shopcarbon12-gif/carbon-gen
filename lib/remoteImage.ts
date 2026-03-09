@@ -29,6 +29,10 @@ function getAllowedHosts() {
     .split(/[,\s]+/g)
     .map((v) => v.trim().toLowerCase())
     .filter(Boolean);
+  // Always allow standard Shopify CDN hosts for catalog media and alt-generation flows.
+  for (const host of ["cdn.shopify.com", "cdn.shopifycdn.net"]) {
+    if (!entries.includes(host)) entries.push(host);
+  }
   const allowAny = entries.includes("*");
   const r2Host = getR2AllowedHost();
   if (r2Host && !entries.includes(r2Host.toLowerCase())) {

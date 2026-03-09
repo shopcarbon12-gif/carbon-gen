@@ -1955,10 +1955,15 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     })();
   }
 
-  function isShopifyImageLoadedForProduct(productIdValue: string) {
+  function hasShopifyImagesLoadedForProduct(productIdValue: string) {
     const normalized = String(productIdValue || "").trim();
     if (!normalized) return false;
-    return pushProductId.trim() === normalized && pushImages.some((img) => img.source === "shopify");
+    return pushImages.some(
+      (img) =>
+        img.source === "shopify" &&
+        String(img.id || "").startsWith(`push:${normalized}:`) &&
+        Boolean(String(img.mediaId || "").trim())
+    );
   }
 
   function hideCurrentShopifyImages(productIdValue: string) {
@@ -2083,14 +2088,11 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     if (pushingImages) return;
     if (!pushProductId.trim()) return;
     if (!nextRows.length) return;
-    const allExistingShopify = nextRows.every(
-      (row) => row.source === "shopify" && Boolean(String(row.mediaId || "").trim())
-    );
-    if (!allExistingShopify) return;
     const orderedMediaIds = nextRows
+      .filter((row) => row.source === "shopify" && Boolean(String(row.mediaId || "").trim()))
       .map((row) => String(row.mediaId || "").trim())
       .filter(Boolean);
-    if (!orderedMediaIds.length) return;
+    if (orderedMediaIds.length < 2) return;
     pushReorderQueuedMediaIdsRef.current = orderedMediaIds;
     if (pushReorderTimerRef.current) {
       clearTimeout(pushReorderTimerRef.current);
@@ -2165,7 +2167,11 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     const target = pushImages.find((img) => img.id === imageId);
     setPushImages((prev) => prev.map((img) => (img.id === imageId ? { ...img, altText: "" } : img)));
     setError(null);
-    if (!target?.mediaId || !pushProductId.trim() || !shop.trim()) return;
+    const fallbackMediaId = String(target?.id || "").startsWith(`push:${pushProductId.trim()}:`)
+      ? String(target?.id || "").slice(`push:${pushProductId.trim()}:`.length)
+      : "";
+    const mediaId = String(target?.mediaId || "").trim() || fallbackMediaId;
+    if (!mediaId || !pushProductId.trim() || !shop.trim()) return;
     try {
       const resp = await fetch("/api/shopify-push", {
         method: "POST",
@@ -2174,7 +2180,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           action: "update-media-alt",
           shop: shop.trim(),
           productId: pushProductId.trim(),
-          mediaId: String(target.mediaId || "").trim(),
+          mediaId,
           altText: "",
         }),
       });
@@ -4855,7 +4861,12 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             previewUrl,
           };
         })
-        .filter((row: FinalResultUpload) => row.path.startsWith("final-results/"))
+        .filter(
+          (row: FinalResultUpload) =>
+            row.path.startsWith("final-results/split/") ||
+            row.path.startsWith("final-results/manual/")
+        )
+        .filter((row: FinalResultUpload) => /\.(png|jpe?g|webp|gif|avif)$/i.test(row.fileName || row.path))
         .sort((a: FinalResultUpload, b: FinalResultUpload) => {
           const ta = a.uploadedAt ? Date.parse(a.uploadedAt) : Number.NaN;
           const tb = b.uploadedAt ? Date.parse(b.uploadedAt) : Number.NaN;
@@ -4887,30 +4898,53 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     );
   }
 
-  function addSelectedFinalResultsToShopifyPush() {
+  async function addSelectedFinalResultsToShopifyPush() {
     const selected = finalResultUploads.filter((file) => selectedFinalResultUploadIds.includes(file.id));
     if (!selected.length) {
       setError("Select previous items first.");
       return;
     }
 
-    const nextRows: SelectedCatalogImage[] = selected.reduce((acc: SelectedCatalogImage[], file) => {
-        const imageUrl = String(file.url || file.previewUrl || "").trim();
-        if (!imageUrl) return acc;
+    const selectedWithData = await Promise.all(
+      selected.map(async (file) => {
+        const rawUrl = String(file.url || "").trim();
+        const previewUrl = String(file.previewUrl || "").trim();
+        const sourceUrl = previewUrl || rawUrl;
+        if (!sourceUrl) return null;
+        try {
+          const resp = await fetch(sourceUrl, { cache: "no-store" });
+          if (!resp.ok) return null;
+          const blob = await resp.blob();
+          const imageFile = new File([blob], file.fileName || "final-result.png", {
+            type: blob.type || "image/png",
+          });
+          const dataUrl = await fileToDataUrl(imageFile);
+          return { file, dataUrl, rawUrl };
+        } catch {
+          return null;
+        }
+      })
+    );
+
+    const nextRows: SelectedCatalogImage[] = selectedWithData.reduce(
+      (acc: SelectedCatalogImage[], row) => {
+        if (!row) return acc;
         acc.push({
-          id: `final-upload:${file.id}`,
-          url: imageUrl,
-          title: file.fileName || "Final result item",
+          id: `final-upload:${row.file.id}`,
+          url: row.dataUrl,
+          title: row.file.fileName || "Final result item",
           source: "final_results_storage",
-          uploadedUrl: imageUrl,
+          uploadedUrl: row.rawUrl || row.dataUrl,
           uploading: false,
           uploadError: null,
         });
         return acc;
-      }, []);
+      },
+      []
+    );
 
     if (!nextRows.length) {
-      setError("Selected files do not have usable image URLs.");
+      setError("Selected files do not have usable image data.");
       return;
     }
 
@@ -4918,7 +4952,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       id: `final-push:${row.id}`,
       sourceImageId: `final-results:${idx}:${row.id}`,
       mediaId: null,
-      url: String(row.uploadedUrl || row.url || "").trim(),
+      url: String(row.url || "").trim(),
       title: row.title || "Final result item",
       source: "device_upload",
       altText: "",
@@ -7157,16 +7191,18 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                         onClick={() => {
                           const productIdValue = String(product.id || "").trim();
                           if (!productIdValue) return;
-                          if (isShopifyImageLoadedForProduct(productIdValue)) {
-                            hideCurrentShopifyImages(productIdValue);
-                            return;
-                          }
                           upsertPushQueueFromProduct(product);
                         }}
                       >
-                        {isShopifyImageLoadedForProduct(String(product.id || "").trim())
-                          ? "Hide Current Shopify Images"
-                          : "Load Current Shopify Images"}
+                        Load Current Shopify Images
+                      </button>
+                      <button
+                        className="btn ghost"
+                        type="button"
+                        onClick={() => hideCurrentShopifyImages(String(product.id || "").trim())}
+                        disabled={!hasShopifyImagesLoadedForProduct(String(product.id || "").trim())}
+                      >
+                        Hide
                       </button>
                     </div>
                     <div className="preview-grid">
