@@ -5075,25 +5075,19 @@ function buildMasterPanelPrompt(
       return;
     }
 
-    const pushRows: PushQueueImage[] = selected
-      .map((file, idx) => {
-        const row = nextRows[idx];
-        if (!row) return null;
-        return {
-          id: `final-push:${row.id}`,
-          sourceImageId: `final-results:${idx}:${row.id}`,
-          mediaId: null,
-          url: String(row.url || "").trim(),
-          sourceStorageUrl: String(row.uploadedUrl || row.url || "").trim(),
-          sourceStoragePath: String(file.path || "").trim(),
-          title: row.title || "Final result item",
-          source: "device_upload" as const,
-          altText: "",
-          generatingAlt: false,
-          deleting: false,
-        };
-      })
-      .filter((row): row is PushQueueImage => Boolean(row));
+    const pushRows: PushQueueImage[] = nextRows.map((row, idx) => ({
+      id: `final-push:${row.id}`,
+      sourceImageId: `final-results:${idx}:${row.id}`,
+      mediaId: null,
+      url: String(row.url || "").trim(),
+      sourceStorageUrl: String(row.uploadedUrl || row.url || "").trim(),
+      sourceStoragePath: String(selected[idx]?.path || "").trim(),
+      title: row.title || "Final result item",
+      source: "device_upload",
+      altText: "",
+      generatingAlt: false,
+      deleting: false,
+    }));
 
     setPushImages((prev) => {
       const deduped = new Map<string, PushQueueImage>();
