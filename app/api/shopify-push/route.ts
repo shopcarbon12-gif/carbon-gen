@@ -288,20 +288,22 @@ function buildSignedStoragePreviewUrl(path: string, appOrigin: string) {
   const normalizedPath = norm(path).replace(/^\/+/, "");
   const normalizedOrigin = norm(appOrigin).replace(/\/+$/, "");
   if (!normalizedPath || !normalizedOrigin) return "";
+  const params = new URLSearchParams({
+    path: normalizedPath,
+    public: "1",
+  });
   const secret = String(
     process.env.SHOPIFY_PUSH_SOURCE_SIGNING_SECRET ||
       process.env.AUTH_SECRET ||
       process.env.SESSION_SECRET ||
       ""
   ).trim();
-  if (!secret) return "";
-  const exp = Math.floor(Date.now() / 1000) + 60 * 60;
-  const sig = createHmac("sha256", secret).update(`${normalizedPath}|${exp}`).digest("hex");
-  const params = new URLSearchParams({
-    path: normalizedPath,
-    exp: String(exp),
-    sig,
-  });
+  if (secret) {
+    const exp = Math.floor(Date.now() / 1000) + 60 * 60;
+    const sig = createHmac("sha256", secret).update(`${normalizedPath}|${exp}`).digest("hex");
+    params.set("exp", String(exp));
+    params.set("sig", sig);
+  }
   return `${normalizedOrigin}/api/storage/preview?${params.toString()}`;
 }
 

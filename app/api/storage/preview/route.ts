@@ -29,6 +29,13 @@ function isValidSignedPublicAccess(path: string, expRaw: string, sigRaw: string)
   }
 }
 
+function isValidPublicPushStagingAccess(path: string, publicFlag: string) {
+  const normalized = String(path || "").trim().replace(/^\/+/, "");
+  if (!normalized) return false;
+  if (String(publicFlag || "").trim() !== "1") return false;
+  return normalized.startsWith("items/push-staging/");
+}
+
 export async function GET(req: NextRequest) {
   try {
     const isAuthedCookie =
@@ -46,7 +53,11 @@ export async function GET(req: NextRequest) {
       String(req.nextUrl.searchParams.get("exp") || "").trim(),
       String(req.nextUrl.searchParams.get("sig") || "").trim()
     );
-    if (!isAuthedCookie && !isSignedPublic) {
+    const isPublicPushStaging = isValidPublicPushStagingAccess(
+      resolvedPath,
+      String(req.nextUrl.searchParams.get("public") || "").trim()
+    );
+    if (!isAuthedCookie && !isSignedPublic && !isPublicPushStaging) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -55,7 +66,8 @@ export async function GET(req: NextRequest) {
       status: 200,
       headers: {
         "Content-Type": contentType || "application/octet-stream",
-        "Cache-Control": isSignedPublic ? "public, max-age=300" : "private, max-age=300",
+        "Cache-Control":
+          isSignedPublic || isPublicPushStaging ? "public, max-age=300" : "private, max-age=300",
       },
     });
   } catch (e: any) {
