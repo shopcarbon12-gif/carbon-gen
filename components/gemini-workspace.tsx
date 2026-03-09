@@ -2270,15 +2270,38 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
     setItemCameraCaptureBusy(true);
     setItemCameraCaptureError(null);
     try {
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) throw new Error("Canvas capture is unavailable.");
-      ctx.drawImage(video, 0, 0, width, height);
-      const blob = await new Promise<Blob | null>((resolve) => {
-        canvas.toBlob(resolve, "image/jpeg", 0.92);
-      });
+      const stream = itemCameraCaptureStreamRef.current;
+      const track = stream?.getVideoTracks?.()[0] || null;
+      let blob: Blob | null = null;
+      const ImageCaptureCtor = (window as Window & { ImageCapture?: any }).ImageCapture;
+      if (track && ImageCaptureCtor) {
+        try {
+          const imageCapture = new ImageCaptureCtor(track);
+          blob = await imageCapture.takePhoto();
+        } catch {
+          // Fall back to canvas capture below.
+        }
+      }
+      if (!blob) {
+        const settings = track?.getSettings?.() || {};
+        const captureWidth = Math.max(
+          1,
+          Math.round(Number((settings as any).width) || width || 1280)
+        );
+        const captureHeight = Math.max(
+          1,
+          Math.round(Number((settings as any).height) || height || 720)
+        );
+        const canvas = document.createElement("canvas");
+        canvas.width = captureWidth;
+        canvas.height = captureHeight;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("Canvas capture is unavailable.");
+        ctx.drawImage(video, 0, 0, captureWidth, captureHeight);
+        blob = await new Promise<Blob | null>((resolve) => {
+          canvas.toBlob(resolve, "image/jpeg", 0.94);
+        });
+      }
       if (!blob) throw new Error("Failed to capture photo.");
       const fileName = `camera-${Date.now()}.jpg`;
       const file = new File([blob], fileName, { type: "image/jpeg" });
@@ -2394,7 +2417,11 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
       setItemCameraCaptureError(null);
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" } },
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 2560 },
+            height: { ideal: 1440 },
+          },
           audio: false,
         });
         if (cancelled) {
@@ -8050,13 +8077,15 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
         }
         .item-catalog-selected-card img.item-catalog-selected-image {
           width: 100%;
-          height: 240px;
+          height: auto;
+          max-height: 320px;
+          aspect-ratio: auto;
           object-fit: contain;
           object-position: center;
           display: block;
           margin: 0 auto;
           border-radius: 8px;
-          background: #f8fafc;
+          background: transparent;
         }
         .item-device-selected-card {
           width: 200px;

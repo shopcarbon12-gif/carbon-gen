@@ -154,10 +154,14 @@ export default function BarcodeScanSessionPage() {
           throw new Error("Barcode detector is unavailable.");
         }
         detector = new DetectorCtor({
-          formats: ["code_128", "ean_13", "ean_8", "upc_a", "upc_e"],
+          formats: ["code_128", "code_39", "ean_13", "ean_8", "upc_a", "upc_e", "itf", "codabar"],
         });
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" } },
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          },
           audio: false,
         });
         if (cancelled) {
@@ -192,25 +196,32 @@ export default function BarcodeScanSessionPage() {
           throw new Error("Scanner fallback is unavailable.");
         }
         const reader = new ReaderCtor();
-        const controls = await reader.decodeFromVideoDevice(
-          undefined,
-          video,
-          (result: any, err: any) => {
-            if (cancelled) return;
-            if (result) {
-              const raw = String(result?.getText?.() || result?.text || "").trim();
-              const normalized = sanitizeBarcodeInput(raw);
-              if (!isValidBarcode(normalized)) return;
-              setManualBarcode(normalized);
-              setStatus(`Detected: ${normalized}. Sending to desktop...`);
-              void submitBarcode(normalized);
-              return;
-            }
-            if (err && NotFoundErrorCtor && err instanceof NotFoundErrorCtor) {
-              return;
-            }
+        const onDecode = (result: any, err: any) => {
+          if (cancelled) return;
+          if (result) {
+            const raw = String(result?.getText?.() || result?.text || "").trim();
+            const normalized = sanitizeBarcodeInput(raw);
+            if (!isValidBarcode(normalized)) return;
+            setManualBarcode(normalized);
+            setStatus(`Detected: ${normalized}. Sending to desktop...`);
+            void submitBarcode(normalized);
+            return;
           }
-        );
+          if (err && NotFoundErrorCtor && err instanceof NotFoundErrorCtor) {
+            return;
+          }
+        };
+        const decodeConstraints = {
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          },
+        };
+        const controls =
+          typeof reader.decodeFromConstraints === "function"
+            ? await reader.decodeFromConstraints(decodeConstraints, video, onDecode)
+            : await reader.decodeFromVideoDevice(undefined, video, onDecode);
         if (cancelled) {
           try {
             controls?.stop?.();
@@ -221,17 +232,18 @@ export default function BarcodeScanSessionPage() {
         }
         fallbackControlsRef.current = controls;
       } catch (e: any) {
+        if (BarcodeDetectorCtor) {
+          setStatus("Trying native scanner...");
+          await startWithNativeDetector();
+          return;
+        }
         setError(e?.message ? `Unable to start camera scanner: ${e.message}` : "Unable to start camera scanner.");
       } finally {
         if (!cancelled) setBusy(false);
       }
     };
 
-    if (BarcodeDetectorCtor) {
-      void startWithNativeDetector();
-    } else {
-      void startWithZxingFallback();
-    }
+    void startWithZxingFallback();
     return () => {
       cancelled = true;
       cleanup();
