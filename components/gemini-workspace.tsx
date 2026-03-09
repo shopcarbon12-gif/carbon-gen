@@ -5221,6 +5221,7 @@ function buildMasterPanelPrompt(
           <span className="picker-transition-label">Preparing upload...</span>
         </div>
       ) : null}
+      <div className="progress-bg-patch" aria-hidden />
       <section
         className={`card status-bar ${statusTone} ${hasRawGeminiResponse ? "copy-ready" : ""}`}
         aria-live="polite"
@@ -7448,6 +7449,31 @@ function buildMasterPanelPrompt(
           font-weight: 700;
           letter-spacing: 0.01em;
         }
+        .progress-bg-patch {
+          position: fixed;
+          top: 0;
+          left: calc(13px + var(--page-edge-gap, 13px));
+          right: calc(
+            var(
+              --content-right-pad,
+              calc(
+                var(--integration-panel-width, 255px) + var(--page-edge-gap, 13px) +
+                  var(--content-api-gap, 13px)
+              )
+            )
+          );
+          height: 245px;
+          z-index: 39;
+          pointer-events: none;
+          background-image:
+            linear-gradient(rgba(0, 0, 0, 0.62), rgba(0, 0, 0, 0.62)),
+            url("/bg-template.jpg");
+          background-repeat: no-repeat;
+          background-position: center top;
+          background-size: cover;
+          border-radius: 0 0 12px 12px;
+          overflow: hidden;
+        }
         :global(.content:not(.menu-open)) .page {
           padding-left: var(--page-inline-gap);
           padding-right: 0;
@@ -9162,6 +9188,10 @@ function buildMasterPanelPrompt(
           background: var(--cg-surface);
         }
         @media (max-width: 1180px) {
+          .progress-bg-patch {
+            left: var(--page-inline-gap);
+            right: var(--page-inline-gap);
+          }
           .chat-inline-fallback {
             display: grid;
           }
@@ -9177,6 +9207,10 @@ function buildMasterPanelPrompt(
           }
         }
         @media (max-width: 900px) {
+          .progress-bg-patch {
+            left: var(--page-inline-gap);
+            right: var(--page-inline-gap);
+          }
           .mobile-only-control,
           .btn.mobile-only-control,
           .ghost-btn.mobile-only-control {
