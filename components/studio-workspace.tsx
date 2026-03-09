@@ -1039,7 +1039,15 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       }, []);
 
       if (rows.length) {
-        setPushImages((prev) => (prev.length ? prev : rows));
+        setPushImages((prev) => {
+          const merged = [...rows, ...prev];
+          const deduped = new Map<string, PushQueueImage>();
+          merged.forEach((row) => {
+            const key = `${row.sourceImageId}::${row.url}`;
+            if (!deduped.has(key)) deduped.set(key, row);
+          });
+          return [...deduped.values()];
+        });
         if (mode === "ops-seo") {
           setShopifyPushCollapsed(false);
           setStatus(`Loaded ${rows.length} transferred image(s) for Shopify Push.`);
@@ -2030,6 +2038,11 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       setError(e?.message || "Failed to generate alt text.");
       return false;
     }
+  }
+
+  function clearPushImageAltText(imageId: string) {
+    setPushImages((prev) => prev.map((img) => (img.id === imageId ? { ...img, altText: "" } : img)));
+    setError(null);
   }
 
   async function generateAltForMissingPushImages() {
@@ -4663,13 +4676,18 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         .map((row: any) => {
           const path = String(row?.path || "").trim();
           const fileName = path.split("/").pop() || path;
+          const previewUrl = path
+            ? `/api/storage/preview?path=${encodeURIComponent(path)}`
+            : row?.url
+              ? String(row.url)
+              : null;
           return {
             id: path || `final-result:${crypto.randomUUID()}`,
             path,
             fileName,
             uploadedAt: row?.uploadedAt ? String(row.uploadedAt) : null,
             url: row?.url ? String(row.url) : null,
-            previewUrl: row?.url ? String(row.url) : null,
+            previewUrl,
           };
         })
         .filter((row: FinalResultUpload) => row.path.startsWith("final-results/"))
@@ -7026,15 +7044,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                     setDraggingPushImageId(null);
                   }}
                 >
-                  <button
-                    type="button"
-                    className="preview-remove-corner"
-                    onClick={() => removePushImageFromShopify(img)}
-                    disabled={img.deleting}
-                    aria-label={`Remove image ${index + 1} from Shopify`}
-                  >
-                    {img.deleting ? "..." : "X"}
-                  </button>
                   <img src={img.url} alt={img.title || `Shopify image ${index + 1}`} />
                   <div className="preview-name">Position {index + 1}</div>
                   <textarea
@@ -7048,13 +7057,31 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                     rows={3}
                     placeholder="Alt text (80-120 chars)"
                   />
+                  <div className="row">
+                    <button
+                      type="button"
+                      className="ghost-btn alt-clear-btn"
+                      onClick={() => clearPushImageAltText(img.id)}
+                      disabled={img.generatingAlt || !img.altText.trim()}
+                    >
+                      X
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost-btn"
+                      onClick={() => generateAltForPushImage(img.id)}
+                      disabled={img.generatingAlt}
+                    >
+                      {img.generatingAlt ? "Generating..." : "Regenerate Alt"}
+                    </button>
+                  </div>
                   <button
                     type="button"
-                    className="ghost-btn"
-                    onClick={() => generateAltForPushImage(img.id)}
-                    disabled={img.generatingAlt}
+                    className="ghost-btn danger"
+                    onClick={() => removePushImageFromShopify(img)}
+                    disabled={img.deleting}
                   >
-                    {img.generatingAlt ? "Generating..." : "Regenerate Alt"}
+                    {img.deleting ? "Removing..." : "Remove"}
                   </button>
                 </div>
               ))}
@@ -7817,6 +7844,15 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           min-height: 68px;
           resize: vertical;
         }
+        .push-queue-card .alt-clear-btn {
+          min-width: 48px;
+          font-weight: 700;
+          color: #fecaca;
+        }
+        .push-queue-card > .ghost-btn.danger {
+          width: 100%;
+          color: #fecaca;
+        }
         .push-variant-row {
           display: flex;
           gap: 10px;
@@ -8075,6 +8111,10 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         .preview-card.selectable.selected {
           border-color: #0b6b58;
           background: #e7f4f1;
+        }
+        .preview-card.selectable.selected .preview-name,
+        .preview-card.selectable.selected .preview-source {
+          color: #d1fae5;
         }
         .preview-remove-corner {
           position: absolute;
@@ -8902,6 +8942,25 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         }
         .divider {
           background: var(--cg-border);
+        }
+        :global(html) {
+          scrollbar-color: rgba(20, 184, 166, 0.62) rgba(15, 23, 42, 0.58);
+          scrollbar-width: thin;
+        }
+        :global(::-webkit-scrollbar) {
+          width: 12px;
+          height: 12px;
+        }
+        :global(::-webkit-scrollbar-track) {
+          background: rgba(15, 23, 42, 0.58);
+        }
+        :global(::-webkit-scrollbar-thumb) {
+          background: linear-gradient(180deg, rgba(45, 212, 191, 0.78), rgba(20, 184, 166, 0.68));
+          border-radius: 999px;
+          border: 2px solid rgba(15, 23, 42, 0.65);
+        }
+        :global(::-webkit-scrollbar-thumb:hover) {
+          background: linear-gradient(180deg, rgba(94, 234, 212, 0.82), rgba(45, 212, 191, 0.74));
         }
         .status-bar-title,
         .status-bar-meta {
