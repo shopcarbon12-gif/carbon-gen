@@ -2076,7 +2076,8 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
       setStatus(`Order updated in preview only. Shopify reorder warning: ${e?.message || "failed"}`);
     } finally {
       pushReorderInFlightRef.current = false;
-      if (pushReorderQueuedMediaIdsRef.current?.length) {
+      const pendingReorder = pushReorderQueuedMediaIdsRef.current as unknown as string[] | null;
+      if (pendingReorder && pendingReorder.length > 0) {
         void flushQueuedShopifyReorder();
       }
     }
