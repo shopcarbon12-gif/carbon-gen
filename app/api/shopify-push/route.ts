@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isRequestAuthed } from "@/lib/auth";
 import { downloadStorageObject, tryGetStoragePathFromUrl, uploadBytesToStorage } from "@/lib/storageProvider";
+import { createHmac } from "crypto";
 import {
   getShopifyAdminToken,
   normalizeShopDomain,
@@ -151,7 +152,7 @@ function parseDataImage(value: string) {
   return { contentType, bytes, ext };
 }
 
-async function getShopifySourceUrl(sourceUrl: string) {
+async function getShopifySourceUrl(sourceUrl: string, appOrigin: string) {
   let raw = norm(sourceUrl);
   if (!/^https?:\/\//i.test(raw)) return "";
   try {
@@ -198,7 +199,8 @@ async function getShopifySourceUrl(sourceUrl: string) {
               : fallbackExtFromUrl;
     const path = `items/push-staging/${Date.now()}-${crypto.randomUUID()}.${ext}`;
     const uploaded = await uploadBytesToStorage({ path, bytes, contentType });
-    return norm(uploaded.url);
+    const signedPreviewUrl = buildSignedStoragePreviewUrl(String(uploaded.path || "").trim(), appOrigin);
+    return signedPreviewUrl || norm(uploaded.url);
   };
 
   // Some rows carry /api/storage/preview URLs. Resolve those first.
@@ -261,6 +263,27 @@ async function getShopifySourceUrl(sourceUrl: string) {
   }
 
   throw new Error(lastError || "source fetch failed (400)");
+}
+
+function buildSignedStoragePreviewUrl(path: string, appOrigin: string) {
+  const normalizedPath = norm(path).replace(/^\/+/, "");
+  const normalizedOrigin = norm(appOrigin).replace(/\/+$/, "");
+  if (!normalizedPath || !normalizedOrigin) return "";
+  const secret = String(
+    process.env.SHOPIFY_PUSH_SOURCE_SIGNING_SECRET ||
+      process.env.AUTH_SECRET ||
+      process.env.SESSION_SECRET ||
+      ""
+  ).trim();
+  if (!secret) return "";
+  const exp = Math.floor(Date.now() / 1000) + 60 * 60;
+  const sig = createHmac("sha256", secret).update(`${normalizedPath}|${exp}`).digest("hex");
+  const params = new URLSearchParams({
+    path: normalizedPath,
+    exp: String(exp),
+    sig,
+  });
+  return `${normalizedOrigin}/api/storage/preview?${params.toString()}`;
 }
 
 function toNumericId(value: string) {
@@ -576,7 +599,8 @@ async function listProductImageMedia(shop: string, productGid: string) {
 async function createProductImages(
   shop: string,
   productGid: string,
-  images: Array<{ url: string; altText?: string; storagePath?: string }>
+  images: Array<{ url: string; altText?: string; storagePath?: string }>,
+  appOrigin: string
 ) {
   const preparedImages: Array<{ url: string; altText?: string }> = [];
   for (const image of images) {
@@ -611,10 +635,12 @@ async function createProductImages(
         contentType: safeType,
       });
       const stagedUrl = norm(uploaded.url);
-      if (!stagedUrl) {
+      const signedPreviewUrl = buildSignedStoragePreviewUrl(String(uploaded.path || "").trim(), appOrigin);
+      const finalSourceUrl = signedPreviewUrl || stagedUrl;
+      if (!finalSourceUrl) {
         throw new Error("Unable to prepare source image URL for Shopify push.");
       }
-      preparedImages.push({ url: stagedUrl, altText: image.altText });
+      preparedImages.push({ url: finalSourceUrl, altText: image.altText });
       continue;
     }
     if (!sourceUrl) continue;
@@ -628,14 +654,16 @@ async function createProductImages(
         contentType: parsed.contentType,
       });
       const stagedUrl = norm(uploaded.url);
-      if (stagedUrl) {
-        preparedImages.push({ url: stagedUrl, altText: image.altText });
+      const signedPreviewUrl = buildSignedStoragePreviewUrl(String(uploaded.path || "").trim(), appOrigin);
+      const finalSourceUrl = signedPreviewUrl || stagedUrl;
+      if (finalSourceUrl) {
+        preparedImages.push({ url: finalSourceUrl, altText: image.altText });
       }
       continue;
     }
 
     if (/^https?:\/\//i.test(sourceUrl)) {
-      const shopifySourceUrl = await getShopifySourceUrl(sourceUrl);
+      const shopifySourceUrl = await getShopifySourceUrl(sourceUrl, appOrigin);
       if (!shopifySourceUrl) {
         throw new Error("Unable to prepare source image URL for Shopify push.");
       }
@@ -986,7 +1014,7 @@ export async function POST(req: NextRequest) {
       existingImageMediaIds = await listProductImageMediaIds(shop, productGid);
     }
 
-    const created = await createProductImages(shop, productGid, images);
+    const created = await createProductImages(shop, productGid, images, req.nextUrl.origin);
     if (removeExisting && existingImageMediaIds.length) {
       const deleted = await deleteMedia(shop, productGid, existingImageMediaIds);
       deletedMediaIds = deleted.deletedMediaIds || [];
