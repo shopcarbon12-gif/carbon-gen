@@ -509,10 +509,25 @@ export async function POST(req: NextRequest) {
     const imageTimeoutMs = getImageTimeoutMs();
     const imageModel = (process.env.GEMINI_IMAGE_MODEL || "gemini-3-pro-image-preview").trim();
     const swimwearActive = isSwimwearItemType(normalizedPanelQa.itemType);
-    const lockedPrompt = prompt;
+    const serverIdentityLockPrompt = buildServerIdentityLockPrompt(normalizedPanelQa);
+    const lockedPrompt = [
+      prompt,
+      "",
+      serverIdentityLockPrompt,
+      ...(swimwearActive
+        ? [
+            "SWIMWEAR SAFETY LOCK (SERVER):",
+            "Professional ecommerce swimwear catalog image only.",
+            "Adult model (25+), neutral posture, non-suggestive composition.",
+            "No erotic context, no intimate framing, no sexual emphasis.",
+            "Focus on garment fit, color, material, and product details.",
+          ]
+        : []),
+    ].join("\n");
 
-    const modelAnchors = normalizedModelRefs.slice(0, 3);
-    const itemAnchors = normalizedItemRefs.slice(0, 3);
+    // Keep model identity anchors bounded; include all item refs from section 0.5.
+    const modelAnchors = normalizedModelRefs.slice(0, 6);
+    const itemAnchors = normalizedItemRefs;
     const allRefs = [...modelAnchors, ...itemAnchors];
 
     const downloaded = await Promise.allSettled(
@@ -539,18 +554,6 @@ export async function POST(req: NextRequest) {
     const modelImageParts = allRefImages.slice(0, modelFilesCount);
     const itemImageParts = allRefImages.slice(modelFilesCount);
 
-    function buildImageLabels(): string {
-      const lines: string[] = [];
-      modelImageParts.forEach((_, i) => {
-        lines.push(`- Image ${i + 1}: MODEL reference photo (person identity — replicate this exact person's face, skin tone, hair, body).`);
-      });
-      itemImageParts.forEach((_, i) => {
-        const idx = modelFilesCount + i + 1;
-        lines.push(`- Image ${idx}: ITEM reference photo (garment/product — replicate this exact garment's color, design, fabric, logos, prints, construction).`);
-      });
-      return lines.join("\n");
-    }
-
     async function generateWithGemini(promptText: string): Promise<string | null> {
       const parts: any[] = [];
       let imageIndex = 1;
@@ -575,6 +578,7 @@ export async function POST(req: NextRequest) {
         `- ${itemRange}: Item reference photos (the garment to replicate).`,
         "",
         "Generate a NEW photo of the EXACT same person from the model references wearing the EXACT same garment from the item references.",
+        "Hard lock: if item references include a full look, preserve the same total outfit including shoes and accessories.",
         "Background: seamless pure white studio (#FFFFFF), soft diffused lighting, faint floor shadow only.",
         "",
         promptText,
@@ -588,6 +592,12 @@ export async function POST(req: NextRequest) {
           config: {
             responseModalities: ["IMAGE"],
             temperature: 0.2,
+            systemInstruction:
+              "You are a strict ecommerce fashion image generator. " +
+              "Never change model identity from MODEL refs. " +
+              "Never change garment/outfit identity from ITEM refs. " +
+              "If item refs include a full look, preserve the full look including shoes and accessories. " +
+              "Use pure white studio background only.",
             imageConfig: {
               aspectRatio: "3:2",
               imageSize: "4K",
