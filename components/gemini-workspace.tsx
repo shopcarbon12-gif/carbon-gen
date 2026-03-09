@@ -24,6 +24,7 @@ const SPLIT_TARGET_HEIGHT = 1200;
 const FLAT_SPLIT_TARGET_WIDTH = 900;
 const FLAT_SPLIT_TARGET_HEIGHT = 1200;
 const PUSH_TRANSFER_STORAGE_KEY = "cg_push_transfer_v1";
+const DAILY_MODEL_RESET_STORAGE_KEY = "cg_daily_model_reset_day_v1";
 const ALT_GENERATION_BATCH_SIZE = 3;
 const PUSH_STAGING_BATCH_SIZE = 4;
 const GENERATION_STAGES: Array<{ at: number; text: string; sub: string }> = [
@@ -256,6 +257,20 @@ function fileToDataUrl(file: File) {
 function isValidBarcode(value: string) {
   const v = String(value || "").trim();
   return /^(?:c\d{6,8}|\d{7,9})$/.test(v);
+}
+
+function getLocalDayKey(dateLike: Date) {
+  const year = dateLike.getFullYear();
+  const month = `${dateLike.getMonth() + 1}`.padStart(2, "0");
+  const day = `${dateLike.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function isTimestampInCurrentLocalDay(value: string | null) {
+  if (!value) return false;
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return false;
+  return getLocalDayKey(dt) === getLocalDayKey(new Date());
 }
 
 function extractBarcodeFromText(value: string) {
@@ -518,6 +533,7 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
   const [poseScanTab, setPoseScanTab] = useState<"male" | "female">("female");
   const [poseScanManualGender, setPoseScanManualGender] = useState<"male" | "female">("female");
   const poseScanAbortRef = useRef<AbortController | null>(null);
+  const dailyModelResetInFlightRef = useRef(false);
   const [appliedPoseSuggestions, setAppliedPoseSuggestions] = useState<Record<string, string>>({});
 
   const lowestSelectedPanel = useMemo(() => {
@@ -1004,6 +1020,39 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
     return () => {
       window.removeEventListener("focus", onFocus);
       window.clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const maybeResetForNewDay = async () => {
+      if (dailyModelResetInFlightRef.current) return;
+      const todayKey = getLocalDayKey(new Date());
+      const lastResetKey = String(window.localStorage.getItem(DAILY_MODEL_RESET_STORAGE_KEY) || "");
+      if (!lastResetKey) {
+        window.localStorage.setItem(DAILY_MODEL_RESET_STORAGE_KEY, todayKey);
+        return;
+      }
+      if (lastResetKey === todayKey) return;
+
+      dailyModelResetInFlightRef.current = true;
+      try {
+        await resetModels();
+        setPreviousModelUploads([]);
+        setPreviousUploadsVisible(false);
+        window.localStorage.setItem(DAILY_MODEL_RESET_STORAGE_KEY, todayKey);
+      } finally {
+        dailyModelResetInFlightRef.current = false;
+      }
+    };
+
+    void maybeResetForNewDay();
+    const intervalId = window.setInterval(() => {
+      void maybeResetForNewDay();
+    }, 30_000);
+    return () => {
+      window.clearInterval(intervalId);
     };
   }, []);
 
@@ -2524,7 +2573,10 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
         }
       }
 
-      setPreviousModelUploads(Array.from(dedupedByName.values()));
+      const todayOnly = Array.from(dedupedByName.values()).filter((row) =>
+        isTimestampInCurrentLocalDay(row.uploadedAt)
+      );
+      setPreviousModelUploads(todayOnly);
       setBrokenPreviousUploadIds([]);
       setPreviousPreviewRetryById({});
     } catch (e: any) {
@@ -4592,14 +4644,21 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
                 <span className="muted registry-inline-summary">No models yet.</span>
               )
             ) : null}
-            <button
-              suppressHydrationWarning
-              className="ghost-btn"
-              type="button"
-              onClick={() => setModelRegistryCollapsed((prev) => !prev)}
-            >
-              {modelRegistryCollapsed ? "Expand" : "Collapse"}
-            </button>
+            <div className="model-registry-header-actions">
+              {modelRegistryCollapsed ? (
+                <button className="ghost-btn danger" type="button" onClick={resetModels}>
+                  Reset Models
+                </button>
+              ) : null}
+              <button
+                suppressHydrationWarning
+                className="ghost-btn"
+                type="button"
+                onClick={() => setModelRegistryCollapsed((prev) => !prev)}
+              >
+                {modelRegistryCollapsed ? "Expand" : "Collapse"}
+              </button>
+            </div>
           </div>
           {!modelRegistryCollapsed ? (
             <>
@@ -4716,7 +4775,7 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
               {emptyingBucket ? "Emptying Storage..." : "Empty Storage"}
             </button>
           </div>
-          <div className="row" style={{ justifyContent: "center" }}>
+          <div className="row" style={{ justifyContent: "center", alignItems: "center" }}>
             <button
               className="btn primary"
               type="button"
@@ -4724,6 +4783,12 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
               disabled={modelSaving}
             >
               {modelSaving ? "Saving..." : "Save Model"}
+            </button>
+            <span className="muted">
+              Registry: {models.length} model{models.length === 1 ? "" : "s"}
+            </span>
+            <button className="ghost-btn danger" type="button" onClick={resetModels}>
+              Reset all models
             </button>
           </div>
           {(modelUploading || modelPreviewItems.some((p) => !p.uploadedUrl)) && (
@@ -4734,11 +4799,6 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
             </div>
           )}
             </>
-          ) : null}
-          {!modelRegistryCollapsed ? (
-            <div className="muted centered">
-              Registry: {models.length} model{models.length === 1 ? "" : "s"}
-            </div>
           ) : null}
           {!modelRegistryCollapsed && previousUploadsVisible ? (
             <div className="card">
@@ -4846,34 +4906,23 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
               )}
             </div>
           ) : null}
-          {!modelRegistryCollapsed ? (
-            models.length ? (
-              <div className="model-list">
-                {models.map((m) => (
-                  <div className="model-pill" key={m.model_id}>
-                    <div className="model-info">
-                      <span className="model-name">{m.name}</span>
-                      <span className="model-meta">{m.gender}</span>
-                    </div>
-                    <button
-                      className="model-remove"
-                      type="button"
-                      onClick={() => removeModel(m.model_id)}
-                    >
-                      Remove
-                    </button>
+          {!modelRegistryCollapsed && models.length ? (
+            <div className="model-list">
+              {models.map((m) => (
+                <div className="model-pill" key={m.model_id}>
+                  <div className="model-info">
+                    <span className="model-name">{m.name}</span>
+                    <span className="model-meta">{m.gender}</span>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div className="muted centered">No models yet.</div>
-            )
-          ) : null}
-          {!modelRegistryCollapsed ? (
-            <div className="centered">
-              <button className="ghost-btn danger" type="button" onClick={resetModels}>
-                Reset all models
-              </button>
+                  <button
+                    className="model-remove"
+                    type="button"
+                    onClick={() => removeModel(m.model_id)}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
             </div>
           ) : null}
         </section>
@@ -5779,7 +5828,7 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
               </div>
             </div>
           </div>
-          <div className="row">
+          <div className="row" style={{ justifyContent: "center" }}>
             <button className="btn primary" onClick={approveSelectedPanels}>
               Approve Selected
             </button>
@@ -6771,6 +6820,12 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
           margin-left: auto;
           white-space: nowrap;
         }
+        .model-registry-header-actions {
+          display: flex;
+          align-items: center;
+          margin-left: auto;
+          gap: 8px;
+        }
         .grid {
           display: grid;
           grid-template-columns: 1fr;
@@ -7236,15 +7291,19 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
         .split-results-grid {
           display: flex;
           flex-wrap: wrap;
-          justify-content: center;
+          justify-content: flex-start;
           align-items: stretch;
           gap: 10px;
-          max-width: 1260px;
+          max-width: 100%;
           margin: 0 auto;
+        }
+        .final-extra-grid {
+          justify-content: flex-start;
+          max-width: 100%;
         }
         .split-results-grid .split-result-card,
         .final-extra-grid .split-result-card {
-          width: 220px;
+          width: 188px;
         }
         .split-result-card img.split-result-image {
           width: 100%;
@@ -8216,13 +8275,16 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
         }
         .pose-scan-header {
           display: flex;
+          flex-direction: column;
           align-items: center;
-          justify-content: space-between;
+          justify-content: center;
+          gap: 8px;
           margin-bottom: 10px;
         }
         .pose-scan-controls {
           display: flex;
           align-items: center;
+          justify-content: center;
           gap: 8px;
         }
         .pose-scan-gender-select {
