@@ -2963,6 +2963,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       const payloadImages = pushImages.map((img) => ({
         url: stagedUrlById.get(img.id) || String(img.sourceStorageUrl || "").trim() || img.url,
         altText: img.altText.trim(),
+        storagePath: String(img.sourceStoragePath || "").trim(),
       }));
       const invalidSource = payloadImages.find((img) => !/^https?:\/\//i.test(String(img.url || "")));
       if (invalidSource) {

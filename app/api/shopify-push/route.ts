@@ -567,11 +567,47 @@ async function listProductImageMedia(shop: string, productGid: string) {
 async function createProductImages(
   shop: string,
   productGid: string,
-  images: Array<{ url: string; altText?: string }>
+  images: Array<{ url: string; altText?: string; storagePath?: string }>
 ) {
   const preparedImages: Array<{ url: string; altText?: string }> = [];
   for (const image of images) {
+    const storagePath = norm(image.storagePath);
     const sourceUrl = norm(image.url);
+    if (!sourceUrl && !storagePath) continue;
+    if (storagePath) {
+      const { body, contentType } = await downloadStorageObject(storagePath);
+      const bytes = new Uint8Array(body);
+      if (!bytes.byteLength) {
+        throw new Error("Unable to prepare source image URL for Shopify push.");
+      }
+      const loweredType = String(contentType || "")
+        .split(";")[0]
+        .trim()
+        .toLowerCase();
+      const safeType = loweredType && loweredType.startsWith("image/") ? loweredType : "image/jpeg";
+      const ext =
+        safeType.includes("png")
+          ? "png"
+          : safeType.includes("webp")
+            ? "webp"
+            : safeType.includes("gif")
+              ? "gif"
+              : safeType.includes("jpg") || safeType.includes("jpeg")
+                ? "jpg"
+                : "jpg";
+      const path = `items/push-staging/${Date.now()}-${crypto.randomUUID()}.${ext}`;
+      const uploaded = await uploadBytesToStorage({
+        path,
+        bytes,
+        contentType: safeType,
+      });
+      const stagedUrl = norm(uploaded.url);
+      if (!stagedUrl) {
+        throw new Error("Unable to prepare source image URL for Shopify push.");
+      }
+      preparedImages.push({ url: stagedUrl, altText: image.altText });
+      continue;
+    }
     if (!sourceUrl) continue;
     if (isDataImageUrl(sourceUrl)) {
       const parsed = parseDataImage(sourceUrl);
@@ -879,8 +915,9 @@ export async function POST(req: NextRequest) {
         .map((row: any) => ({
           url: norm(row?.url),
           altText: normalizeAlt(row?.altText),
+          storagePath: norm(row?.storagePath),
         }))
-        .filter((row: any) => row.url)
+        .filter((row: any) => row.url || row.storagePath)
     : [];
 
   if (!shop) {
