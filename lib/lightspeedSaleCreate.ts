@@ -108,6 +108,15 @@ type SaleResult = {
   error?: string;
 };
 
+type ExistingSaleCandidate = {
+  saleID?: string;
+  referenceNumber?: string;
+  referenceNumberSource?: string;
+  completed?: string | boolean;
+  voided?: string | boolean;
+  customerID?: string;
+};
+
 // ── Duplicate check ────────────────────────────────────────────────────
 
 export async function isOrderAlreadyProcessed(shopifyOrderId: number): Promise<boolean> {
@@ -130,9 +139,34 @@ async function claimOrderForProcessing(
     await insertOrderProcessing(shopifyOrderId, shopifyOrderName);
     return true;
   } catch (error: any) {
-    // Unique constraint violation = another process already claimed it
+    // Unique constraint violation = another process already claimed it.
+    // Fail closed on any storage issue to prevent duplicate LS sale creation.
     if (String(error?.message || "").toLowerCase().includes("duplicate")) return false;
-    return true; // proceed on error (fail open)
+    return false;
+  }
+}
+
+async function findExistingShopifySaleByReference(orderName: string): Promise<string | null> {
+  const ref = normalizeText(orderName);
+  if (!ref) return null;
+  try {
+    const res = await lsGet<any>("Sale", {
+      referenceNumber: `~,${ref}`,
+      limit: "50",
+    });
+    const raw = res?.Sale;
+    const sales: ExistingSaleCandidate[] = Array.isArray(raw) ? raw : raw ? [raw] : [];
+    const matches = sales
+      .filter((sale) => normalizeText(sale.referenceNumber) === ref)
+      .filter((sale) => normalizeLower(sale.referenceNumberSource) === "shopify")
+      .filter((sale) => !(sale.voided === true || normalizeLower(sale.voided) === "true"))
+      .map((sale) => normalizeText(sale.saleID))
+      .filter(Boolean);
+    if (matches.length === 0) return null;
+    matches.sort((a, b) => Number.parseInt(b, 10) - Number.parseInt(a, 10));
+    return matches[0] || null;
+  } catch {
+    return null;
   }
 }
 
@@ -317,7 +351,32 @@ export async function createLightspeedSale(
 
   const claimed = await claimOrderForProcessing(order.id, order.name);
   if (!claimed) {
+    const existingAfterClaimMiss = await findExistingShopifySaleByReference(order.name);
+    if (existingAfterClaimMiss) {
+      await markOrderProcessed(order.id, order.name, existingAfterClaimMiss, "completed");
+      return {
+        ok: true,
+        saleId: existingAfterClaimMiss,
+        linesMatched: 0,
+        linesSkipped: 0,
+        skippedItems: [],
+        error: "Already processed",
+      };
+    }
     return { ok: true, linesMatched: 0, linesSkipped: 0, skippedItems: [], error: "Already being processed" };
+  }
+
+  const existingSaleId = await findExistingShopifySaleByReference(order.name);
+  if (existingSaleId) {
+    await markOrderProcessed(order.id, order.name, existingSaleId, "completed");
+    return {
+      ok: true,
+      saleId: existingSaleId,
+      linesMatched: 0,
+      linesSkipped: 0,
+      skippedItems: [],
+      error: "Already processed",
+    };
   }
 
   const { matched, skipped } = await matchLineItems(order.line_items, shop);

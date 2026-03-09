@@ -51,6 +51,15 @@ async function ensureSqlTables() {
     )
   `);
   await sqlQuery(`
+    CREATE TABLE IF NOT EXISTS shopify_webhook_events (
+      webhook_id TEXT PRIMARY KEY,
+      topic TEXT NOT NULL DEFAULT '',
+      shop_domain TEXT NOT NULL DEFAULT '',
+      shopify_order_id BIGINT,
+      first_seen_at TIMESTAMPTZ DEFAULT now()
+    )
+  `);
+  await sqlQuery(`
     CREATE TABLE IF NOT EXISTS customer_ls_history (
       shopify_email TEXT PRIMARY KEY,
       ls_customer_id TEXT,
@@ -123,6 +132,31 @@ export async function insertOrderProcessing(shopifyOrderId: number, shopifyOrder
      VALUES ($1,$2,'processing',now())`,
     [shopifyOrderId, orderName]
   );
+}
+
+export async function claimWebhookEvent(input: {
+  webhookId: string;
+  topic?: string;
+  shopDomain?: string;
+  shopifyOrderId?: number | null;
+}): Promise<boolean> {
+  const webhookId = normalizeText(input.webhookId);
+  if (!webhookId) return true;
+  getDbMode();
+  await ensureSqlTables();
+  const rows = await sqlQuery<{ webhook_id: string }>(
+    `INSERT INTO shopify_webhook_events (webhook_id, topic, shop_domain, shopify_order_id, first_seen_at)
+     VALUES ($1,$2,$3,$4,now())
+     ON CONFLICT (webhook_id) DO NOTHING
+     RETURNING webhook_id`,
+    [
+      webhookId,
+      normalizeText(input.topic),
+      normalizeText(input.shopDomain),
+      Number.isFinite(Number(input.shopifyOrderId)) ? Number(input.shopifyOrderId) : null,
+    ]
+  );
+  return rows.length > 0;
 }
 
 export async function upsertOrderSyncRecord(input: {

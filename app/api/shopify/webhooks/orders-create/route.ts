@@ -8,6 +8,7 @@ import {
 import { normalizeShopDomain } from "@/lib/shopify";
 import { buildOrderLabelZpl, maybePrintWebhookLabel } from "@/lib/shopifyPrinter";
 import { hasShopifyWebhookSecretConfigured, verifyShopifyWebhookHmac } from "@/lib/shopifyWebhookAuth";
+import { claimWebhookEvent } from "@/lib/lightspeedRepository";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,6 +50,25 @@ export async function POST(req: NextRequest) {
     normalizeShopDomain(shopDomain) ||
     normalizeShopDomain(normalizeText(process.env.SHOPIFY_SHOP_DOMAIN)) ||
     "";
+
+  if (webhookId) {
+    const claimed = await claimWebhookEvent({
+      webhookId,
+      topic: topic || "orders/create",
+      shopDomain: shop,
+      shopifyOrderId: Number(order.id),
+    });
+    if (!claimed) {
+      return NextResponse.json({
+        ok: true,
+        skipped: true,
+        reason: "duplicate_webhook",
+        webhookId,
+        orderId: order.id,
+        orderName: order.name,
+      });
+    }
+  }
 
   console.log(
     `[webhook/orders-create] Processing order ${order.name} (#${order.id}) from ${shop || "unknown"}, ` +
