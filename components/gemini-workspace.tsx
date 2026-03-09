@@ -6071,7 +6071,17 @@ function buildMasterPanelPrompt(
               <div className="preview-grid item-selected-grid">
                 {selectedCatalogImages.map((img) => (
                   <div className="preview-card item-catalog-selected-card" key={img.id}>
-                    <img className="item-catalog-selected-image" src={img.url} alt={img.title} />
+                    <img
+                      className="item-catalog-selected-image"
+                      src={
+                        img.source === "device_upload" && img.uploadedUrl
+                          ? String(img.url || "").startsWith("data:")
+                            ? img.url
+                            : `/api/storage/preview?url=${encodeURIComponent(img.uploadedUrl)}`
+                          : img.url
+                      }
+                      alt={img.title}
+                    />
                     <div className="preview-name">
                       {img.uploading
                         ? "Uploading..."
