@@ -402,19 +402,27 @@ async function waitForMediaReady(
   options?: { timeoutMs?: number; intervalMs?: number }
 ) {
   const target = Array.from(new Set(mediaIds.map((id) => norm(id)).filter(Boolean)));
-  if (!target.length) return;
-  const timeoutMs = Math.max(10_000, Number(options?.timeoutMs || 90_000));
-  const intervalMs = Math.max(750, Number(options?.intervalMs || 2_000));
+  if (!target.length) return { ready: true, failedIds: [] as string[] };
+  const timeoutMs = Math.max(2_000, Number(options?.timeoutMs || 20_000));
+  const intervalMs = Math.max(500, Number(options?.intervalMs || 1_000));
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const statusMap = await listProductMediaStatusMap(shop, productGid);
+    const failedIds = target.filter((id) => {
+      const status = statusMap.get(id) || "";
+      return status === "FAILED";
+    });
+    if (failedIds.length) {
+      return { ready: false, failedIds };
+    }
     const allReady = target.every((id) => {
       const status = statusMap.get(id) || "";
       return status === "READY";
     });
-    if (allReady) return;
+    if (allReady) return { ready: true, failedIds: [] as string[] };
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
+  return { ready: false, failedIds: [] as string[] };
 }
 
 async function listProductImageMedia(shop: string, productGid: string) {
@@ -648,7 +656,16 @@ async function assignVariantMedia(
 ) {
   if (!assignments.length) return null;
   const assignedMediaIds = Array.from(new Set(assignments.map((row) => norm(row.mediaId)).filter(Boolean)));
-  await waitForMediaReady(shop, productGid, assignedMediaIds);
+  const initialReady = await waitForMediaReady(shop, productGid, assignedMediaIds, {
+    timeoutMs: 10_000,
+    intervalMs: 1_000,
+  });
+  if (!initialReady.ready) {
+    if (initialReady.failedIds.length) {
+      return "Variant mapping skipped: some Shopify media failed processing.";
+    }
+    return "Variant mapping skipped: Shopify media still processing.";
+  }
   const mutation = `
     mutation ProductVariantAppendMedia($productId: ID!, $variantMedia: [ProductVariantAppendMediaInput!]!) {
       productVariantAppendMedia(productId: $productId, variantMedia: $variantMedia) {
@@ -663,7 +680,7 @@ async function assignVariantMedia(
     mediaIds: [row.mediaId],
   }));
 
-  const maxAttempts = 6;
+  const maxAttempts = 2;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const result = await runWithAnyToken<VariantAppendMediaResult>(shop, async (token) =>
       runShopifyGraphql<VariantAppendMediaResult>({
@@ -681,11 +698,20 @@ async function assignVariantMedia(
     if (!errors.length) return null;
 
     const message = errors.map((e: { message: string }) => e.message).join("; ");
-    const retryable = /non-ready media cannot be attached to variants/i.test(message);
+    const retryable =
+      /non-ready media cannot be attached to variants/i.test(message) ||
+      /still processing/i.test(message);
     if (!retryable || attempt >= maxAttempts) {
+      if (retryable) return "Variant mapping skipped: Shopify media not ready yet.";
       throw new Error(`Failed to assign variant media: ${message}`);
     }
-    await waitForMediaReady(shop, productGid, assignedMediaIds, { timeoutMs: 20_000, intervalMs: 1_500 });
+    const ready = await waitForMediaReady(shop, productGid, assignedMediaIds, {
+      timeoutMs: 4_000,
+      intervalMs: 800,
+    });
+    if (!ready.ready && ready.failedIds.length) {
+      return "Variant mapping skipped: some Shopify media failed processing.";
+    }
     const waitMs = 900 * attempt;
     await new Promise((resolve) => setTimeout(resolve, waitMs));
   }
