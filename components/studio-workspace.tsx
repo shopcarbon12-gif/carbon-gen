@@ -406,6 +406,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   const [pushCatalogLoading, setPushCatalogLoading] = useState(false);
   const [pushCatalogSearched, setPushCatalogSearched] = useState(false);
   const [pushCatalogProducts, setPushCatalogProducts] = useState<ShopifyCatalogProduct[]>([]);
+  const [collapsedCatalogProductIds, setCollapsedCatalogProductIds] = useState<string[]>([]);
   const [pushProductId, setPushProductId] = useState("");
   const [pushProductHandle, setPushProductHandle] = useState("");
   const [pushImages, setPushImages] = useState<PushQueueImage[]>([]);
@@ -1934,7 +1935,16 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     })) as PushQueueImage[];
     const generatedRows = includeGenerated ? buildGeneratedPushImages() : [];
     const merged = [...currentRows, ...generatedRows];
-    setPushImages(merged);
+    setPushImages((prev) => {
+      const keep = prev.filter(
+        (img) =>
+          !(
+            img.source === "shopify" &&
+            String(img.id || "").startsWith(`push:${productIdValue}:`)
+          )
+      );
+      return [...keep, ...merged];
+    });
     return merged;
   }
 
@@ -1970,19 +1980,22 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   function hideCurrentShopifyImages(productIdValue: string) {
     const normalized = String(productIdValue || "").trim();
     if (!normalized) return;
-    setPushImages((prev) =>
-      prev.filter(
-        (img) =>
-          !(
-            img.source === "shopify" &&
-            String(img.id || "").startsWith(`push:${normalized}:`)
-          )
-      )
+    setCollapsedCatalogProductIds((prev) =>
+      prev.includes(normalized) ? prev : [...prev, normalized]
     );
-    if (pushProductId.trim() === normalized) {
-      setPushVariants([]);
-    }
-    setStatus("Current Shopify images hidden from push queue.");
+    setStatus("Catalog images hidden.");
+  }
+
+  function showCurrentShopifyImages(productIdValue: string) {
+    const normalized = String(productIdValue || "").trim();
+    if (!normalized) return;
+    setCollapsedCatalogProductIds((prev) => prev.filter((id) => id !== normalized));
+  }
+
+  function isCatalogProductCollapsed(productIdValue: string) {
+    const normalized = String(productIdValue || "").trim();
+    if (!normalized) return false;
+    return collapsedCatalogProductIds.includes(normalized);
   }
 
   function togglePushCatalogImage(
@@ -2135,11 +2148,16 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     );
     setError(null);
     try {
+      const rawAltSource = String(target.sourceStorageUrl || target.url || "").trim();
+      const altSource =
+        rawAltSource.startsWith("/") && typeof window !== "undefined"
+          ? `${window.location.origin}${rawAltSource}`
+          : rawAltSource;
       const resp = await fetch("/api/openai/image-alt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          imageUrl: target.url,
+          imageUrl: altSource,
           itemType: resolvedItemType || "apparel item",
         }),
       });
@@ -4956,8 +4974,16 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       deleting: false,
     }));
 
-    setPushImages(pushRows);
-    setPushVariants([]);
+    setPushImages((prev) => {
+      const deduped = new Map<string, PushQueueImage>();
+      [...prev, ...pushRows].forEach((row) => {
+        const stableUrl = String(row.sourceStorageUrl || row.url || "").trim();
+        const key = row.source === "shopify" ? `shopify:${row.id}` : `external:${stableUrl}`;
+        if (!key || deduped.has(key)) return;
+        deduped.set(key, row);
+      });
+      return [...deduped.values()];
+    });
 
     const inferredBarcode =
       sanitizeBarcodeInput(itemBarcodeSaved).trim() ||
@@ -7187,6 +7213,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                         onClick={() => {
                           const productIdValue = String(product.id || "").trim();
                           if (!productIdValue) return;
+                          showCurrentShopifyImages(productIdValue);
                           upsertPushQueueFromProduct(product);
                         }}
                       >
@@ -7195,32 +7222,42 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                       <button
                         className="btn ghost"
                         type="button"
-                        onClick={() => hideCurrentShopifyImages(String(product.id || "").trim())}
-                        disabled={!hasShopifyImagesLoadedForProduct(String(product.id || "").trim())}
+                        onClick={() => {
+                          const productIdValue = String(product.id || "").trim();
+                          if (!productIdValue) return;
+                          if (isCatalogProductCollapsed(productIdValue)) {
+                            showCurrentShopifyImages(productIdValue);
+                          } else {
+                            hideCurrentShopifyImages(productIdValue);
+                          }
+                        }}
+                        disabled={!product.images.length}
                       >
-                        Hide
+                        {isCatalogProductCollapsed(String(product.id || "").trim()) ? "Show" : "Hide"}
                       </button>
                     </div>
-                    <div className="preview-grid">
-                      {product.images.map((img) => {
-                        const selected = pushImages.some(
-                          (row) =>
-                            row.sourceImageId === img.id &&
-                            pushProductId === String(product.id || "")
-                        );
-                        return (
-                          <button
-                            key={img.id}
-                            type="button"
-                            className={`catalog-image ${selected ? "selected" : ""}`}
-                            onClick={() => togglePushCatalogImage(product, img)}
-                          >
-                            <img src={img.url} alt={img.altText || product.title} />
-                            <span>{selected ? "Selected" : "Select"}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
+                    {!isCatalogProductCollapsed(String(product.id || "").trim()) ? (
+                      <div className="preview-grid">
+                        {product.images.map((img) => {
+                          const selected = pushImages.some(
+                            (row) =>
+                              row.sourceImageId === img.id &&
+                              pushProductId === String(product.id || "")
+                          );
+                          return (
+                            <button
+                              key={img.id}
+                              type="button"
+                              className={`catalog-image ${selected ? "selected" : ""}`}
+                              onClick={() => togglePushCatalogImage(product, img)}
+                            >
+                              <img src={img.url} alt={img.altText || product.title} />
+                              <span>{selected ? "Selected" : "Select"}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : null}
                   </div>
                 ))}
               </div>
@@ -7243,13 +7280,16 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                   onDragOver={(e) => {
                     e.preventDefault();
                   }}
-                  onDrop={() => {
-                    if (!draggingPushImageId) return;
-                    const from = pushImages.findIndex((row) => row.id === draggingPushImageId);
+                  onDrop={(e) => {
+                    const droppedImageId =
+                      e.dataTransfer.getData("text/push-image-id") || draggingPushImageId || "";
+                    if (!droppedImageId) return;
+                    const from = pushImages.findIndex((row) => row.id === droppedImageId);
                     const to = pushImages.findIndex((row) => row.id === img.id);
                     movePushImage(from, to);
                     setDraggingPushImageId(null);
                   }}
+                  onDragEnd={() => setDraggingPushImageId(null)}
                 >
                   <img src={img.url} alt={img.title || `Shopify image ${index + 1}`} />
                   <div className="preview-name">Position {index + 1}</div>
