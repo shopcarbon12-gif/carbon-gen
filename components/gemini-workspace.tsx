@@ -7870,7 +7870,7 @@ function buildMasterPanelPrompt(
           gap: 16px;
           overflow: visible;
           overscroll-behavior: contain;
-          margin-top: calc(var(--status-bar-height, 96px) + 12px);
+          margin-top: calc(var(--status-bar-height, 96px) + 13px);
           width: calc(100% + var(--content-right-pad, 0px));
           margin-right: calc(-1 * var(--content-right-pad, 0px));
           padding-right: var(--content-right-pad, 0px);
