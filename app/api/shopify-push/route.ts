@@ -601,25 +601,30 @@ async function assignVariantMedia(
     mediaIds: [row.mediaId],
   }));
 
-  const result = await runWithAnyToken<VariantAppendMediaResult>(shop, async (token) =>
-    runShopifyGraphql<VariantAppendMediaResult>({
-      shop,
-      token,
-      query: mutation,
-      variables: { productId: productGid, variantMedia },
-      apiVersion: API_VERSION,
-    })
-  );
-  if (!result.ok) {
-    throw new Error(`Failed to assign variant media: ${JSON.stringify(result.errors)}`);
-  }
-  const errors = result.data?.productVariantAppendMedia?.userErrors || [];
-  if (errors.length) {
-    throw new Error(
-      `Failed to assign variant media: ${errors
-        .map((e: { message: string }) => e.message)
-        .join("; ")}`
+  const maxAttempts = 6;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const result = await runWithAnyToken<VariantAppendMediaResult>(shop, async (token) =>
+      runShopifyGraphql<VariantAppendMediaResult>({
+        shop,
+        token,
+        query: mutation,
+        variables: { productId: productGid, variantMedia },
+        apiVersion: API_VERSION,
+      })
     );
+    if (!result.ok) {
+      throw new Error(`Failed to assign variant media: ${JSON.stringify(result.errors)}`);
+    }
+    const errors = result.data?.productVariantAppendMedia?.userErrors || [];
+    if (!errors.length) return;
+
+    const message = errors.map((e: { message: string }) => e.message).join("; ");
+    const retryable = /non-ready media cannot be attached to variants/i.test(message);
+    if (!retryable || attempt >= maxAttempts) {
+      throw new Error(`Failed to assign variant media: ${message}`);
+    }
+    const waitMs = 900 * attempt;
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
   }
 }
 

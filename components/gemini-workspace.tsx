@@ -7393,12 +7393,14 @@ function buildMasterPanelPrompt(
                   draggable
                   onDragStart={(e) => {
                     setDraggingPushImageId(img.id);
+                    e.dataTransfer.effectAllowed = "move";
                     e.dataTransfer.setData("text/push-image-id", img.id);
                   }}
                   onDragOver={(e) => {
                     e.preventDefault();
                   }}
                   onDrop={(e) => {
+                    e.preventDefault();
                     const droppedImageId =
                       e.dataTransfer.getData("text/push-image-id") || draggingPushImageId || "";
                     if (!droppedImageId) return;
