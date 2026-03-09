@@ -28,6 +28,7 @@ const DAILY_MODEL_RESET_STORAGE_KEY = "cg_daily_model_reset_day_v1";
 const ALT_GENERATION_BATCH_SIZE = 3;
 const PUSH_STAGING_BATCH_SIZE = 4;
 const STATUS_BAR_FIXED_HEIGHT = 154;
+const GEMINI_FLOW_V2_DEFAULT: "v2" | "legacy" = "v2";
 
 type ShopifyCatalogProduct = {
   id: string;
@@ -3548,7 +3549,7 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
     return `POSE ${poseNumber}`;
   }
 
-  function buildMasterPanelPrompt(args: {
+function buildMasterPanelPromptLegacy(args: {
     panelNumber: number;
     panelNumberForLocks?: number;
     panelLabel: string;
@@ -3621,6 +3622,193 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
 
     return lines.join("\n");
   }
+
+function buildMasterPanelPromptV2(args: {
+  panelNumber: number;
+  panelNumberForLocks?: number;
+  panelLabel: string;
+  poseA: number;
+  poseB: number;
+  forceActivePoseOverride?: boolean;
+  modelName: string;
+  modelGender: string;
+  modelRefs: string[];
+  itemRefs: string[];
+  itemType: string;
+  itemStyleInstructions?: string;
+  regenerationComments?: string;
+  poseSafetySuggestions?: string[];
+}) {
+  const poseLibrary = getPoseLibraryForGender(args.modelGender);
+  const fullPoseLibraries = [
+    "MALE POSE LIBRARY (ORIGINAL, UNCHANGED):",
+    MALE_POSE_LIBRARY,
+    "",
+    "FEMALE POSE LIBRARY (ORIGINAL, UNCHANGED):",
+    FEMALE_POSE_LIBRARY,
+  ].join("\n");
+  const mappingText =
+    String(args.modelGender || "").toLowerCase() === "female"
+      ? FEMALE_PANEL_MAPPING_TEXT
+      : MALE_PANEL_MAPPING_TEXT;
+  const poseABlock = extractPoseBlock(poseLibrary, args.poseA);
+  const poseBBlock = extractPoseBlock(poseLibrary, args.poseB);
+  const criticalLockLines = getPanelCriticalLockLines(
+    args.modelGender,
+    args.panelNumberForLocks ?? args.panelNumber,
+    args.itemType
+  );
+  const swimwearActive = isSwimwearItemType(args.itemType);
+  const swimwearStyleLines = getSwimwearStyleLockLines(args.modelGender, args.itemType);
+  const closeUpCategoryRule = getCloseUpCategoryRule(args.itemType);
+  const promptItemType =
+    String(args.modelGender || "").trim().toLowerCase() === "female" &&
+    isSwimwearItemType(args.itemType)
+      ? "swimwear"
+      : args.itemType.trim();
+  const closeUpSubjectLine = promptItemType
+    ? `- CLOSE-UP SUBJECT LOCK: the close-up subject must match section 0.5 item type "${promptItemType}" exactly.`
+    : "- CLOSE-UP SUBJECT LOCK: the close-up subject must match section 0.5 item type exactly.";
+  const styleInstructions = normalizePromptInstruction(args.itemStyleInstructions);
+  const regenNotes = normalizePromptInstruction(args.regenerationComments);
+
+  return [
+    "GEMINI FLOW V2 EXECUTION HARD LOCK (embedded by app)",
+    "ITEM REFERENCE INTERPRETATION HARD LOCK:",
+    "- Treat every uploaded item image as product reference only.",
+    "- Item images may show a person, flat-lay, hanger, or mannequin.",
+    "- Do not block item images because a person is wearing the product. Keep the image and use garment details only.",
+    "- Never copy any person identity/presentation from item refs (face, skin tone, hair, body type, pose, identity).",
+    "- Never copy presentation style from item refs (model styling, camera angle, background composition, pose styling).",
+    "- Human in item refs = temporary hanger/mannequin only. Not a character source.",
+    "- Forbidden from item-ref humans: face shape, eyes, nose, lips, jawline, skin tone, hair texture/color/style/hairline, age cues, body proportions, tattoos, jewelry.",
+    "- If any item ref conflicts with model identity, ignore the human and keep only garment details.",
+    "- Identity source priority is absolute: MODEL refs first and only for person identity; item refs are garment-only.",
+    `- LOCKED ITEM TYPE PRIORITY: section 0.5 item type is "${promptItemType || args.itemType || "apparel item"}".`,
+    "- When references include multiple garment categories, prioritize and render only details that match the locked item type.",
+    "- Ignore conflicting category cues that do not match the locked item type.",
+    "- Use item refs only for product attributes: shape, color, material, construction, and details.",
+    "- If a full-body outfit image is provided, treat it as a single full-look reference and preserve the whole look structure (top, bottom, shoes, accessories).",
+    "- If full-look + separate item images are both provided, match each extra item to the corresponding part in the full look and replace only those matched parts.",
+    "- Keep all non-replaced parts from the full-look reference unchanged.",
+    "- CLOSE-UP LOCK: for MALE Pose 6 and FEMALE Pose 5, generate one close-up using section 0.5 item references.",
+    closeUpSubjectLine,
+    closeUpCategoryRule,
+    "- If a set or multiple items are present, choose the most detailed item that still matches the locked section 0.5 item type.",
+    ...(styleInstructions
+      ? [
+          "ITEM STYLING INSTRUCTIONS (SECTION 0.5, APPLY WITH LOCKS):",
+          "- Apply these fit/silhouette/style instructions while preserving exact product identity/details from item refs.",
+          styleInstructions,
+        ]
+      : []),
+    ...(regenNotes
+      ? [
+          "REGENERATION FEEDBACK (APPLY FOR THIS PASS):",
+          "- Use these corrections to improve accuracy while preserving all hard locks above.",
+          regenNotes,
+        ]
+      : []),
+    "POSE SET SELECTION (HARD LOCK):",
+    "- If MODEL.gender == male: use MALE POSE SET definitions unchanged.",
+    "- If MODEL.gender == female: use FEMALE POSE SET definitions unchanged.",
+    "- IMPORTANT: only panel-to-pose pairing changes by gender. Pose definitions stay unchanged.",
+    "GENDER-SPECIFIC PANEL MAPPING (IMMUTABLE PER GENDER):",
+    "PANEL MAPPING IS IMMUTABLE. DO NOT REMAP.",
+    ...(args.forceActivePoseOverride
+      ? [
+          "FALLBACK OVERRIDE (THIS GENERATION ONLY): if mapping conflicts with the ACTIVE pose assignments below, ignore the mapping and execute the ACTIVE poses exactly as provided.",
+        ]
+      : []),
+    mappingText,
+    "PANEL OUTPUT HARD LOCK:",
+    "- Generate exactly ONE panel image.",
+    "- Each panel is a 2-up canvas only: LEFT Pose A, RIGHT Pose B.",
+    "- Never output 3+ poses in one canvas. No collage. No grids.",
+    "POSE LIBRARIES (ORIGINAL, UNCHANGED) INCLUDED BELOW FOR REFERENCE:",
+    fullPoseLibraries,
+    "Generate exactly ONE 2-up panel image.",
+    "Age requirement: the model must be an adult 25+ only.",
+    `PANEL ${args.panelNumber} HARD AGE LOCK: the model is over 25+.`,
+    "Canvas 1536x1024; left frame 768x1024; right frame 768x1024; thin divider.",
+    "No collage, no extra poses, no extra panels.",
+    "Identity anchor override: use ONLY MODEL refs for face/body identity.",
+    "Run-level identity lock: across all selected panels in this run, preserve the same exact model face identity.",
+    "Identity consistency lock: keep the same exact person identity across every generated panel in this run (same face structure, eyes, nose, lips, skin tone, and hairline).",
+    "Do not drift identity panel-to-panel.",
+    "Hard identity lock: this must be the exact same person across all panels in this generation batch.",
+    "Face-geometry lock: keep the same eye shape/spacing, nose bridge/tip, lip contour, jawline, cheek structure, and brow shape as model refs.",
+    "Skin-tone lock: preserve the exact model skin tone and undertone from model refs. Never lighten, darken, recolor, or stylistically shift skin tone.",
+    "Do not change age appearance, facial proportions, skin tone, hairline, or ethnicity between panels.",
+    "Item refs are product-only anchors; never copy identity from item photos.",
+    "If an item photo shows a real person, treat that person as invisible except for clothing pixels.",
+    "Item-photo human = mannequin/hanger only for product display. Never transfer face, hair, skin, body, age, tattoos, or jewelry traits.",
+    "Fail-closed lock: if exact locked model identity and exact locked item look cannot both be shown, do not output an image.",
+    "Outfit continuity lock: both left and right frames must represent the same selected outfit/look from item references (unless right frame is an intentional close-up of that same look).",
+    "No outfit swaps, no colorway swaps, no garment substitutions across frames.",
+    "GLOBAL BACK-DESIGN HARD LOCK (ALL GENDERS, ALL PANELS, ALL POSES):",
+    "- For any back-facing frame, never invent, redesign, or hallucinate back graphics/logos/prints.",
+    "- If item references include a clear back design, reproduce that exact back design only.",
+    "- If item references do not include a clear back design, keep the back fully solid/clean in item color only.",
+    "Photorealism hard lock: realistic human anatomy and skin texture. No CGI, no mannequin-like skin, no plastic look, no uncanny facial structure.",
+    "NON-SEXUAL PRODUCT CATALOG HARD LOCK:",
+    "- This is an ecommerce fashion catalog photo set.",
+    "- Keep the scene strictly non-sexual: no lingerie/underwear context, no erotic framing, no suggestive mood.",
+    "- No emphasis on breasts/cleavage/groin; no deliberate zoom on intimate body regions.",
+    "- Wardrobe presentation must be professional and storefront-safe (neutral posture, neutral camera angle).",
+    ...(args.poseSafetySuggestions && args.poseSafetySuggestions.length
+      ? [
+          "POSE SAFETY MODIFICATIONS (from pre-generation scan — apply strictly):",
+          ...args.poseSafetySuggestions,
+        ]
+      : []),
+    `Panel request: Panel ${args.panelNumber} (${args.panelLabel}).`,
+    `Active pose priority: LEFT Pose ${args.poseA}, RIGHT Pose ${args.poseB}.`,
+    `LEFT ACTIVE POSE ${args.poseA} HARD AGE LOCK: the model is over 25+.`,
+    `RIGHT ACTIVE POSE ${args.poseB} HARD AGE LOCK: the model is over 25+.`,
+    "POSE PROMPTING METHOD HARD LOCK:",
+    "- Only two active poses are allowed in this generation call.",
+    "- LEFT frame must execute ACTIVE Pose A only.",
+    "- RIGHT frame must execute ACTIVE Pose B only.",
+    "Pose execution hard lock: LEFT frame must execute only LEFT active pose. RIGHT frame must execute only RIGHT active pose.",
+    "ONLY these two active poses are allowed in this image.",
+    ...criticalLockLines,
+    ...swimwearStyleLines,
+    `LEFT ACTIVE POSE:\n${poseABlock}`,
+    `RIGHT ACTIVE POSE:\n${poseBBlock}`,
+    "All non-active poses are reference only and must not execute in this image.",
+    "Full-body framing lock (male + female): whenever an active pose is full-body, include full head and both feet entirely in frame. No cropping of head, hair, chin, toes, or shoes.",
+    "Full-body no-crop applies to: Male poses 1,2,4 and Female poses 1,2,3,6.",
+    "3:4 split centering hard lock: each panel half is center-cropped to a final 3:4 portrait. Keep each active pose centered in its own half.",
+    "3:4 safe-zone math lock (for 1536x1024 panel output): each half is 768x1024 (already 3:4). Keep head/body/garment details inside this center-safe zone.",
+    swimwearActive
+      ? "Swimwear footwear lock (full-body): use clean flip-flops/sandals/water-shoes, or naturally uncovered feet."
+      : "Footwear hard lock (full-body): for every full-body active pose, the model must wear visible shoes. Barefoot and socks-only are forbidden.",
+    swimwearActive
+      ? "If swimwear footwear is not defined in item refs, keep feet natural or use simple neutral flip-flops consistently across selected panels."
+      : "If footwear is not clearly defined in item refs, use clean neutral studio sneakers and keep the same pair consistent across all selected panels in this run.",
+    "No-crop mapping lock: in any panel where the active pose is full-body (male/female mapping), frame top-of-hair to bottom-of-shoes with visible white margin.",
+    "Camera framing rule for full-body active poses: fit the complete body from top of hair to bottom of shoes with visible white margin above the head and below the feet.",
+    "If a full-body active pose would crop head or feet, zoom out and reframe until full body is fully visible.",
+    "If an active pose is not full-body (e.g., close-up/lower-body/torso crop), follow that crop as defined.",
+    `Model: ${args.modelName} (${args.modelGender}).`,
+    `Item type: ${promptItemType || args.itemType}.`,
+    "Pure white background, high-key studio light, faint contact shadow only.",
+    "Background hard lock: keep a sharp, clean studio white background (no gray cast, no gradient, no vignette, no texture, no wrinkles).",
+    "Background hard lock: use seamless pure white cyclorama look (#FFFFFF), no horizon line, and no color tint.",
+    "Cross-panel consistency lock: keep the same white background tone and lighting style across all selected panels in this run.",
+    "Hands rule: no hands in pockets.",
+  ].join("\n");
+}
+
+function buildMasterPanelPrompt(
+  args: Parameters<typeof buildMasterPanelPromptV2>[0],
+  flowVersion: "v2" | "legacy" = GEMINI_FLOW_V2_DEFAULT
+) {
+  return flowVersion === "legacy"
+    ? buildMasterPanelPromptLegacy(args)
+    : buildMasterPanelPromptV2(args);
+}
 
   async function generatePanels(
     mode: "generate" | "regenerate" | "generate_selected" | "regenerate_selected" = "generate"
@@ -3749,13 +3937,16 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
           const panelButtonLabel = getPanelButtonLabel(selectedModel.gender, panelNumber);
           const [defaultPoseA, defaultPoseB] = getPanelPosePair(selectedModel.gender, panelNumber);
 
-          const requestOnce = async (overrides?: {
+          const requestOnce = async (
+            overrides?: {
             poseA?: number;
             poseB?: number;
             panelNumberForLocks?: number;
             forceActivePoseOverride?: boolean;
             panelLabelSuffix?: string;
-          }) => {
+            },
+            flowVersion: "v2" | "legacy" = GEMINI_FLOW_V2_DEFAULT
+          ) => {
             const poseA = typeof overrides?.poseA === "number" ? overrides.poseA : defaultPoseA;
             const poseB = typeof overrides?.poseB === "number" ? overrides.poseB : defaultPoseB;
 
@@ -3770,7 +3961,7 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
             if (suggA) poseSafetySuggestions.push(`- LEFT Pose ${poseA}: ${suggA}`);
             if (suggB) poseSafetySuggestions.push(`- RIGHT Pose ${poseB}: ${suggB}`);
 
-            const prompt = buildMasterPanelPrompt({
+            const promptArgs = {
               panelNumber,
               panelNumberForLocks: overrides?.panelNumberForLocks,
               panelLabel,
@@ -3785,7 +3976,8 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
               itemStyleInstructions: normalizedItemStyleInstructions,
               regenerationComments: normalizedRegenerationComments,
               poseSafetySuggestions,
-            });
+            };
+            const prompt = buildMasterPanelPrompt(promptArgs, flowVersion);
 
             const { resp, json } = await fetchJsonWithRetry(
               "/api/gemini/generate",
@@ -3855,7 +4047,20 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
           };
 
           try {
-            const primary = await requestOnce();
+            let primary: Awaited<ReturnType<typeof requestOnce>>;
+            if (GEMINI_FLOW_V2_DEFAULT === "v2") {
+              try {
+                primary = await requestOnce(undefined, "v2");
+              } catch (v2Err: any) {
+                const v2Message = String(v2Err?.message || v2Err || "Gemini V2 flow failed");
+                setStatus(
+                  `Panel ${panelNumber}: Gemini Flow V2 failed (${v2Message}). Recovering with legacy flow...`
+                );
+                primary = await requestOnce(undefined, "legacy");
+              }
+            } else {
+              primary = await requestOnce(undefined, "legacy");
+            }
             return { panelNumber: primary.panelNumber, b64: primary.b64 };
           } catch (err) {
             const message = String((err as any)?.message || err || "");
@@ -6312,6 +6517,9 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
           <>
           <p className="muted">
             Select panels, generate, approve, then split into crops.
+          </p>
+          <p className="muted">
+            Gemini Flow: V2 hard-lock parity with OpenAI is active. Legacy flow remains enabled as automatic recovery.
           </p>
           <div className="row">
             <select

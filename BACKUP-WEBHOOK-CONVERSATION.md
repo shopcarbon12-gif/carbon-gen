@@ -98,3 +98,123 @@ Restore context quickly after a session crash. This file tracks major migration 
 ## Resume Instruction
 If session resets, instruct the agent:
 - "Read `BACKUP-WEBHOOK-CONVERSATION.md` and continue from the latest SQL-only state."
+
+## 2026-03-06 UI Progress Bar Cleanup
+- Removed duplicate global shell progress bar from:
+  - `components/workspace-shell.tsx`
+- Kept page-level themed progress bars on generator pages:
+  - `components/studio-workspace.tsx`
+  - `components/gemini-workspace.tsx`
+- Commit deployed to main:
+  - `33e9736` (`fix(ui): remove duplicate global progress bar`)
+- Live verification completed:
+  - `/studio/images` -> one themed progress bar, aligned with content in menu open/closed states
+  - `/studio/gemini-generator` -> one themed progress bar, aligned with content in menu open/closed states
+
+## 2026-03-06 Reference Image Download Hardening
+- Fixed generation failures when all remote reference URLs fail to download:
+  - error seen by user:
+    - `Unable to download required reference images`
+    - `Failed to download 12/12 reference image(s)`
+- Changes shipped in commit:
+  - `414a122` (`fix(images): fallback to direct storage reads for references`)
+- Files changed:
+  - `lib/storageProvider.ts`
+    - added `tryGetStoragePathFromUrl()` to resolve R2 object paths from public/custom URLs
+  - `app/api/generate/route.ts`
+    - `downloadReferenceAsFile()` now falls back to `downloadStorageObject()` when HTTP fetch fails
+  - `app/api/gemini/generate/route.ts`
+    - `downloadReferenceAsBase64()` now falls back to `downloadStorageObject()` when HTTP fetch fails
+- Deployment note:
+  - commit pushed to `main`
+  - Coolify was recovered from host disk-full outage (`/` 100%) by pruning unused Docker images/build cache
+  - `coolify-db` + `coolify` restarted and returned healthy
+  - app redeployed successfully in Coolify with commit `414a122` and status `Running`
+
+## 2026-03-07 Coolify Build Speed Optimization
+- Added optimized multi-stage Dockerfile for cache-friendly builds:
+  - `Dockerfile`
+- Commit:
+  - `e3cd0a8` (`build(coolify): add optimized Dockerfile with layer caching`)
+- Coolify configuration updated:
+  - Build mode switched from `Nixpacks` to `Dockerfile`
+- Deployment verification:
+  - New deployment created for `e3cd0a8`
+  - Final state `Success`
+  - `/studio/images` loads correctly after deploy
+
+## 2026-03-07 OpenAI Panel Generation Model Guard
+- Fixed `Panel 4 generation failed: 400 Invalid value ... Value must be 'dall-e-2'`:
+  - `app/api/generate/route.ts`
+  - added model-validation detection for `images.edit`
+  - auto-fallback from configured image model to `dall-e-2` when OpenAI rejects model for edit mode
+  - keeps existing prompt/safety retry logic, with `input_fidelity` only on non-`dall-e-2` calls
+- Commit:
+  - `ddad100` (`fix(openai): fallback images.edit model to dall-e-2`)
+- Deployment:
+  - redeploy queued via internal Coolify deployment helper
+  - deployment commit resolved to `ddad100e72a42853b4918de26f6a70bf2149ecfe`
+  - final status `finished`
+  - live `/studio/images` verification passed
+
+## 2026-03-07 Split -> Final Results Visibility
+- User issue: after approving and clicking `Split to 3:4`, split outputs were not visible in section `04 — Results`.
+- Fix:
+  - `components/studio-workspace.tsx`
+  - `components/gemini-workspace.tsx`
+  - `splitToThreeByFour()` now auto-expands section 04 via `setResultsCollapsed(false)` after successful split.
+- Commit:
+  - `fecc703` (`fix(results): auto-open section 04 after split`)
+- Deployment:
+  - queued through internal Coolify helper
+  - deployed commit `fecc703fc3d4184e7d31011e1d0bf9b67e5cc00f`
+  - final status `finished`
+
+## 2026-03-07 Studio/Gemini Split + Publish Flow Enhancements
+- User workflow updates applied identically to:
+  - `components/studio-workspace.tsx`
+  - `components/gemini-workspace.tsx`
+- Changes:
+  - Section 04 Final Results:
+    - replaced top-right `X` for device/cloud final result cards with under-image `Remove` button
+  - Section 03 Generate:
+    - added `Add External Files` button next to `Split to 3:4`
+    - external images are tracked as count only (no preview in section 03)
+    - `Split to 3:4` now includes both generated panel images and newly added external files
+  - Shopify Push handoff:
+    - `Use Pictures In Shopify Push` now redirects directly to `/studio/seo#publish-section`
+    - transfer payload includes barcode from section 02 context and forces SEO publish search input to that barcode
+    - on SEO mode load, publish section auto-expands when transferred images arrive
+- Commit:
+  - `55d412c` (`fix(workflow): improve split uploads and publish handoff`)
+- Deployment:
+  - deployed commit `55d412cbcbe994ee1ddb9ad815268cc1ffb6fa46`
+  - final status `finished`
+  - live UI verification passed on Studio + Gemini pages
+
+## 2026-03-07 Shopify Printer Reliability + Bridge
+- Fixed webhook signature validation drift by accepting either:
+  - `SHOPIFY_WEBHOOK_SECRET`
+  - `SHOPIFY_APP_CLIENT_SECRET` (fallback)
+- Added and deployed fulfilled-order trigger path:
+  - webhook registration uses `ORDERS_FULFILLED`
+  - new route `app/api/shopify/webhooks/orders-fulfilled/route.ts`
+- Added carrier-label-first print attempt and tracking-barcode fallback label rendering.
+- Added bridge queue + worker infrastructure for Shopify-native print-label capture:
+  - queue module: `lib/shopifyPrintBridgeQueue.ts`
+  - secure claim endpoint: `app/api/shopify/printer/bridge/claim/route.ts`
+  - secure complete endpoint: `app/api/shopify/printer/bridge/complete/route.ts`
+  - worker script: `scripts/shopify-print-bridge.mjs`
+  - npm script: `shopify:print-bridge`
+- Deployments:
+  - `40d81d6` (webhook auth fix) -> finished
+  - `85cc362` (carrier-label-first + fallback improvements) -> finished
+  - `37fe2a9` (print bridge queue/worker) -> finished
+
+## 2026-03-09 Gemini Flow V2 Prompt Parity
+- Added Gemini Flow V2 hard-lock prompt builder in `components/gemini-workspace.tsx` by porting OpenAI prompt lock structure.
+- Kept legacy Gemini prompt flow intact as automatic recovery fallback.
+- Generation behavior:
+  - default uses V2 prompt flow
+  - auto-retries same panel with legacy prompt flow if V2 request fails
+- UI note added under Gemini Generate section to indicate V2 active + legacy recovery available.
