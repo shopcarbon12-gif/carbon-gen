@@ -155,9 +155,62 @@ async function getShopifySourceUrl(sourceUrl: string) {
   const raw = norm(sourceUrl);
   if (!/^https?:\/\//i.test(raw)) return "";
 
-  // Keep legacy storage URLs usable by passing them through unchanged.
-  // Public R2/S3 URLs and already-signed URLs work directly with Shopify.
-  return raw;
+  // Re-stage every remote source into our own public storage so Shopify
+  // always reads from a stable host with consistent headers/content-type.
+  const fallbackExtFromUrl = (() => {
+    try {
+      const pathname = new URL(raw).pathname || "";
+      const ext = pathname.split(".").pop()?.toLowerCase() || "";
+      if (ext === "jpg" || ext === "jpeg" || ext === "png" || ext === "webp" || ext === "gif") {
+        return ext === "jpeg" ? "jpg" : ext;
+      }
+    } catch {}
+    return "jpg";
+  })();
+
+  const ctrl = new AbortController();
+  const timeout = setTimeout(() => ctrl.abort(), 20_000);
+  try {
+    const resp = await fetch(raw, {
+      method: "GET",
+      redirect: "follow",
+      signal: ctrl.signal,
+      headers: {
+        accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+        "user-agent": "Mozilla/5.0 (compatible; CarbonGenShopifyPush/1.0)",
+      },
+      cache: "no-store",
+    });
+    if (!resp.ok) {
+      throw new Error(`source fetch failed (${resp.status})`);
+    }
+    const bytes = new Uint8Array(await resp.arrayBuffer());
+    if (!bytes.byteLength) {
+      throw new Error("source image is empty");
+    }
+
+    const contentTypeRaw = String(resp.headers.get("content-type") || "")
+      .split(";")[0]
+      ?.trim()
+      .toLowerCase();
+    const contentType =
+      contentTypeRaw && contentTypeRaw.startsWith("image/") ? contentTypeRaw : "image/jpeg";
+    const ext =
+      contentType.includes("png")
+        ? "png"
+        : contentType.includes("webp")
+          ? "webp"
+          : contentType.includes("gif")
+            ? "gif"
+            : contentType.includes("jpg") || contentType.includes("jpeg")
+              ? "jpg"
+              : fallbackExtFromUrl;
+    const path = `items/push-staging/${Date.now()}-${crypto.randomUUID()}.${ext}`;
+    const uploaded = await uploadBytesToStorage({ path, bytes, contentType });
+    return norm(uploaded.url);
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function toNumericId(value: string) {
