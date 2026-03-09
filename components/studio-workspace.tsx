@@ -466,6 +466,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   const barcodeScannerVideoRef = useRef<HTMLVideoElement | null>(null);
   const barcodeScannerRafRef = useRef<number | null>(null);
   const barcodeScannerStreamRef = useRef<MediaStream | null>(null);
+  const barcodeScannerFallbackControlsRef = useRef<{ stop: () => void } | null>(null);
   const barcodeScannerRemotePollRef = useRef<number | null>(null);
   const itemCameraRemotePollRef = useRef<number | null>(null);
   const finalResultPickerRef = useRef<HTMLInputElement | null>(null);
@@ -687,6 +688,15 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   );
 
   const stopBarcodeScannerSession = useCallback(() => {
+    const fallbackControls = barcodeScannerFallbackControlsRef.current;
+    if (fallbackControls) {
+      try {
+        fallbackControls.stop();
+      } catch {
+        // Ignore fallback scanner stop errors during cleanup.
+      }
+      barcodeScannerFallbackControlsRef.current = null;
+    }
     if (typeof window !== "undefined" && barcodeScannerRafRef.current !== null) {
       window.cancelAnimationFrame(barcodeScannerRafRef.current);
       barcodeScannerRafRef.current = null;
@@ -729,13 +739,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     }
     const BarcodeDetectorCtor = (window as Window & { BarcodeDetector?: BarcodeDetectorCtorLike })
       .BarcodeDetector;
-    if (!BarcodeDetectorCtor) {
-      const message = "Live barcode scan is not supported on this browser. Use Chrome/Edge mobile.";
-      setBarcodeScannerError(message);
-      setError(message);
-      setBarcodeScannerOpen(false);
-      return;
-    }
 
     let cancelled = false;
     let detectorBusy = false;
@@ -779,7 +782,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       });
     };
 
-    const start = async () => {
+    const startWithNativeDetector = async () => {
       setBarcodeScannerBusy(true);
       setBarcodeScannerError(null);
       try {
@@ -814,7 +817,67 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       }
     };
 
-    void start();
+    const startWithZxingFallback = async () => {
+      setBarcodeScannerBusy(true);
+      setBarcodeScannerError(null);
+      try {
+        const video = barcodeScannerVideoRef.current;
+        if (!video) throw new Error("Camera preview is unavailable.");
+        const zxing = (await import("@zxing/browser")) as any;
+        const ReaderCtor = zxing?.BrowserMultiFormatReader;
+        const NotFoundErrorCtor = zxing?.NotFoundException;
+        if (!ReaderCtor) {
+          throw new Error("Barcode scanner fallback is unavailable.");
+        }
+        const reader = new ReaderCtor();
+        const controls = await reader.decodeFromVideoDevice(
+          undefined,
+          video,
+          (result: any, err: any) => {
+            if (cancelled) return;
+            if (result) {
+              const raw = String(result?.getText?.() || result?.text || "").trim();
+              const normalized = sanitizeBarcodeInput(raw);
+              if (!normalized) return;
+              setItemBarcode(normalized);
+              setStatus(`Scanned barcode: ${normalized}`);
+              setError(null);
+              setBarcodeScannerError(null);
+              setBarcodeScannerOpen(false);
+              return;
+            }
+            if (err && NotFoundErrorCtor && err instanceof NotFoundErrorCtor) {
+              return;
+            }
+          }
+        );
+        if (cancelled) {
+          try {
+            controls?.stop?.();
+          } catch {
+            // Ignore stop errors during cancellation.
+          }
+          return;
+        }
+        barcodeScannerFallbackControlsRef.current = controls;
+      } catch (e: any) {
+        const message =
+          e?.message
+            ? `Unable to start camera scanner: ${e.message}`
+            : "Unable to start camera scanner.";
+        setBarcodeScannerError(message);
+        setError(message);
+        setBarcodeScannerOpen(false);
+      } finally {
+        if (!cancelled) setBarcodeScannerBusy(false);
+      }
+    };
+
+    if (BarcodeDetectorCtor) {
+      void startWithNativeDetector();
+    } else {
+      void startWithZxingFallback();
+    }
     return () => {
       cancelled = true;
       setBarcodeScannerBusy(false);

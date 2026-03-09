@@ -124,6 +124,8 @@ export default function BarcodeScanSessionPage() {
           if (raw) {
             const normalized = sanitizeBarcodeInput(raw);
             if (isValidBarcode(normalized)) {
+              setManualBarcode(normalized);
+              setStatus(`Detected: ${normalized}. Sending to desktop...`);
               await submitBarcode(normalized);
               return;
             }
@@ -175,10 +177,19 @@ export default function BarcodeScanSessionPage() {
   }, [cleanup, done, sessionId, submitBarcode]);
 
   return (
-    <main style={{ minHeight: "100dvh", background: "#020617", color: "#f8fafc", padding: 16 }}>
+    <main
+      style={{
+        position: "fixed",
+        inset: 0,
+        overflowY: "auto",
+        background: "#020617",
+        color: "#f8fafc",
+        padding: 12,
+      }}
+    >
       <div
         style={{
-          maxWidth: 460,
+          maxWidth: 520,
           margin: "0 auto",
           border: "1px solid rgba(255,255,255,0.3)",
           borderRadius: 14,
@@ -192,7 +203,7 @@ export default function BarcodeScanSessionPage() {
           <strong>Scan Barcode</strong>
           <span style={{ fontSize: 12, opacity: 0.8 }}>{busy ? "Opening..." : "Ready"}</span>
         </div>
-        <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", aspectRatio: "3 / 4" }}>
+        <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", aspectRatio: "4 / 5", background: "#000" }}>
           <video ref={videoRef} playsInline muted autoPlay style={{ width: "100%", height: "100%", objectFit: "cover" }} />
         </div>
         <div style={{ textAlign: "center", opacity: 0.85, fontSize: 13 }}>{status}</div>
