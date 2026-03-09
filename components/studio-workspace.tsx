@@ -1906,7 +1906,11 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     return [] as PushQueueImage[];
   }
 
-  async function loadCurrentShopifyImages(productIdValue: string, includeGenerated: boolean) {
+  async function loadCurrentShopifyImages(
+    productIdValue: string,
+    includeGenerated: boolean,
+    options?: { replaceQueue?: boolean }
+  ) {
     const shopValue = shop.trim();
     if (!shopValue || !productIdValue.trim()) return;
     const resp = await fetch("/api/shopify-push", {
@@ -1938,6 +1942,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     const generatedRows = includeGenerated ? buildGeneratedPushImages() : [];
     const merged = [...currentRows, ...generatedRows];
     setPushImages((prev) => {
+      if (options?.replaceQueue) {
+        return merged;
+      }
       const keep = prev.filter(
         (img) =>
           !(
@@ -3010,7 +3017,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           ? `Shopify images updated. Variant order warning: ${reorderWarning}`
           : "Shopify product images and color assignments updated."
       );
-      await loadPushCatalogProducts();
+      const refreshed = await loadCurrentShopifyImages(pushProductId.trim(), false, { replaceQueue: true });
+      await pullPushVariants(pushProductId.trim(), refreshed);
     } catch (e: any) {
       setError(e?.message || "Shopify image push failed");
       setStatus(null);
