@@ -27,7 +27,7 @@ const PUSH_TRANSFER_STORAGE_KEY = "cg_push_transfer_v1";
 const DAILY_MODEL_RESET_STORAGE_KEY = "cg_daily_model_reset_day_v1";
 const ALT_GENERATION_BATCH_SIZE = 3;
 const PUSH_STAGING_BATCH_SIZE = 4;
-const STATUS_BAR_FIXED_HEIGHT = 126;
+const STATUS_BAR_FIXED_HEIGHT = 154;
 
 type ShopifyCatalogProduct = {
   id: string;
@@ -7370,8 +7370,10 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           );
           z-index: 40;
           gap: 8px;
-          min-height: var(--status-bar-height, 126px);
-          max-height: var(--status-bar-height, 126px);
+          height: var(--status-bar-height, 154px);
+          min-height: var(--status-bar-height, 154px);
+          max-height: var(--status-bar-height, 154px);
+          overflow: hidden;
           will-change: right, left;
           transition:
             left var(--chat-expand-duration, 220ms)
@@ -7423,8 +7425,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         .status-chip {
           border: 1px solid #e2e8f0;
           border-radius: 10px;
-          padding: 3px 9px;
-          min-width: 76px;
+          padding: 3px 0;
+          width: 78px;
+          box-sizing: border-box;
           justify-content: center;
           text-align: center;
           display: inline-flex;
