@@ -2072,7 +2072,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       setStatus(`Order updated in preview only. Shopify reorder warning: ${e?.message || "failed"}`);
     } finally {
       pushReorderInFlightRef.current = false;
-      if (pushReorderQueuedMediaIdsRef.current?.length) {
+      const pendingReorder = pushReorderQueuedMediaIdsRef.current;
+      if (Array.isArray(pendingReorder) && pendingReorder.length > 0) {
         void flushQueuedShopifyReorder();
       }
     }
