@@ -190,6 +190,24 @@ function sanitizeBarcodeInput(value: string) {
     .slice(0, 9);
 }
 
+function dataUrlToFile(dataUrl: string, fileName: string) {
+  const match = String(dataUrl || "").match(/^data:(.*?);base64,(.*)$/);
+  if (!match) return null;
+  const mimeType = String(match[1] || "").trim();
+  const base64Data = String(match[2] || "");
+  if (!mimeType.startsWith("image/")) return null;
+  try {
+    const binary = atob(base64Data);
+    const bytes = new Uint8Array(binary.length);
+    for (let idx = 0; idx < binary.length; idx += 1) {
+      bytes[idx] = binary.charCodeAt(idx);
+    }
+    return new File([bytes], fileName || "camera-upload.jpg", { type: mimeType });
+  } catch {
+    return null;
+  }
+}
+
 function normalizePromptInstruction(value: unknown, maxLen = 1200) {
   return String(value || "")
     .replace(/\r/g, "")
@@ -348,6 +366,18 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   const [itemBarcode, setItemBarcode] = useState("");
   const [itemBarcodeSaved, setItemBarcodeSaved] = useState("");
   const [barcodeScannerOpen, setBarcodeScannerOpen] = useState(false);
+  const [itemCameraChooserOpen, setItemCameraChooserOpen] = useState(false);
+  const [itemCameraRemoteOpen, setItemCameraRemoteOpen] = useState(false);
+  const [itemCameraRemoteBusy, setItemCameraRemoteBusy] = useState(false);
+  const [itemCameraRemoteSessionId, setItemCameraRemoteSessionId] = useState("");
+  const [itemCameraRemoteQrCodeUrl, setItemCameraRemoteQrCodeUrl] = useState("");
+  const [itemCameraRemoteError, setItemCameraRemoteError] = useState<string | null>(null);
+  const [barcodeScannerChooserOpen, setBarcodeScannerChooserOpen] = useState(false);
+  const [barcodeScannerRemoteOpen, setBarcodeScannerRemoteOpen] = useState(false);
+  const [barcodeScannerRemoteBusy, setBarcodeScannerRemoteBusy] = useState(false);
+  const [barcodeScannerRemoteSessionId, setBarcodeScannerRemoteSessionId] = useState("");
+  const [barcodeScannerRemoteQrCodeUrl, setBarcodeScannerRemoteQrCodeUrl] = useState("");
+  const [barcodeScannerRemoteError, setBarcodeScannerRemoteError] = useState<string | null>(null);
   const [barcodeScannerBusy, setBarcodeScannerBusy] = useState(false);
   const [barcodeScannerError, setBarcodeScannerError] = useState<string | null>(null);
   const [dropboxSearching, setDropboxSearching] = useState(false);
@@ -436,6 +466,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   const barcodeScannerVideoRef = useRef<HTMLVideoElement | null>(null);
   const barcodeScannerRafRef = useRef<number | null>(null);
   const barcodeScannerStreamRef = useRef<MediaStream | null>(null);
+  const barcodeScannerRemotePollRef = useRef<number | null>(null);
+  const itemCameraRemotePollRef = useRef<number | null>(null);
   const finalResultPickerRef = useRef<HTMLInputElement | null>(null);
   const finalResultFolderRef = useRef<HTMLInputElement | null>(null);
   const externalSplitPickerRef = useRef<HTMLInputElement | null>(null);
@@ -2069,8 +2101,221 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   function openBarcodeScanner() {
     setError(null);
     setBarcodeScannerError(null);
+    setBarcodeScannerRemoteError(null);
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(min-width: 901px)").matches &&
+      window.matchMedia("(pointer: fine)").matches
+    ) {
+      setBarcodeScannerChooserOpen(true);
+      return;
+    }
     setBarcodeScannerOpen(true);
   }
+
+  function stopBarcodeRemotePolling() {
+    if (typeof window !== "undefined" && barcodeScannerRemotePollRef.current !== null) {
+      window.clearInterval(barcodeScannerRemotePollRef.current);
+      barcodeScannerRemotePollRef.current = null;
+    }
+  }
+
+  function openDesktopLocalCameraScanner() {
+    setBarcodeScannerChooserOpen(false);
+    setBarcodeScannerRemoteOpen(false);
+    setBarcodeScannerRemoteError(null);
+    setBarcodeScannerOpen(true);
+  }
+
+  function stopItemCameraRemotePolling() {
+    if (typeof window !== "undefined" && itemCameraRemotePollRef.current !== null) {
+      window.clearInterval(itemCameraRemotePollRef.current);
+      itemCameraRemotePollRef.current = null;
+    }
+  }
+
+  function openItemCameraCapture() {
+    setItemCameraRemoteError(null);
+    setError(null);
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(min-width: 901px)").matches &&
+      window.matchMedia("(pointer: fine)").matches
+    ) {
+      setItemCameraChooserOpen(true);
+      return;
+    }
+    openInputPickerWithMask(itemCameraRef.current);
+  }
+
+  function openItemCameraLocalCapture() {
+    setItemCameraChooserOpen(false);
+    setItemCameraRemoteOpen(false);
+    setItemCameraRemoteError(null);
+    openInputPickerWithMask(itemCameraRef.current);
+  }
+
+  async function openItemCameraRemoteQr() {
+    setItemCameraRemoteBusy(true);
+    setItemCameraRemoteError(null);
+    setItemCameraRemoteSessionId("");
+    setItemCameraRemoteQrCodeUrl("");
+    setItemCameraRemoteOpen(false);
+    stopItemCameraRemotePolling();
+    try {
+      const response = await fetch("/api/image-handoff/session", {
+        method: "POST",
+        cache: "no-store",
+      });
+      const json = await parseJsonResponse(response, "/api/image-handoff/session");
+      if (!response.ok) {
+        throw new Error(String(json?.error || "Failed to start remote camera session."));
+      }
+      const sessionId = String(json?.sessionId || "").trim();
+      const qrCodeUrl = String(json?.qrCodeUrl || "").trim();
+      if (!sessionId || !qrCodeUrl) {
+        throw new Error("Invalid remote camera response.");
+      }
+      setItemCameraChooserOpen(false);
+      setItemCameraRemoteSessionId(sessionId);
+      setItemCameraRemoteQrCodeUrl(qrCodeUrl);
+      setItemCameraRemoteOpen(true);
+    } catch (e: any) {
+      const message = e?.message || "Failed to open remote camera QR.";
+      setItemCameraRemoteError(message);
+      setError(message);
+    } finally {
+      setItemCameraRemoteBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!itemCameraRemoteOpen || !itemCameraRemoteSessionId) {
+      stopItemCameraRemotePolling();
+      return;
+    }
+    if (typeof window === "undefined") return;
+    stopItemCameraRemotePolling();
+    const poll = async () => {
+      try {
+        const response = await fetch(
+          `/api/image-handoff/session/${encodeURIComponent(itemCameraRemoteSessionId)}?consume=1`,
+          { cache: "no-store" }
+        );
+        const json = await parseJsonResponse(response, "/api/image-handoff/session/[sessionId]");
+        if (response.status === 404) {
+          throw new Error(String(json?.error || "Remote camera session expired."));
+        }
+        if (!response.ok || !json?.ready) return;
+        const fileName = String(json?.fileName || "").trim() || "camera-upload.jpg";
+        const dataUrl = String(json?.dataUrl || "");
+        const file = dataUrlToFile(dataUrl, fileName);
+        if (!file) throw new Error("Received invalid image from remote camera.");
+        setItemFiles((prev) => mergeUniqueFiles(prev, [file]));
+        setItemCameraRemoteOpen(false);
+        setItemCameraChooserOpen(false);
+        setItemCameraRemoteError(null);
+        setError(null);
+        setStatus(`Camera upload received: ${file.name}`);
+        stopItemCameraRemotePolling();
+      } catch (e: any) {
+        const message = e?.message || "Remote camera polling failed.";
+        setItemCameraRemoteError(message);
+        setError(message);
+        setItemCameraRemoteOpen(false);
+        setItemCameraChooserOpen(false);
+        stopItemCameraRemotePolling();
+      }
+    };
+    void poll();
+    itemCameraRemotePollRef.current = window.setInterval(() => {
+      void poll();
+    }, 1300);
+    return () => {
+      stopItemCameraRemotePolling();
+    };
+  }, [itemCameraRemoteOpen, itemCameraRemoteSessionId]);
+
+  async function openDesktopRemoteScannerQr() {
+    setBarcodeScannerRemoteBusy(true);
+    setBarcodeScannerRemoteError(null);
+    setBarcodeScannerRemoteSessionId("");
+    setBarcodeScannerRemoteQrCodeUrl("");
+    setBarcodeScannerRemoteOpen(false);
+    stopBarcodeRemotePolling();
+    try {
+      const response = await fetch("/api/barcode-handoff/session", {
+        method: "POST",
+        cache: "no-store",
+      });
+      const json = await parseJsonResponse(response, "/api/barcode-handoff/session");
+      if (!response.ok) {
+        throw new Error(String(json?.error || "Failed to start remote scanner session."));
+      }
+      const sessionId = String(json?.sessionId || "").trim();
+      const qrCodeUrl = String(json?.qrCodeUrl || "").trim();
+      if (!sessionId || !qrCodeUrl) {
+        throw new Error("Invalid remote scanner session response.");
+      }
+      setBarcodeScannerChooserOpen(false);
+      setBarcodeScannerRemoteSessionId(sessionId);
+      setBarcodeScannerRemoteQrCodeUrl(qrCodeUrl);
+      setBarcodeScannerRemoteOpen(true);
+    } catch (e: any) {
+      const message = e?.message || "Failed to open remote scanner QR.";
+      setBarcodeScannerRemoteError(message);
+      setError(message);
+    } finally {
+      setBarcodeScannerRemoteBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!barcodeScannerRemoteOpen || !barcodeScannerRemoteSessionId) {
+      stopBarcodeRemotePolling();
+      return;
+    }
+    if (typeof window === "undefined") return;
+    stopBarcodeRemotePolling();
+    const poll = async () => {
+      try {
+        const response = await fetch(
+          `/api/barcode-handoff/session/${encodeURIComponent(barcodeScannerRemoteSessionId)}?consume=1`,
+          { cache: "no-store" }
+        );
+        const json = await parseJsonResponse(response, "/api/barcode-handoff/session/[sessionId]");
+        if (response.status === 404) {
+          throw new Error(String(json?.error || "Remote scanner session expired."));
+        }
+        if (!response.ok) return;
+        if (!json?.ready) return;
+        const normalized = sanitizeBarcodeInput(String(json?.barcode || "")).trim();
+        if (!isValidBarcode(normalized)) return;
+        setItemBarcode(normalized);
+        setItemBarcodeSaved(normalized);
+        setStatus(`Scanned barcode: ${normalized}`);
+        setError(null);
+        setBarcodeScannerRemoteError(null);
+        setBarcodeScannerRemoteOpen(false);
+        setBarcodeScannerChooserOpen(false);
+        stopBarcodeRemotePolling();
+      } catch (e: any) {
+        const message = e?.message || "Remote scanner polling failed.";
+        setBarcodeScannerRemoteError(message);
+        setError(message);
+        setBarcodeScannerRemoteOpen(false);
+        setBarcodeScannerChooserOpen(false);
+        stopBarcodeRemotePolling();
+      }
+    };
+    void poll();
+    barcodeScannerRemotePollRef.current = window.setInterval(() => {
+      void poll();
+    }, 1200);
+    return () => {
+      stopBarcodeRemotePolling();
+    };
+  }, [barcodeScannerRemoteOpen, barcodeScannerRemoteSessionId]);
 
   function clearSavedItemBarcode() {
     setItemBarcodeSaved("");
@@ -4758,12 +5003,10 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                     </div>
                   ))}
                 </div>
-              ) : (
-                <span className="muted registry-inline-summary">No models yet.</span>
-              )
+              ) : null
             ) : null}
             <div className="model-registry-header-actions">
-              {modelRegistryCollapsed ? (
+              {modelRegistryCollapsed && models.length ? (
                 <button className="ghost-btn danger" type="button" onClick={resetModels}>
                   Reset Models
                 </button>
@@ -4781,7 +5024,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           {!modelRegistryCollapsed ? (
             <>
           <p className="muted">Upload model profile images.</p>
-          <div className="row">
+          <div className="row barcode-row">
             <input
               suppressHydrationWarning
               value={modelName}
@@ -5089,10 +5332,10 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             />
             <button
               suppressHydrationWarning
-              className="btn ghost mobile-only-control mobile-camera-trigger"
+              className="btn ghost mobile-camera-trigger"
               type="button"
               onClick={openBarcodeScanner}
-              disabled={barcodeScannerBusy}
+              disabled={barcodeScannerBusy || barcodeScannerRemoteBusy}
             >
               <span className="camera-btn-inner">
                 <svg
@@ -5108,7 +5351,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                   <path d="M4 7h4l1.3-2h5.4L16 7h4v12H4z" />
                   <circle cx="12" cy="13" r="4" />
                 </svg>
-                <span>{barcodeScannerBusy ? "Opening..." : "Scan"}</span>
+                <span>
+                  {barcodeScannerBusy || barcodeScannerRemoteBusy ? "Opening..." : "Scan Barcode"}
+                </span>
               </span>
             </button>
             <button
@@ -5127,6 +5372,146 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                   : "Search Dropbox by Barcode"}
             </button>
           </div>
+          {itemCameraChooserOpen ? (
+            <div className="barcode-scanner-overlay" role="dialog" aria-modal="true">
+              <div className="barcode-scanner-card barcode-scanner-choice-card">
+                <div className="barcode-scanner-head">
+                  <div className="card-title">Camera Upload</div>
+                  <button
+                    className="ghost-btn"
+                    type="button"
+                    onClick={() => {
+                      setItemCameraChooserOpen(false);
+                      setItemCameraRemoteError(null);
+                    }}
+                  >
+                    Close
+                  </button>
+                </div>
+                <div className="barcode-scanner-choice-actions">
+                  <button className="ghost-btn" type="button" onClick={openItemCameraLocalCapture}>
+                    Use This Device Camera
+                  </button>
+                  <button
+                    className="ghost-btn"
+                    type="button"
+                    onClick={() => {
+                      void openItemCameraRemoteQr();
+                    }}
+                    disabled={itemCameraRemoteBusy}
+                  >
+                    Use Another Device Camera (QR)
+                  </button>
+                </div>
+                {itemCameraRemoteError ? (
+                  <div className="barcode-scanner-error">{itemCameraRemoteError}</div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+          {itemCameraRemoteOpen ? (
+            <div className="barcode-scanner-overlay" role="dialog" aria-modal="true">
+              <div className="barcode-scanner-card barcode-scanner-choice-card">
+                <div className="barcode-scanner-head">
+                  <div className="card-title">Upload Photo From Another Device</div>
+                  <button
+                    className="ghost-btn"
+                    type="button"
+                    onClick={() => {
+                      setItemCameraRemoteOpen(false);
+                      setItemCameraRemoteError(null);
+                      stopItemCameraRemotePolling();
+                    }}
+                  >
+                    Close
+                  </button>
+                </div>
+                {itemCameraRemoteQrCodeUrl ? (
+                  <img
+                    className="barcode-scanner-qr"
+                    src={itemCameraRemoteQrCodeUrl}
+                    alt="QR code for camera upload handoff"
+                  />
+                ) : null}
+                <div className="muted centered">
+                  Scan this QR code on your phone, take a photo, and it will appear here automatically.
+                </div>
+                {itemCameraRemoteError ? (
+                  <div className="barcode-scanner-error">{itemCameraRemoteError}</div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+          {barcodeScannerChooserOpen ? (
+            <div className="barcode-scanner-overlay" role="dialog" aria-modal="true">
+              <div className="barcode-scanner-card barcode-scanner-choice-card">
+                <div className="barcode-scanner-head">
+                  <div className="card-title">Scan Barcode</div>
+                  <button
+                    className="ghost-btn"
+                    type="button"
+                    onClick={() => {
+                      setBarcodeScannerChooserOpen(false);
+                      setBarcodeScannerRemoteError(null);
+                    }}
+                  >
+                    Close
+                  </button>
+                </div>
+                <div className="barcode-scanner-choice-actions">
+                  <button className="ghost-btn" type="button" onClick={openDesktopLocalCameraScanner}>
+                    Use This Device Camera
+                  </button>
+                  <button
+                    className="ghost-btn"
+                    type="button"
+                    onClick={() => {
+                      void openDesktopRemoteScannerQr();
+                    }}
+                    disabled={barcodeScannerRemoteBusy}
+                  >
+                    Use Another Device Camera (QR)
+                  </button>
+                </div>
+                {barcodeScannerRemoteError ? (
+                  <div className="barcode-scanner-error">{barcodeScannerRemoteError}</div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+          {barcodeScannerRemoteOpen ? (
+            <div className="barcode-scanner-overlay" role="dialog" aria-modal="true">
+              <div className="barcode-scanner-card barcode-scanner-choice-card">
+                <div className="barcode-scanner-head">
+                  <div className="card-title">Scan With Another Device</div>
+                  <button
+                    className="ghost-btn"
+                    type="button"
+                    onClick={() => {
+                      setBarcodeScannerRemoteOpen(false);
+                      setBarcodeScannerRemoteError(null);
+                      stopBarcodeRemotePolling();
+                    }}
+                  >
+                    Close
+                  </button>
+                </div>
+                {barcodeScannerRemoteQrCodeUrl ? (
+                  <img
+                    className="barcode-scanner-qr"
+                    src={barcodeScannerRemoteQrCodeUrl}
+                    alt="QR code for barcode scanner handoff"
+                  />
+                ) : null}
+                <div className="muted centered">
+                  Scan this QR code on your phone, then scan the barcode there.
+                </div>
+                {barcodeScannerRemoteError ? (
+                  <div className="barcode-scanner-error">{barcodeScannerRemoteError}</div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
           {barcodeScannerOpen ? (
             <div className="barcode-scanner-overlay" role="dialog" aria-modal="true">
               <div className="barcode-scanner-card">
@@ -5260,9 +5645,10 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               Choose folder
             </button>
             <button
-              className="ghost-btn mobile-only-control mobile-camera-trigger"
+              className="ghost-btn mobile-camera-trigger"
               type="button"
-              onClick={() => openInputPickerWithMask(itemCameraRef.current)}
+              onClick={openItemCameraCapture}
+              disabled={itemCameraRemoteBusy}
             >
               <span className="camera-btn-inner">
                 <svg
@@ -5278,7 +5664,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                   <path d="M4 7h4l1.3-2h5.4L16 7h4v12H4z" />
                   <circle cx="12" cy="13" r="4" />
                 </svg>
-                <span>Camera</span>
+                <span>{itemCameraRemoteBusy ? "Opening..." : "Camera"}</span>
               </span>
             </button>
           </div>
@@ -7076,6 +7462,22 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           font-size: 0.85rem;
           text-align: center;
         }
+        .barcode-scanner-choice-card {
+          width: min(420px, 94vw);
+        }
+        .barcode-scanner-choice-actions {
+          display: grid;
+          gap: 8px;
+        }
+        .barcode-scanner-qr {
+          width: min(280px, 72vw);
+          max-width: 100%;
+          margin: 0 auto;
+          border-radius: 12px;
+          border: 1px solid rgba(255, 255, 255, 0.35);
+          background: #fff;
+          display: block;
+        }
         .model-selected-area {
           border: 1px dashed #cbd5e1;
           border-radius: 12px;
@@ -8315,6 +8717,40 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           .ghost-btn.mobile-only-control {
             display: inline-flex;
           }
+          .row {
+            align-items: stretch;
+          }
+          .barcode-row > input {
+            flex: 1 1 100%;
+          }
+          .barcode-row > .btn,
+          .barcode-row > .ghost-btn,
+          .barcode-row > button {
+            flex: 1 1 calc(50% - 8px);
+            min-width: 0;
+          }
+          .picker-row {
+            flex-wrap: wrap;
+            justify-content: stretch;
+          }
+          .picker-row .ghost-btn,
+          .picker-row .btn {
+            flex: 1 1 calc(50% - 8px);
+            min-width: 132px;
+          }
+          .model-selected-header {
+            flex-wrap: wrap;
+            align-items: flex-start;
+          }
+          .model-selected-header .card-title,
+          .model-selected-header .muted {
+            width: 100%;
+            margin-left: 0;
+            text-align: center;
+          }
+          .source-note {
+            text-align: center;
+          }
           .generation-actions-layout {
             grid-template-columns: 1fr;
           }
@@ -8343,6 +8779,13 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           }
         }
         @media (max-width: 640px) {
+          .barcode-row > .btn,
+          .barcode-row > .ghost-btn,
+          .barcode-row > button,
+          .picker-row .ghost-btn,
+          .picker-row .btn {
+            flex: 1 1 100%;
+          }
           .item-catalog-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
           }

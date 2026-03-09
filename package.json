@@ -27,6 +27,7 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:report": "playwright show-report",
+    "deploy:coolify": "node scripts/deploy-coolify.mjs",
     "deploy:vercel": "vercel deploy --prod --yes",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload",
