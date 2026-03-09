@@ -116,6 +116,14 @@ function norm(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function toMediaGid(value: unknown) {
+  const raw = norm(value);
+  if (!raw) return "";
+  if (raw.startsWith("gid://")) return raw;
+  const numeric = raw.match(/\d+/)?.[0] || "";
+  return numeric ? `gid://shopify/MediaImage/${numeric}` : "";
+}
+
 function normalizeAlt(value: unknown) {
   return norm(value).slice(0, 120);
 }
@@ -240,7 +248,11 @@ async function updateMediaAlt(shop: string, productGid: string, mediaId: string,
     }
   `;
   const normalizedAlt = normalizeAlt(altText);
-  const media = [{ id: mediaId, alt: normalizedAlt ? normalizedAlt : null }];
+  const normalizedMediaId = toMediaGid(mediaId);
+  if (!normalizedMediaId) {
+    throw new Error("Invalid mediaId for Shopify alt update.");
+  }
+  const media = [{ id: normalizedMediaId, alt: normalizedAlt ? normalizedAlt : null }];
   const result = await runWithAnyToken<ProductUpdateMediaResult>(shop, async (token) =>
     runShopifyGraphql<ProductUpdateMediaResult>({
       shop,
@@ -268,8 +280,9 @@ async function updateMediaAlt(shop: string, productGid: string, mediaId: string,
 }
 
 async function reorderProductMedia(shop: string, productGid: string, orderedMediaIds: string[]) {
-  if (!orderedMediaIds.length) return { success: true };
-  const moves = orderedMediaIds.map((id, idx) => ({ id, newPosition: idx + 1 }));
+  const normalizedIds = Array.from(new Set(orderedMediaIds.map((id) => toMediaGid(id)).filter(Boolean)));
+  if (normalizedIds.length < 2) return { success: true };
+  const moves = normalizedIds.map((id, idx) => ({ id, newPosition: idx + 1 }));
   const mutation = `
     mutation ProductReorderMedia($id: ID!, $moves: [MoveInput!]!) {
       productReorderMedia(id: $id, moves: $moves) {

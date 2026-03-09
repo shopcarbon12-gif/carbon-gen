@@ -101,6 +101,7 @@ type PushQueueImage = {
   sourceImageId: string;
   mediaId: string | null;
   url: string;
+  sourceStorageUrl?: string;
   title: string;
   source: "shopify" | "generated_split" | "device_upload";
   altText: string;
@@ -2916,7 +2917,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       }
 
       const payloadImages = pushImages.map((img) => ({
-        url: stagedUrlById.get(img.id) || img.url,
+        url: stagedUrlById.get(img.id) || String(img.sourceStorageUrl || "").trim() || img.url,
         altText: img.altText.trim(),
       }));
       const invalidSource = payloadImages.find((img) => !/^https?:\/\//i.test(String(img.url || "")));
@@ -4867,6 +4868,12 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             row.path.startsWith("final-results/manual/")
         )
         .filter((row: FinalResultUpload) => /\.(png|jpe?g|webp|gif|avif)$/i.test(row.fileName || row.path))
+        .filter((row: FinalResultUpload) => {
+          const barcode = String(itemBarcodeSaved || "").trim();
+          if (!barcode) return true;
+          const hay = `${row.fileName} ${row.path}`.toLowerCase();
+          return hay.includes(barcode.toLowerCase());
+        })
         .sort((a: FinalResultUpload, b: FinalResultUpload) => {
           const ta = a.uploadedAt ? Date.parse(a.uploadedAt) : Number.NaN;
           const tb = b.uploadedAt ? Date.parse(b.uploadedAt) : Number.NaN;
@@ -4905,46 +4912,27 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       return;
     }
 
-    const selectedWithData = await Promise.all(
-      selected.map(async (file) => {
-        const rawUrl = String(file.url || "").trim();
-        const previewUrl = String(file.previewUrl || "").trim();
-        const sourceUrl = previewUrl || rawUrl;
-        if (!sourceUrl) return null;
-        try {
-          const resp = await fetch(sourceUrl, { cache: "no-store" });
-          if (!resp.ok) return null;
-          const blob = await resp.blob();
-          const imageFile = new File([blob], file.fileName || "final-result.png", {
-            type: blob.type || "image/png",
-          });
-          const dataUrl = await fileToDataUrl(imageFile);
-          return { file, dataUrl, rawUrl };
-        } catch {
-          return null;
-        }
-      })
-    );
-
-    const nextRows: SelectedCatalogImage[] = selectedWithData.reduce(
-      (acc: SelectedCatalogImage[], row) => {
-        if (!row) return acc;
-        acc.push({
-          id: `final-upload:${row.file.id}`,
-          url: row.dataUrl,
-          title: row.file.fileName || "Final result item",
-          source: "final_results_storage",
-          uploadedUrl: row.rawUrl || row.dataUrl,
-          uploading: false,
-          uploadError: null,
-        });
-        return acc;
-      },
-      []
-    );
+    const nextRows: SelectedCatalogImage[] = selected.reduce((acc: SelectedCatalogImage[], file) => {
+      const rawUrl = String(file.url || "").trim();
+      const previewUrl =
+        String(file.previewUrl || "").trim() ||
+        (file.path ? `/api/storage/preview?path=${encodeURIComponent(file.path)}` : "");
+      const displayUrl = previewUrl || rawUrl;
+      if (!displayUrl) return acc;
+      acc.push({
+        id: `final-upload:${file.id}`,
+        url: displayUrl,
+        title: file.fileName || "Final result item",
+        source: "final_results_storage",
+        uploadedUrl: rawUrl || displayUrl,
+        uploading: false,
+        uploadError: null,
+      });
+      return acc;
+    }, []);
 
     if (!nextRows.length) {
-      setError("Selected files do not have usable image data.");
+      setError("Selected files do not have usable image URLs.");
       return;
     }
 
@@ -4953,6 +4941,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       sourceImageId: `final-results:${idx}:${row.id}`,
       mediaId: null,
       url: String(row.url || "").trim(),
+      sourceStorageUrl: String(row.uploadedUrl || row.url || "").trim(),
       title: row.title || "Final result item",
       source: "device_upload",
       altText: "",
