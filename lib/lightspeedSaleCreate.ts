@@ -431,8 +431,23 @@ export async function createLightspeedSale(
     };
     if (customerId) draftPayload.customerID = customerId;
 
-    const draftResult = await lsPost<any>("Sale", draftPayload);
-    const saleId = normalizeText(draftResult?.Sale?.saleID);
+    let draftResult: any = null;
+    let saleId = "";
+    try {
+      draftResult = await lsPost<any>("Sale", draftPayload, { disableTransportRetries: true });
+      saleId = normalizeText(draftResult?.Sale?.saleID);
+    } catch (postError: any) {
+      // A timeout/network error after POST can still create the sale in LS.
+      // Recover by reference number before failing to avoid duplicate POST.
+      const existingSaleId = await findExistingShopifySaleByReference(order.name);
+      if (existingSaleId) {
+        saleId = existingSaleId;
+      } else {
+        const postErrorMsg = String(postError?.message || postError || "unknown_error");
+        throw new Error(`Lightspeed POST Sale failed (${postErrorMsg}) and no existing sale found by reference`);
+      }
+    }
+
     if (!saleId) {
       const errMsg = "LS Sale created but no saleID returned";
       await markOrderProcessed(order.id, order.name, null, "failed", errMsg);

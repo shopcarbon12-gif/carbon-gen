@@ -20,14 +20,20 @@ function delay(ms: number) {
   });
 }
 
-async function resilientFetch(url: string, opts: RequestInit, timeoutMs = 30_000): Promise<Response> {
-  for (let attempt = 1; attempt <= LS_FETCH_MAX_RETRIES; attempt++) {
+async function resilientFetch(
+  url: string,
+  opts: RequestInit,
+  timeoutMs = 30_000,
+  maxAttempts = LS_FETCH_MAX_RETRIES
+): Promise<Response> {
+  const attempts = Math.max(1, maxAttempts);
+  for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
       return await fetch(url, { ...opts, signal: AbortSignal.timeout(timeoutMs) });
     } catch (err: any) {
       const msg = String(err?.message || err);
       const isRetryable = /timeout|abort|network|ECONNRESET|ENOTFOUND|socket hang up|fetch failed/i.test(msg);
-      if (!isRetryable || attempt >= LS_FETCH_MAX_RETRIES) throw err;
+      if (!isRetryable || attempt >= attempts) throw err;
       await delay(1500 * attempt);
     }
   }
@@ -250,7 +256,11 @@ export async function lsGet<T = any>(resource: string, query: Record<string, str
   throw new Error(lastError);
 }
 
-export async function lsPost<T = any>(resource: string, body: unknown): Promise<T> {
+export async function lsPost<T = any>(
+  resource: string,
+  body: unknown,
+  options?: { disableTransportRetries?: boolean }
+): Promise<T> {
   const accessToken = await refreshLightspeedAccessToken();
   const url = buildResourceUrl(resource);
   let lastError = `Lightspeed POST ${resource} failed.`;
@@ -265,7 +275,7 @@ export async function lsPost<T = any>(resource: string, body: unknown): Promise<
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body),
-    }, 20_000);
+    }, 20_000, options?.disableTransportRetries ? 1 : LS_FETCH_MAX_RETRIES);
     const raw = await response.text();
     let parsed: any = {};
     try { parsed = JSON.parse(raw); } catch { parsed = { raw }; }
