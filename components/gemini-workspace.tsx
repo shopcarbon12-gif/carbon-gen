@@ -748,15 +748,18 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
 
     let cancelled = false;
     let detectorBusy = false;
-    const detector = new BarcodeDetectorCtor({
-      formats: ["code_128", "ean_13", "ean_8", "upc_a", "upc_e"],
-    });
+    const detector = BarcodeDetectorCtor
+      ? new BarcodeDetectorCtor({
+          formats: ["code_128", "ean_13", "ean_8", "upc_a", "upc_e"],
+        })
+      : null;
 
     const scanFrame = async () => {
       if (cancelled) return;
       const video = barcodeScannerVideoRef.current;
       if (
         video &&
+        detector &&
         video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
         !detectorBusy
       ) {

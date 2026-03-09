@@ -113,14 +113,12 @@ export default function BarcodeScanSessionPage() {
 
     let cancelled = false;
     let detectorBusy = false;
-    const detector = new BarcodeDetectorCtor({
-      formats: ["code_128", "ean_13", "ean_8", "upc_a", "upc_e"],
-    });
+    let detector: { detect(source: ImageBitmapSource): Promise<BarcodeDetectionLike[]> } | null = null;
 
     const scanFrame = async () => {
       if (cancelled) return;
       const video = videoRef.current;
-      if (video && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && !detectorBusy) {
+      if (video && detector && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && !detectorBusy) {
         detectorBusy = true;
         try {
           const detections = await detector.detect(video);
@@ -151,6 +149,13 @@ export default function BarcodeScanSessionPage() {
       setBusy(true);
       setError(null);
       try {
+        const DetectorCtor = BarcodeDetectorCtor;
+        if (!DetectorCtor) {
+          throw new Error("Barcode detector is unavailable.");
+        }
+        detector = new DetectorCtor({
+          formats: ["code_128", "ean_13", "ean_8", "upc_a", "upc_e"],
+        });
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: { ideal: "environment" } },
           audio: false,
