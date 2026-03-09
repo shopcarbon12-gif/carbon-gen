@@ -4919,6 +4919,14 @@ function buildMasterPanelPrompt(
   }
 
   async function loadFinalResultUploads() {
+    const activeBarcode = sanitizeBarcodeInput(itemBarcodeSaved || itemBarcode || pushSearchQuery).trim();
+    if (!isValidBarcode(activeBarcode)) {
+      setFinalResultsVisible(true);
+      setFinalResultUploads([]);
+      setSelectedFinalResultUploadIds([]);
+      setError("Set a valid barcode first (section 0.5 or search) before loading previous items.");
+      return;
+    }
     setFinalResultsVisible(true);
     setFinalResultsLoading(true);
     setError(null);
@@ -4955,8 +4963,7 @@ function buildMasterPanelPrompt(
         )
         .filter((row: FinalResultUpload) => /\.(png|jpe?g|webp|gif|avif)$/i.test(row.fileName || row.path))
         .filter((row: FinalResultUpload) => {
-          const barcode = String(itemBarcodeSaved || "").trim();
-          if (!barcode) return true;
+          const barcode = activeBarcode;
           const hay = `${row.fileName} ${row.path}`.toLowerCase();
           return hay.includes(barcode.toLowerCase());
         })
