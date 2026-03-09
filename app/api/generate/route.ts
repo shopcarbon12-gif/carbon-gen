@@ -180,6 +180,28 @@ function buildGeneralSafetyRetryPrompt(basePrompt: string) {
   ].join("\n");
 }
 
+function buildNonSwimwearCoverageLock(itemType: string) {
+  const category = inferItemTypeCategory(itemType);
+  const lines: string[] = [
+    "NON-SWIMWEAR COVERAGE LOCK (SERVER):",
+    "- This request is non-swimwear ecommerce apparel.",
+    "- Never render revealing/underwear-like or shirtless styling unless explicitly present in both model and item refs.",
+    "- Keep styling strictly product-catalog neutral and fully clothed.",
+    "- Preserve non-target outfit parts from references unless item refs explicitly replace them.",
+  ];
+  if (category === "bottom") {
+    lines.push(
+      "- Locked item type is BOTTOM (e.g., jeans/pants/shorts): keep a normal opaque top on the model; shirtless torso is forbidden."
+    );
+  }
+  if (category === "top") {
+    lines.push(
+      "- Locked item type is TOP: keep appropriate bottoms on the model from refs; no underwear-style substitution."
+    );
+  }
+  return lines.join("\n");
+}
+
 async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | null = null;
   try {
@@ -747,7 +769,7 @@ export async function POST(req: NextRequest) {
             "No erotic context, no intimate framing, no sexual emphasis.",
             "Focus on garment fit, color, material, and product details.",
           ]
-        : []),
+        : [buildNonSwimwearCoverageLock(normalizedPanelQa.itemType)]),
     ].join("\n");
 
     // Keep model identity anchors bounded; include all item refs provided by section 0.5.
@@ -931,8 +953,18 @@ export async function POST(req: NextRequest) {
           timeoutMs: imageTimeoutMs,
         });
         if (qa.decisive && !qa.pass) {
-          qaWarning = "QA check flagged: " + qa.reasons.join(" | ");
-          console.warn("Panel QA flagged (returning image with warning):", qa.raw);
+          return NextResponse.json(
+            {
+              error: {
+                type: "lock_violation",
+                code: "identity_or_item_lock_failed",
+                message:
+                  "Generated output failed identity/item lock QA. Regenerate this panel with stricter matching.",
+                reasons: qa.reasons,
+              },
+            },
+            { status: 422 }
+          );
         }
         if (!qa.decisive) {
           qaWarning = "Compliance check was inconclusive; generation was allowed.";
