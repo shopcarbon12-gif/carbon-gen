@@ -6391,9 +6391,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                       {splitAddedCount}/{splitTotal} added
                     </div>
                   </div>
-                  <div className="row">
+                  <div className="row item-flat-actions-row">
                     <button
-                      className="btn"
+                      className="btn item-flat-primary-btn"
                       type="button"
                       onClick={addAllFlatSplitsToSelectedItems}
                       disabled={!itemFlatSplitImages.length || splitAnyAdding || splitAllAdded}
@@ -6423,7 +6423,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                             {crop.side === "front" ? "Front" : "Back"} | 3:4
                           </div>
                           <button
-                            className="ghost-btn"
+                            className="ghost-btn item-flat-secondary-btn"
                             type="button"
                             onClick={() => void addFlatSplitToSelectedItems(crop)}
                             disabled={isAdding || isAdded}
@@ -8088,9 +8088,11 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           justify-content: space-between;
           align-items: center;
           gap: 10px;
+          margin-bottom: 8px;
         }
         .item-flat-flow-hint {
-          font-size: 0.82rem;
+          font-size: 0.88rem;
+          line-height: 1.3;
         }
         .item-flat-flow-pill {
           border: 1px solid #cbd5e1;
@@ -8111,12 +8113,24 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         .item-flat-preview-card {
           width: min(900px, 100%);
         }
+        .item-flat-actions-row {
+          justify-content: center;
+          margin-bottom: 12px;
+        }
+        .item-flat-primary-btn {
+          min-width: min(560px, 100%);
+          min-height: 38px;
+          font-size: 0.9rem;
+          font-weight: 700;
+        }
         .item-flat-split-card {
-          width: 200px;
+          width: 250px;
+          padding: 10px;
+          gap: 8px;
         }
         .item-flat-split-card img.item-flat-preview-image {
           width: 100%;
-          height: 240px;
+          height: 300px;
           object-fit: contain;
           object-position: center;
           display: block;
@@ -8124,6 +8138,11 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           border-radius: 8px;
           background: #f8fafc;
           cursor: zoom-in;
+        }
+        .item-flat-secondary-btn {
+          width: 100%;
+          min-height: 34px;
+          font-weight: 600;
         }
         .item-flat-preview-card img.item-flat-preview-image {
           width: 100%;
