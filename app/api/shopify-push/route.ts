@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isRequestAuthed } from "@/lib/auth";
-import { uploadBytesToStorage } from "@/lib/storageProvider";
+import { downloadStorageObject, tryGetStoragePathFromUrl, uploadBytesToStorage } from "@/lib/storageProvider";
 import {
   getShopifyAdminToken,
   normalizeShopDomain,
@@ -152,7 +152,7 @@ function parseDataImage(value: string) {
 }
 
 async function getShopifySourceUrl(sourceUrl: string) {
-  const raw = norm(sourceUrl);
+  let raw = norm(sourceUrl);
   if (!/^https?:\/\//i.test(raw)) return "";
 
   // Re-stage every remote source into our own public storage so Shopify
@@ -167,6 +167,47 @@ async function getShopifySourceUrl(sourceUrl: string) {
     } catch {}
     return "jpg";
   })();
+
+  // Some UI rows carry /api/storage/preview URLs. Resolve these to direct
+  // storage bytes first so server-side fetch does not fail with 400/401.
+  try {
+    const parsed = new URL(raw);
+    if (parsed.pathname === "/api/storage/preview") {
+      const previewPath = String(parsed.searchParams.get("path") || "").trim();
+      const previewUrl = String(parsed.searchParams.get("url") || "").trim();
+      const resolvedPath = previewPath || (previewUrl ? tryGetStoragePathFromUrl(previewUrl) : "");
+      if (resolvedPath) {
+        const { body, contentType: storedContentType } = await downloadStorageObject(resolvedPath);
+        const bytes = new Uint8Array(body);
+        if (!bytes.byteLength) {
+          throw new Error("source image is empty");
+        }
+        const loweredType = String(storedContentType || "").toLowerCase();
+        const contentType =
+          loweredType && loweredType.startsWith("image/") ? loweredType : "image/jpeg";
+        const ext =
+          contentType.includes("png")
+            ? "png"
+            : contentType.includes("webp")
+              ? "webp"
+              : contentType.includes("gif")
+                ? "gif"
+                : contentType.includes("jpg") || contentType.includes("jpeg")
+                  ? "jpg"
+                  : fallbackExtFromUrl;
+        const path = `items/push-staging/${Date.now()}-${crypto.randomUUID()}.${ext}`;
+        const uploaded = await uploadBytesToStorage({ path, bytes, contentType });
+        return norm(uploaded.url);
+      }
+      // Fallback: if preview wraps a remote URL we cannot map to storage,
+      // try downloading that raw URL directly instead of the preview route.
+      if (previewUrl && /^https?:\/\//i.test(previewUrl)) {
+        raw = previewUrl;
+      }
+    }
+  } catch {
+    // ignore parse errors and continue with direct fetch fallback
+  }
 
   const ctrl = new AbortController();
   const timeout = setTimeout(() => ctrl.abort(), 20_000);
