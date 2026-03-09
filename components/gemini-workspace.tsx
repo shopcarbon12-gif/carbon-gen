@@ -7306,6 +7306,11 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
           border: 1px solid #e2e8f0;
           border-radius: 10px;
           padding: 3px 9px;
+          min-width: 76px;
+          justify-content: center;
+          text-align: center;
+          display: inline-flex;
+          align-items: center;
           font-size: 0.72rem;
           font-weight: 700;
           letter-spacing: 0.05em;
