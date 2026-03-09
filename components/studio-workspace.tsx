@@ -27,15 +27,7 @@ const PUSH_TRANSFER_STORAGE_KEY = "cg_push_transfer_v1";
 const DAILY_MODEL_RESET_STORAGE_KEY = "cg_daily_model_reset_day_v1";
 const ALT_GENERATION_BATCH_SIZE = 3;
 const PUSH_STAGING_BATCH_SIZE = 4;
-const GENERATION_STAGES: Array<{ at: number; text: string; sub: string }> = [
-  { at: 0, text: "Initializing model...", sub: "Loading components" },
-  { at: 12, text: "Understanding prompt...", sub: "Extracting style and intent" },
-  { at: 28, text: "Composing scene...", sub: "Layout and perspective" },
-  { at: 45, text: "Diffusing pixels...", sub: "Turning noise into structure" },
-  { at: 65, text: "Adding lighting...", sub: "Shadows and highlights" },
-  { at: 80, text: "Enhancing details...", sub: "Textures and micro-contrast" },
-  { at: 92, text: "Final render pass...", sub: "Polishing output" },
-];
+const STATUS_BAR_FIXED_HEIGHT = 126;
 
 type ShopifyCatalogProduct = {
   id: string;
@@ -521,13 +513,10 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   const [generationElapsedMs, setGenerationElapsedMs] = useState(0);
   const generationStartRef = useRef<number | null>(null);
   const generationRafRef = useRef<number | null>(null);
-  const [progressLogoSrc, setProgressLogoSrc] = useState("/logo.svg");
   const [chatExpanded, setChatExpanded] = useState(false);
   const inlineChatLogRef = useRef<HTMLDivElement | null>(null);
   const sideChatLogRef = useRef<HTMLDivElement | null>(null);
   const pageRef = useRef<HTMLDivElement | null>(null);
-  const statusBarRef = useRef<HTMLElement | null>(null);
-  const [statusBarHeight, setStatusBarHeight] = useState(0);
   const [previousModelUploads, setPreviousModelUploads] = useState<PreviousModelUpload[]>([]);
   const [previousModelUploadsLoading, setPreviousModelUploadsLoading] = useState(false);
   const [previousSort, setPreviousSort] = useState<"date_asc" | "date_desc" | "name_az">(
@@ -5029,29 +5018,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   }, [chatExpanded, showCreativeSections]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const node = statusBarRef.current;
-    if (!node) return;
-
-    const sync = () => {
-      const nextHeight = Math.ceil(node.getBoundingClientRect().height);
-      setStatusBarHeight((prev) => (prev === nextHeight ? prev : nextHeight));
-    };
-
-    sync();
-    let ro: ResizeObserver | null = null;
-    if ("ResizeObserver" in window) {
-      ro = new ResizeObserver(() => sync());
-      ro.observe(node);
-    }
-    window.addEventListener("resize", sync);
-    return () => {
-      window.removeEventListener("resize", sync);
-      ro?.disconnect();
-    };
-  }, []);
-
-  useEffect(() => {
     const logs = [inlineChatLogRef.current, sideChatLogRef.current];
     for (const node of logs) {
       if (!node) continue;
@@ -5069,7 +5035,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     );
   }
   if (panelGenerating || panelsInFlight.length > 0) {
-    activeProgress.push("Image generation in progress");
+    activeProgress.push(`Image generation in progress (${formatElapsedStopwatch(generationElapsedMs)})`);
   }
   if (dropboxSearching) {
     activeProgress.push("Searching Dropbox");
@@ -5106,17 +5072,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     (statusTone === "working"
       ? "Action in progress..."
       : "Ready. Start from Model Registry or Item References.");
-  const isGeneratingNow = panelGenerating || panelsInFlight.length > 0;
-  const generationStage = useMemo(() => {
-    if (!isGeneratingNow) return null;
-    const elapsedSeconds = Math.max(0, Math.floor(generationElapsedMs / 1000));
-    let stage = GENERATION_STAGES[0];
-    for (const candidate of GENERATION_STAGES) {
-      if (elapsedSeconds >= candidate.at) stage = candidate;
-    }
-    return stage;
-  }, [generationElapsedMs, isGeneratingNow]);
-  const generationElapsedLabel = formatElapsedStopwatch(generationElapsedMs);
   const hasRawOpenAiResponse = Boolean(generateOpenAiResponse && generateOpenAiResponse.trim());
 
   function onStatusBarCopyRawResponse() {
@@ -5124,8 +5079,15 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     void copyErrorPayload();
   }
 
+  function resetTaskProgressDisplay() {
+    setStatus(null);
+    setError(null);
+    setGenerateOpenAiResponse(null);
+    setGenerationElapsedMs(0);
+  }
+
   const pageStyle = {
-    ["--status-bar-height" as string]: `${statusBarHeight}px`,
+    ["--status-bar-height" as string]: `${STATUS_BAR_FIXED_HEIGHT}px`,
   } as CSSProperties;
 
   return (
@@ -5140,7 +5102,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         </div>
       ) : null}
       <section
-        ref={statusBarRef}
         className={`card status-bar ${statusTone} ${hasRawOpenAiResponse ? "copy-ready" : ""}`}
         aria-live="polite"
         aria-atomic="true"
@@ -5160,43 +5121,38 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       >
         <div className="status-bar-head">
           <div className="status-bar-title">Progress</div>
-          <span className={`status-chip ${statusTone}`}>
-            {statusTone === "error"
-              ? "Error"
-              : statusTone === "working"
-                ? "Working"
-                : statusTone === "success"
-                  ? "Done"
-                  : "Idle"}
-          </span>
+          <div className="status-bar-head-actions">
+            <button
+              className="status-reset-btn"
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                resetTaskProgressDisplay();
+              }}
+            >
+              Reset
+            </button>
+            <span className={`status-chip ${statusTone}`}>
+              {statusTone === "error"
+                ? "Error"
+                : statusTone === "working"
+                  ? "Working"
+                  : statusTone === "success"
+                    ? "Done"
+                    : "Idle"}
+            </span>
+          </div>
         </div>
         <div className="status-bar-message">
           {statusTone === "error" ? `Error: ${statusHeadline}` : statusHeadline}
         </div>
-        {isGeneratingNow && generationStage ? (
-          <div className="status-generation">
-            <div className="status-generation-logo-wrap">
-              <img
-                src={progressLogoSrc}
-                alt="Generation logo"
-                className="status-generation-logo"
-                onError={() =>
-                  setProgressLogoSrc((prev) => (prev === "/logo.svg" ? "/logo.jpg" : prev))
-                }
-              />
-            </div>
-            <div className="status-generation-text">
-              <div className="status-generation-stage">{generationStage.text}</div>
-              <div className="status-generation-sub">{generationStage.sub}</div>
-            </div>
-            <div className="status-generation-time">{generationElapsedLabel}</div>
-          </div>
-        ) : null}
         {hasRawOpenAiResponse ? (
           <div className="status-bar-meta">OpenAI error found. Click this bar to copy raw response for AI Chat.</div>
         ) : activeProgress.length ? (
           <div className="status-bar-meta">{activeProgress.join(" | ")}</div>
-        ) : null}
+        ) : (
+          <div className="status-bar-meta">No active tasks.</div>
+        )}
       </section>
 
       <main className="grid">
@@ -7414,6 +7370,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           );
           z-index: 40;
           gap: 8px;
+          min-height: var(--status-bar-height, 126px);
+          max-height: var(--status-bar-height, 126px);
           will-change: right, left;
           transition:
             left var(--chat-expand-duration, 220ms)
@@ -7443,6 +7401,26 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           align-items: center;
           justify-content: space-between;
           gap: 10px;
+        }
+        .status-bar-head-actions {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .status-reset-btn {
+          border: 1px solid #cbd5e1;
+          border-radius: 8px;
+          background: rgba(255, 255, 255, 0.7);
+          color: #334155;
+          font-size: 0.72rem;
+          font-weight: 700;
+          letter-spacing: 0.02em;
+          padding: 4px 10px;
+          cursor: pointer;
+        }
+        .status-reset-btn:hover {
+          border-color: #94a3b8;
+          background: rgba(255, 255, 255, 0.95);
         }
         .status-bar-title {
           font-weight: 700;
@@ -7501,69 +7479,17 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           font-weight: 600;
           color: #0f172a;
           line-height: 1.35;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
         .status-bar-meta {
           font-size: 0.8rem;
           color: #475569;
           line-height: 1.25;
-          word-break: break-word;
-        }
-        .status-generation {
-          display: grid;
-          grid-template-columns: auto minmax(0, 1fr) auto;
-          align-items: center;
-          gap: 12px;
-          border: 1px solid #e2e8f0;
-          border-radius: 12px;
-          padding: 10px;
-          background: rgba(255, 255, 255, 0.12);
-        }
-        .status-generation-logo-wrap {
-          width: 48px;
-          height: 48px;
-          display: grid;
-          place-items: center;
-          animation: status-logo-pulse 1.5s ease-in-out infinite;
-        }
-        .status-generation-logo {
-          width: 40px;
-          height: 40px;
-          object-fit: contain;
-          border-radius: 8px;
-        }
-        .status-generation-text {
-          min-width: 0;
-          display: grid;
-          gap: 2px;
-        }
-        .status-generation-stage {
-          font-size: 0.93rem;
-          font-weight: 700;
-          line-height: 1.2;
-        }
-        .status-generation-sub {
-          font-size: 0.78rem;
-          color: #64748b;
-          line-height: 1.2;
-        }
-        .status-generation-time {
-          font-size: 0.84rem;
-          font-weight: 700;
-          border: 1px solid #cbd5e1;
-          border-radius: 10px;
-          padding: 4px 10px;
           white-space: nowrap;
-        }
-        @keyframes status-logo-pulse {
-          0%,
-          100% {
-            transform: scale(1);
-            filter: drop-shadow(0 0 0 rgba(255, 255, 255, 0));
-          }
-          50% {
-            transform: scale(1.04);
-            filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.2));
-          }
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
         .card-title {
           font-weight: 700;
