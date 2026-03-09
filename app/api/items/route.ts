@@ -60,50 +60,72 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const contentType = req.headers.get("content-type") || "";
-    if (contentType.includes("application/json")) {
-      const body = await req.json().catch(() => ({}));
+    const contentType = (req.headers.get("content-type") || "").toLowerCase();
+    const isJson = contentType.includes("application/json");
+    const isMultipart = contentType.includes("multipart/form-data");
+    if (isJson || !isMultipart) {
+      const body = await req.json().catch(() => null);
+      if (isJson && !body) {
+        return NextResponse.json({ error: "Invalid JSON request body." }, { status: 400 });
+      }
       const inputUrls = Array.isArray(body?.urls)
         ? body.urls.filter((u: unknown): u is string => typeof u === "string" && !!u.trim())
         : [];
-      if (!inputUrls.length) {
+      if (!inputUrls.length && isJson) {
         return NextResponse.json(
           { error: "No Shopify image URLs selected." },
           { status: 400 }
         );
       }
-      const folderPrefix = sanitizeFolderPrefix(body?.folderPrefix);
+      if (inputUrls.length) {
+        const folderPrefix = sanitizeFolderPrefix(body?.folderPrefix);
 
-      const batchId = crypto.randomUUID();
-      const importConcurrency = Number.parseInt(process.env.ITEM_IMPORT_CONCURRENCY || "4", 10) || 4;
-      const urls = await mapWithConcurrency<string, string>(
-        inputUrls,
-        importConcurrency,
-        async (sourceUrl, i) => {
-        const remote = await fetch(sourceUrl);
-        if (!remote.ok) {
-          throw new Error(`Failed to fetch catalog image (${remote.status})`);
-        }
+        const batchId = crypto.randomUUID();
+        const importConcurrency = Number.parseInt(process.env.ITEM_IMPORT_CONCURRENCY || "4", 10) || 4;
+        const urls = await mapWithConcurrency<string, string>(
+          inputUrls,
+          importConcurrency,
+          async (sourceUrl, i) => {
+          const remote = await fetch(sourceUrl);
+          if (!remote.ok) {
+            throw new Error(`Failed to fetch catalog image (${remote.status})`);
+          }
 
-        const arrayBuffer = await remote.arrayBuffer();
-        const bytes = new Uint8Array(arrayBuffer);
-        const remoteContentType = remote.headers.get("content-type") || "application/octet-stream";
-        const safeName = guessFileNameFromUrl(sourceUrl, i);
-        const path = `${folderPrefix}/${batchId}/${Date.now()}-${crypto.randomUUID()}-${safeName}`;
+          const arrayBuffer = await remote.arrayBuffer();
+          const bytes = new Uint8Array(arrayBuffer);
+          const remoteContentType = remote.headers.get("content-type") || "application/octet-stream";
+          const safeName = guessFileNameFromUrl(sourceUrl, i);
+          const path = `${folderPrefix}/${batchId}/${Date.now()}-${crypto.randomUUID()}-${safeName}`;
 
-        const uploaded = await uploadBytesToStorage({
-          path,
-          bytes,
-          contentType: remoteContentType,
-        });
-        return uploaded.url;
-        }
-      );
+          const uploaded = await uploadBytesToStorage({
+            path,
+            bytes,
+            contentType: remoteContentType,
+          });
+          return uploaded.url;
+          }
+        );
 
-      return NextResponse.json({ urls });
+        return NextResponse.json({ urls });
+      }
+
+      if (!isMultipart) {
+        return NextResponse.json(
+          { error: "Unsupported request body. Use JSON or multipart form-data." },
+          { status: 415 }
+        );
+      }
     }
 
-    const form = await req.formData();
+    let form: FormData;
+    try {
+      form = await req.formData();
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid form-data body. Please retry the upload." },
+        { status: 400 }
+      );
+    }
     const files = form.getAll("files").filter(Boolean) as File[];
     const folderPrefix = sanitizeFolderPrefix(form.get("folderPrefix"));
 

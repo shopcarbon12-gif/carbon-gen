@@ -12,7 +12,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const form = await req.formData();
+    const contentType = (req.headers.get("content-type") || "").toLowerCase();
+    if (!contentType.includes("multipart/form-data")) {
+      return NextResponse.json(
+        { error: "Unsupported request body. Use multipart form-data." },
+        { status: 415 }
+      );
+    }
+    let form: FormData;
+    try {
+      form = await req.formData();
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid form-data body. Please retry the upload." },
+        { status: 400 }
+      );
+    }
     const file = form.get("file") as File | null;
     const batchId = String(form.get("batchId") || "").trim() || crypto.randomUUID();
     const userId = req.cookies.get("carbon_gen_user_id")?.value?.trim() || "anonymous";

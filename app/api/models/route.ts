@@ -117,15 +117,25 @@ export async function POST(req: NextRequest) {
       req.cookies.get("carbon_gen_username")?.value?.trim() ||
       DEFAULT_SESSION_USER_ID;
 
-    const contentType = req.headers.get("content-type") || "";
+    const contentType = (req.headers.get("content-type") || "").toLowerCase();
     const isJson = contentType.includes("application/json");
+    const isMultipart = contentType.includes("multipart/form-data");
     let name = "";
     let gender = "";
     let urls: string[] = [];
 
     let alreadyCheckedDuplicate = false;
-    if (isJson) {
-      const body = await req.json();
+    if (isJson || !isMultipart) {
+      let body: any = null;
+      try {
+        body = await req.json();
+      } catch {
+        if (isJson) {
+          return NextResponse.json({ error: "Invalid JSON request body." }, { status: 400 });
+        }
+        body = null;
+      }
+      if (body && typeof body === "object") {
       name = String(body?.name || "").trim();
       gender = String(body?.gender || "").trim().toLowerCase();
       urls = Array.isArray(body?.urls)
@@ -148,8 +158,23 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         );
       }
-    } else {
-      const form = await req.formData();
+      } else if (!isMultipart) {
+        return NextResponse.json(
+          { error: "Unsupported request body. Use JSON or multipart form-data." },
+          { status: 415 }
+        );
+      }
+    }
+    if (isMultipart) {
+      let form: FormData;
+      try {
+        form = await req.formData();
+      } catch {
+        return NextResponse.json(
+          { error: "Invalid form-data body. Please retry the upload." },
+          { status: 400 }
+        );
+      }
       name = String(form.get("name") || "").trim();
       gender = String(form.get("gender") || "").trim().toLowerCase();
       const files = form.getAll("files").filter(Boolean) as File[];
