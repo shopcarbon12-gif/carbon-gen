@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { downloadStorageObject } from "@/lib/storageProvider";
+import { downloadStorageObject, tryGetStoragePathFromUrl } from "@/lib/storageProvider";
 
 export async function GET(req: NextRequest) {
   try {
@@ -13,11 +13,13 @@ export async function GET(req: NextRequest) {
     }
 
     const path = String(req.nextUrl.searchParams.get("path") || "").trim();
-    if (!path) {
-      return NextResponse.json({ error: "Missing path." }, { status: 400 });
+    const rawUrl = String(req.nextUrl.searchParams.get("url") || "").trim();
+    const resolvedPath = path || (rawUrl ? tryGetStoragePathFromUrl(rawUrl) : "");
+    if (!resolvedPath) {
+      return NextResponse.json({ error: "Missing or unsupported storage path/url." }, { status: 400 });
     }
 
-    const { body, contentType } = await downloadStorageObject(path);
+    const { body, contentType } = await downloadStorageObject(resolvedPath);
     return new NextResponse(body, {
       status: 200,
       headers: {

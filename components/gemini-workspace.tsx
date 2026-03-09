@@ -4558,17 +4558,20 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
         .map((row: any) => {
           const path = String(row?.path || "").trim();
           const fileName = path.split("/").pop() || path;
+          const rawUrl = row?.url ? String(row.url).trim() : "";
           const previewUrl = path
-            ? `/api/storage/preview?path=${encodeURIComponent(path)}`
-            : row?.url
-              ? String(row.url)
+            ? rawUrl
+              ? `/api/storage/preview?url=${encodeURIComponent(rawUrl)}`
+              : `/api/storage/preview?path=${encodeURIComponent(path)}`
+            : rawUrl
+              ? `/api/storage/preview?url=${encodeURIComponent(rawUrl)}`
               : null;
           return {
             id: path || `final-result:${crypto.randomUUID()}`,
             path,
             fileName,
             uploadedAt: row?.uploadedAt ? String(row.uploadedAt) : null,
-            url: row?.url ? String(row.url) : null,
+            url: rawUrl || null,
             previewUrl,
           };
         })
