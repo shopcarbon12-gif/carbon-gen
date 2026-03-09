@@ -6207,58 +6207,74 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
           </div>
 
           {itemFlatSplitImages.length ? (
-            <div className="card">
-              <div className="card-title">Generated Flat 3:4 Split (Front + Back)</div>
-              <div className="row">
-                <button
-                  className="btn ghost"
-                  type="button"
-                  onClick={addAllFlatSplitsToSelectedItems}
-                  disabled={
-                    !itemFlatSplitImages.length ||
-                    addingFlatSplitIds.length > 0 ||
-                    itemFlatSplitImages.every((crop) =>
-                      selectedCatalogImages.some((img) => img.id === crop.id && Boolean(img.uploadedUrl))
-                    )
-                  }
-                >
-                  Add Front + Back To Selected Items
-                </button>
-              </div>
-              <div className="preview-grid item-flat-preview-grid">
-                {itemFlatSplitImages.map((crop) => {
-                  const selectedEntry = selectedCatalogImages.find((img) => img.id === crop.id);
-                  const isAdding = addingFlatSplitIds.includes(crop.id) || Boolean(selectedEntry?.uploading);
-                  const isAdded = Boolean(selectedEntry?.uploadedUrl);
-                  return (
-                    <div className="preview-card item-flat-split-card" key={crop.id}>
-                      <img
-                        className="item-flat-preview-image"
-                        src={`data:image/png;base64,${crop.imageBase64}`}
-                        alt={`Generated ${crop.side} flat 3:4`}
-                        onClick={() =>
-                          setPreviewModal({
-                            imageBase64: crop.imageBase64,
-                            title: `${crop.side === "front" ? "Front" : "Back"} 3:4 Flat Preview`,
-                          })
-                        }
-                      />
-                      <div className="preview-name">
-                        {crop.side === "front" ? "Front" : "Back"} | 3:4
-                      </div>
-                    <button
-                      className="ghost-btn"
-                      type="button"
-                        onClick={() => void addFlatSplitToSelectedItems(crop)}
-                        disabled={isAdding || isAdded}
-                      >
-                        {isAdded ? "Added To Selected Items" : isAdding ? "Adding..." : "Add To Selected Items"}
-                      </button>
+            (() => {
+              const splitTotal = itemFlatSplitImages.length;
+              const splitAddedCount = itemFlatSplitImages.filter((crop) =>
+                selectedCatalogImages.some((img) => img.id === crop.id && Boolean(img.uploadedUrl))
+              ).length;
+              const splitAllAdded = splitAddedCount >= splitTotal;
+              const splitAnyAdding =
+                addingFlatSplitIds.length > 0 ||
+                selectedCatalogImages.some(
+                  (img) =>
+                    Boolean(img.uploading) &&
+                    itemFlatSplitImages.some((crop) => crop.id === img.id)
+                );
+              return (
+                <div className="card">
+                  <div className="card-title">Generated Flat 3:4 Split (Front + Back)</div>
+                  <div className="row item-flat-flow-row">
+                    <div className="muted item-flat-flow-hint">Review both images, then add to Selected Pictures.</div>
+                    <div className={`item-flat-flow-pill ${splitAllAdded ? "done" : ""}`}>
+                      {splitAddedCount}/{splitTotal} added
                     </div>
-                  );
-                })}
-              </div>
-            </div>
+                  </div>
+                  <div className="row">
+                    <button
+                      className="btn"
+                      type="button"
+                      onClick={addAllFlatSplitsToSelectedItems}
+                      disabled={!itemFlatSplitImages.length || splitAnyAdding || splitAllAdded}
+                    >
+                      {splitAllAdded ? "Front + Back Added" : splitAnyAdding ? "Adding Front + Back..." : "Add Front + Back To Selected Items"}
+                    </button>
+                  </div>
+                  <div className="preview-grid item-flat-preview-grid">
+                    {itemFlatSplitImages.map((crop) => {
+                      const selectedEntry = selectedCatalogImages.find((img) => img.id === crop.id);
+                      const isAdding = addingFlatSplitIds.includes(crop.id) || Boolean(selectedEntry?.uploading);
+                      const isAdded = Boolean(selectedEntry?.uploadedUrl);
+                      return (
+                        <div className="preview-card item-flat-split-card" key={crop.id}>
+                          <img
+                            className="item-flat-preview-image"
+                            src={`data:image/png;base64,${crop.imageBase64}`}
+                            alt={`Generated ${crop.side} flat 3:4`}
+                            onClick={() =>
+                              setPreviewModal({
+                                imageBase64: crop.imageBase64,
+                                title: `${crop.side === "front" ? "Front" : "Back"} 3:4 Flat Preview`,
+                              })
+                            }
+                          />
+                          <div className="preview-name">
+                            {crop.side === "front" ? "Front" : "Back"} | 3:4
+                          </div>
+                          <button
+                            className="ghost-btn"
+                            type="button"
+                            onClick={() => void addFlatSplitToSelectedItems(crop)}
+                            disabled={isAdding || isAdded}
+                          >
+                            {isAdded ? "Added" : isAdding ? "Adding..." : `Add ${crop.side === "front" ? "Front" : "Back"}`}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()
           ) : itemFlatCompositeBase64 ? (
             <div className="card">
               <div className="card-title">Generated Item Flat (Front + Back)</div>
@@ -7905,6 +7921,30 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
         }
         .item-flat-preview-grid {
           max-width: 1260px;
+        }
+        .item-flat-flow-row {
+          justify-content: space-between;
+          align-items: center;
+          gap: 10px;
+        }
+        .item-flat-flow-hint {
+          font-size: 0.82rem;
+        }
+        .item-flat-flow-pill {
+          border: 1px solid #cbd5e1;
+          border-radius: 999px;
+          padding: 4px 10px;
+          font-size: 0.74rem;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          color: #64748b;
+          background: #f8fafc;
+        }
+        .item-flat-flow-pill.done {
+          color: #166534;
+          border-color: #86efac;
+          background: #f0fdf4;
         }
         .item-flat-preview-card {
           width: min(900px, 100%);
