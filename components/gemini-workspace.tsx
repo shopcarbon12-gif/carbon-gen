@@ -1515,6 +1515,9 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
       throw new Error("Please add item references from device, Shopify catalog, or both.");
     }
 
+    const devicePreviewDataUrls = await Promise.all(
+      files.map((file) => fileToDataUrl(file).catch(() => ""))
+    );
     let uploadedUrls: string[] = [];
     if (files.length) {
       const form = new FormData();
@@ -1534,7 +1537,7 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
     const uploadedDeviceSelections: SelectedCatalogImage[] = uploadedUrls.map((uploadedUrl, idx) => {
       const fallbackName = `Device upload ${idx + 1}`;
       const title = String(files[idx]?.name || fallbackName).trim() || fallbackName;
-      const localPreviewUrl = files[idx] ? URL.createObjectURL(files[idx]) : uploadedUrl;
+      const localPreviewUrl = String(devicePreviewDataUrls[idx] || "").trim() || uploadedUrl;
       return {
         id: `device:${uploadedUrl}`,
         url: localPreviewUrl,
@@ -1556,14 +1559,11 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
         const additions = uploadedDeviceSelections.filter(
           (img) => !existingUploaded.has(String(img.uploadedUrl || "").trim())
         );
-        const skipped = uploadedDeviceSelections.filter(
-          (img) => existingUploaded.has(String(img.uploadedUrl || "").trim())
+        const skipped = uploadedDeviceSelections.filter((img) =>
+          existingUploaded.has(String(img.uploadedUrl || "").trim())
         );
-        skipped.forEach((img) => {
-          if (String(img.url || "").startsWith("blob:")) {
-            URL.revokeObjectURL(img.url);
-          }
-        });
+        // Nothing to release for data URLs.
+        void skipped;
         return additions.length ? [...prev, ...additions] : prev;
       });
     }
@@ -4299,9 +4299,6 @@ function buildMasterPanelPrompt(
       if (target?.uploadedUrl) {
         setItemReferenceUrls((urls) => urls.filter((url) => url !== target.uploadedUrl));
       }
-      if (target?.url && String(target.url).startsWith("blob:")) {
-        URL.revokeObjectURL(target.url);
-      }
       return prev.filter((img) => img.id !== removeId);
     });
     let done = false;
@@ -4316,11 +4313,6 @@ function buildMasterPanelPrompt(
   useEffect(() => {
     return () => {
       modelPreviewItems.forEach((p) => URL.revokeObjectURL(p.localUrl));
-      selectedCatalogImagesRef.current.forEach((img) => {
-        if (String(img.url || "").startsWith("blob:")) {
-          URL.revokeObjectURL(img.url);
-        }
-      });
     };
   }, []);
 
