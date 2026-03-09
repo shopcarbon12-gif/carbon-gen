@@ -1533,9 +1533,10 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     const uploadedDeviceSelections: SelectedCatalogImage[] = uploadedUrls.map((uploadedUrl, idx) => {
       const fallbackName = `Device upload ${idx + 1}`;
       const title = String(files[idx]?.name || fallbackName).trim() || fallbackName;
+      const localPreviewUrl = files[idx] ? URL.createObjectURL(files[idx]) : uploadedUrl;
       return {
         id: `device:${uploadedUrl}`,
-        url: uploadedUrl,
+        url: localPreviewUrl,
         title,
         source: "device_upload",
         uploadedUrl,
@@ -1554,6 +1555,14 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         const additions = uploadedDeviceSelections.filter(
           (img) => !existingUploaded.has(String(img.uploadedUrl || "").trim())
         );
+        const skipped = uploadedDeviceSelections.filter(
+          (img) => existingUploaded.has(String(img.uploadedUrl || "").trim())
+        );
+        skipped.forEach((img) => {
+          if (String(img.url || "").startsWith("blob:")) {
+            URL.revokeObjectURL(img.url);
+          }
+        });
         return additions.length ? [...prev, ...additions] : prev;
       });
     }
@@ -4204,6 +4213,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       if (target?.uploadedUrl) {
         setItemReferenceUrls((urls) => urls.filter((url) => url !== target.uploadedUrl));
       }
+      if (target?.url && String(target.url).startsWith("blob:")) {
+        URL.revokeObjectURL(target.url);
+      }
       return prev.filter((img) => img.id !== removeId);
     });
     let done = false;
@@ -4218,6 +4230,11 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   useEffect(() => {
     return () => {
       modelPreviewItems.forEach((p) => URL.revokeObjectURL(p.localUrl));
+      selectedCatalogImagesRef.current.forEach((img) => {
+        if (String(img.url || "").startsWith("blob:")) {
+          URL.revokeObjectURL(img.url);
+        }
+      });
     };
   }, []);
 
