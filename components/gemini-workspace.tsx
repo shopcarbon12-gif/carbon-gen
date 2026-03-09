@@ -7871,7 +7871,7 @@ function buildMasterPanelPrompt(
           gap: 16px;
           overflow: visible;
           overscroll-behavior: contain;
-          margin-top: calc(var(--status-bar-height, 96px) + 13px);
+          margin-top: calc(var(--status-bar-height, 96px) - 29px);
           width: calc(100% + var(--content-right-pad, 0px));
           margin-right: calc(-1 * var(--content-right-pad, 0px));
           padding-right: var(--content-right-pad, 0px);
@@ -9328,6 +9328,9 @@ function buildMasterPanelPrompt(
           }
         }
         @media (max-width: 900px) {
+          .grid {
+            margin-top: calc(var(--status-bar-height, 96px) - 40px);
+          }
           .mobile-only-control,
           .btn.mobile-only-control,
           .ghost-btn.mobile-only-control {
