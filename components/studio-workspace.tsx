@@ -5123,7 +5123,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           <div className="status-bar-title">Progress</div>
           <div className="status-bar-head-actions">
             <button
-              className="status-reset-btn"
+              className="status-chip idle status-reset-btn"
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
@@ -7408,19 +7408,10 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           gap: 8px;
         }
         .status-reset-btn {
-          border: 1px solid #cbd5e1;
-          border-radius: 8px;
-          background: rgba(255, 255, 255, 0.7);
-          color: #334155;
-          font-size: 0.72rem;
-          font-weight: 700;
-          letter-spacing: 0.02em;
-          padding: 4px 10px;
           cursor: pointer;
         }
         .status-reset-btn:hover {
-          border-color: #94a3b8;
-          background: rgba(255, 255, 255, 0.95);
+          filter: brightness(0.98);
         }
         .status-bar-title {
           font-weight: 700;
