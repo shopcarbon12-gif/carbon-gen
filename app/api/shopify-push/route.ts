@@ -168,74 +168,15 @@ async function getShopifySourceUrl(sourceUrl: string) {
     return "jpg";
   })();
 
-  // Some UI rows carry /api/storage/preview URLs. Resolve these to direct
-  // storage bytes first so server-side fetch does not fail with 400/401.
-  try {
-    const parsed = new URL(raw);
-    if (parsed.pathname === "/api/storage/preview") {
-      const previewPath = String(parsed.searchParams.get("path") || "").trim();
-      const previewUrl = String(parsed.searchParams.get("url") || "").trim();
-      const resolvedPath = previewPath || (previewUrl ? tryGetStoragePathFromUrl(previewUrl) : "");
-      if (resolvedPath) {
-        const { body, contentType: storedContentType } = await downloadStorageObject(resolvedPath);
-        const bytes = new Uint8Array(body);
-        if (!bytes.byteLength) {
-          throw new Error("source image is empty");
-        }
-        const loweredType = String(storedContentType || "").toLowerCase();
-        const contentType =
-          loweredType && loweredType.startsWith("image/") ? loweredType : "image/jpeg";
-        const ext =
-          contentType.includes("png")
-            ? "png"
-            : contentType.includes("webp")
-              ? "webp"
-              : contentType.includes("gif")
-                ? "gif"
-                : contentType.includes("jpg") || contentType.includes("jpeg")
-                  ? "jpg"
-                  : fallbackExtFromUrl;
-        const path = `items/push-staging/${Date.now()}-${crypto.randomUUID()}.${ext}`;
-        const uploaded = await uploadBytesToStorage({ path, bytes, contentType });
-        return norm(uploaded.url);
-      }
-      // Fallback: if preview wraps a remote URL we cannot map to storage,
-      // try downloading that raw URL directly instead of the preview route.
-      if (previewUrl && /^https?:\/\//i.test(previewUrl)) {
-        raw = previewUrl;
-      }
-    }
-  } catch {
-    // ignore parse errors and continue with direct fetch fallback
-  }
-
-  const ctrl = new AbortController();
-  const timeout = setTimeout(() => ctrl.abort(), 20_000);
-  try {
-    const resp = await fetch(raw, {
-      method: "GET",
-      redirect: "follow",
-      signal: ctrl.signal,
-      headers: {
-        accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-        "user-agent": "Mozilla/5.0 (compatible; CarbonGenShopifyPush/1.0)",
-      },
-      cache: "no-store",
-    });
-    if (!resp.ok) {
-      throw new Error(`source fetch failed (${resp.status})`);
-    }
-    const bytes = new Uint8Array(await resp.arrayBuffer());
+  const stageBytesToStorage = async (bytes: Uint8Array, incomingContentType: string) => {
     if (!bytes.byteLength) {
       throw new Error("source image is empty");
     }
-
-    const contentTypeRaw = String(resp.headers.get("content-type") || "")
+    const loweredType = String(incomingContentType || "")
       .split(";")[0]
-      ?.trim()
+      .trim()
       .toLowerCase();
-    const contentType =
-      contentTypeRaw && contentTypeRaw.startsWith("image/") ? contentTypeRaw : "image/jpeg";
+    const contentType = loweredType && loweredType.startsWith("image/") ? loweredType : "image/jpeg";
     const ext =
       contentType.includes("png")
         ? "png"
@@ -249,9 +190,68 @@ async function getShopifySourceUrl(sourceUrl: string) {
     const path = `items/push-staging/${Date.now()}-${crypto.randomUUID()}.${ext}`;
     const uploaded = await uploadBytesToStorage({ path, bytes, contentType });
     return norm(uploaded.url);
-  } finally {
-    clearTimeout(timeout);
+  };
+
+  // Some rows carry /api/storage/preview URLs. Resolve those first.
+  try {
+    const parsed = new URL(raw);
+    if (parsed.pathname === "/api/storage/preview") {
+      const previewPath = String(parsed.searchParams.get("path") || "").trim();
+      const previewUrl = String(parsed.searchParams.get("url") || "").trim();
+      const resolvedPath = previewPath || (previewUrl ? tryGetStoragePathFromUrl(previewUrl) : "");
+      if (resolvedPath) {
+        const { body, contentType } = await downloadStorageObject(resolvedPath);
+        return await stageBytesToStorage(new Uint8Array(body), contentType);
+      }
+      if (previewUrl && /^https?:\/\//i.test(previewUrl)) {
+        raw = previewUrl;
+      } else {
+        throw new Error("source fetch failed (400)");
+      }
+    }
+  } catch (err: any) {
+    const message = String(err?.message || "");
+    if (/source fetch failed/i.test(message)) throw err;
   }
+
+  const candidates = new Set<string>([raw]);
+  try {
+    const parsed = new URL(raw);
+    if (parsed.search) {
+      parsed.search = "";
+      candidates.add(parsed.toString());
+    }
+  } catch {}
+
+  let lastError = "source fetch failed (400)";
+  for (const candidate of candidates) {
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 20_000);
+    try {
+      const resp = await fetch(candidate, {
+        method: "GET",
+        redirect: "follow",
+        signal: ctrl.signal,
+        headers: {
+          accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+          "user-agent": "Mozilla/5.0 (compatible; CarbonGenShopifyPush/1.0)",
+        },
+        cache: "no-store",
+      });
+      if (!resp.ok) {
+        lastError = `source fetch failed (${resp.status})`;
+        continue;
+      }
+      const bytes = new Uint8Array(await resp.arrayBuffer());
+      return await stageBytesToStorage(bytes, String(resp.headers.get("content-type") || ""));
+    } catch (err: any) {
+      lastError = String(err?.message || "source fetch failed");
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  throw new Error(lastError || "source fetch failed (400)");
 }
 
 function toNumericId(value: string) {
