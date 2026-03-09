@@ -9,6 +9,7 @@ import {
   getImageFetchTimeoutMs,
   normalizeRemoteImageUrl,
 } from "@/lib/remoteImage";
+import { downloadStorageObject, tryGetStoragePathFromUrl } from "@/lib/storageProvider";
 
 function normalizeText(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -36,12 +37,40 @@ function normalizeReferenceUrls(values: unknown[], label: string) {
 }
 
 async function downloadReferenceAsBase64(url: string): Promise<{ mimeType: string; data: string }> {
-  const { bytes, contentType } = await fetchRemoteImageBytes(url, {
-    timeoutMs: getImageFetchTimeoutMs(),
-    maxBytes: getImageFetchMaxBytes(),
-  });
+  let bytes: Buffer | null = null;
+  let contentType = "image/png";
+  let lastError = "";
+  try {
+    const remote = await fetchRemoteImageBytes(url, {
+      timeoutMs: getImageFetchTimeoutMs(),
+      maxBytes: getImageFetchMaxBytes(),
+    });
+    bytes = remote.bytes;
+    contentType = normalizeText(remote.contentType) || contentType;
+  } catch (err: any) {
+    lastError = String(err?.message || "Image fetch failed");
+  }
+
+  if (!bytes) {
+    const storagePath = tryGetStoragePathFromUrl(url);
+    if (storagePath) {
+      try {
+        const stored = await downloadStorageObject(storagePath);
+        bytes = Buffer.from(stored.body);
+        contentType = normalizeText(stored.contentType) || contentType;
+      } catch (storageErr: any) {
+        const storageMsg = String(storageErr?.message || "Storage fetch failed");
+        throw new Error(lastError ? `${lastError}; storage fallback: ${storageMsg}` : storageMsg);
+      }
+    }
+  }
+
+  if (!bytes) {
+    throw new Error(lastError || "Image fetch failed");
+  }
+
   return {
-    mimeType: normalizeText(contentType) || "image/png",
+    mimeType: contentType,
     data: bytes.toString("base64"),
   };
 }
@@ -129,8 +158,16 @@ export async function POST(req: NextRequest) {
       .map((r) => r.value);
 
     if (!referenceImages.length) {
+      const downloadErrors = downloaded
+        .filter((r): r is PromiseRejectedResult => r.status === "rejected")
+        .map((r) => String(r.reason?.message || r.reason || "reference download failed"))
+        .filter(Boolean)
+        .slice(0, 5);
       return NextResponse.json(
-        { error: "Could not download any item reference images." },
+        {
+          error: "Could not download any item reference images.",
+          details: downloadErrors.join(" | "),
+        },
         { status: 400 }
       );
     }

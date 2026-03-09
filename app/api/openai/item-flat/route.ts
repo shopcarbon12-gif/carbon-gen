@@ -10,6 +10,7 @@ import {
   getImageFetchTimeoutMs,
   normalizeRemoteImageUrl,
 } from "@/lib/remoteImage";
+import { downloadStorageObject, tryGetStoragePathFromUrl } from "@/lib/storageProvider";
 
 function normalizeText(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -60,6 +61,19 @@ async function downloadReferenceAsFile(url: string, index: number) {
       return toFile(bytes, `item-ref-${index + 1}.${ext}`, { type: contentType });
     } catch (err: any) {
       lastError = err?.message || "Image fetch failed";
+    }
+  }
+
+  const storagePath = tryGetStoragePathFromUrl(url);
+  if (storagePath) {
+    try {
+      const { body, contentType } = await downloadStorageObject(storagePath);
+      const bytes = Buffer.from(body);
+      const ext = extFromContentType(contentType);
+      return toFile(bytes, `item-ref-${index + 1}.${ext}`, { type: contentType });
+    } catch (storageErr: any) {
+      const storageMsg = String(storageErr?.message || "Storage fetch failed");
+      lastError = lastError ? `${lastError}; storage fallback: ${storageMsg}` : `storage fallback: ${storageMsg}`;
     }
   }
 
@@ -152,8 +166,16 @@ export async function POST(req: NextRequest) {
       .map((r) => r.value);
 
     if (!referenceFiles.length) {
+      const downloadErrors = downloaded
+        .filter((r): r is PromiseRejectedResult => r.status === "rejected")
+        .map((r) => String(r.reason?.message || r.reason || "reference download failed"))
+        .filter(Boolean)
+        .slice(0, 5);
       return NextResponse.json(
-        { error: "Could not download any item reference images." },
+        {
+          error: "Could not download any item reference images.",
+          details: downloadErrors.join(" | "),
+        },
         { status: 400 }
       );
     }
