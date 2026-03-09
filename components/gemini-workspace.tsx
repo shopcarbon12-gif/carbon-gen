@@ -5005,16 +5005,28 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
           <div className="status-bar-title">Progress</div>
           <div className="status-bar-head-actions">
             <button
-              className="status-chip idle status-reset-btn"
+              className="status-chip status-chip-fixed idle status-reset-btn"
               type="button"
+              role="button"
               onClick={(e) => {
                 e.stopPropagation();
                 resetTaskProgressDisplay();
               }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  resetTaskProgressDisplay();
+                }
+              }}
             >
               Reset
             </button>
-            <span className={`status-chip ${statusTone}`}>
+            <button
+              className={`status-chip status-chip-fixed status-state-btn ${statusTone}`}
+              type="button"
+              disabled
+            >
               {statusTone === "error"
                 ? "Error"
                 : statusTone === "working"
@@ -5022,7 +5034,7 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
                   : statusTone === "success"
                     ? "Done"
                     : "Idle"}
-            </span>
+            </button>
           </div>
         </div>
         <div className="status-bar-message">
@@ -7293,9 +7305,20 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
         }
         .status-reset-btn {
           cursor: pointer;
+          appearance: none;
+          -webkit-appearance: none;
+          font: inherit;
+          line-height: 1;
+          margin: 0;
         }
         .status-reset-btn:hover {
           filter: brightness(0.98);
+        }
+        .status-state-btn,
+        .status-state-btn:disabled {
+          cursor: default;
+          opacity: 1;
+          pointer-events: none;
         }
         .status-bar-title {
           font-weight: 700;
@@ -7308,17 +7331,27 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
           border: 1px solid #e2e8f0;
           border-radius: 10px;
           padding: 3px 0;
-          width: 78px;
           box-sizing: border-box;
           justify-content: center;
           text-align: center;
           display: inline-flex;
           align-items: center;
+          line-height: 1;
           font-size: 0.72rem;
           font-weight: 700;
           letter-spacing: 0.05em;
           text-transform: uppercase;
           white-space: nowrap;
+        }
+        .status-chip-fixed {
+          width: 82px;
+          min-width: 82px;
+          max-width: 82px;
+          flex: 0 0 82px;
+          height: 32px;
+          min-height: 32px;
+          max-height: 32px;
+          padding: 0;
         }
         .status-chip.idle {
           color: #94a3b8;
