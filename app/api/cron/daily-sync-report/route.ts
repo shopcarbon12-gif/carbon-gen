@@ -11,6 +11,7 @@ export const maxDuration = 60;
 
 const REPORT_EMAIL = "elior@carbonjeanscompany.com";
 const STORAGE_CLEANUP_PREFIXES = ["models/uploads"];
+const STORAGE_CLEANUP_HOUR = Number(process.env.MODEL_UPLOAD_CLEANUP_HOUR_LOCAL || "0");
 
 function isAuthorized(req: NextRequest) {
   if (isRequestAuthed(req)) return true;
@@ -27,6 +28,11 @@ function isAuthorized(req: NextRequest) {
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function shouldRunStorageCleanupNow(date: Date) {
+  if (!Number.isFinite(STORAGE_CLEANUP_HOUR)) return false;
+  return date.getHours() === Math.max(0, Math.min(23, STORAGE_CLEANUP_HOUR));
 }
 
 async function getShop(): Promise<string> {
@@ -238,11 +244,14 @@ export async function GET(req: NextRequest) {
     }
 
     try {
-      const groups = await Promise.all(STORAGE_CLEANUP_PREFIXES.map((prefix) => listStorageFiles(prefix)));
-      const allPaths = Array.from(new Set(groups.flat().map((f) => f.path)));
-      if (allPaths.length) {
-        const deleted = await deleteStorageObjects(allPaths);
-        deletedStorageUploads = deleted.deleted;
+      // Guardrail: only clear model uploads during the midnight maintenance window.
+      if (shouldRunStorageCleanupNow(now)) {
+        const groups = await Promise.all(STORAGE_CLEANUP_PREFIXES.map((prefix) => listStorageFiles(prefix)));
+        const allPaths = Array.from(new Set(groups.flat().map((f) => f.path)));
+        if (allPaths.length) {
+          const deleted = await deleteStorageObjects(allPaths);
+          deletedStorageUploads = deleted.deleted;
+        }
       }
     } catch {
       // best-effort cleanup

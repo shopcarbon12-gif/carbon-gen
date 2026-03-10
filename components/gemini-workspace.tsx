@@ -24,7 +24,7 @@ const SPLIT_TARGET_HEIGHT = 1200;
 const FLAT_SPLIT_TARGET_WIDTH = 900;
 const FLAT_SPLIT_TARGET_HEIGHT = 1200;
 const PUSH_TRANSFER_STORAGE_KEY = "cg_push_transfer_v1";
-const DAILY_MODEL_RESET_STORAGE_KEY = "cg_daily_model_reset_day_v1";
+const DAILY_MODEL_UPLOAD_CLEANUP_STORAGE_KEY = "cg_daily_model_upload_cleanup_day_v1";
 const ALT_GENERATION_BATCH_SIZE = 3;
 const PUSH_STAGING_BATCH_SIZE = 4;
 const STATUS_BAR_FIXED_HEIGHT = 154;
@@ -594,7 +594,8 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
   const [poseScanTab, setPoseScanTab] = useState<"male" | "female">("female");
   const [poseScanManualGender, setPoseScanManualGender] = useState<"male" | "female">("female");
   const poseScanAbortRef = useRef<AbortController | null>(null);
-  const dailyModelResetInFlightRef = useRef(false);
+  const modelsLoadedOnceRef = useRef(false);
+  const dailyModelUploadCleanupInFlightRef = useRef(false);
   const [appliedPoseSuggestions, setAppliedPoseSuggestions] = useState<Record<string, string>>({});
 
   const lowestSelectedPanel = useMemo(() => {
@@ -1140,8 +1141,10 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
       .then((json) => {
         const nextModels = Array.isArray(json?.models) ? json.models : [];
         setModels(nextModels);
+        modelsLoadedOnceRef.current = true;
       })
       .catch((e: any) => {
+        if (modelsLoadedOnceRef.current) return;
         setError(e?.message || "Failed to load models");
       });
   }
@@ -1160,30 +1163,26 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const maybeResetForNewDay = async () => {
-      if (dailyModelResetInFlightRef.current) return;
-      const todayKey = getLocalDayKey(new Date());
-      const lastResetKey = String(window.localStorage.getItem(DAILY_MODEL_RESET_STORAGE_KEY) || "");
-      if (!lastResetKey) {
-        window.localStorage.setItem(DAILY_MODEL_RESET_STORAGE_KEY, todayKey);
-        return;
-      }
-      if (lastResetKey === todayKey) return;
+    const maybeRunDailyUploadCleanup = async () => {
+      if (dailyModelUploadCleanupInFlightRef.current) return;
+      const now = new Date();
+      if (now.getHours() !== 0) return;
+      const todayKey = getLocalDayKey(now);
+      const lastCleanupKey = String(window.localStorage.getItem(DAILY_MODEL_UPLOAD_CLEANUP_STORAGE_KEY) || "");
+      if (lastCleanupKey === todayKey) return;
 
-      dailyModelResetInFlightRef.current = true;
+      dailyModelUploadCleanupInFlightRef.current = true;
       try {
-        await resetModels();
-        setPreviousModelUploads([]);
-        setPreviousUploadsVisible(false);
-        window.localStorage.setItem(DAILY_MODEL_RESET_STORAGE_KEY, todayKey);
+        await resetDailyModelUploadsOnly();
+        window.localStorage.setItem(DAILY_MODEL_UPLOAD_CLEANUP_STORAGE_KEY, todayKey);
       } finally {
-        dailyModelResetInFlightRef.current = false;
+        dailyModelUploadCleanupInFlightRef.current = false;
       }
     };
 
-    void maybeResetForNewDay();
+    void maybeRunDailyUploadCleanup();
     const intervalId = window.setInterval(() => {
-      void maybeResetForNewDay();
+      void maybeRunDailyUploadCleanup();
     }, 30_000);
     return () => {
       window.clearInterval(intervalId);
@@ -3258,6 +3257,14 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
     } catch (e: any) {
       setError(e?.message || "Failed to reset models.");
     }
+  }
+
+  async function resetDailyModelUploadsOnly() {
+    const resp = await fetch("/api/models/uploads/reset", { method: "POST" });
+    const json = await parseJsonResponse(resp);
+    if (!resp.ok) throw new Error(json?.error || "Failed to reset daily model uploads.");
+    setPreviousModelUploads([]);
+    setPreviousUploadsVisible(false);
   }
 
   async function loadPreviousModelUploads() {
