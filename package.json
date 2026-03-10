@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "next build && node -e \"const fs=require('fs');const path=require('path');const root=process.cwd();const src=path.join(root,'.next','static');const out=path.join(root,'.next','standalone','.next','static');if(fs.existsSync(src)){fs.mkdirSync(out,{recursive:true});fs.cpSync(src,out,{recursive:true,force:true});}const pub=path.join(root,'public');const pubOut=path.join(root,'.next','standalone','public');if(fs.existsSync(pub)){fs.mkdirSync(pubOut,{recursive:true});fs.cpSync(pub,pubOut,{recursive:true,force:true});}console.log('[build] standalone static/public synced');\"",
+    "build": "next build --webpack && node -e \"const fs=require('fs');const path=require('path');const root=process.cwd();const src=path.join(root,'.next','static');const out=path.join(root,'.next','standalone','.next','static');if(fs.existsSync(src)){fs.mkdirSync(out,{recursive:true});fs.cpSync(src,out,{recursive:true,force:true});}const pub=path.join(root,'public');const pubOut=path.join(root,'.next','standalone','public');if(fs.existsSync(pub)){fs.mkdirSync(pubOut,{recursive:true});fs.cpSync(pub,pubOut,{recursive:true,force:true});}console.log('[build] standalone static/public synced');\"",
     "dev": "powershell -ExecutionPolicy Bypass -File scripts/dev-local.ps1",
     "dev:raw": "next dev --webpack",
     "dev:3000": "next dev --webpack -p 3000",
