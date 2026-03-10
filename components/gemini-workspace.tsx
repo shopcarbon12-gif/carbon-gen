@@ -2705,6 +2705,11 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
           stopItemCameraRemotePolling();
           return;
         }
+        if (!itemCameraRemoteWasConnectedRef.current && !json?.connected && !json?.ready) {
+          // Before first connect, poll faster so QR popup closes quickly once scanned.
+          scheduleNextPoll(450);
+          return;
+        }
         if (!json?.ready) {
           idlePollCount = Math.min(idlePollCount + 1, 4);
           scheduleNextPoll(1300 + idlePollCount * 400);

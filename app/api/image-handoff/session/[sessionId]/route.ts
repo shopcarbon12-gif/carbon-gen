@@ -8,7 +8,7 @@ import {
   saveImageToSession,
   isSessionConnected,
 } from "@/lib/image-handoff-store";
-import { getStoragePublicUrl, uploadBytesToStorage } from "@/lib/storageProvider";
+import { uploadBytesToStorage } from "@/lib/storageProvider";
 
 export const dynamic = "force-dynamic";
 
@@ -58,7 +58,9 @@ export async function GET(
       sessionId,
       ready: true,
       ...consumed,
-      objectUrl: consumed.objectPath ? getStoragePublicUrl(consumed.objectPath) : null,
+      objectUrl: consumed.objectPath
+        ? `/api/storage/preview?path=${encodeURIComponent(consumed.objectPath)}`
+        : null,
     });
   }
 
