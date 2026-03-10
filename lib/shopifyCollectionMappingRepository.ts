@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { ensureSqlReady, hasSqlDatabaseConfigured, sqlQuery } from "@/lib/sqlDb";
 import { normalizeShopDomain } from "@/lib/shopify";
 
@@ -55,6 +56,45 @@ type ToggleAuditInput = {
   removedCollectionIds: string[];
   status: "ok" | "error";
   errorMessage?: string;
+};
+
+export type LiveMenuNodeInput = {
+  nodeKey: string;
+  label: string;
+  parentKey: string | null;
+  depth: number;
+  sortOrder: number;
+  collectionIdHint?: string | null;
+  defaultCollectionHandle?: string | null;
+};
+
+type MappingAuditInput = {
+  shop: string;
+  action: string;
+  summary: string;
+  status: "ok" | "error";
+  details?: Record<string, unknown> | null;
+  errorMessage?: string;
+};
+
+export type MappingAuditLogRow = {
+  id: string;
+  action: string;
+  summary: string;
+  status: "ok" | "error";
+  details: Record<string, unknown>;
+  errorMessage: string | null;
+  createdAt: string;
+};
+
+type PersistedMappingAuditRow = {
+  id: string;
+  action: string;
+  summary: string;
+  status: string;
+  details: unknown;
+  error_message: string | null;
+  created_at: string;
 };
 
 const DEFAULT_SHOP_KEY = "__default_shop__";
@@ -158,7 +198,10 @@ const DEFAULT_MENU_NODES: MenuNodeSeed[] = [
 ];
 
 const memoryNodesByShop = new Map<string, MenuNodeRecord[]>();
+const memoryAuditLogsByShop = new Map<string, MappingAuditLogRow[]>();
 let sqlTablesEnsured = false;
+const MAPPING_AUDIT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+const MAPPING_AUDIT_LIMIT_MAX = 1000;
 
 function normalizeText(value: unknown) {
   return String(value ?? "").trim();
@@ -256,6 +299,41 @@ function parsePersistedNode(row: PersistedNodeRow): MenuNodeRecord {
   };
 }
 
+function normalizeDetails(details: unknown): Record<string, unknown> {
+  if (details && typeof details === "object" && !Array.isArray(details)) {
+    return details as Record<string, unknown>;
+  }
+  return {};
+}
+
+function parsePersistedMappingAuditRow(row: PersistedMappingAuditRow): MappingAuditLogRow {
+  return {
+    id: normalizeText(row.id) || randomUUID(),
+    action: normalizeText(row.action) || "unknown",
+    summary: normalizeText(row.summary),
+    status: normalizeLower(row.status) === "error" ? "error" : "ok",
+    details: normalizeDetails(row.details),
+    errorMessage: normalizeText(row.error_message) || null,
+    createdAt: normalizeText(row.created_at) || new Date().toISOString(),
+  };
+}
+
+function clampAuditLimit(limit: number) {
+  if (!Number.isFinite(limit)) return 100;
+  return Math.max(1, Math.min(MAPPING_AUDIT_LIMIT_MAX, Math.floor(limit)));
+}
+
+function pruneMemoryAuditLogs(shopKey: string) {
+  const existing = memoryAuditLogsByShop.get(shopKey) || [];
+  const threshold = Date.now() - MAPPING_AUDIT_RETENTION_MS;
+  const next = existing.filter((row) => {
+    const ts = Date.parse(row.createdAt);
+    return Number.isFinite(ts) && ts >= threshold;
+  });
+  memoryAuditLogsByShop.set(shopKey, next);
+  return next;
+}
+
 function getMemoryNodes(shop: string, collections: CollectionOption[]): MenuNodeRecord[] {
   const shopKey = normalizeShopKey(shop);
   const existing = memoryNodesByShop.get(shopKey);
@@ -324,6 +402,19 @@ async function ensureSqlTables() {
   `);
 
   await sqlQuery(`
+    CREATE TABLE IF NOT EXISTS shopify_collection_mapping_audit (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      shop TEXT NOT NULL,
+      action TEXT NOT NULL,
+      summary TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'ok',
+      details JSONB NOT NULL DEFAULT '{}'::jsonb,
+      error_message TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
+
+  await sqlQuery(`
     CREATE INDEX IF NOT EXISTS idx_shopify_collection_menu_nodes_shop_sort
       ON shopify_collection_menu_nodes (shop, sort_order, node_key)
   `);
@@ -331,6 +422,11 @@ async function ensureSqlTables() {
   await sqlQuery(`
     CREATE INDEX IF NOT EXISTS idx_shopify_collection_mapping_actions_shop_created
       ON shopify_collection_mapping_actions (shop, created_at DESC)
+  `);
+
+  await sqlQuery(`
+    CREATE INDEX IF NOT EXISTS idx_shopify_collection_mapping_audit_shop_created
+      ON shopify_collection_mapping_audit (shop, created_at DESC)
   `);
 
   sqlTablesEnsured = true;
@@ -543,6 +639,176 @@ export async function resetMenuMappingsToDefault(
   };
 }
 
+function normalizeLiveNode(row: LiveMenuNodeInput): LiveMenuNodeInput {
+  return {
+    nodeKey: normalizeText(row.nodeKey),
+    label: normalizeText(row.label),
+    parentKey: normalizeText(row.parentKey) || null,
+    depth: Math.max(0, toInt(row.depth)),
+    sortOrder: toInt(row.sortOrder),
+    collectionIdHint: normalizeText(row.collectionIdHint) || null,
+    defaultCollectionHandle: normalizeText(row.defaultCollectionHandle) || null,
+  };
+}
+
+function resolveNodeCollectionState(
+  existing: MenuNodeRecord | undefined,
+  incoming: LiveMenuNodeInput,
+  byId: Map<string, CollectionOption>,
+  byHandle: Map<string, CollectionOption>
+) {
+  const existingCollectionId = normalizeText(existing?.collectionId);
+  const incomingCollectionIdHint = normalizeText(incoming.collectionIdHint);
+  const existingDefaultHandle = normalizeText(existing?.defaultCollectionHandle);
+  const incomingDefaultHandle = normalizeText(incoming.defaultCollectionHandle);
+
+  const existingMatch = existingCollectionId ? byId.get(existingCollectionId) : undefined;
+  const incomingHintMatch = incomingCollectionIdHint ? byId.get(incomingCollectionIdHint) : undefined;
+
+  if (existingMatch) {
+    return {
+      collectionId: existingMatch.id,
+      collectionTitle: existingMatch.title,
+      collectionHandle: existingMatch.handle,
+      defaultCollectionHandle: incomingDefaultHandle || existingDefaultHandle || existingMatch.handle || null,
+    };
+  }
+
+  if (incomingHintMatch) {
+    return {
+      collectionId: incomingHintMatch.id,
+      collectionTitle: incomingHintMatch.title,
+      collectionHandle: incomingHintMatch.handle,
+      defaultCollectionHandle:
+        incomingDefaultHandle || existingDefaultHandle || incomingHintMatch.handle || null,
+    };
+  }
+
+  if (existingCollectionId) {
+    return {
+      collectionId: existingCollectionId,
+      collectionTitle: normalizeText(existing?.collectionTitle) || null,
+      collectionHandle: normalizeText(existing?.collectionHandle) || null,
+      defaultCollectionHandle: incomingDefaultHandle || existingDefaultHandle || null,
+    };
+  }
+
+  const handleMatch =
+    byHandle.get(normalizeLower(incomingDefaultHandle)) ||
+    byHandle.get(normalizeLower(existingDefaultHandle));
+
+  return {
+    collectionId: handleMatch?.id || null,
+    collectionTitle: handleMatch?.title || null,
+    collectionHandle: handleMatch?.handle || null,
+    defaultCollectionHandle: incomingDefaultHandle || existingDefaultHandle || handleMatch?.handle || null,
+  };
+}
+
+export async function syncLiveMenuNodes(
+  shop: string,
+  liveNodes: LiveMenuNodeInput[],
+  collections: CollectionOption[]
+): Promise<{ backend: "sql" | "memory"; nodes: MenuNodeRecord[]; warning?: string }> {
+  const safeShop = normalizeShopKey(shop);
+  const { byId, byHandle } = toCollectionMaps(collections);
+  const normalized = liveNodes
+    .map(normalizeLiveNode)
+    .filter((row) => row.nodeKey && row.label)
+    .sort((a, b) => {
+      if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+      return a.nodeKey.localeCompare(b.nodeKey);
+    });
+
+  if (!(await canUseSql())) {
+    const existing = memoryNodesByShop.get(safeShop) || [];
+    const byExisting = new Map(existing.map((row) => [row.nodeKey, row]));
+    const nowIso = new Date().toISOString();
+    const next: MenuNodeRecord[] = normalized.map((row) => {
+      const current = byExisting.get(row.nodeKey);
+      const collectionState = resolveNodeCollectionState(current, row, byId, byHandle);
+      return {
+        nodeKey: row.nodeKey,
+        label: row.label,
+        parentKey: row.parentKey,
+        depth: row.depth,
+        sortOrder: row.sortOrder,
+        enabled: typeof current?.enabled === "boolean" ? current.enabled : true,
+        collectionId: collectionState.collectionId,
+        collectionTitle: collectionState.collectionTitle,
+        collectionHandle: collectionState.collectionHandle,
+        defaultCollectionHandle: collectionState.defaultCollectionHandle,
+        updatedAt: nowIso,
+      };
+    });
+
+    memoryNodesByShop.set(safeShop, next.map(cloneNode));
+    return {
+      backend: "memory",
+      warning: "SQL is not configured. Mapping data is running in memory for this local session.",
+      nodes: sortNodes(next),
+    };
+  }
+
+  const existingRows = await listSqlNodes(safeShop);
+  const byExisting = new Map(existingRows.map((row) => [row.nodeKey, row]));
+  const now = new Date().toISOString();
+
+  for (const row of normalized) {
+    const current = byExisting.get(row.nodeKey);
+    const collectionState = resolveNodeCollectionState(current, row, byId, byHandle);
+    await sqlQuery(
+      `INSERT INTO shopify_collection_menu_nodes (
+        shop, node_key, label, parent_key, depth, sort_order, enabled,
+        collection_id, collection_title, collection_handle, default_collection_handle, updated_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::timestamptz)
+      ON CONFLICT (shop, node_key) DO UPDATE
+        SET label = EXCLUDED.label,
+            parent_key = EXCLUDED.parent_key,
+            depth = EXCLUDED.depth,
+            sort_order = EXCLUDED.sort_order,
+            enabled = EXCLUDED.enabled,
+            collection_id = EXCLUDED.collection_id,
+            collection_title = EXCLUDED.collection_title,
+            collection_handle = EXCLUDED.collection_handle,
+            default_collection_handle = EXCLUDED.default_collection_handle,
+            updated_at = EXCLUDED.updated_at`,
+      [
+        safeShop,
+        row.nodeKey,
+        row.label,
+        row.parentKey,
+        row.depth,
+        row.sortOrder,
+        typeof current?.enabled === "boolean" ? current.enabled : true,
+        collectionState.collectionId,
+        collectionState.collectionTitle,
+        collectionState.collectionHandle,
+        collectionState.defaultCollectionHandle,
+        now,
+      ]
+    );
+  }
+
+  const keys = normalized.map((row) => row.nodeKey);
+  if (keys.length < 1) {
+    await sqlQuery(`DELETE FROM shopify_collection_menu_nodes WHERE shop = $1`, [safeShop]);
+  } else {
+    await sqlQuery(
+      `DELETE FROM shopify_collection_menu_nodes
+       WHERE shop = $1
+         AND NOT (node_key = ANY($2::text[]))`,
+      [safeShop, keys]
+    );
+  }
+
+  return {
+    backend: "sql",
+    nodes: sortNodes(await listSqlNodes(safeShop)),
+  };
+}
+
 export async function logCollectionMappingAction(input: ToggleAuditInput): Promise<void> {
   const shop = normalizeShopKey(input.shop);
   if (!(await canUseSql())) return;
@@ -576,6 +842,91 @@ export async function logCollectionMappingAction(input: ToggleAuditInput): Promi
   } catch {
     // Best-effort audit log.
   }
+}
+
+async function trimSqlMappingAuditLogs(shop: string) {
+  await sqlQuery(
+    `DELETE FROM shopify_collection_mapping_audit
+     WHERE shop = $1
+       AND created_at < now() - interval '7 days'`,
+    [shop]
+  );
+}
+
+export async function logMappingAudit(input: MappingAuditInput): Promise<void> {
+  const shop = normalizeShopKey(input.shop);
+  const action = normalizeText(input.action) || "unknown";
+  const summary = normalizeText(input.summary) || action;
+  const status: "ok" | "error" = normalizeLower(input.status) === "error" ? "error" : "ok";
+  const details = normalizeDetails(input.details);
+  const errorMessage = normalizeText(input.errorMessage) || null;
+
+  if (!(await canUseSql())) {
+    const current = pruneMemoryAuditLogs(shop);
+    const row: MappingAuditLogRow = {
+      id: randomUUID(),
+      action,
+      summary,
+      status,
+      details,
+      errorMessage,
+      createdAt: new Date().toISOString(),
+    };
+    memoryAuditLogsByShop.set(shop, [row, ...current].slice(0, MAPPING_AUDIT_LIMIT_MAX));
+    return;
+  }
+
+  try {
+    await trimSqlMappingAuditLogs(shop);
+    await sqlQuery(
+      `INSERT INTO shopify_collection_mapping_audit (
+        shop, action, summary, status, details, error_message
+      )
+      VALUES ($1, $2, $3, $4, $5::jsonb, $6)`,
+      [shop, action, summary, status, JSON.stringify(details), errorMessage]
+    );
+  } catch {
+    // Best-effort audit log.
+  }
+}
+
+export async function listMappingAuditLogs(
+  shop: string,
+  limit = 120
+): Promise<{ backend: "sql" | "memory"; logs: MappingAuditLogRow[]; warning?: string }> {
+  const safeShop = normalizeShopKey(shop);
+  const safeLimit = clampAuditLimit(limit);
+
+  if (!(await canUseSql())) {
+    const rows = pruneMemoryAuditLogs(safeShop)
+      .slice()
+      .sort((a, b) => {
+        const tA = Date.parse(a.createdAt) || 0;
+        const tB = Date.parse(b.createdAt) || 0;
+        return tB - tA;
+      })
+      .slice(0, safeLimit);
+    return {
+      backend: "memory",
+      warning: "SQL is not configured. Mapping logs are only available for this local session.",
+      logs: rows,
+    };
+  }
+
+  await trimSqlMappingAuditLogs(safeShop);
+  const rows = await sqlQuery<PersistedMappingAuditRow>(
+    `SELECT id, action, summary, status, details, error_message, created_at
+     FROM shopify_collection_mapping_audit
+     WHERE shop = $1
+     ORDER BY created_at DESC
+     LIMIT $2`,
+    [safeShop, safeLimit]
+  );
+
+  return {
+    backend: "sql",
+    logs: rows.map(parsePersistedMappingAuditRow),
+  };
 }
 
 export function getDefaultMenuNodes() {

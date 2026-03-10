@@ -9708,6 +9708,16 @@ function buildMasterPanelPrompt(
           .grid > .card {
             width: 100%;
             justify-items: stretch;
+            max-width: 100%;
+            margin-left: 0;
+            margin-right: 0;
+            box-sizing: border-box;
+          }
+          .grid > section.card:nth-of-type(-n + 4) {
+            width: 100%;
+            max-width: 100%;
+            margin-left: 0;
+            margin-right: 0;
           }
           .mobile-only-control,
           .btn.mobile-only-control,
@@ -9802,7 +9812,8 @@ function buildMasterPanelPrompt(
             right: var(--page-inline-gap);
           }
           :global(.content.menu-open) .status-bar {
-            left: 280px;
+            left: var(--page-inline-gap);
+            right: var(--page-inline-gap);
           }
           .hero {
             grid-template-columns: 1fr;
