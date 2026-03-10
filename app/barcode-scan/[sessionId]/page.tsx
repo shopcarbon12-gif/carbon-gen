@@ -46,6 +46,16 @@ function isValidBarcode(value: string) {
   return /^\d{7,9}$/.test(value) || /^C\d{6,8}$/.test(value);
 }
 
+function extractBarcodeCandidate(value: string) {
+  const raw = String(value || "").toUpperCase();
+  const cMatch = raw.match(/C\d{6,8}/);
+  if (cMatch?.[0] && isValidBarcode(cMatch[0])) return cMatch[0];
+  const numMatch = raw.match(/\d{7,9}/);
+  if (numMatch?.[0] && isValidBarcode(numMatch[0])) return numMatch[0];
+  const sanitized = sanitizeBarcodeInput(raw).trim();
+  return isValidBarcode(sanitized) ? sanitized : "";
+}
+
 export default function BarcodeScanSessionPage() {
   const params = useParams<{ sessionId: string }>();
   const sessionId = useMemo(() => String(params?.sessionId || "").trim(), [params]);
@@ -91,8 +101,8 @@ export default function BarcodeScanSessionPage() {
 
   const submitBarcode = useCallback(
     async (value: string) => {
-      const normalized = sanitizeBarcodeInput(value).trim();
-      if (!isValidBarcode(normalized)) {
+      const candidate = extractBarcodeCandidate(value);
+      if (!isValidBarcode(candidate)) {
         setError("Barcode must be 7-9 digits, or C + 6-8 digits.");
         return false;
       }
@@ -106,14 +116,14 @@ export default function BarcodeScanSessionPage() {
         const response = await fetch(`/api/barcode-handoff/session/${encodeURIComponent(sessionId)}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ barcode: normalized }),
+          body: JSON.stringify({ barcode: candidate }),
         });
         const json = await response.json().catch(() => null);
         if (!response.ok) {
           throw new Error(String(json?.error || "Failed to submit barcode."));
         }
         setDone(true);
-        setStatus(`Barcode sent: ${normalized}. You can close this page.`);
+        setStatus(`Barcode sent: ${candidate}. You can close this page.`);
         cleanup();
         return true;
       } catch (e: any) {
@@ -151,7 +161,7 @@ export default function BarcodeScanSessionPage() {
             detections.find((row) => String(row?.rawValue || "").trim())?.rawValue || ""
           ).trim();
           if (raw) {
-            const normalized = sanitizeBarcodeInput(raw);
+            const normalized = extractBarcodeCandidate(raw);
             if (isValidBarcode(normalized)) {
               setManualBarcode(normalized);
               setStatus(`Detected: ${normalized}. Sending to desktop...`);
@@ -255,7 +265,7 @@ export default function BarcodeScanSessionPage() {
           if (cancelled) return;
           if (result) {
             const raw = String(result?.getText?.() || result?.text || "").trim();
-            const normalized = sanitizeBarcodeInput(raw);
+            const normalized = extractBarcodeCandidate(raw);
             if (!isValidBarcode(normalized)) return;
             setManualBarcode(normalized);
             setStatus(`Detected: ${normalized}. Sending to desktop...`);
