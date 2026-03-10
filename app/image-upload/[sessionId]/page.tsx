@@ -1,16 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-
-function toDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("Failed to read image file."));
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.readAsDataURL(file);
-  });
-}
 
 async function optimizeCameraTrack(track: MediaStreamTrack | null) {
   if (!track || track.kind !== "video" || typeof track.applyConstraints !== "function") return;
@@ -51,6 +42,20 @@ export default function ImageUploadSessionPage() {
   const [cameraReady, setCameraReady] = useState(false);
   const [status, setStatus] = useState("Take or choose a photo, then send it to desktop.");
 
+  const notifyDisconnected = useCallback(async () => {
+    if (!sessionId) return;
+    try {
+      await fetch(`/api/image-handoff/session/${encodeURIComponent(sessionId)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "disconnect" }),
+        keepalive: true,
+      });
+    } catch {
+      // Best-effort disconnect signal.
+    }
+  }, [sessionId]);
+
   useEffect(() => {
     if (!sessionId) return;
     let cancelled = false;
@@ -73,6 +78,16 @@ export default function ImageUploadSessionPage() {
       cancelled = true;
     };
   }, [sessionId]);
+
+  useEffect(() => {
+    const onPageHide = () => {
+      void notifyDisconnected();
+    };
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      window.removeEventListener("pagehide", onPageHide);
+    };
+  }, [notifyDisconnected]);
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof navigator === "undefined") return;
@@ -138,18 +153,14 @@ export default function ImageUploadSessionPage() {
     setBusy(true);
     setError(null);
     try {
-      const dataUrl = await toDataUrl(file);
-      if (!dataUrl.startsWith("data:image/")) {
+      if (!String(file.type || "").toLowerCase().startsWith("image/")) {
         throw new Error("Please choose an image file.");
       }
+      const form = new FormData();
+      form.append("file", file, file.name || "camera-upload.jpg");
       const response = await fetch(`/api/image-handoff/session/${encodeURIComponent(sessionId)}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fileName: file.name || "camera-upload.jpg",
-          mimeType: file.type || "image/jpeg",
-          dataUrl,
-        }),
+        body: form,
       });
       const json = await response.json().catch(() => null);
       if (!response.ok) {
@@ -197,6 +208,7 @@ export default function ImageUploadSessionPage() {
   }
 
   function closeDeviceWindow() {
+    void notifyDisconnected();
     if (typeof window === "undefined") return;
     try {
       window.close();
@@ -235,23 +247,6 @@ export default function ImageUploadSessionPage() {
         }}
       >
         <strong>Send Camera Photo</strong>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={closeDeviceWindow}
-          style={{
-            width: "100%",
-            borderRadius: 10,
-            border: "1px solid rgba(255,255,255,0.45)",
-            background: "linear-gradient(180deg, #475569 0%, #1e293b 100%)",
-            color: "#f8fafc",
-            padding: "10px 12px",
-            cursor: "pointer",
-            fontWeight: 700,
-          }}
-        >
-          Close Window
-        </button>
         <div style={{ textAlign: "center", opacity: 0.85, fontSize: 13 }}>{status}</div>
         {error ? <div style={{ textAlign: "center", color: "#fecaca", fontSize: 13 }}>{error}</div> : null}
         <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", aspectRatio: "4 / 5", background: "#000" }}>
@@ -327,8 +322,9 @@ export default function ImageUploadSessionPage() {
         </button>
         <button
           type="button"
-          disabled={busy}
-          onClick={closeDeviceWindow}
+          onClick={() => {
+            closeDeviceWindow();
+          }}
           style={{
             width: "100%",
             borderRadius: 10,

@@ -7,6 +7,7 @@ type ImageHandoffSession = {
   createdAt: number;
   expiresAt: number;
   connectedAt: number | null;
+  disconnectedAt: number | null;
   fileName: string | null;
   mimeType: string | null;
   dataUrl: string | null;
@@ -66,6 +67,12 @@ function saveSessionToFallback(session: ImageHandoffSession) {
   FALLBACK_SESSIONS.set(session.id, cloneSession(session));
 }
 
+function isSessionConnected(session: ImageHandoffSession) {
+  if (!session.connectedAt) return false;
+  if (!session.disconnectedAt) return true;
+  return session.connectedAt > session.disconnectedAt;
+}
+
 export async function createImageHandoffSession() {
   const createdAt = nowMs();
   const session: ImageHandoffSession = {
@@ -73,6 +80,7 @@ export async function createImageHandoffSession() {
     createdAt,
     expiresAt: createdAt + SESSION_TTL_MS,
     connectedAt: null,
+    disconnectedAt: null,
     fileName: null,
     mimeType: null,
     dataUrl: null,
@@ -109,9 +117,20 @@ export async function getImageHandoffSession(sessionId: string) {
 export async function markImageSessionConnected(sessionId: string) {
   const session = await getImageHandoffSession(sessionId);
   if (!session) return null;
-  if (!session.connectedAt) {
-    session.connectedAt = nowMs();
+  session.connectedAt = nowMs();
+  session.expiresAt = nowMs() + SESSION_TTL_MS;
+  try {
+    await writeSessionToStorage(session);
+  } catch {
+    saveSessionToFallback(session);
   }
+  return session;
+}
+
+export async function markImageSessionDisconnected(sessionId: string) {
+  const session = await getImageHandoffSession(sessionId);
+  if (!session) return null;
+  session.disconnectedAt = nowMs();
   session.expiresAt = nowMs() + SESSION_TTL_MS;
   try {
     await writeSessionToStorage(session);
@@ -160,3 +179,5 @@ export async function consumeImageFromSession(sessionId: string) {
   }
   return payload;
 }
+
+export { isSessionConnected };

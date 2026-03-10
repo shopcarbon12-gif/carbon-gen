@@ -4,12 +4,15 @@ import {
   consumeImageFromSession,
   getImageHandoffSession,
   markImageSessionConnected,
+  markImageSessionDisconnected,
   saveImageToSession,
+  isSessionConnected,
 } from "@/lib/image-handoff-store";
 
 export const dynamic = "force-dynamic";
 
 const MAX_DATA_URL_LENGTH = 16_000_000;
+const MAX_IMAGE_BYTES = 12_000_000;
 
 function normalizeSessionId(value: string) {
   return String(value || "").trim();
@@ -44,7 +47,7 @@ export async function GET(
       return NextResponse.json({
         sessionId,
         ready: false,
-        connected: Boolean(existing.connectedAt),
+        connected: isSessionConnected(existing),
         expiresAt: new Date(existing.expiresAt).toISOString(),
       });
     }
@@ -63,7 +66,7 @@ export async function GET(
   return NextResponse.json({
     sessionId,
     ready: Boolean(existing.dataUrl),
-    connected: Boolean(existing.connectedAt),
+    connected: isSessionConnected(existing),
     expiresAt: new Date(existing.expiresAt).toISOString(),
   });
 }
@@ -78,11 +81,40 @@ export async function POST(
     return NextResponse.json({ error: "Missing session id." }, { status: 400 });
   }
 
+  const contentType = String(request.headers.get("content-type") || "").toLowerCase();
+  const isMultipart = contentType.includes("multipart/form-data");
   let payload: any = null;
-  try {
-    payload = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+  let fileName = "";
+  let mimeType = "";
+  let dataUrl = "";
+
+  if (isMultipart) {
+    let form: FormData;
+    try {
+      form = await request.formData();
+    } catch {
+      return NextResponse.json({ error: "Invalid multipart body." }, { status: 400 });
+    }
+    const upload = form.get("file");
+    if (!(upload instanceof File)) {
+      return NextResponse.json({ error: "Missing image file." }, { status: 400 });
+    }
+    fileName = String(upload.name || "").trim() || "camera-upload.jpg";
+    mimeType = normalizeMimeType(String(upload.type || ""));
+    if (!mimeType) {
+      return NextResponse.json({ error: "Only image uploads are allowed." }, { status: 400 });
+    }
+    if (upload.size > MAX_IMAGE_BYTES) {
+      return NextResponse.json({ error: "Image is too large." }, { status: 413 });
+    }
+    const bytes = Buffer.from(await upload.arrayBuffer());
+    dataUrl = `data:${mimeType};base64,${bytes.toString("base64")}`;
+  } else {
+    try {
+      payload = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    }
   }
 
   if (String(payload?.action || "").trim().toLowerCase() === "connect") {
@@ -100,9 +132,26 @@ export async function POST(
     });
   }
 
-  const fileName = String(payload?.fileName || "").trim() || "camera-upload.jpg";
-  const mimeType = normalizeMimeType(String(payload?.mimeType || ""));
-  const dataUrl = String(payload?.dataUrl || "");
+  if (String(payload?.action || "").trim().toLowerCase() === "disconnect") {
+    const disconnectedSession = await markImageSessionDisconnected(sessionId);
+    if (!disconnectedSession) {
+      return NextResponse.json({ error: "Session expired or not found." }, { status: 404 });
+    }
+    return NextResponse.json({
+      ok: true,
+      sessionId,
+      disconnectedAt: disconnectedSession.disconnectedAt
+        ? new Date(disconnectedSession.disconnectedAt).toISOString()
+        : null,
+      expiresAt: new Date(disconnectedSession.expiresAt).toISOString(),
+    });
+  }
+
+  if (!isMultipart) {
+    fileName = String(payload?.fileName || "").trim() || "camera-upload.jpg";
+    mimeType = normalizeMimeType(String(payload?.mimeType || ""));
+    dataUrl = String(payload?.dataUrl || "");
+  }
 
   if (!mimeType) {
     return NextResponse.json({ error: "Only image uploads are allowed." }, { status: 400 });

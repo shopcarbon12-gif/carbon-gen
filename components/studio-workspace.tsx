@@ -494,6 +494,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   const barcodeScannerFallbackControlsRef = useRef<{ stop: () => void } | null>(null);
   const barcodeScannerRemotePollRef = useRef<number | null>(null);
   const itemCameraRemotePollRef = useRef<number | null>(null);
+  const itemCameraRemoteLastPayloadRef = useRef<string | null>(null);
   const itemCameraCaptureVideoRef = useRef<HTMLVideoElement | null>(null);
   const itemCameraCaptureStreamRef = useRef<MediaStream | null>(null);
   const finalResultPickerRef = useRef<HTMLInputElement | null>(null);
@@ -595,6 +596,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   const [poseScanManualGender, setPoseScanManualGender] = useState<"male" | "female">("female");
   const poseScanAbortRef = useRef<AbortController | null>(null);
   const modelsLoadedOnceRef = useRef(false);
+  const modelsRefreshInFlightRef = useRef(false);
+  const modelsRefreshLastAtRef = useRef(0);
   const dailyModelUploadCleanupInFlightRef = useRef(false);
   const [appliedPoseSuggestions, setAppliedPoseSuggestions] = useState<Record<string, string>>({});
 
@@ -1124,7 +1127,12 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     };
   }, [panelGenerating, panelsInFlight.length]);
 
-  function refreshModels() {
+  function refreshModels(force = false) {
+    if (typeof document !== "undefined" && document.hidden && !force) return;
+    if (modelsRefreshInFlightRef.current) return;
+    const now = Date.now();
+    if (!force && now - modelsRefreshLastAtRef.current < 8_000) return;
+    modelsRefreshInFlightRef.current = true;
     fetch("/api/models/list", { cache: "no-store" })
       .then(async (r) => {
         let json: any = null;
@@ -1142,16 +1150,20 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         const nextModels = Array.isArray(json?.models) ? json.models : [];
         setModels(nextModels);
         modelsLoadedOnceRef.current = true;
+        modelsRefreshLastAtRef.current = Date.now();
       })
       .catch((e: any) => {
         if (modelsLoadedOnceRef.current) return;
         setError(e?.message || "Failed to load models");
+      })
+      .finally(() => {
+        modelsRefreshInFlightRef.current = false;
       });
   }
 
   useEffect(() => {
-    refreshModels();
-    const onFocus = () => refreshModels();
+    refreshModels(true);
+    const onFocus = () => refreshModels(true);
     window.addEventListener("focus", onFocus);
     const interval = window.setInterval(refreshModels, 15000);
     return () => {
@@ -2493,6 +2505,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   function openItemCameraLocalCapture() {
     setItemCameraRemotePollingActive(false);
     stopItemCameraRemotePolling();
+    itemCameraRemoteLastPayloadRef.current = null;
     setItemCameraChooserOpen(false);
     setItemCameraRemoteOpen(false);
     setItemCameraRemoteError(null);
@@ -2593,6 +2606,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     setItemCameraRemoteOpen(false);
     setItemCameraRemotePollingActive(false);
     stopItemCameraRemotePolling();
+    itemCameraRemoteLastPayloadRef.current = null;
     try {
       const response = await fetch("/api/image-handoff/session", {
         method: "POST",
@@ -2628,8 +2642,18 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     }
     if (typeof window === "undefined") return;
     stopItemCameraRemotePolling();
+    let idlePollCount = 0;
+    const scheduleNextPoll = (delayMs: number) => {
+      itemCameraRemotePollRef.current = window.setTimeout(() => {
+        void poll();
+      }, delayMs);
+    };
     const poll = async () => {
       try {
+        if (document.hidden) {
+          scheduleNextPoll(2500);
+          return;
+        }
         const response = await fetch(
           `/api/image-handoff/session/${encodeURIComponent(itemCameraRemoteSessionId)}?consume=1`,
           { cache: "no-store" }
@@ -2638,21 +2662,42 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         if (response.status === 404) {
           throw new Error(String(json?.error || "Remote camera session expired."));
         }
-        if (!response.ok) return;
+        if (!response.ok) {
+          scheduleNextPoll(1800);
+          return;
+        }
         if (json?.connected && itemCameraRemoteOpen) {
           setItemCameraRemoteOpen(false);
           setStatus("Device connected. Waiting for camera uploads...");
         }
-        if (!json?.ready) return;
+        if (!json?.connected && !json?.ready) {
+          setStatus("Device disconnected.");
+          setItemCameraRemotePollingActive(false);
+          stopItemCameraRemotePolling();
+          return;
+        }
+        if (!json?.ready) {
+          idlePollCount = Math.min(idlePollCount + 1, 4);
+          scheduleNextPoll(1300 + idlePollCount * 400);
+          return;
+        }
+        idlePollCount = 0;
         const fileName = String(json?.fileName || "").trim() || "camera-upload.jpg";
         const dataUrl = String(json?.dataUrl || "");
+        const payloadSignature = `${fileName}|${dataUrl.length}|${dataUrl.slice(0, 64)}|${dataUrl.slice(-64)}`;
+        if (itemCameraRemoteLastPayloadRef.current === payloadSignature) {
+          scheduleNextPoll(1300);
+          return;
+        }
         const file = dataUrlToFile(dataUrl, fileName);
         if (!file) throw new Error("Received invalid image from remote camera.");
+        itemCameraRemoteLastPayloadRef.current = payloadSignature;
         setItemFiles((prev) => mergeUniqueFiles(prev, [file]));
         setItemCameraRemoteError(null);
         setError(null);
         setStatus(`Camera upload received: ${file.name}`);
         setItemCameraRemoteOpen(false);
+        scheduleNextPoll(1300);
       } catch (e: any) {
         const message = e?.message || "Remote camera polling failed.";
         setItemCameraRemoteError(message);
@@ -2664,9 +2709,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       }
     };
     void poll();
-    itemCameraRemotePollRef.current = window.setInterval(() => {
-      void poll();
-    }, 1300);
     return () => {
       stopItemCameraRemotePolling();
     };
@@ -3284,7 +3326,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     setPreviousModelUploadsLoading(true);
     setError(null);
     try {
-      const resp = await fetch("/api/models/uploads", { cache: "no-store" });
+      const resp = await fetch("/api/models/uploads?limit=250", { cache: "no-store" });
       const json = await parseJsonResponse(resp);
       if (!resp.ok) throw new Error(json?.error || "Failed to load previous model uploads");
       const files = Array.isArray(json?.files) ? json.files : [];
@@ -4370,7 +4412,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     const items = Array.from(e.dataTransfer.items || []);
     const files: File[] = [];
 
-    const walkEntry = async (entry: any, path = ""): Promise<void> => {
+    const walkEntry = async (entry: any): Promise<void> => {
       if (!entry) return;
       if (entry.isFile) {
         await new Promise<void>((resolve) => {
@@ -4389,9 +4431,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           const readBatch = () => {
             reader.readEntries(async (entries: any[]) => {
               if (!entries.length) return resolve();
-              for (const child of entries) {
-                await walkEntry(child, `${path}${entry.name}/`);
-              }
+              await Promise.all(entries.map((child) => walkEntry(child)));
               readBatch();
             });
           };
@@ -4400,12 +4440,12 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       }
     };
 
-    for (const item of items) {
-      const entry = (item as any).webkitGetAsEntry?.();
-      if (entry) {
-        await walkEntry(entry);
-      }
-    }
+    await Promise.all(
+      items.map(async (item) => {
+        const entry = (item as any).webkitGetAsEntry?.();
+        if (entry) await walkEntry(entry);
+      })
+    );
 
     const fallbackFiles = e.dataTransfer.files?.length ? filterImages(e.dataTransfer.files) : [];
     return mergeUniqueByNameAndSize(files, fallbackFiles);
@@ -4979,7 +5019,13 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     setFinalResultsLoading(true);
     setError(null);
     try {
-      const resp = await fetch("/api/storage/list?prefix=final-results", { cache: "no-store" });
+      const qs = new URLSearchParams({
+        prefix: "final-results",
+        barcode: activeBarcode,
+        sort: "desc",
+        limit: "200",
+      });
+      const resp = await fetch(`/api/storage/list?${qs.toString()}`, { cache: "no-store" });
       const json = await parseJsonResponse(resp, "/api/storage/list?prefix=final-results");
       if (!resp.ok) throw new Error(json?.error || "Failed to load previous items.");
       const rows = Array.isArray(json?.files) ? json.files : [];
@@ -5010,11 +5056,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             row.path.startsWith("final-results/manual/")
         )
         .filter((row: FinalResultUpload) => /\.(png|jpe?g|webp|gif|avif)$/i.test(row.fileName || row.path))
-        .filter((row: FinalResultUpload) => {
-          const barcode = activeBarcode;
-          const hay = `${row.fileName} ${row.path}`.toLowerCase();
-          return hay.includes(barcode.toLowerCase());
-        })
         .sort((a: FinalResultUpload, b: FinalResultUpload) => {
           const ta = a.uploadedAt ? Date.parse(a.uploadedAt) : Number.NaN;
           const tb = b.uploadedAt ? Date.parse(b.uploadedAt) : Number.NaN;
@@ -9250,6 +9291,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           place-items: center;
           z-index: 1000;
           padding: 16px;
+          backdrop-filter: none !important;
+          -webkit-backdrop-filter: none !important;
         }
         .preview-modal {
           width: min(1100px, 95vw);
@@ -9322,6 +9365,11 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         .camera-preview-download-btn:hover {
           filter: brightness(1.08);
           transform: translateY(-1px);
+        }
+        .preview-modal {
+          backdrop-filter: none !important;
+          -webkit-backdrop-filter: none !important;
+          background: rgba(15, 23, 42, 0.96);
         }
         /* Bright glass overrides so Image Studio matches Motion Studio styling. */
         .page {
