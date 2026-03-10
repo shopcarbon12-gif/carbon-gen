@@ -1259,7 +1259,6 @@ export default function ShopifyMappingCartsInventory() {
     error ||
     status ||
     (statusTone === "working" ? task.label || "Action in progress..." : "Ready.");
-  const progressValue = Number.isFinite(task.progress) ? Math.max(0, Math.min(100, Math.round(task.progress))) : 0;
   const inventoryProgressPercent =
     summary.totalItems > 0
       ? Math.max(0, Math.min(100, Math.round(((summary.totalProcessed + summary.totalErrors) / summary.totalItems) * 100)))
@@ -1294,20 +1293,6 @@ export default function ShopifyMappingCartsInventory() {
         </div>
         <div className="status-bar-message">
           {statusTone === "error" ? `Error: ${statusHeadline}` : statusHeadline}
-        </div>
-        <div className="status-progress-wrap">
-          <span className="status-progress-label">Progress</span>
-          <div
-            className="status-progress-track"
-            role="progressbar"
-            aria-label="Task progress"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={progressValue}
-          >
-            <div className={`status-progress-fill ${statusTone}`} style={{ width: `${progressValue}%` }} />
-          </div>
-          <span className="status-progress-percent">{progressValue}%</span>
         </div>
         <div className="status-bar-meta">
           {warning || (statusTone === "working" ? "Task in progress..." : "No active tasks.")}
@@ -2372,55 +2357,6 @@ export default function ShopifyMappingCartsInventory() {
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
-        }
-        .status-progress-wrap {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          width: 100%;
-        }
-        .status-progress-label {
-          min-width: 72px;
-          font-size: 0.78rem;
-          font-weight: 700;
-          color: rgba(248, 250, 252, 0.95);
-          text-transform: uppercase;
-          letter-spacing: 0.03em;
-        }
-        .status-progress-track {
-          position: relative;
-          flex: 1;
-          height: 16px;
-          border-radius: 999px;
-          overflow: hidden;
-          background: rgba(15, 23, 42, 0.72);
-          border: 1px solid rgba(255, 255, 255, 0.36);
-          box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
-        }
-        .status-progress-fill {
-          height: 100%;
-          min-width: 0;
-          border-radius: inherit;
-          transition: width 220ms ease;
-          background: linear-gradient(90deg, rgba(203, 213, 225, 0.9) 0%, rgba(148, 163, 184, 0.98) 100%);
-        }
-        .status-progress-fill.working {
-          background: linear-gradient(90deg, rgba(251, 191, 36, 0.92) 0%, rgba(245, 158, 11, 0.95) 100%);
-        }
-        .status-progress-fill.success {
-          background: linear-gradient(90deg, rgba(74, 222, 128, 0.92) 0%, rgba(34, 197, 94, 0.95) 100%);
-        }
-        .status-progress-fill.error {
-          background: linear-gradient(90deg, rgba(248, 113, 113, 0.92) 0%, rgba(239, 68, 68, 0.95) 100%);
-        }
-        .status-progress-percent {
-          width: 56px;
-          text-align: right;
-          font-size: 0.86rem;
-          font-weight: 700;
-          color: rgba(241, 245, 249, 0.98);
-          letter-spacing: 0.01em;
-          font-variant-numeric: tabular-nums;
         }
         .status-bar-meta {
           font-size: 0.8rem;
