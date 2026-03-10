@@ -163,6 +163,23 @@ function mergeUniqueByNameAndSize(existing: File[], incoming: File[]) {
   return out;
 }
 
+function upsertRemoteCaptureFile(
+  existing: File[],
+  captureId: string,
+  kind: "preview" | "source",
+  file: File
+) {
+  const marker = `remote-capture-${captureId}::`;
+  const nextName = `${marker}${kind}::${file.name}`;
+  const nextFile = new File([file], nextName, { type: file.type, lastModified: file.lastModified });
+  const filtered = existing.filter((entry) => !String(entry.name || "").startsWith(marker));
+  return [...filtered, nextFile];
+}
+
+function hasPendingRemotePreviewFiles(files: File[]) {
+  return files.some((file) => String(file?.name || "").includes("::preview::"));
+}
+
 function openInputPicker(input: HTMLInputElement | null) {
   if (!input) return;
   const picker = input as HTMLInputElement & { showPicker?: () => void };
@@ -1680,6 +1697,10 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
 
   async function generateFlatFrontBackFromItemRefs() {
     setError(null);
+    if (hasPendingRemotePreviewFiles(itemFiles)) {
+      setError("Remote camera HQ uploads are still processing. Please wait a moment and try again.");
+      return;
+    }
     setItemFlatGenerating(true);
     setItemFlatSplitImages([]);
     setAddingFlatSplitIds([]);
@@ -2722,6 +2743,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         const objectPath = String(json?.objectPath || "").trim();
         const objectUrl = String(json?.objectUrl || "").trim();
         const payloadId = String(json?.id || "").trim();
+        const captureId = String(json?.captureId || payloadId || "").trim();
+        const captureKind: "preview" | "source" =
+          String(json?.kind || "").trim().toLowerCase() === "preview" ? "preview" : "source";
         const payloadSignature =
           payloadId ||
           `${fileName}|${dataUrl.length}|${objectUrl}|${dataUrl.slice(0, 32)}|${dataUrl.slice(-32)}`;
@@ -2739,10 +2763,16 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           }).catch(() => undefined);
         }
         itemCameraRemoteLastPayloadRef.current = payloadSignature;
-        setItemFiles((prev) => mergeUniqueFiles(prev, [file]));
+        setItemFiles((prev) =>
+          captureId ? upsertRemoteCaptureFile(prev, captureId, captureKind, file) : mergeUniqueFiles(prev, [file])
+        );
         setItemCameraRemoteError(null);
         setError(null);
-        setStatus(`Camera upload received: ${file.name}`);
+        setStatus(
+          captureKind === "preview"
+            ? `Camera preview received: ${file.name}`
+            : `Camera HQ received: ${file.name}`
+        );
         setItemCameraRemoteOpen(false);
         scheduleNextPoll(1300);
       } catch (e: any) {
@@ -4116,6 +4146,10 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     mode: "generate" | "regenerate" | "generate_selected" | "regenerate_selected" = "generate"
   ) {
     setError(null);
+    if (hasPendingRemotePreviewFiles(itemFiles)) {
+      setError("Remote camera HQ uploads are still processing. Please wait a moment and try again.");
+      return;
+    }
     setGenerateOpenAiResponse(null);
     setPanelFailReasons({});
 

@@ -94,6 +94,8 @@ export async function POST(
   let fileName = "";
   let mimeType = "";
   let dataUrl = "";
+  let captureId = "";
+  let kind: "preview" | "source" = "source";
 
   if (isMultipart) {
     let form: FormData;
@@ -108,6 +110,8 @@ export async function POST(
     }
     fileName = String(upload.name || "").trim() || "camera-upload.jpg";
     mimeType = normalizeMimeType(String(upload.type || ""));
+    captureId = String(form.get("captureId") || "").trim();
+    kind = String(form.get("kind") || "").trim().toLowerCase() === "preview" ? "preview" : "source";
     if (!mimeType) {
       return NextResponse.json({ error: "Only image uploads are allowed." }, { status: 400 });
     }
@@ -122,6 +126,8 @@ export async function POST(
       contentType: mimeType,
     });
     const updated = await saveImageToSession(sessionId, {
+      captureId,
+      kind,
       fileName,
       mimeType,
       objectPath,
@@ -176,6 +182,8 @@ export async function POST(
     fileName = String(payload?.fileName || "").trim() || "camera-upload.jpg";
     mimeType = normalizeMimeType(String(payload?.mimeType || ""));
     dataUrl = String(payload?.dataUrl || "");
+    captureId = String(payload?.captureId || "").trim();
+    kind = String(payload?.kind || "").trim().toLowerCase() === "preview" ? "preview" : "source";
   }
 
   if (!mimeType) {
@@ -188,7 +196,7 @@ export async function POST(
     return NextResponse.json({ error: "Image is too large." }, { status: 413 });
   }
 
-  const updated = await saveImageToSession(sessionId, { fileName, mimeType, dataUrl });
+  const updated = await saveImageToSession(sessionId, { captureId, kind, fileName, mimeType, dataUrl });
   if (!updated) {
     return NextResponse.json({ error: "Session expired or not found." }, { status: 404 });
   }

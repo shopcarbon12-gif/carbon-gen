@@ -10,6 +10,8 @@ type ImageHandoffSession = {
   disconnectedAt: number | null;
   images: Array<{
     id: string;
+    captureId: string;
+    kind: "preview" | "source";
     fileName: string;
     mimeType: string;
     dataUrl: string | null;
@@ -41,6 +43,8 @@ function normalizeSessionShape(raw: any): ImageHandoffSession | null {
       ? [
           {
             id: randomUUID(),
+            captureId: randomUUID(),
+            kind: "source",
             fileName: String(raw.fileName),
             mimeType: String(raw.mimeType),
             dataUrl: String(raw.dataUrl),
@@ -56,11 +60,15 @@ function normalizeSessionShape(raw: any): ImageHandoffSession | null {
           const mimeType = String(entry?.mimeType || "").trim();
           const dataUrl = entry?.dataUrl ? String(entry.dataUrl) : null;
           const objectPath = entry?.objectPath ? String(entry.objectPath).trim() : null;
+          const kindRaw = String(entry?.kind || "").trim().toLowerCase();
+          const kind = kindRaw === "preview" ? "preview" : "source";
           const receivedAt = Number(entry?.receivedAt || 0);
           if (!fileName || !mimeType || (!dataUrl && !objectPath) || !Number.isFinite(receivedAt))
             return null;
           return {
             id: String(entry?.id || randomUUID()),
+            captureId: String(entry?.captureId || randomUUID()),
+            kind,
             fileName,
             mimeType,
             dataUrl,
@@ -188,7 +196,14 @@ export async function markImageSessionDisconnected(sessionId: string) {
 
 export async function saveImageToSession(
   sessionId: string,
-  payload: { fileName: string; mimeType: string; dataUrl?: string | null; objectPath?: string | null }
+  payload: {
+    captureId?: string;
+    kind?: "preview" | "source";
+    fileName: string;
+    mimeType: string;
+    dataUrl?: string | null;
+    objectPath?: string | null;
+  }
 ) {
   const session = await getImageHandoffSession(sessionId);
   if (!session) return null;
@@ -197,6 +212,8 @@ export async function saveImageToSession(
   if (!normalizedDataUrl && !normalizedObjectPath) return null;
   session.images.push({
     id: randomUUID(),
+    captureId: String(payload.captureId || randomUUID()),
+    kind: payload.kind === "preview" ? "preview" : "source",
     fileName: payload.fileName,
     mimeType: payload.mimeType,
     dataUrl: normalizedDataUrl,
@@ -222,6 +239,8 @@ export async function consumeImageFromSession(sessionId: string) {
   if (!next) return null;
   const payload = {
     id: next.id,
+    captureId: next.captureId,
+    kind: next.kind,
     fileName: next.fileName,
     mimeType: next.mimeType,
     dataUrl: next.dataUrl || null,

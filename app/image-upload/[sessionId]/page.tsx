@@ -37,6 +37,7 @@ export default function ImageUploadSessionPage() {
   const cameraStreamRef = useRef<MediaStream | null>(null);
   const uploadQueueRef = useRef<Promise<void>>(Promise.resolve());
   const closeAfterFlushRef = useRef(false);
+  const [pendingCaptures, setPendingCaptures] = useState(0);
   const [busy, setBusy] = useState(false);
   const [pendingUploads, setPendingUploads] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -93,8 +94,8 @@ export default function ImageUploadSessionPage() {
   }, [notifyDisconnected]);
 
   useEffect(() => {
-    setBusy(pendingUploads > 0);
-    if (pendingUploads === 0 && closeAfterFlushRef.current) {
+    setBusy(pendingUploads > 0 || pendingCaptures > 0);
+    if (pendingUploads === 0 && pendingCaptures === 0 && closeAfterFlushRef.current) {
       closeAfterFlushRef.current = false;
       if (typeof window !== "undefined") {
         try {
@@ -109,7 +110,7 @@ export default function ImageUploadSessionPage() {
         }
       }
     }
-  }, [pendingUploads]);
+  }, [pendingUploads, pendingCaptures]);
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof navigator === "undefined") return;
@@ -167,42 +168,83 @@ export default function ImageUploadSessionPage() {
     };
   }, []);
 
-  async function uploadOneFile(file: File) {
+  async function createPreviewFile(source: File, maxEdge = 1200, quality = 0.7) {
+    try {
+      const bitmap = await createImageBitmap(source);
+      const srcW = Math.max(1, bitmap.width);
+      const srcH = Math.max(1, bitmap.height);
+      const scale = Math.min(1, maxEdge / Math.max(srcW, srcH));
+      const outW = Math.max(1, Math.round(srcW * scale));
+      const outH = Math.max(1, Math.round(srcH * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = outW;
+      canvas.height = outH;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        bitmap.close();
+        return source;
+      }
+      ctx.drawImage(bitmap, 0, 0, outW, outH);
+      bitmap.close();
+      const blob = await new Promise<Blob | null>((resolve) => {
+        canvas.toBlob(resolve, "image/jpeg", quality);
+      });
+      if (!blob) return source;
+      return new File([blob], source.name.replace(/\.[^.]+$/, "") + "-preview.jpg", {
+        type: "image/jpeg",
+      });
+    } catch {
+      return source;
+    }
+  }
+
+  function submitCapturePair(sourceFile: File, captureId: string) {
     if (!sessionId) {
       setError("Missing session id.");
       return;
     }
-    setError(null);
-    try {
-      if (!String(file.type || "").toLowerCase().startsWith("image/")) {
-        throw new Error("Please choose an image file.");
-      }
-      const form = new FormData();
-      form.append("file", file, file.name || "camera-upload.jpg");
-      const response = await fetch(`/api/image-handoff/session/${encodeURIComponent(sessionId)}`, {
-        method: "POST",
-        body: form,
-      });
-      const json = await response.json().catch(() => null);
-      if (!response.ok) {
-        throw new Error(String(json?.error || "Failed to send image."));
-      }
-      setStatus("Image sent. You can keep sending photos or close this page.");
-    } catch (e: any) {
-      setError(e?.message || "Failed to send image.");
+    if (!String(sourceFile.type || "").toLowerCase().startsWith("image/")) {
+      setError("Please choose an image file.");
+      return;
     }
+    setPendingUploads((count) => count + 2);
+    uploadQueueRef.current = uploadQueueRef.current
+      .then(async () => {
+        const previewFile = await createPreviewFile(sourceFile);
+        const previewForm = new FormData();
+        previewForm.append("file", previewFile, previewFile.name || "camera-preview.jpg");
+        previewForm.append("captureId", captureId);
+        previewForm.append("kind", "preview");
+        const previewResp = await fetch(`/api/image-handoff/session/${encodeURIComponent(sessionId)}`, {
+          method: "POST",
+          body: previewForm,
+        });
+        const previewJson = await previewResp.json().catch(() => null);
+        if (!previewResp.ok) throw new Error(String(previewJson?.error || "Failed to send preview image."));
+      })
+      .then(async () => {
+        const sourceForm = new FormData();
+        sourceForm.append("file", sourceFile, sourceFile.name || "camera-upload.jpg");
+        sourceForm.append("captureId", captureId);
+        sourceForm.append("kind", "source");
+        const sourceResp = await fetch(`/api/image-handoff/session/${encodeURIComponent(sessionId)}`, {
+          method: "POST",
+          body: sourceForm,
+        });
+        const sourceJson = await sourceResp.json().catch(() => null);
+        if (!sourceResp.ok) throw new Error(String(sourceJson?.error || "Failed to send source image."));
+      })
+      .catch((e: any) => {
+        setError(e?.message || "Failed to send image.");
+      })
+      .finally(() => {
+        setPendingUploads((count) => Math.max(0, count - 2));
+      });
   }
 
   function submitFile(file: File) {
-    setPendingUploads((count) => count + 1);
-    uploadQueueRef.current = uploadQueueRef.current
-      .then(() => uploadOneFile(file))
-      .catch(() => {
-        // Error already surfaced by uploadOneFile.
-      })
-      .finally(() => {
-        setPendingUploads((count) => Math.max(0, count - 1));
-      });
+    const captureId = `cap-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    submitCapturePair(file, captureId);
   }
 
   async function captureAndSendPhoto() {
@@ -218,6 +260,7 @@ export default function ImageUploadSessionPage() {
       return;
     }
     setError(null);
+    setPendingCaptures((count) => count + 1);
     try {
       const canvas = document.createElement("canvas");
       canvas.width = width;
@@ -231,17 +274,19 @@ export default function ImageUploadSessionPage() {
       if (!blob) throw new Error("Failed to capture photo.");
       const file = new File([blob], `camera-${Date.now()}.jpg`, { type: "image/jpeg" });
       submitFile(file);
-      setStatus("Capture queued. Uploading...");
+      setStatus("Capture queued. Uploading in background...");
     } catch (e: any) {
       setError(e?.message || "Failed to capture photo.");
+    } finally {
+      setPendingCaptures((count) => Math.max(0, count - 1));
     }
   }
 
   function closeDeviceWindow() {
     void notifyDisconnected();
-    if (pendingUploads > 0) {
+    if (pendingUploads > 0 || pendingCaptures > 0) {
       closeAfterFlushRef.current = true;
-      setStatus(`Finishing ${pendingUploads} upload(s) before close...`);
+      setStatus(`Finishing ${pendingUploads} upload(s) and ${pendingCaptures} capture(s) before close...`);
       return;
     }
     if (typeof window === "undefined") return;
@@ -332,7 +377,11 @@ export default function ImageUploadSessionPage() {
             cursor: "pointer",
           }}
         >
-          {pendingUploads > 0 ? `Sending... (${pendingUploads})` : cameraBusy ? "Opening camera..." : "Capture & Send"}
+          {pendingUploads > 0 || pendingCaptures > 0
+            ? `Sending... (${pendingUploads} upload / ${pendingCaptures} capture)`
+            : cameraBusy
+              ? "Opening camera..."
+              : "Capture & Send"}
         </button>
         <button
           type="button"
@@ -347,7 +396,9 @@ export default function ImageUploadSessionPage() {
             cursor: "pointer",
           }}
         >
-          {pendingUploads > 0 ? `Sending... (${pendingUploads})` : "Choose Existing Photo"}
+          {pendingUploads > 0 || pendingCaptures > 0
+            ? `Sending... (${pendingUploads} upload / ${pendingCaptures} capture)`
+            : "Choose Existing Photo"}
         </button>
         <button
           type="button"
