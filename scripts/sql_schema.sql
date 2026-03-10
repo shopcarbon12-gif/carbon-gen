@@ -290,3 +290,42 @@ create table if not exists shopify_cart_sync_log (
 
 create index if not exists idx_shopify_cart_sync_log_shop_created
   on shopify_cart_sync_log (shop, created_at desc);
+
+-- Shopify collection mapping nodes (menu taxonomy -> collection links)
+create table if not exists shopify_collection_menu_nodes (
+  shop text not null,
+  node_key text not null,
+  label text not null,
+  parent_key text,
+  depth int not null default 0,
+  sort_order int not null default 0,
+  enabled boolean not null default true,
+  collection_id text,
+  collection_title text,
+  collection_handle text,
+  default_collection_handle text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (shop, node_key)
+);
+
+create index if not exists idx_shopify_collection_menu_nodes_shop_sort
+  on shopify_collection_menu_nodes (shop, sort_order, node_key);
+
+-- Shopify collection mapping action audit (per checkbox action)
+create table if not exists shopify_collection_mapping_actions (
+  id uuid primary key default gen_random_uuid(),
+  shop text not null,
+  product_id text not null,
+  product_title text,
+  node_key text not null,
+  checked boolean not null,
+  added_collection_ids jsonb not null default '[]'::jsonb,
+  removed_collection_ids jsonb not null default '[]'::jsonb,
+  status text not null default 'ok',
+  error_message text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_shopify_collection_mapping_actions_shop_created
+  on shopify_collection_mapping_actions (shop, created_at desc);
