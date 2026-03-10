@@ -534,6 +534,11 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     imageBase64: string;
     title: string;
   } | null>(null);
+  const [cameraPreviewModal, setCameraPreviewModal] = useState<{
+    src: string;
+    title: string;
+    downloadName: string;
+  } | null>(null);
   const [generateOpenAiResponse, setGenerateOpenAiResponse] = useState<string | null>(null);
   const [dialogMessages, setDialogMessages] = useState<Array<{ role: "user" | "assistant"; content: string }>>([]);
   const [dialogInput, setDialogInput] = useState("");
@@ -4612,6 +4617,17 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     a.click();
   }
 
+  function downloadImageUrl(filename: string, url: string) {
+    if (!url) return;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename || "image.jpg";
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
   function base64ToFile(base64: string, fileName: string) {
     const binary = atob(base64);
     const bytes = new Uint8Array(binary.length);
@@ -6186,7 +6202,19 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               <div className="preview-grid item-selected-grid">
                 {itemPreviews.map((file, idx) => (
                   <div className="preview-card item-device-selected-card" key={file.url}>
-                    <img className="item-device-selected-image" src={file.url} alt={file.name} />
+                    <img
+                      className="item-device-selected-image"
+                      src={file.url}
+                      alt={file.name}
+                      onClick={() =>
+                        setCameraPreviewModal({
+                          src: file.url,
+                          title: file.name,
+                          downloadName: file.name,
+                        })
+                      }
+                      style={{ cursor: "zoom-in" }}
+                    />
                     <div className="preview-source">Source: Device upload</div>
                     <button
                       type="button"
@@ -7564,6 +7592,31 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               alt={previewModal.title}
               className="preview-modal-image"
             />
+          </div>
+        </div>
+      ) : null}
+      {cameraPreviewModal ? (
+        <div className="preview-modal-overlay" onClick={() => setCameraPreviewModal(null)}>
+          <div className="preview-modal" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="preview-modal-close"
+              onClick={() => setCameraPreviewModal(null)}
+              aria-label="Close image preview"
+            >
+              X
+            </button>
+            <div className="preview-modal-title">{cameraPreviewModal.title}</div>
+            <img src={cameraPreviewModal.src} alt={cameraPreviewModal.title} className="preview-modal-image" />
+            <div className="preview-modal-actions">
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={() => downloadImageUrl(cameraPreviewModal.downloadName, cameraPreviewModal.src)}
+              >
+                Download
+              </button>
+            </div>
           </div>
         </div>
       ) : null}
@@ -9185,6 +9238,11 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           font-weight: 700;
           cursor: pointer;
           line-height: 1;
+        }
+        .preview-modal-actions {
+          display: flex;
+          justify-content: center;
+          margin-top: 10px;
         }
         /* Bright glass overrides so Image Studio matches Motion Studio styling. */
         .page {

@@ -25,7 +25,6 @@ export default function ImageUploadSessionPage() {
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [cameraReady, setCameraReady] = useState(false);
   const [status, setStatus] = useState("Take or choose a photo, then send it to desktop.");
-  const [done, setDone] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof navigator === "undefined") return;
@@ -103,8 +102,7 @@ export default function ImageUploadSessionPage() {
       if (!response.ok) {
         throw new Error(String(json?.error || "Failed to send image."));
       }
-      setDone(true);
-      setStatus("Image sent. You can close this page.");
+      setStatus("Image sent. You can keep sending photos or close this page.");
     } catch (e: any) {
       setError(e?.message || "Failed to send image.");
     } finally {
@@ -211,7 +209,7 @@ export default function ImageUploadSessionPage() {
         />
         <button
           type="button"
-          disabled={busy || done || cameraBusy || !cameraReady}
+          disabled={busy || cameraBusy || !cameraReady}
           onClick={() => {
             void captureAndSendPhoto();
           }}
@@ -229,7 +227,7 @@ export default function ImageUploadSessionPage() {
         </button>
         <button
           type="button"
-          disabled={busy || done}
+          disabled={busy}
           onClick={() => fileInputRef.current?.click()}
           style={{
             width: "100%",
