@@ -436,6 +436,7 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
   const [itemCameraRemoteError, setItemCameraRemoteError] = useState<string | null>(null);
   const [barcodeScannerChooserOpen, setBarcodeScannerChooserOpen] = useState(false);
   const [barcodeScannerRemoteOpen, setBarcodeScannerRemoteOpen] = useState(false);
+  const [barcodeScannerRemotePollingActive, setBarcodeScannerRemotePollingActive] = useState(false);
   const [barcodeScannerRemoteBusy, setBarcodeScannerRemoteBusy] = useState(false);
   const [barcodeScannerRemoteSessionId, setBarcodeScannerRemoteSessionId] = useState("");
   const [barcodeScannerRemoteQrCodeUrl, setBarcodeScannerRemoteQrCodeUrl] = useState("");
@@ -2508,8 +2509,10 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
 
   function openDesktopLocalCameraScanner() {
     setBarcodeScannerChooserOpen(false);
+    setBarcodeScannerRemotePollingActive(false);
     setBarcodeScannerRemoteOpen(false);
     setBarcodeScannerRemoteError(null);
+    stopBarcodeRemotePolling();
     setBarcodeScannerOpen(true);
   }
 
@@ -2848,6 +2851,7 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
     setBarcodeScannerRemoteSessionId("");
     setBarcodeScannerRemoteQrCodeUrl("");
     setBarcodeScannerRemoteOpen(false);
+    setBarcodeScannerRemotePollingActive(false);
     stopBarcodeRemotePolling();
     try {
       const response = await fetch("/api/barcode-handoff/session", {
@@ -2866,6 +2870,7 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
       setBarcodeScannerChooserOpen(false);
       setBarcodeScannerRemoteSessionId(sessionId);
       setBarcodeScannerRemoteQrCodeUrl(qrCodeUrl);
+      setBarcodeScannerRemotePollingActive(true);
       setBarcodeScannerRemoteOpen(true);
     } catch (e: any) {
       const message = e?.message || "Failed to open remote scanner QR.";
@@ -2877,7 +2882,7 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
   }
 
   useEffect(() => {
-    if (!barcodeScannerRemoteOpen || !barcodeScannerRemoteSessionId) {
+    if (!barcodeScannerRemotePollingActive || !barcodeScannerRemoteSessionId) {
       stopBarcodeRemotePolling();
       return;
     }
@@ -2894,6 +2899,10 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
           throw new Error(String(json?.error || "Remote scanner session expired."));
         }
         if (!response.ok) return;
+        if (json?.connected && barcodeScannerRemoteOpen) {
+          setBarcodeScannerRemoteOpen(false);
+          setStatus("Scanner device connected. Waiting for barcode scan...");
+        }
         if (!json?.ready) return;
         const normalized = sanitizeBarcodeInput(String(json?.barcode || "")).trim();
         if (!isValidBarcode(normalized)) return;
@@ -2902,6 +2911,7 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
         setStatus(`Scanned barcode: ${normalized}`);
         setError(null);
         setBarcodeScannerRemoteError(null);
+        setBarcodeScannerRemotePollingActive(false);
         setBarcodeScannerRemoteOpen(false);
         setBarcodeScannerChooserOpen(false);
         stopBarcodeRemotePolling();
@@ -2909,6 +2919,7 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
         const message = e?.message || "Remote scanner polling failed.";
         setBarcodeScannerRemoteError(message);
         setError(message);
+        setBarcodeScannerRemotePollingActive(false);
         setBarcodeScannerRemoteOpen(false);
         setBarcodeScannerChooserOpen(false);
         stopBarcodeRemotePolling();
@@ -2921,7 +2932,7 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
     return () => {
       stopBarcodeRemotePolling();
     };
-  }, [barcodeScannerRemoteOpen, barcodeScannerRemoteSessionId]);
+  }, [barcodeScannerRemoteOpen, barcodeScannerRemotePollingActive, barcodeScannerRemoteSessionId]);
 
   function clearSavedItemBarcode() {
     setItemBarcodeSaved("");
@@ -6244,7 +6255,6 @@ function buildMasterPanelPrompt(
                     onClick={() => {
                       setBarcodeScannerRemoteOpen(false);
                       setBarcodeScannerRemoteError(null);
-                      stopBarcodeRemotePolling();
                     }}
                   >
                     Close

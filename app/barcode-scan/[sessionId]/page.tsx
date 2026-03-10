@@ -82,6 +82,47 @@ export default function BarcodeScanSessionPage() {
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
 
+  const notifyConnected = useCallback(async () => {
+    if (!sessionId) return;
+    try {
+      await fetch(`/api/barcode-handoff/session/${encodeURIComponent(sessionId)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "connect" }),
+      });
+    } catch {
+      // Best-effort connect signal.
+    }
+  }, [sessionId]);
+
+  const notifyDisconnected = useCallback(async () => {
+    if (!sessionId) return;
+    try {
+      await fetch(`/api/barcode-handoff/session/${encodeURIComponent(sessionId)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "disconnect" }),
+        keepalive: true,
+      });
+    } catch {
+      // Best-effort disconnect signal.
+    }
+  }, [sessionId]);
+
+  useEffect(() => {
+    void notifyConnected();
+  }, [notifyConnected]);
+
+  useEffect(() => {
+    const onPageHide = () => {
+      void notifyDisconnected();
+    };
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      window.removeEventListener("pagehide", onPageHide);
+    };
+  }, [notifyDisconnected]);
+
   const cleanup = useCallback(() => {
     const fallbackControls = fallbackControlsRef.current;
     if (fallbackControls) {

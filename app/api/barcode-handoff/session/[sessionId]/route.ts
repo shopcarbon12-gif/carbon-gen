@@ -3,6 +3,9 @@ import { NextResponse } from "next/server";
 import {
   consumeBarcodeFromSession,
   getBarcodeHandoffSession,
+  isBarcodeSessionConnected,
+  markBarcodeSessionConnected,
+  markBarcodeSessionDisconnected,
   saveBarcodeToSession,
 } from "@/lib/barcode-handoff-store";
 
@@ -43,6 +46,7 @@ export async function GET(
       return NextResponse.json({
         sessionId,
         ready: false,
+        connected: isBarcodeSessionConnected(existing),
         expiresAt: new Date(existing.expiresAt).toISOString(),
       });
     }
@@ -61,6 +65,7 @@ export async function GET(
   return NextResponse.json({
     sessionId,
     ready: Boolean(existing.barcode),
+    connected: isBarcodeSessionConnected(existing),
     barcode: existing.barcode || null,
     expiresAt: new Date(existing.expiresAt).toISOString(),
   });
@@ -81,6 +86,34 @@ export async function POST(
     payload = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+  }
+
+  const action = String(payload?.action || "").trim().toLowerCase();
+  if (action === "connect") {
+    const connected = markBarcodeSessionConnected(sessionId);
+    if (!connected) {
+      return NextResponse.json({ error: "Session expired or not found." }, { status: 404 });
+    }
+    return NextResponse.json({
+      ok: true,
+      sessionId,
+      connectedAt: connected.connectedAt ? new Date(connected.connectedAt).toISOString() : null,
+      expiresAt: new Date(connected.expiresAt).toISOString(),
+    });
+  }
+  if (action === "disconnect") {
+    const disconnected = markBarcodeSessionDisconnected(sessionId);
+    if (!disconnected) {
+      return NextResponse.json({ error: "Session expired or not found." }, { status: 404 });
+    }
+    return NextResponse.json({
+      ok: true,
+      sessionId,
+      disconnectedAt: disconnected.disconnectedAt
+        ? new Date(disconnected.disconnectedAt).toISOString()
+        : null,
+      expiresAt: new Date(disconnected.expiresAt).toISOString(),
+    });
   }
 
   const normalizedBarcode = sanitizeBarcodeInput(String(payload?.barcode || ""));

@@ -435,6 +435,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   const [itemCameraRemoteError, setItemCameraRemoteError] = useState<string | null>(null);
   const [barcodeScannerChooserOpen, setBarcodeScannerChooserOpen] = useState(false);
   const [barcodeScannerRemoteOpen, setBarcodeScannerRemoteOpen] = useState(false);
+  const [barcodeScannerRemotePollingActive, setBarcodeScannerRemotePollingActive] = useState(false);
   const [barcodeScannerRemoteBusy, setBarcodeScannerRemoteBusy] = useState(false);
   const [barcodeScannerRemoteSessionId, setBarcodeScannerRemoteSessionId] = useState("");
   const [barcodeScannerRemoteQrCodeUrl, setBarcodeScannerRemoteQrCodeUrl] = useState("");
@@ -2509,8 +2510,10 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
 
   function openDesktopLocalCameraScanner() {
     setBarcodeScannerChooserOpen(false);
+    setBarcodeScannerRemotePollingActive(false);
     setBarcodeScannerRemoteOpen(false);
     setBarcodeScannerRemoteError(null);
+    stopBarcodeRemotePolling();
     setBarcodeScannerOpen(true);
   }
 
@@ -2849,6 +2852,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     setBarcodeScannerRemoteSessionId("");
     setBarcodeScannerRemoteQrCodeUrl("");
     setBarcodeScannerRemoteOpen(false);
+    setBarcodeScannerRemotePollingActive(false);
     stopBarcodeRemotePolling();
     try {
       const response = await fetch("/api/barcode-handoff/session", {
@@ -2867,6 +2871,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       setBarcodeScannerChooserOpen(false);
       setBarcodeScannerRemoteSessionId(sessionId);
       setBarcodeScannerRemoteQrCodeUrl(qrCodeUrl);
+      setBarcodeScannerRemotePollingActive(true);
       setBarcodeScannerRemoteOpen(true);
     } catch (e: any) {
       const message = e?.message || "Failed to open remote scanner QR.";
@@ -2878,7 +2883,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   }
 
   useEffect(() => {
-    if (!barcodeScannerRemoteOpen || !barcodeScannerRemoteSessionId) {
+    if (!barcodeScannerRemotePollingActive || !barcodeScannerRemoteSessionId) {
       stopBarcodeRemotePolling();
       return;
     }
@@ -2895,6 +2900,10 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           throw new Error(String(json?.error || "Remote scanner session expired."));
         }
         if (!response.ok) return;
+        if (json?.connected && barcodeScannerRemoteOpen) {
+          setBarcodeScannerRemoteOpen(false);
+          setStatus("Scanner device connected. Waiting for barcode scan...");
+        }
         if (!json?.ready) return;
         const normalized = sanitizeBarcodeInput(String(json?.barcode || "")).trim();
         if (!isValidBarcode(normalized)) return;
@@ -2903,6 +2912,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         setStatus(`Scanned barcode: ${normalized}`);
         setError(null);
         setBarcodeScannerRemoteError(null);
+        setBarcodeScannerRemotePollingActive(false);
         setBarcodeScannerRemoteOpen(false);
         setBarcodeScannerChooserOpen(false);
         stopBarcodeRemotePolling();
@@ -2910,6 +2920,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         const message = e?.message || "Remote scanner polling failed.";
         setBarcodeScannerRemoteError(message);
         setError(message);
+        setBarcodeScannerRemotePollingActive(false);
         setBarcodeScannerRemoteOpen(false);
         setBarcodeScannerChooserOpen(false);
         stopBarcodeRemotePolling();
@@ -2922,7 +2933,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     return () => {
       stopBarcodeRemotePolling();
     };
-  }, [barcodeScannerRemoteOpen, barcodeScannerRemoteSessionId]);
+  }, [barcodeScannerRemoteOpen, barcodeScannerRemotePollingActive, barcodeScannerRemoteSessionId]);
 
   function clearSavedItemBarcode() {
     setItemBarcodeSaved("");
@@ -6159,7 +6170,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                     onClick={() => {
                       setBarcodeScannerRemoteOpen(false);
                       setBarcodeScannerRemoteError(null);
-                      stopBarcodeRemotePolling();
                     }}
                   >
                     Close

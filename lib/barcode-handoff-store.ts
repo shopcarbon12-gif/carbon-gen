@@ -6,6 +6,8 @@ type BarcodeHandoffSession = {
   id: string;
   createdAt: number;
   expiresAt: number;
+  connectedAt: number | null;
+  disconnectedAt: number | null;
   barcode: string | null;
   receivedAt: number | null;
 };
@@ -96,6 +98,8 @@ export function createBarcodeHandoffSession() {
     id: randomUUID(),
     createdAt,
     expiresAt: createdAt + SESSION_TTL_MS,
+    connectedAt: null,
+    disconnectedAt: null,
     barcode: null,
     receivedAt: null,
   };
@@ -120,8 +124,33 @@ export function saveBarcodeToSession(sessionId: string, barcode: string) {
   if (!session) return null;
   session.barcode = barcode;
   session.receivedAt = nowMs();
+  session.expiresAt = nowMs() + SESSION_TTL_MS;
   persistSessionsToDisk();
   return session;
+}
+
+export function markBarcodeSessionConnected(sessionId: string) {
+  const session = getBarcodeHandoffSession(sessionId);
+  if (!session) return null;
+  session.connectedAt = nowMs();
+  session.expiresAt = nowMs() + SESSION_TTL_MS;
+  persistSessionsToDisk();
+  return session;
+}
+
+export function markBarcodeSessionDisconnected(sessionId: string) {
+  const session = getBarcodeHandoffSession(sessionId);
+  if (!session) return null;
+  session.disconnectedAt = nowMs();
+  session.expiresAt = nowMs() + SESSION_TTL_MS;
+  persistSessionsToDisk();
+  return session;
+}
+
+export function isBarcodeSessionConnected(session: BarcodeHandoffSession) {
+  if (!session?.connectedAt) return false;
+  if (!session?.disconnectedAt) return true;
+  return session.connectedAt > session.disconnectedAt;
 }
 
 export function consumeBarcodeFromSession(sessionId: string) {
