@@ -7711,7 +7711,7 @@ function buildMasterPanelPrompt(
       ) : null}
       {cameraPreviewModal ? (
         <div className="preview-modal-overlay" onClick={() => setCameraPreviewModal(null)}>
-          <div className="preview-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="preview-modal camera-preview-modal" onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
               className="preview-modal-close"
@@ -7721,14 +7721,18 @@ function buildMasterPanelPrompt(
               X
             </button>
             <div className="preview-modal-title">{cameraPreviewModal.title}</div>
-            <img src={cameraPreviewModal.src} alt={cameraPreviewModal.title} className="preview-modal-image" />
+            <img
+              src={cameraPreviewModal.src}
+              alt={cameraPreviewModal.title}
+              className="preview-modal-image camera-preview-modal-image"
+            />
             <div className="preview-modal-actions">
               <button
                 type="button"
-                className="btn ghost"
+                className="camera-preview-download-btn"
                 onClick={() => downloadImageUrl(cameraPreviewModal.downloadName, cameraPreviewModal.src)}
               >
-                Download
+                Download Image
               </button>
             </div>
           </div>
@@ -9354,6 +9358,37 @@ function buildMasterPanelPrompt(
           display: flex;
           justify-content: center;
           margin-top: 10px;
+        }
+        .camera-preview-modal {
+          width: fit-content;
+          max-width: calc(100vw - 32px);
+          max-height: calc(100vh - 32px);
+          overflow: auto;
+        }
+        .camera-preview-modal-image {
+          width: auto;
+          max-width: min(92vw, 1200px);
+          max-height: calc(92vh - 170px);
+          height: auto;
+          margin-inline: auto;
+          display: block;
+          object-fit: contain;
+        }
+        .camera-preview-download-btn {
+          border: 1px solid rgba(16, 185, 129, 0.65);
+          background: linear-gradient(180deg, rgba(16, 185, 129, 0.24), rgba(5, 150, 105, 0.28));
+          color: #ecfeff;
+          border-radius: 999px;
+          padding: 10px 18px;
+          font-size: 0.92rem;
+          font-weight: 700;
+          letter-spacing: 0.02em;
+          cursor: pointer;
+          box-shadow: 0 6px 22px rgba(16, 185, 129, 0.28);
+        }
+        .camera-preview-download-btn:hover {
+          filter: brightness(1.08);
+          transform: translateY(-1px);
         }
         /* Bright glass overrides so Image Studio matches Motion Studio styling. */
         .page {
