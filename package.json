@@ -28,7 +28,7 @@
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:report": "playwright show-report",
     "deploy:coolify": "node scripts/deploy-coolify.mjs",
-    "deploy:vercel": "vercel deploy --prod --yes",
+    "deploy:coolify:setup": "node scripts/setup-coolify-deploy.mjs",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"

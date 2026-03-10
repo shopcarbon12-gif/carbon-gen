@@ -10,7 +10,11 @@ import {
   getImageFetchTimeoutMs,
   normalizeRemoteImageUrl,
 } from "@/lib/remoteImage";
-import { downloadStorageObject, tryGetStoragePathFromUrl } from "@/lib/storageProvider";
+import {
+  downloadStorageObject,
+  tryGetStoragePathFromUrl,
+  uploadBytesToStorage,
+} from "@/lib/storageProvider";
 
 function normalizeText(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -220,8 +224,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const bytes = Buffer.from(imageBase64, "base64");
+    if (!bytes.byteLength) {
+      return NextResponse.json(
+        { error: "OpenAI returned an empty front/back image payload." },
+        { status: 502 }
+      );
+    }
+    const stored = await uploadBytesToStorage({
+      path: `items/generated-flat/${Date.now()}-${crypto.randomUUID()}.png`,
+      bytes: new Uint8Array(bytes),
+      contentType: "image/png",
+    });
     return NextResponse.json({
-      imageBase64,
+      imageUrl: `/api/storage/preview?path=${encodeURIComponent(String(stored.path || ""))}`,
+      imageStoragePath: String(stored.path || ""),
       referencesUsed: referenceFiles.length,
       size: "1536x1024",
     });

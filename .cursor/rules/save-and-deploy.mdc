@@ -1,5 +1,5 @@
 ---
-description: MUST deploy to Vercel after every code change. No exceptions.
+description: MUST deploy to Coolify after every code change. No exceptions.
 alwaysApply: true
 ---
 
@@ -9,7 +9,7 @@ alwaysApply: true
 
 ## Deploy (required)
 ```
-npm run deploy:vercel
+npm run deploy:coolify
 ```
 
 Run this immediately after completing changes. Do not ask if the user wants to deploy — just deploy.

@@ -6,6 +6,23 @@ import {
   listModelsForUser,
 } from "@/lib/modelsRepository";
 
+type CachedUploadsResponse = {
+  expiresAt: number;
+  files: Array<{
+    id: string;
+    path: string;
+    fileName: string;
+    modelName: string;
+    gender: string;
+    uploadedAt: string | null;
+    url: string | null;
+    previewUrl: string | null;
+  }>;
+};
+
+const uploadsResponseCache = new Map<string, CachedUploadsResponse>();
+const UPLOADS_CACHE_TTL_MS = 10_000;
+
 function extractPathFromStorageUrl(url: string) {
   try {
     const u = new URL(url);
@@ -207,6 +224,13 @@ export async function GET(req: NextRequest) {
 
     const r2Bucket = String(process.env.R2_BUCKET || "").trim();
     const userId = req.cookies.get("carbon_gen_user_id")?.value?.trim() || null;
+    const limitRaw = Number(req.nextUrl.searchParams.get("limit") || "");
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(500, Math.floor(limitRaw))) : 250;
+    const cacheKey = userId || "__global__";
+    const cached = uploadsResponseCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return NextResponse.json({ files: cached.files.slice(0, limit) });
+    }
     const modelRows = await loadModelRowsForSession(userId);
     const uploadPrefix = userId ? `models/uploads/${userId}` : "models/uploads";
     const storageFiles = await listStorageFiles(uploadPrefix).catch(() => []);
@@ -322,8 +346,7 @@ export async function GET(req: NextRequest) {
 
     const deduped = Array.from(byCanonical.values());
 
-    return NextResponse.json({
-      files: deduped.map((entry) => ({
+    const files = deduped.map((entry) => ({
         id: entry.id,
         path: entry.path,
         fileName: entry.fileName,
@@ -332,8 +355,12 @@ export async function GET(req: NextRequest) {
         uploadedAt: entry.uploadedAt,
         url: entry.url,
         previewUrl: entry.previewUrl,
-      })),
+      }));
+    uploadsResponseCache.set(cacheKey, {
+      expiresAt: Date.now() + UPLOADS_CACHE_TTL_MS,
+      files,
     });
+    return NextResponse.json({ files: files.slice(0, limit) });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Failed to load model uploads" }, { status: 500 });
   }

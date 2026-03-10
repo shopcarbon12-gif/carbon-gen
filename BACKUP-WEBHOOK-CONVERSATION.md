@@ -46,7 +46,7 @@ Restore context quickly after a session crash. This file tracks major migration 
   - Dropbox token persistence
 - Removed storage/admin provider fallback code from runtime.
 - Removed legacy SDK packages from dependencies; added `@types/pg`.
-- Added `deploy:vercel` script and standardized deploy flow.
+- Added `deploy:coolify` script and standardized deploy flow.
 - Renamed SQL layer and symbols:
   - old SQL adapter module -> `lib/sqlDb.ts`
   - old query helper symbol -> `sqlQuery`
@@ -81,7 +81,7 @@ Restore context quickly after a session crash. This file tracks major migration 
 - Build passes:
   - `npm run build`
 - Deploy passes:
-  - `npm run deploy:vercel`
+  - `npm run deploy:coolify`
 - Browser checks pass:
   - `/studio/images`
   - `/studio/gemini-generator`

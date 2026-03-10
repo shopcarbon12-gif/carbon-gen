@@ -2,12 +2,17 @@
 
 import Link from "next/link";
 
+const SHOW_LOCAL_ONLY_MODULES = process.env.NODE_ENV !== "production";
+
 const links = [
   { href: "/studio/images", label: "Image Studio" },
   { href: "/studio/seo", label: "SEO Manager" },
   { href: "/studio/rfid-price-tag", label: "RFID Price Tag" },
   { href: "/studio/lightspeed-catalog", label: "Lightspeed Catalog" },
   { href: "/studio/shopify-mapping-inventory", label: "Shopify Mapping Inventory" },
+  ...(SHOW_LOCAL_ONLY_MODULES
+    ? [{ href: "/studio/shopify-collection-mapping", label: "Shopify Collection Mapping" }]
+    : []),
   { href: "/studio/video", label: "create new items" },
   { href: "/studio/social", label: "Ad Generator" },
   { href: "/ops/inventory", label: "Collection Mapper" },
@@ -77,4 +82,3 @@ export function SectionShell() {
     </main>
   );
 }
-

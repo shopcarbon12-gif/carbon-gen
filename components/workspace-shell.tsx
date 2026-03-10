@@ -41,6 +41,7 @@ const SHOPIFY_MAPPING_INVENTORY_ROOT = "/studio/shopify-mapping-inventory";
 const SHOPIFY_MAPPING_CONFIG_ROOT = `${SHOPIFY_MAPPING_INVENTORY_ROOT}/configurations`;
 const SHOPIFY_MAPPING_CONFIG_POS = `${SHOPIFY_MAPPING_CONFIG_ROOT}/pos`;
 const SHOPIFY_MAPPING_CONFIG_CART = `${SHOPIFY_MAPPING_CONFIG_ROOT}/cart`;
+const SHOW_LOCAL_ONLY_MODULES = process.env.NODE_ENV !== "production";
 
 const ACTIVE_ITEM_STYLE: CSSProperties = {
   color: "#fff",
@@ -64,6 +65,9 @@ const navItems: NavItem[] = [
   { href: "/studio/rfid-price-tag", label: "RFID Price Tag" },
   { href: "/studio/lightspeed-catalog", label: "Lightspeed Catalog" },
   { href: SHOPIFY_MAPPING_INVENTORY_ROOT, label: "Shopify Mapping Inventory" },
+  ...(SHOW_LOCAL_ONLY_MODULES
+    ? [{ href: "/studio/shopify-collection-mapping", label: "Shopify Collection Mapping" }]
+    : []),
   { href: "/studio/video", label: "Create New Items" },
   { href: "/studio/social", label: "Social Ads & Meta" },
   { href: "/ops/inventory", label: "Collection Mapping" },

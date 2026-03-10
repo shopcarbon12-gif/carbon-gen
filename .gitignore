@@ -53,3 +53,7 @@ backups/
 
 .env*.local
 .vercel
+.coolify-deploy.local.json
+.bridge/
+playwright-report/
+test-results/

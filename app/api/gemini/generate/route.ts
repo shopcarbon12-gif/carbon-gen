@@ -297,7 +297,8 @@ function buildServerIdentityLockPrompt(panelQa: PanelQaInput) {
     "SERVER-ENFORCED ITEM FIDELITY LOCK (NON-NEGOTIABLE):",
     `- Locked item type from section 0.5: "${lockedItemType}".`,
     "- Prioritize garment details that match this locked item type.",
-    "- If references contain mixed categories, ignore details from categories that do not match the locked item type.",
+    "- If item refs include a full look, preserve the total outfit structure (top, bottom, footwear, accessories) from that full look.",
+    "- If both full-look and isolated item refs are provided, use isolated refs only to refine the locked item details while keeping non-target full-look pieces unchanged.",
     "- Garment design must match item-reference photos exactly.",
     "- Never invent, replace, remove, recolor, or restyle logos/graphics/prints/embroidery/patches.",
     "- If an item ref shows a back graphic/print, preserve that exact back design (position, scale, colors, and style).",
@@ -418,6 +419,7 @@ async function runPanelComplianceCheck(args: {
     "If close-up subject lock is active and the right close-up clearly focuses on a different item type/category than the locked section 0.5 item type, set pass=false.",
     "If back-view strict lock is active and back-facing design does not clearly match item refs, set pass=false.",
     "If either side appears significantly off-center such that a center 3:4 crop would cut key model/item content, set pass=false.",
+    "If item type is non-swimwear bottom (jeans/pants/shorts) and output shows shirtless/bare torso styling, set pass=false.",
     "If facial geometry or skin tone/undertone clearly drifts from MODEL refs, set pass=false.",
     "If background is not seamless pure white (any pink/warm/cream/gray tint, gradient, vignette, texture, or colored cast), set pass=false.",
     "Set pass=false only when you are clearly confident this output violates model/item/pose lock.",
@@ -569,6 +571,15 @@ export async function POST(req: NextRequest) {
       });
       return NextResponse.json({ error: "Unable to download required reference images.", details: summary.details, failedIndexes: summary.failedIndexes }, { status: 400 });
     }
+    if (modelFilesCount < 3) {
+      return NextResponse.json(
+        {
+          error:
+            "Locked model is under-specified after download. At least 3 model references must be successfully readable.",
+        },
+        { status: 400 }
+      );
+    }
 
     const modelRefImages = allRefImages.slice(0, modelFilesCount);
     const itemRefImages = allRefImages.slice(modelFilesCount);
@@ -618,6 +629,9 @@ export async function POST(req: NextRequest) {
               "You are a strict ecommerce fashion image generator. " +
               "Never change model identity from MODEL refs. " +
               "Never change garment/outfit identity from ITEM refs. " +
+              "Never copy person identity from ITEM refs. " +
+              "If item refs include a full look, preserve non-target outfit parts (top, bottom, footwear, accessories). " +
+              "For non-swimwear bottoms, shirtless output is forbidden. " +
               "If item refs include a full look, preserve the full look including shoes and accessories. " +
               "Use pure white studio background only.",
             imageConfig: {
@@ -683,7 +697,6 @@ export async function POST(req: NextRequest) {
     }
 
     const strictLocksEnabled = (process.env.STRICT_PANEL_LOCKS || "true").trim().toLowerCase() !== "false";
-    let qaWarning: string | null = null;
     if (strictLocksEnabled) {
       try {
         const qa = await runPanelComplianceCheck({
@@ -706,16 +719,32 @@ export async function POST(req: NextRequest) {
           );
         }
         if (!qa.decisive) {
-          qaWarning = "Compliance check was inconclusive; generation was allowed.";
-          console.warn("Compliance check inconclusive:", qa.raw);
+          return NextResponse.json(
+            {
+              error: {
+                type: "lock_violation",
+                code: "qa_inconclusive_blocked",
+                message:
+                  "Generated output was blocked because compliance QA was inconclusive. Regenerate this panel.",
+              },
+            },
+            { status: 422 }
+          );
         }
       } catch (qaErr: any) {
-        qaWarning = "Compliance check unavailable; generation was allowed.";
-        console.warn("Compliance check error:", qaErr?.message || qaErr);
+        return NextResponse.json(
+          {
+            error: {
+              type: "lock_violation",
+              code: "qa_unavailable_blocked",
+              message:
+                "Generated output was blocked because lock QA was unavailable. Please retry this panel.",
+            },
+          },
+          { status: 503 }
+        );
       }
     }
-
-    if (qaWarning) return NextResponse.json({ imageBase64: b64, warning: qaWarning });
     return NextResponse.json({ imageBase64: b64 });
   } catch (err: unknown) {
     console.error("Generate failed:", err);

@@ -8,7 +8,7 @@ alwaysApply: true
 **MANDATORY:** After deploying ANY code change, you MUST open the browser and verify the change works before telling the user it's done.
 
 ## Verification steps (required)
-1. Deploy to Vercel
+1. Deploy to Coolify
 2. Open the relevant page in the browser using MCP browser tools
 3. Take a snapshot and confirm the change is visually correct and functional
 4. Only THEN tell the user it's done

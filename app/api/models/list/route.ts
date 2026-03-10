@@ -4,6 +4,8 @@ import { getStoragePublicUrl } from "@/lib/storageProvider";
 import { listModelsForUser } from "@/lib/modelsRepository";
 
 const DEFAULT_SESSION_USER_ID = "00000000-0000-0000-0000-000000000001";
+const MODELS_LIST_CACHE_TTL_MS = 8_000;
+const modelsListCache = new Map<string, { expiresAt: number; models: any[] }>();
 
 function sanitizeReferenceUrl(value: unknown) {
   if (typeof value !== "string") return "";
@@ -110,6 +112,11 @@ export async function GET(req: NextRequest) {
       req.cookies.get("carbon_gen_username")?.value?.trim() ||
       DEFAULT_SESSION_USER_ID;
 
+    const cached = modelsListCache.get(userId);
+    if (cached && cached.expiresAt > Date.now()) {
+      return NextResponse.json({ models: cached.models });
+    }
+
     const rows = await listModelsForUser(userId);
     const cleaned: any[] = [];
 
@@ -137,6 +144,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    modelsListCache.set(userId, { expiresAt: Date.now() + MODELS_LIST_CACHE_TTL_MS, models: cleaned });
     return NextResponse.json({ models: cleaned });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Failed to load models" }, { status: 500 });

@@ -23,6 +23,10 @@ export async function GET(req: NextRequest) {
       .trim()
       .replace(/^\/+/, "")
       .replace(/\/+$/, "");
+    const barcode = String(req.nextUrl.searchParams.get("barcode") || "").trim().toLowerCase();
+    const sort = String(req.nextUrl.searchParams.get("sort") || "asc").trim().toLowerCase();
+    const limitRaw = Number(req.nextUrl.searchParams.get("limit") || "");
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(500, Math.floor(limitRaw))) : 300;
 
     const targetPrefixes = prefix ? [prefix] : ["models", "items"];
     const listedGroups = await Promise.all(
@@ -45,13 +49,20 @@ export async function GET(req: NextRequest) {
       })
     );
 
-    withUrls.sort((a, b) => {
+    const filtered = barcode
+      ? withUrls.filter((row) => {
+          const hay = `${row.path} ${row.url}`.toLowerCase();
+          return hay.includes(barcode);
+        })
+      : withUrls;
+
+    filtered.sort((a, b) => {
       const ta = a.uploadedAt ? new Date(a.uploadedAt).getTime() : 0;
       const tb = b.uploadedAt ? new Date(b.uploadedAt).getTime() : 0;
-      return ta - tb;
+      return sort === "desc" ? tb - ta : ta - tb;
     });
 
-    return NextResponse.json({ files: withUrls });
+    return NextResponse.json({ files: filtered.slice(0, limit) });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Failed to list uploads" }, { status: 500 });
   }

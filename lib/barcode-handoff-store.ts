@@ -14,6 +14,7 @@ type ImageHandoffSession = {
   id: string;
   createdAt: number;
   expiresAt: number;
+  connectedAt: number | null;
   fileName: string | null;
   mimeType: string | null;
   dataUrl: string | null;
@@ -139,6 +140,7 @@ export function createImageHandoffSession() {
     id: randomUUID(),
     createdAt,
     expiresAt: createdAt + SESSION_TTL_MS,
+    connectedAt: null,
     fileName: null,
     mimeType: null,
     dataUrl: null,
@@ -170,6 +172,17 @@ export function saveImageToSession(
   session.mimeType = payload.mimeType;
   session.dataUrl = payload.dataUrl;
   session.receivedAt = nowMs();
+  session.expiresAt = nowMs() + SESSION_TTL_MS;
+  persistSessionsToDisk();
+  return session;
+}
+
+export function markImageSessionConnected(sessionId: string) {
+  const session = getImageHandoffSession(sessionId);
+  if (!session) return null;
+  if (!session.connectedAt) {
+    session.connectedAt = nowMs();
+  }
   session.expiresAt = nowMs() + SESSION_TTL_MS;
   persistSessionsToDisk();
   return session;
