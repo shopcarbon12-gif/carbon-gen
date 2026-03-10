@@ -2202,14 +2202,20 @@ export default function ShopifyMappingCartsInventory() {
             )
           );
           z-index: 40;
+          gap: 8px;
           height: var(--status-bar-height, 154px);
           min-height: var(--status-bar-height, 154px);
           max-height: var(--status-bar-height, 154px);
           overflow: hidden;
+          text-align: center;
+          justify-items: center;
           will-change: right, left;
           transition:
             left var(--chat-expand-duration, 220ms) var(--chat-expand-ease, cubic-bezier(0.22, 1, 0.36, 1)),
             right var(--chat-expand-duration, 220ms) var(--chat-expand-ease, cubic-bezier(0.22, 1, 0.36, 1));
+        }
+        .status-bar > * {
+          width: 100%;
         }
         :global(.content.menu-open) .status-bar {
           left: 280px;
@@ -2233,17 +2239,40 @@ export default function ShopifyMappingCartsInventory() {
           align-items: center;
           gap: 8px;
         }
+        .status-reset-btn {
+          cursor: pointer;
+          appearance: none;
+          -webkit-appearance: none;
+          font: inherit;
+          line-height: 1;
+          margin: 0;
+        }
+        .status-reset-btn:hover {
+          filter: brightness(0.98);
+        }
+        .status-state-btn,
+        .status-state-btn:disabled {
+          cursor: default;
+          opacity: 1;
+          pointer-events: none;
+        }
         .status-bar-title {
           font-weight: 700;
           letter-spacing: 0.01em;
           text-transform: uppercase;
           font-size: 0.74rem;
-          color: rgba(226, 232, 240, 0.8);
+          color: #475569;
         }
         .status-chip {
-          border: 1px solid rgba(255, 255, 255, 0.35);
+          border: 1px solid #e2e8f0;
           border-radius: 10px;
-          padding: 3px 9px;
+          padding: 3px 0;
+          box-sizing: border-box;
+          justify-content: center;
+          text-align: center;
+          display: inline-flex;
+          align-items: center;
+          line-height: 1;
           font-size: 0.72rem;
           font-weight: 700;
           letter-spacing: 0.05em;
@@ -2251,58 +2280,66 @@ export default function ShopifyMappingCartsInventory() {
           white-space: nowrap;
         }
         .status-chip-fixed {
-          min-height: 30px;
-          min-width: 72px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
+          width: 82px;
+          min-width: 82px;
+          max-width: 82px;
+          flex: 0 0 82px;
+          height: 32px;
+          min-height: 32px;
+          max-height: 32px;
+          padding: 0;
         }
         .status-chip.idle {
-          color: rgba(226, 232, 240, 0.96);
-          border-color: rgba(255, 255, 255, 0.52);
-          background: rgba(255, 255, 255, 0.14);
+          color: #94a3b8;
+          border-color: #cbd5e1;
+          background: #f1f5f9;
         }
         .status-chip.working {
-          color: #f8fafc;
-          border-color: rgba(253, 186, 116, 0.85);
-          background: rgba(245, 158, 11, 0.2);
+          color: #7c2d12;
+          border-color: #fdba74;
+          background: #ffedd5;
         }
         .status-chip.success {
-          color: #dcfce7;
-          border-color: rgba(134, 239, 172, 0.85);
-          background: rgba(22, 163, 74, 0.22);
+          color: #166534;
+          border-color: #86efac;
+          background: #dcfce7;
         }
         .status-chip.error {
-          color: #fecaca;
-          border-color: rgba(252, 165, 165, 0.9);
-          background: rgba(220, 38, 38, 0.2);
+          color: #991b1b;
+          border-color: #fca5a5;
+          background: #fee2e2;
         }
         .status-bar.idle {
-          border-color: rgba(255, 255, 255, 0.22);
+          border-color: #dbe5f1;
         }
         .status-bar.working {
-          border-color: rgba(250, 204, 21, 0.75);
+          border-color: #facc15;
           box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.15), 0 8px 24px rgba(0, 0, 0, 0.24);
         }
         .status-bar.success {
-          border-color: rgba(134, 239, 172, 0.75);
+          border-color: #86efac;
           box-shadow: 0 0 0 1px rgba(134, 239, 172, 0.14), 0 8px 24px rgba(0, 0, 0, 0.2);
         }
         .status-bar.error {
-          border-color: rgba(252, 165, 165, 0.82);
+          border-color: #fca5a5;
           box-shadow: 0 0 0 1px rgba(252, 165, 165, 0.16), 0 8px 24px rgba(0, 0, 0, 0.22);
         }
         .status-bar-message {
           font-size: 0.95rem;
           font-weight: 600;
-          color: #f8fafc;
+          color: #0f172a;
           line-height: 1.35;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
         .status-bar-meta {
           font-size: 0.8rem;
-          color: rgba(226, 232, 240, 0.86);
+          color: #475569;
           line-height: 1.25;
-          word-break: break-word;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
         .card { padding: 18px; display: grid; gap: 10px; }
         .quick-nav { display: flex; flex-wrap: wrap; gap: 8px; }
