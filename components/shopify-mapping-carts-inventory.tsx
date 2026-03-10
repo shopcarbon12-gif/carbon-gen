@@ -1259,6 +1259,11 @@ export default function ShopifyMappingCartsInventory() {
     error ||
     status ||
     (statusTone === "working" ? task.label || "Action in progress..." : "Ready.");
+  const progressValue = Number.isFinite(task.progress) ? Math.max(0, Math.min(100, Math.round(task.progress))) : 0;
+  const inventoryProgressPercent =
+    summary.totalItems > 0
+      ? Math.max(0, Math.min(100, Math.round(((summary.totalProcessed + summary.totalErrors) / summary.totalItems) * 100)))
+      : 0;
 
   function resetTaskProgressDisplay() {
     setStatus("");
@@ -1289,6 +1294,20 @@ export default function ShopifyMappingCartsInventory() {
         </div>
         <div className="status-bar-message">
           {statusTone === "error" ? `Error: ${statusHeadline}` : statusHeadline}
+        </div>
+        <div className="status-progress-wrap">
+          <span className="status-progress-label">Progress</span>
+          <div
+            className="status-progress-track"
+            role="progressbar"
+            aria-label="Task progress"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={progressValue}
+          >
+            <div className={`status-progress-fill ${statusTone}`} style={{ width: `${progressValue}%` }} />
+          </div>
+          <span className="status-progress-percent">{progressValue}%</span>
         </div>
         <div className="status-bar-meta">
           {warning || (statusTone === "working" ? "Task in progress..." : "No active tasks.")}
@@ -1514,6 +1533,19 @@ export default function ShopifyMappingCartsInventory() {
           ) : null}
           {shop ? ` | Shop ${shop}` : ""}
         </p>
+        <div className="mini-progress-wrap">
+          <div
+            className="mini-progress-track"
+            role="progressbar"
+            aria-label="Carts inventory progress"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={inventoryProgressPercent}
+          >
+            <div className="mini-progress-fill" style={{ width: `${inventoryProgressPercent}%` }} />
+          </div>
+          <span className="mini-progress-label">{inventoryProgressPercent}%</span>
+        </div>
       </section>
 
       {status ? <p className="status-msg">{status}</p> : null}
@@ -2189,6 +2221,11 @@ export default function ShopifyMappingCartsInventory() {
           color: #f8fafc;
         }
         .status-bar {
+          border: 1px solid rgba(255, 255, 255, 0.22);
+          border-radius: 16px;
+          background: rgba(15, 23, 42, 0.44);
+          backdrop-filter: blur(12px) saturate(1.15);
+          -webkit-backdrop-filter: blur(12px) saturate(1.15);
           position: fixed;
           top: var(--integration-panel-top, 89px);
           left: calc(var(--page-inline-gap) + var(--page-edge-gap, 13px));
@@ -2290,38 +2327,41 @@ export default function ShopifyMappingCartsInventory() {
           padding: 0;
         }
         .status-chip.idle {
-          color: #94a3b8;
-          border-color: #cbd5e1;
-          background: #f1f5f9;
+          color: rgba(226, 232, 240, 0.96);
+          border-color: rgba(255, 255, 255, 0.52);
+          background: rgba(255, 255, 255, 0.14);
         }
         .status-chip.working {
-          color: #7c2d12;
-          border-color: #fdba74;
-          background: #ffedd5;
+          color: #f8fafc;
+          border-color: rgba(253, 186, 116, 0.85);
+          background: rgba(245, 158, 11, 0.2);
         }
         .status-chip.success {
-          color: #166534;
-          border-color: #86efac;
-          background: #dcfce7;
+          color: #dcfce7;
+          border-color: rgba(134, 239, 172, 0.85);
+          background: rgba(22, 163, 74, 0.22);
         }
         .status-chip.error {
-          color: #991b1b;
-          border-color: #fca5a5;
-          background: #fee2e2;
+          color: #fecaca;
+          border-color: rgba(252, 165, 165, 0.9);
+          background: rgba(220, 38, 38, 0.2);
         }
         .status-bar.idle {
-          border-color: #dbe5f1;
+          border-color: rgba(255, 255, 255, 0.34);
+          box-shadow:
+            inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+            0 8px 24px rgba(0, 0, 0, 0.24);
         }
         .status-bar.working {
-          border-color: #facc15;
+          border-color: rgba(250, 204, 21, 0.75);
           box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.15), 0 8px 24px rgba(0, 0, 0, 0.24);
         }
         .status-bar.success {
-          border-color: #86efac;
+          border-color: rgba(134, 239, 172, 0.75);
           box-shadow: 0 0 0 1px rgba(134, 239, 172, 0.14), 0 8px 24px rgba(0, 0, 0, 0.2);
         }
         .status-bar.error {
-          border-color: #fca5a5;
+          border-color: rgba(252, 165, 165, 0.82);
           box-shadow: 0 0 0 1px rgba(252, 165, 165, 0.16), 0 8px 24px rgba(0, 0, 0, 0.22);
         }
         .status-bar-message {
@@ -2332,6 +2372,55 @@ export default function ShopifyMappingCartsInventory() {
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
+        }
+        .status-progress-wrap {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          width: 100%;
+        }
+        .status-progress-label {
+          min-width: 72px;
+          font-size: 0.78rem;
+          font-weight: 700;
+          color: rgba(248, 250, 252, 0.95);
+          text-transform: uppercase;
+          letter-spacing: 0.03em;
+        }
+        .status-progress-track {
+          position: relative;
+          flex: 1;
+          height: 16px;
+          border-radius: 999px;
+          overflow: hidden;
+          background: rgba(15, 23, 42, 0.72);
+          border: 1px solid rgba(255, 255, 255, 0.36);
+          box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+        }
+        .status-progress-fill {
+          height: 100%;
+          min-width: 0;
+          border-radius: inherit;
+          transition: width 220ms ease;
+          background: linear-gradient(90deg, rgba(203, 213, 225, 0.9) 0%, rgba(148, 163, 184, 0.98) 100%);
+        }
+        .status-progress-fill.working {
+          background: linear-gradient(90deg, rgba(251, 191, 36, 0.92) 0%, rgba(245, 158, 11, 0.95) 100%);
+        }
+        .status-progress-fill.success {
+          background: linear-gradient(90deg, rgba(74, 222, 128, 0.92) 0%, rgba(34, 197, 94, 0.95) 100%);
+        }
+        .status-progress-fill.error {
+          background: linear-gradient(90deg, rgba(248, 113, 113, 0.92) 0%, rgba(239, 68, 68, 0.95) 100%);
+        }
+        .status-progress-percent {
+          width: 56px;
+          text-align: right;
+          font-size: 0.86rem;
+          font-weight: 700;
+          color: rgba(241, 245, 249, 0.98);
+          letter-spacing: 0.01em;
+          font-variant-numeric: tabular-nums;
         }
         .status-bar-meta {
           font-size: 0.8rem;
@@ -2484,6 +2573,34 @@ export default function ShopifyMappingCartsInventory() {
         .mini-removal { color: #94a3b8; }
         .mini-link { background: none; border: none; color: #67e8f9; cursor: pointer; font: inherit; padding: 0; text-decoration: underline; }
         .mini-link:hover { color: #22d3ee; }
+        .mini-progress-wrap {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+        .mini-progress-track {
+          flex: 1;
+          position: relative;
+          height: 10px;
+          border-radius: 999px;
+          overflow: hidden;
+          border: 1px solid rgba(255, 255, 255, 0.18);
+          background: rgba(255, 255, 255, 0.1);
+        }
+        .mini-progress-fill {
+          height: 100%;
+          border-radius: inherit;
+          transition: width 220ms ease;
+          background: linear-gradient(90deg, rgba(74, 222, 128, 0.9) 0%, rgba(34, 197, 94, 0.95) 100%);
+        }
+        .mini-progress-label {
+          width: 44px;
+          text-align: right;
+          font-size: 0.8rem;
+          font-weight: 700;
+          color: rgba(241, 245, 249, 0.94);
+          font-variant-numeric: tabular-nums;
+        }
         .status-msg, .warn-msg, .error-msg {
           margin: 0;
           border-radius: 12px;
