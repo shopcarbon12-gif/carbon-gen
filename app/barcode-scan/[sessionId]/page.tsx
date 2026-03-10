@@ -13,6 +13,31 @@ type BarcodeDetectorCtorLike = new (opts?: {
   detect(source: ImageBitmapSource): Promise<BarcodeDetectionLike[]>;
 };
 
+async function optimizeScannerTrack(track: MediaStreamTrack | null) {
+  if (!track || track.kind !== "video" || typeof track.applyConstraints !== "function") return;
+  const getCapabilities = (track as MediaStreamTrack & { getCapabilities?: () => any }).getCapabilities;
+  const capabilities = typeof getCapabilities === "function" ? getCapabilities.call(track) : null;
+  const constraints: any = {};
+  if (capabilities?.width?.max) constraints.width = { ideal: capabilities.width.max };
+  if (capabilities?.height?.max) constraints.height = { ideal: capabilities.height.max };
+  if (capabilities?.focusMode && Array.isArray(capabilities.focusMode)) {
+    if (capabilities.focusMode.includes("continuous")) {
+      constraints.focusMode = "continuous";
+    } else if (capabilities.focusMode.includes("single-shot")) {
+      constraints.focusMode = "single-shot";
+    }
+  }
+  if (capabilities && "torch" in capabilities) {
+    constraints.advanced = [{ torch: true }];
+  }
+  if (!Object.keys(constraints).length) return;
+  try {
+    await track.applyConstraints(constraints);
+  } catch {
+    // Best-effort optimization.
+  }
+}
+
 function sanitizeBarcodeInput(value: string) {
   return String(value || "").replace(/[^0-9cC]/g, "").toUpperCase();
 }
@@ -154,13 +179,24 @@ export default function BarcodeScanSessionPage() {
           throw new Error("Barcode detector is unavailable.");
         }
         detector = new DetectorCtor({
-          formats: ["code_128", "code_39", "ean_13", "ean_8", "upc_a", "upc_e", "itf", "codabar"],
+          formats: [
+            "code_128",
+            "code_39",
+            "code_93",
+            "ean_13",
+            "ean_8",
+            "upc_a",
+            "upc_e",
+            "itf",
+            "codabar",
+            "qr_code",
+          ],
         });
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: "environment" },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
+            width: { ideal: 3840 },
+            height: { ideal: 2160 },
           },
           audio: false,
         });
@@ -169,6 +205,7 @@ export default function BarcodeScanSessionPage() {
           return;
         }
         streamRef.current = stream;
+        await optimizeScannerTrack(stream.getVideoTracks?.()[0] || null);
         const video = videoRef.current;
         if (!video) throw new Error("Camera preview is unavailable.");
         video.srcObject = stream;
@@ -191,11 +228,29 @@ export default function BarcodeScanSessionPage() {
         if (!video) throw new Error("Camera preview is unavailable.");
         const zxing = (await import("@zxing/browser")) as any;
         const ReaderCtor = zxing?.BrowserMultiFormatReader;
+        const BarcodeFormat = zxing?.BarcodeFormat;
+        const DecodeHintType = zxing?.DecodeHintType;
         const NotFoundErrorCtor = zxing?.NotFoundException;
         if (!ReaderCtor) {
           throw new Error("Scanner fallback is unavailable.");
         }
-        const reader = new ReaderCtor();
+        const hints = new Map();
+        if (DecodeHintType && BarcodeFormat) {
+          hints.set(DecodeHintType.TRY_HARDER, true);
+          hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+            BarcodeFormat.CODE_128,
+            BarcodeFormat.CODE_39,
+            BarcodeFormat.CODE_93,
+            BarcodeFormat.EAN_13,
+            BarcodeFormat.EAN_8,
+            BarcodeFormat.UPC_A,
+            BarcodeFormat.UPC_E,
+            BarcodeFormat.ITF,
+            BarcodeFormat.CODABAR,
+            BarcodeFormat.QR_CODE,
+          ]);
+        }
+        const reader = hints.size ? new ReaderCtor(hints) : new ReaderCtor();
         const onDecode = (result: any, err: any) => {
           if (cancelled) return;
           if (result) {
@@ -214,8 +269,8 @@ export default function BarcodeScanSessionPage() {
         const decodeConstraints = {
           video: {
             facingMode: { ideal: "environment" },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
+            width: { ideal: 3840 },
+            height: { ideal: 2160 },
           },
         };
         const controls =
@@ -230,6 +285,8 @@ export default function BarcodeScanSessionPage() {
           }
           return;
         }
+        const activeStream = video.srcObject as MediaStream | null;
+        await optimizeScannerTrack(activeStream?.getVideoTracks?.()[0] || null);
         fallbackControlsRef.current = controls;
       } catch (e: any) {
         if (BarcodeDetectorCtor) {
