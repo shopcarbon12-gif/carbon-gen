@@ -131,11 +131,37 @@ type ShopifyCollectionNode = {
   productsCount?: number | { count?: number };
 };
 
+type GraphResult<T> = {
+  ok: boolean;
+  status: number;
+  errors: unknown;
+  data: T | null;
+};
+
+type CollectionsPageData = {
+  collections: {
+    edges: Array<{ node: ShopifyCollectionNode }>;
+    pageInfo: { hasNextPage: boolean; endCursor: string | null };
+  };
+};
+
+type CollectionsFetchResult =
+  | { ok: true; collections: CollectionOption[] }
+  | { ok: false; error: string };
+
+type ProductsFetchResult =
+  | { ok: true; products: ProductRow[] }
+  | { ok: false; error: string };
+
+type ProductCollectionsFetchResult =
+  | { ok: true; productId: string; title: string; collectionIds: string[] }
+  | { ok: false; error: string };
+
 async function fetchAllCollections(
   shop: string,
   token: string,
   apiVersion: string
-): Promise<{ ok: true; collections: CollectionOption[] } | { ok: false; error: string }> {
+): Promise<CollectionsFetchResult> {
   const query = `
     query CollectionsPage($first: Int!, $after: String) {
       collections(first: $first, after: $after, sortKey: TITLE) {
@@ -160,27 +186,24 @@ async function fetchAllCollections(
   const out: CollectionOption[] = [];
 
   while (page < MAX_COLLECTION_PAGES) {
-    const response = await runShopifyGraphql<{
-      collections: {
-        edges: Array<{ node: ShopifyCollectionNode }>;
-        pageInfo: { hasNextPage: boolean; endCursor: string | null };
-      };
-    }>({
-      shop,
-      token,
-      apiVersion,
-      query,
-      variables: { first: COLLECTION_PAGE_SIZE, after: cursor },
-    });
+    const gqlResult: GraphResult<CollectionsPageData> = (await runShopifyGraphql<CollectionsPageData>(
+      {
+        shop,
+        token,
+        apiVersion,
+        query,
+        variables: { first: COLLECTION_PAGE_SIZE, after: cursor },
+      }
+    )) as GraphResult<CollectionsPageData>;
 
-    if (!response.ok || !response.data?.collections) {
+    if (!gqlResult.ok || !gqlResult.data?.collections) {
       return {
         ok: false,
-        error: `Failed to load Shopify collections: ${JSON.stringify(response.errors || "unknown")}`,
+        error: `Failed to load Shopify collections: ${JSON.stringify(gqlResult.errors || "unknown")}`,
       };
     }
 
-    for (const edge of response.data.collections.edges || []) {
+    for (const edge of gqlResult.data.collections.edges || []) {
       const node = edge?.node || {};
       const id = normalizeText(node.id);
       if (!id) continue;
@@ -192,8 +215,8 @@ async function fetchAllCollections(
       });
     }
 
-    const hasNext = Boolean(response.data.collections.pageInfo?.hasNextPage);
-    const endCursor = normalizeText(response.data.collections.pageInfo?.endCursor) || null;
+    const hasNext = Boolean(gqlResult.data.collections.pageInfo?.hasNextPage);
+    const endCursor = normalizeText(gqlResult.data.collections.pageInfo?.endCursor) || null;
     page += 1;
     if (!hasNext || !endCursor) break;
     cursor = endCursor;
@@ -214,6 +237,13 @@ type ShopifyProductNode = {
   featuredImage?: { url?: string | null } | null;
   variants?: { nodes?: Array<{ id?: string; sku?: string | null; barcode?: string | null }> };
   collections?: { nodes?: Array<{ id?: string; title?: string; handle?: string }> };
+};
+
+type ProductsPageData = {
+  products: {
+    edges: Array<{ node: ShopifyProductNode }>;
+    pageInfo: { hasNextPage: boolean; endCursor: string | null };
+  };
 };
 
 type ProductRow = {
@@ -273,7 +303,7 @@ async function fetchAllProducts(
   shop: string,
   token: string,
   apiVersion: string
-): Promise<{ ok: true; products: ProductRow[] } | { ok: false; error: string }> {
+): Promise<ProductsFetchResult> {
   const query = `
     query ProductsPage($first: Int!, $after: String, $query: String) {
       products(first: $first, after: $after, query: $query, sortKey: TITLE) {
@@ -318,12 +348,7 @@ async function fetchAllProducts(
   const out: ProductRow[] = [];
 
   while (page < MAX_PRODUCT_PAGES) {
-    const response = await runShopifyGraphql<{
-      products: {
-        edges: Array<{ node: ShopifyProductNode }>;
-        pageInfo: { hasNextPage: boolean; endCursor: string | null };
-      };
-    }>({
+    const gqlResult: GraphResult<ProductsPageData> = (await runShopifyGraphql<ProductsPageData>({
       shop,
       token,
       apiVersion,
@@ -333,22 +358,22 @@ async function fetchAllProducts(
         after: cursor,
         query: BASE_PRODUCT_QUERY,
       },
-    });
+    })) as GraphResult<ProductsPageData>;
 
-    if (!response.ok || !response.data?.products) {
+    if (!gqlResult.ok || !gqlResult.data?.products) {
       return {
         ok: false,
-        error: `Failed to load Shopify products: ${JSON.stringify(response.errors || "unknown")}`,
+        error: `Failed to load Shopify products: ${JSON.stringify(gqlResult.errors || "unknown")}`,
       };
     }
 
-    for (const edge of response.data.products.edges || []) {
+    for (const edge of gqlResult.data.products.edges || []) {
       const row = transformProductNode(edge?.node || {});
       if (row) out.push(row);
     }
 
-    const hasNext = Boolean(response.data.products.pageInfo?.hasNextPage);
-    const endCursor = normalizeText(response.data.products.pageInfo?.endCursor) || null;
+    const hasNext = Boolean(gqlResult.data.products.pageInfo?.hasNextPage);
+    const endCursor = normalizeText(gqlResult.data.products.pageInfo?.endCursor) || null;
     page += 1;
     if (!hasNext || !endCursor) break;
     cursor = endCursor;
@@ -482,10 +507,7 @@ async function fetchProductCollections(
   token: string,
   apiVersion: string,
   productGid: string
-): Promise<
-  | { ok: true; productId: string; title: string; collectionIds: string[] }
-  | { ok: false; error: string }
-> {
+): Promise<ProductCollectionsFetchResult> {
   const query = `
     query ProductCollections($id: ID!) {
       product(id: $id) {
@@ -500,7 +522,13 @@ async function fetchProductCollections(
     }
   `;
 
-  const response = await runShopifyGraphql<{
+  const gqlResult: GraphResult<{
+    product: {
+      id: string;
+      title: string;
+      collections: { nodes: Array<{ id: string }> };
+    } | null;
+  }> = (await runShopifyGraphql<{
     product: {
       id: string;
       title: string;
@@ -512,16 +540,22 @@ async function fetchProductCollections(
     apiVersion,
     query,
     variables: { id: productGid },
-  });
+  })) as GraphResult<{
+    product: {
+      id: string;
+      title: string;
+      collections: { nodes: Array<{ id: string }> };
+    } | null;
+  }>;
 
-  if (!response.ok || !response.data?.product) {
+  if (!gqlResult.ok || !gqlResult.data?.product) {
     return {
       ok: false,
-      error: `Failed to fetch product collections: ${JSON.stringify(response.errors || "unknown")}`,
+      error: `Failed to fetch product collections: ${JSON.stringify(gqlResult.errors || "unknown")}`,
     };
   }
 
-  const product = response.data.product;
+  const product = gqlResult.data.product;
   return {
     ok: true,
     productId: normalizeText(product.id),
@@ -554,7 +588,11 @@ async function applyCollectionAdd(
     }
   `;
 
-  const response = await runShopifyGraphql<{
+  const response: GraphResult<{
+    collectionAddProducts: {
+      userErrors: Array<{ message?: string }>;
+    };
+  }> = (await runShopifyGraphql<{
     collectionAddProducts: {
       userErrors: Array<{ message?: string }>;
     };
@@ -564,7 +602,11 @@ async function applyCollectionAdd(
     apiVersion,
     query: mutation,
     variables: { id: collectionId, productIds: [productGid] },
-  });
+  })) as GraphResult<{
+    collectionAddProducts: {
+      userErrors: Array<{ message?: string }>;
+    };
+  }>;
 
   if (!response.ok || !response.data?.collectionAddProducts) {
     return `collectionAddProducts failed for ${collectionId}`;
@@ -599,7 +641,11 @@ async function applyCollectionRemove(
     }
   `;
 
-  const response = await runShopifyGraphql<{
+  const response: GraphResult<{
+    collectionRemoveProducts: {
+      userErrors: Array<{ message?: string }>;
+    };
+  }> = (await runShopifyGraphql<{
     collectionRemoveProducts: {
       userErrors: Array<{ message?: string }>;
     };
@@ -609,7 +655,11 @@ async function applyCollectionRemove(
     apiVersion,
     query: mutation,
     variables: { id: collectionId, productIds: [productGid] },
-  });
+  })) as GraphResult<{
+    collectionRemoveProducts: {
+      userErrors: Array<{ message?: string }>;
+    };
+  }>;
 
   if (!response.ok || !response.data?.collectionRemoveProducts) {
     return `collectionRemoveProducts failed for ${collectionId}`;
@@ -691,10 +741,10 @@ export async function GET(req: NextRequest) {
       fetchAllProducts(shop, tokenResult.token, apiVersion),
     ]);
 
-    if (!collectionsResult.ok) {
+    if ("error" in collectionsResult) {
       return NextResponse.json({ ok: false, error: collectionsResult.error }, { status: 500 });
     }
-    if (!productsResult.ok) {
+    if ("error" in productsResult) {
       return NextResponse.json({ ok: false, error: productsResult.error }, { status: 500 });
     }
 
@@ -766,7 +816,7 @@ export async function POST(req: NextRequest) {
     }
 
     const collectionsResult = await fetchAllCollections(shop, tokenResult.token, apiVersion);
-    if (!collectionsResult.ok) {
+    if ("error" in collectionsResult) {
       return NextResponse.json({ ok: false, error: collectionsResult.error }, { status: 500 });
     }
     const collections = collectionsResult.collections;
@@ -809,7 +859,9 @@ export async function POST(req: NextRequest) {
 
       const nodesResult = await listAndEnsureMenuNodes(shop, collections);
       const nodes = nodesResult.nodes.filter((node) => node.enabled && Boolean(node.collectionId));
-      const nodeByKey = new Map(nodes.map((node) => [node.nodeKey, node]));
+      const nodeByKey = new Map<string, MenuNodeRecord>(
+        nodes.map((node): [string, MenuNodeRecord] => [node.nodeKey, node])
+      );
       const targetNode = nodeByKey.get(nodeKey);
       if (!targetNode || !targetNode.collectionId) {
         return NextResponse.json({ ok: false, error: "Selected node is not mapped to a collection." }, { status: 400 });
@@ -821,7 +873,7 @@ export async function POST(req: NextRequest) {
       }
 
       const currentResult = await fetchProductCollections(shop, tokenResult.token, apiVersion, productGid);
-      if (!currentResult.ok) {
+      if ("error" in currentResult) {
         await logCollectionMappingAction({
           shop,
           productId,
@@ -890,7 +942,7 @@ export async function POST(req: NextRequest) {
       }
 
       const refreshedResult = await fetchProductCollections(shop, tokenResult.token, apiVersion, productGid);
-      if (!refreshedResult.ok) {
+      if ("error" in refreshedResult) {
         await logCollectionMappingAction({
           shop,
           productId: currentResult.productId,
