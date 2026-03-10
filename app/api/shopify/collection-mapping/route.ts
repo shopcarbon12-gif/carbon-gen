@@ -207,7 +207,9 @@ async function fetchAllCollections(
             id
             title
             handle
-            productsCount
+            productsCount {
+              count
+            }
           }
         }
         pageInfo {
