@@ -16,6 +16,7 @@ import {
   type LiveMenuNodeInput,
   type MappingAuditLogRow,
   type MenuNodeRecord,
+  listAndEnsureMenuNodes,
   listMappingAuditLogs,
   logMappingAudit,
   saveMenuMappings,
@@ -36,6 +37,7 @@ const COLLECTION_CACHE_TTL_MS = 60 * 1000;
 const PRODUCT_CACHE_TTL_MS = 45 * 1000;
 const MAX_MENU_DEPTH = 3;
 const DEFAULT_MENU_HANDLE = normalizeText(process.env.SHOPIFY_COLLECTION_MAPPING_MENU_HANDLE || "main-menu") || "main-menu";
+const REQUIRED_MENU_SCOPES = ["read_online_store_navigation", "write_online_store_navigation"] as const;
 
 type CacheEntry<T> = {
   expiresAt: number;
@@ -74,6 +76,66 @@ function parseProductsCount(raw: unknown): number | null {
     if (Number.isFinite(count)) return count;
   }
   return null;
+}
+
+function formatRequiredMenuScopes() {
+  return REQUIRED_MENU_SCOPES.join(", ");
+}
+
+function parseGraphErrorMessages(errors: unknown): string[] {
+  if (Array.isArray(errors)) {
+    return errors
+      .map((row) => {
+        if (typeof row === "string") return row;
+        if (row && typeof row === "object" && "message" in row) {
+          return normalizeText((row as { message?: unknown }).message);
+        }
+        return normalizeText(row);
+      })
+      .filter(Boolean);
+  }
+
+  if (errors && typeof errors === "object" && "message" in (errors as Record<string, unknown>)) {
+    const message = normalizeText((errors as { message?: unknown }).message);
+    return message ? [message] : [];
+  }
+
+  const text = normalizeText(errors);
+  return text ? [text] : [];
+}
+
+function isMenusAccessDenied(errors: unknown) {
+  const text = parseGraphErrorMessages(errors).join(" | ").toLowerCase();
+  return (
+    text.includes("access denied for menus field") ||
+    (text.includes("menus") && text.includes("access_denied")) ||
+    text.includes("\"path\":[\"menus\"]")
+  );
+}
+
+function buildMenuScopeErrorMessage(rawError?: string) {
+  const details = normalizeText(rawError);
+  const scopeText = formatRequiredMenuScopes();
+  return `Shopify denied menu access. Reconnect the app with scopes: ${scopeText}.${details ? ` Details: ${details}` : ""}`;
+}
+
+function isMenuScopeErrorMessage(message: unknown) {
+  const text = normalizeLower(message);
+  return (
+    text.includes("access denied for menus field") ||
+    text.includes("denied menu access") ||
+    text.includes("read_online_store_navigation") ||
+    text.includes("write_online_store_navigation")
+  );
+}
+
+function joinWarnings(...parts: Array<unknown>) {
+  const unique = new Set<string>();
+  for (const part of parts) {
+    const text = normalizeText(part);
+    if (text) unique.add(text);
+  }
+  return Array.from(unique).join(" | ");
 }
 
 function isModuleEnabled() {
@@ -870,7 +932,11 @@ async function fetchMenuTree(
   })) as GraphResult<MenusQueryData>;
 
   if (!gqlResult.ok || !gqlResult.data?.menus?.nodes) {
-    return { ok: false, error: `Failed to load Shopify menus: ${JSON.stringify(gqlResult.errors || "unknown")}` };
+    const rawError = `Failed to load Shopify menus: ${JSON.stringify(gqlResult.errors || "unknown")}`;
+    if (isMenusAccessDenied(gqlResult.errors)) {
+      return { ok: false, error: buildMenuScopeErrorMessage(rawError) };
+    }
+    return { ok: false, error: rawError };
   }
 
   const menu = resolvePreferredMenu(gqlResult.data.menus.nodes || [], requestedHandle);
@@ -1029,12 +1095,34 @@ async function syncMenuNodesFromShopify(
 ) {
   const menuResult = await fetchMenuTree(shop, token, apiVersion, menuHandle);
   if (!menuResult.ok) {
-    return { ok: false as const, error: menuResult.error };
+    if (!isMenuScopeErrorMessage(menuResult.error)) {
+      return { ok: false as const, error: menuResult.error, menuAccessDenied: false as const };
+    }
+
+    const fallback = await listAndEnsureMenuNodes(shop, collections);
+    return {
+      ok: true as const,
+      menuAccessDenied: true as const,
+      warning: joinWarnings(
+        buildMenuScopeErrorMessage(),
+        "Live menu pull/edit is unavailable until scopes are granted.",
+        fallback.warning
+      ),
+      menu: {
+        menuId: "",
+        menuHandle: normalizeText(menuHandle) || DEFAULT_MENU_HANDLE,
+        menuTitle: normalizeText(menuHandle) || "main-menu",
+        items: [],
+        liveNodes: [],
+      },
+      synced: fallback,
+    };
   }
 
   const synced = await syncLiveMenuNodes(shop, menuResult.liveNodes, collections);
   return {
     ok: true as const,
+    menuAccessDenied: false as const,
     menu: menuResult,
     synced,
   };
@@ -1484,6 +1572,7 @@ export async function GET(req: NextRequest) {
 
     const logsResult = includeLogs ? await listMappingAuditLogs(shop, logLimit) : null;
     const warningParts = [
+      normalizeText(menuSyncResult.warning),
       normalizeText(nodesResult.warning),
       normalizeText(logsResult?.warning),
     ].filter(Boolean);
@@ -1594,13 +1683,16 @@ export async function POST(req: NextRequest) {
           errorMessage: menuSyncResult.error,
           details: { menuHandle },
         });
-        return NextResponse.json({ ok: false, error: menuSyncResult.error }, { status: 500 });
+        const status = isMenuScopeErrorMessage(menuSyncResult.error) ? 403 : 500;
+        return NextResponse.json({ ok: false, error: menuSyncResult.error }, { status });
       }
 
       await logMappingAudit({
         shop,
-        action,
-        summary: `Menu synced (${menuSyncResult.menu.menuHandle})`,
+        action: menuSyncResult.menuAccessDenied ? "refresh-menu-fallback" : action,
+        summary: menuSyncResult.menuAccessDenied
+          ? `Menu refresh fallback used (${menuSyncResult.menu.menuHandle})`
+          : `Menu synced (${menuSyncResult.menu.menuHandle})`,
         status: "ok",
         details: { menuHandle: menuSyncResult.menu.menuHandle, nodes: menuSyncResult.synced.nodes.length },
       });
@@ -1614,7 +1706,7 @@ export async function POST(req: NextRequest) {
           title: menuSyncResult.menu.menuTitle,
         },
         backend: menuSyncResult.synced.backend,
-        warning: menuSyncResult.synced.warning || "",
+        warning: joinWarnings(menuSyncResult.warning, menuSyncResult.synced.warning),
         collections: collectionsResult.collections,
         nodes: menuSyncResult.synced.nodes,
         mappedNodes: menuSyncResult.synced.nodes.filter((node) => node.enabled && Boolean(node.collectionId)),
@@ -1670,7 +1762,8 @@ export async function POST(req: NextRequest) {
         collectionsResult.collections
       );
       if (!menuSync.ok) {
-        return NextResponse.json({ ok: false, error: menuSync.error }, { status: 500 });
+        const status = isMenuScopeErrorMessage(menuSync.error) ? 403 : 500;
+        return NextResponse.json({ ok: false, error: menuSync.error }, { status });
       }
 
       let menuMeta = {
@@ -1678,12 +1771,21 @@ export async function POST(req: NextRequest) {
         handle: menuSync.menu.menuHandle,
         title: menuSync.menu.menuTitle,
       };
+      let actionWarning = joinWarnings(menuSync.warning);
 
       const collectionMatch = collectionId
         ? collectionsResult.collections.find((row) => normalizeText(row.id) === collectionId) || null
         : null;
 
-      if (syncMenuLink) {
+      const shouldSyncMenuLink = syncMenuLink && !menuSync.menuAccessDenied;
+      if (syncMenuLink && menuSync.menuAccessDenied) {
+        actionWarning = joinWarnings(
+          actionWarning,
+          "Collection mapping was saved, but Shopify menu link sync is blocked until navigation scopes are granted."
+        );
+      }
+
+      if (shouldSyncMenuLink) {
         const items = sanitizeMenuItemTree(menuSync.menu.items);
         const index = findMenuNodeIndex(items);
         const target = index.get(nodeKey);
@@ -1734,7 +1836,14 @@ export async function POST(req: NextRequest) {
         action,
         summary: `Updated node mapping: ${nodeKey}`,
         status: "ok",
-        details: { nodeKey, collectionId, enabled, menuHandle: menuMeta.handle },
+        details: {
+          nodeKey,
+          collectionId,
+          enabled,
+          menuHandle: menuMeta.handle,
+          menuLinkSynced: shouldSyncMenuLink,
+          menuAccessDenied: menuSync.menuAccessDenied,
+        },
       });
 
       return NextResponse.json({
@@ -1742,7 +1851,7 @@ export async function POST(req: NextRequest) {
         shop,
         menu: menuMeta,
         backend: saved.backend,
-        warning: saved.warning || "",
+        warning: joinWarnings(saved.warning, actionWarning),
         nodes: saved.nodes,
         mappedNodes: saved.nodes.filter((node) => node.enabled && Boolean(node.collectionId)),
       });
@@ -1766,7 +1875,16 @@ export async function POST(req: NextRequest) {
 
       const menuSync = await fetchMenuTree(shop, tokenResult.token, apiVersion, menuHandle);
       if (!menuSync.ok) {
-        return NextResponse.json({ ok: false, error: menuSync.error }, { status: 500 });
+        const status = isMenuScopeErrorMessage(menuSync.error) ? 403 : 500;
+        await logMappingAudit({
+          shop,
+          action,
+          summary: `Failed to create menu node "${label}"`,
+          status: "error",
+          errorMessage: menuSync.error,
+          details: { label, parentKey, collectionId, menuHandle },
+        });
+        return NextResponse.json({ ok: false, error: menuSync.error }, { status });
       }
 
       const items = sanitizeMenuItemTree(menuSync.items);
@@ -1885,7 +2003,16 @@ export async function POST(req: NextRequest) {
 
       const menuSync = await fetchMenuTree(shop, tokenResult.token, apiVersion, menuHandle);
       if (!menuSync.ok) {
-        return NextResponse.json({ ok: false, error: menuSync.error }, { status: 500 });
+        const status = isMenuScopeErrorMessage(menuSync.error) ? 403 : 500;
+        await logMappingAudit({
+          shop,
+          action,
+          summary: "Failed to move menu node",
+          status: "error",
+          errorMessage: menuSync.error,
+          details: { nodeKey, targetKey, position, menuHandle },
+        });
+        return NextResponse.json({ ok: false, error: menuSync.error }, { status });
       }
 
       const moveResult = moveMenuNode(menuSync.items, nodeKey, targetKey, position);
@@ -1955,7 +2082,8 @@ export async function POST(req: NextRequest) {
         collectionsResult.collections
       );
       if (!menuSyncResult.ok) {
-        return NextResponse.json({ ok: false, error: menuSyncResult.error }, { status: 500 });
+        const status = isMenuScopeErrorMessage(menuSyncResult.error) ? 403 : 500;
+        return NextResponse.json({ ok: false, error: menuSyncResult.error }, { status });
       }
 
       const nodesResult = menuSyncResult.synced;
@@ -2085,7 +2213,7 @@ export async function POST(req: NextRequest) {
           },
           addedCollectionIds: [],
           removedCollectionIds: [],
-          warning: noChangeMessage,
+          warning: joinWarnings(noChangeMessage, menuSyncResult.warning, nodesResult.warning),
         });
       }
 
@@ -2161,7 +2289,7 @@ export async function POST(req: NextRequest) {
         },
         addedCollectionIds: additions,
         removedCollectionIds: removals,
-        warning: errors.join(" | "),
+        warning: joinWarnings(errors.join(" | "), menuSyncResult.warning, nodesResult.warning),
       });
     }
 

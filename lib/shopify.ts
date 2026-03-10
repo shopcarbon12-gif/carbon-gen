@@ -17,7 +17,12 @@ export function getShopifyConfig(baseUrl: string) {
   const rawScopes =
     (process.env.SHOPIFY_SCOPES || "").trim() ||
     "read_products,write_products,write_files,read_locations,write_inventory,read_orders,read_customers,read_publications,write_publications,read_shipping,write_shipping";
-  const requiredScopes = ["read_shipping", "write_shipping"];
+  const requiredScopes = [
+    "read_shipping",
+    "write_shipping",
+    "read_online_store_navigation",
+    "write_online_store_navigation",
+  ];
   const mergedScopes = new Set(
     rawScopes
       .split(",")

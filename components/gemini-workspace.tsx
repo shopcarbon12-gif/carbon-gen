@@ -9716,16 +9716,16 @@ function buildMasterPanelPrompt(
             padding-right: 0;
           }
           .grid > .card {
-            width: 100%;
+            width: 100% !important;
             justify-items: stretch;
-            max-width: 100%;
+            max-width: 100% !important;
             margin-left: 0;
             margin-right: 0;
             box-sizing: border-box;
           }
           .grid > section.card:nth-of-type(-n + 4) {
-            width: 100%;
-            max-width: 100%;
+            width: 100% !important;
+            max-width: 100% !important;
             margin-left: 0;
             margin-right: 0;
           }
@@ -9772,28 +9772,32 @@ function buildMasterPanelPrompt(
             grid-template-columns: 1fr;
           }
           .model-registry-header {
-            flex-wrap: wrap;
-            align-items: flex-start;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            align-items: start;
+            gap: 8px;
           }
           .model-registry-header .card-title {
-            flex: 1 1 auto;
-            min-width: 120px;
+            grid-column: 1;
+            min-width: 0;
             text-align: left;
           }
           .model-registry-header-actions {
+            grid-column: 2;
             margin-left: 0;
             margin-right: 0;
             justify-content: flex-end;
+            align-self: start;
           }
           .registry-inline-models {
-            order: 3;
-            flex: 1 1 100%;
+            grid-column: 1 / -1;
             width: 100%;
-            justify-content: stretch;
+            justify-content: flex-start;
             gap: 8px;
           }
           .model-pill {
             width: 100%;
+            min-width: 0;
             justify-content: space-between;
             padding: 8px 10px;
             gap: 8px;
@@ -9843,6 +9847,7 @@ function buildMasterPanelPrompt(
         }
         @media (max-width: 640px) {
           .model-registry-header-actions {
+            grid-column: 1 / -1;
             width: 100%;
             justify-content: flex-start;
           }
