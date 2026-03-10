@@ -50,8 +50,20 @@ function extractBarcodeCandidate(value: string) {
   const raw = String(value || "").toUpperCase();
   const cMatch = raw.match(/C\d{6,8}/);
   if (cMatch?.[0] && isValidBarcode(cMatch[0])) return cMatch[0];
-  const numMatch = raw.match(/\d{7,9}/);
-  if (numMatch?.[0] && isValidBarcode(numMatch[0])) return numMatch[0];
+  const numMatch = raw.match(/\d{7,13}/);
+  if (numMatch?.[0]) {
+    const digits = numMatch[0];
+    if (isValidBarcode(digits)) return digits;
+    // Normalize long EAN/UPC-like reads into supported 7-9 digit barcode.
+    let trimmed = digits.replace(/^0+/, "");
+    if (isValidBarcode(trimmed)) return trimmed;
+    if (trimmed.length > 9) trimmed = trimmed.slice(-9);
+    if (isValidBarcode(trimmed)) return trimmed;
+    const last8 = digits.slice(-8);
+    if (isValidBarcode(last8)) return last8;
+    const last7 = digits.slice(-7);
+    if (isValidBarcode(last7)) return last7;
+  }
   const sanitized = sanitizeBarcodeInput(raw).trim();
   return isValidBarcode(sanitized) ? sanitized : "";
 }
@@ -176,6 +188,9 @@ export default function BarcodeScanSessionPage() {
               setStatus(`Detected: ${normalized}. Sending to desktop...`);
               await submitBarcode(normalized);
               return;
+            }
+            if (!done) {
+              setStatus("Scanning... barcode seen but format not accepted yet.");
             }
           }
         } catch {

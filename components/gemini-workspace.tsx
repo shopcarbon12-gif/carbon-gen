@@ -8118,6 +8118,7 @@ function buildMasterPanelPrompt(
           display: flex;
           align-items: center;
           gap: 10px;
+          min-width: 0;
         }
         .model-registry-header .card-title {
           white-space: nowrap;
@@ -8148,6 +8149,7 @@ function buildMasterPanelPrompt(
           align-items: center;
           margin-left: auto;
           gap: 8px;
+          flex-wrap: wrap;
         }
         .grid {
           display: grid;
@@ -8874,11 +8876,13 @@ function buildMasterPanelPrompt(
           gap: 10px;
           align-items: center;
           font-size: 0.8rem;
+          max-width: 100%;
         }
         .model-info {
           display: inline-flex;
           gap: 8px;
           align-items: center;
+          min-width: 0;
         }
         .model-remove {
           border: 1px solid #e2e8f0;
@@ -9653,8 +9657,23 @@ function buildMasterPanelPrompt(
           }
         }
         @media (max-width: 900px) {
+          .page {
+            padding-left: var(--page-inline-gap);
+            padding-right: var(--page-inline-gap);
+          }
+          :global(.content.menu-open) .page {
+            padding-left: var(--page-inline-gap);
+            padding-right: var(--page-inline-gap);
+          }
           .grid {
             margin-top: calc(var(--status-bar-height, 96px) - 40px);
+            width: 100%;
+            margin-right: 0;
+            padding-right: 0;
+          }
+          .grid > .card {
+            width: 100%;
+            justify-items: stretch;
           }
           .mobile-only-control,
           .btn.mobile-only-control,
@@ -9698,6 +9717,51 @@ function buildMasterPanelPrompt(
           .generation-actions-layout {
             grid-template-columns: 1fr;
           }
+          .model-registry-header {
+            flex-wrap: wrap;
+            align-items: flex-start;
+          }
+          .model-registry-header .card-title {
+            flex: 1 1 auto;
+            min-width: 120px;
+            text-align: left;
+          }
+          .model-registry-header-actions {
+            margin-left: 0;
+            margin-right: 0;
+            justify-content: flex-end;
+          }
+          .registry-inline-models {
+            order: 3;
+            flex: 1 1 100%;
+            width: 100%;
+            justify-content: stretch;
+            gap: 8px;
+          }
+          .model-pill {
+            width: 100%;
+            justify-content: space-between;
+            padding: 8px 10px;
+            gap: 8px;
+          }
+          .model-info {
+            flex: 1 1 auto;
+            display: grid;
+            gap: 2px;
+            justify-items: start;
+            text-align: left;
+          }
+          .model-name,
+          .model-meta {
+            max-width: 100%;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+          .model-remove {
+            flex: 0 0 auto;
+            min-width: 74px;
+          }
           .status-bar {
             top: 78px;
             left: var(--page-inline-gap);
@@ -9723,6 +9787,14 @@ function buildMasterPanelPrompt(
           }
         }
         @media (max-width: 640px) {
+          .model-registry-header-actions {
+            width: 100%;
+            justify-content: flex-start;
+          }
+          .model-registry-header-actions .ghost-btn {
+            flex: 1 1 calc(50% - 6px);
+            min-width: 0;
+          }
           .barcode-row > .btn,
           .barcode-row > .ghost-btn,
           .barcode-row > button,
