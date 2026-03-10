@@ -70,30 +70,35 @@ const DEFAULT_MENU_NODES: MenuNodeSeed[] = [
   { key: "women/clothing", label: "CLOTHING", parentKey: "women", depth: 1, sortOrder: 20, defaultCollectionHandle: "clothing-1" },
   { key: "women/clothing/matching-sets", label: "MATCHING SETS", parentKey: "women/clothing", depth: 2, sortOrder: 21, defaultCollectionHandle: "matching-sets-1" },
   { key: "women/clothing/dresses", label: "DRESSES", parentKey: "women/clothing", depth: 2, sortOrder: 22, defaultCollectionHandle: "dresses" },
-  { key: "women/clothing/jeans", label: "JEANS", parentKey: "women/clothing", depth: 2, sortOrder: 23, defaultCollectionHandle: "clothing-jeans" },
-  { key: "women/clothing/shorts", label: "SHORTS", parentKey: "women/clothing", depth: 2, sortOrder: 24, defaultCollectionHandle: "shorts" },
-  { key: "women/clothing/skirts", label: "SKIRTS", parentKey: "women/clothing", depth: 2, sortOrder: 25, defaultCollectionHandle: "skirts" },
-  { key: "women/clothing/tops", label: "TOPS", parentKey: "women/clothing", depth: 2, sortOrder: 26, defaultCollectionHandle: "tops" },
-  { key: "women/clothing/tank-tops", label: "TANK TOPS", parentKey: "women/clothing", depth: 2, sortOrder: 27, defaultCollectionHandle: "tank-tops" },
-  { key: "women/clothing/t-shirts", label: "T-SHIRTS", parentKey: "women/clothing", depth: 2, sortOrder: 28, defaultCollectionHandle: "t-shirts-women" },
-  { key: "women/clothing/jumpsuits-rompers", label: "JUMPSUITS & ROMPERS", parentKey: "women/clothing", depth: 2, sortOrder: 29, defaultCollectionHandle: "jumpsuits-rompers" },
-  { key: "women/clothing/jackets-coats", label: "JACKETS & COATS", parentKey: "women/clothing", depth: 2, sortOrder: 30, defaultCollectionHandle: "jackets-coats-2" },
-  { key: "women/clothing/bodysuits", label: "BODYSUITS", parentKey: "women/clothing", depth: 2, sortOrder: 31, defaultCollectionHandle: "bodysuits" },
-  { key: "women/clothing/tracksuits", label: "TRACKSUITS", parentKey: "women/clothing", depth: 2, sortOrder: 32, defaultCollectionHandle: "tracksuits" },
-  { key: "women/clothing/sweatpants", label: "SWEATPANTS", parentKey: "women/clothing", depth: 2, sortOrder: 33, defaultCollectionHandle: "sweatpants" },
-  { key: "women/clothing/pants-leggings", label: "PANTS & LEGGINGS", parentKey: "women/clothing", depth: 2, sortOrder: 34, defaultCollectionHandle: "pants-women" },
-  { key: "women/clothing/sweatshirts-hoodies", label: "SWEATSHIRTS & HOODIES", parentKey: "women/clothing", depth: 2, sortOrder: 35, defaultCollectionHandle: "sweatshirts-hoodies-women" },
-  { key: "women/clothing/swimwear", label: "SWIMWEAR", parentKey: "women/clothing", depth: 2, sortOrder: 36, defaultCollectionHandle: "swimsuit-women" },
-  { key: "women/clothing/sweaters", label: "SWEATERS", parentKey: "women/clothing", depth: 2, sortOrder: 37, defaultCollectionHandle: "sweaters-women" },
+  { key: "women/clothing/dresses/mini-dresses", label: "MINI DRESSES", parentKey: "women/clothing/dresses", depth: 3, sortOrder: 23, defaultCollectionHandle: "mini-dresses" },
+  { key: "women/clothing/dresses/midi-dresses", label: "MIDI DRESSES", parentKey: "women/clothing/dresses", depth: 3, sortOrder: 24, defaultCollectionHandle: "midi-dresses-women" },
+  { key: "women/clothing/dresses/maxi-dresses", label: "MAXI DRESSES", parentKey: "women/clothing/dresses", depth: 3, sortOrder: 25, defaultCollectionHandle: "maxi-dresses-women" },
+  { key: "women/clothing/dresses/night-dresses", label: "NIGHT DRESSES", parentKey: "women/clothing/dresses", depth: 3, sortOrder: 26, defaultCollectionHandle: "night-dresses" },
+  { key: "women/clothing/jeans", label: "JEANS", parentKey: "women/clothing", depth: 2, sortOrder: 27, defaultCollectionHandle: "clothing-jeans" },
+  { key: "women/clothing/shorts", label: "SHORTS", parentKey: "women/clothing", depth: 2, sortOrder: 28, defaultCollectionHandle: "shorts" },
+  { key: "women/clothing/skirts", label: "SKIRTS", parentKey: "women/clothing", depth: 2, sortOrder: 29, defaultCollectionHandle: "skirts" },
+  { key: "women/clothing/tops", label: "TOPS", parentKey: "women/clothing", depth: 2, sortOrder: 30, defaultCollectionHandle: "tops" },
+  { key: "women/clothing/tank-tops", label: "TANK TOPS", parentKey: "women/clothing", depth: 2, sortOrder: 31, defaultCollectionHandle: "tank-tops" },
+  { key: "women/clothing/t-shirts", label: "T-SHIRTS", parentKey: "women/clothing", depth: 2, sortOrder: 32, defaultCollectionHandle: "t-shirts-women" },
+  { key: "women/clothing/jumpsuits-rompers", label: "JUMPSUITS & ROMPERS", parentKey: "women/clothing", depth: 2, sortOrder: 33, defaultCollectionHandle: "jumpsuits-rompers" },
+  { key: "women/clothing/jackets-coats", label: "JACKETS & COATS", parentKey: "women/clothing", depth: 2, sortOrder: 34, defaultCollectionHandle: "jackets-coats-2" },
+  { key: "women/clothing/bodysuits", label: "BODYSUITS", parentKey: "women/clothing", depth: 2, sortOrder: 35, defaultCollectionHandle: "bodysuits" },
+  { key: "women/clothing/tracksuits", label: "TRACKSUITS", parentKey: "women/clothing", depth: 2, sortOrder: 36, defaultCollectionHandle: "tracksuits" },
+  { key: "women/clothing/sweatpants", label: "SWEATPANTS", parentKey: "women/clothing", depth: 2, sortOrder: 37, defaultCollectionHandle: "sweatpants" },
+  { key: "women/clothing/pants-leggings", label: "PANTS & LEGGINGS", parentKey: "women/clothing", depth: 2, sortOrder: 38, defaultCollectionHandle: "pants-women" },
+  { key: "women/clothing/leggings", label: "LEGGINGS", parentKey: "women/clothing", depth: 2, sortOrder: 39, defaultCollectionHandle: "women-clothing-leggings" },
+  { key: "women/clothing/sweatshirts-hoodies", label: "SWEATSHIRTS & HOODIES", parentKey: "women/clothing", depth: 2, sortOrder: 40, defaultCollectionHandle: "sweatshirts-hoodies-women" },
+  { key: "women/clothing/swimwear", label: "SWIMWEAR", parentKey: "women/clothing", depth: 2, sortOrder: 41, defaultCollectionHandle: "swimsuit-women" },
+  { key: "women/clothing/sweaters", label: "SWEATERS", parentKey: "women/clothing", depth: 2, sortOrder: 42, defaultCollectionHandle: "sweaters-women" },
 
-  { key: "women/accessories-shoes", label: "ACCESSORIES & SHOES", parentKey: "women", depth: 1, sortOrder: 40, defaultCollectionHandle: "accessories-shoes-women" },
-  { key: "women/accessories-shoes/jewelry", label: "JEWELRY", parentKey: "women/accessories-shoes", depth: 2, sortOrder: 41, defaultCollectionHandle: "jewelry-women" },
-  { key: "women/accessories-shoes/sunglasses", label: "SUNGLASSES", parentKey: "women/accessories-shoes", depth: 2, sortOrder: 42, defaultCollectionHandle: "sunglasses-women" },
-  { key: "women/accessories-shoes/belts", label: "BELTS", parentKey: "women/accessories-shoes", depth: 2, sortOrder: 43, defaultCollectionHandle: "women-belts" },
-  { key: "women/accessories-shoes/hats", label: "HATS", parentKey: "women/accessories-shoes", depth: 2, sortOrder: 44, defaultCollectionHandle: "hats" },
-  { key: "women/accessories-shoes/shoes", label: "SHOES", parentKey: "women/accessories-shoes", depth: 2, sortOrder: 45, defaultCollectionHandle: "shoes-women" },
-  { key: "women/accessories-shoes/fragrance-beauty", label: "FRAGRANCE & BEAUTY", parentKey: "women/accessories-shoes", depth: 2, sortOrder: 46, defaultCollectionHandle: "fragrance-beauty-women" },
-  { key: "women/accessories-shoes/all-accessories", label: "ALL ACCESSORIES", parentKey: "women/accessories-shoes", depth: 2, sortOrder: 47, defaultCollectionHandle: "all-accessories-women" },
+  { key: "women/accessories-shoes", label: "ACCESSORIES & SHOES", parentKey: "women", depth: 1, sortOrder: 50, defaultCollectionHandle: "accessories-shoes-women" },
+  { key: "women/accessories-shoes/jewelry", label: "JEWELRY", parentKey: "women/accessories-shoes", depth: 2, sortOrder: 51, defaultCollectionHandle: "jewelry-women" },
+  { key: "women/accessories-shoes/sunglasses", label: "SUNGLASSES", parentKey: "women/accessories-shoes", depth: 2, sortOrder: 52, defaultCollectionHandle: "sunglasses-women" },
+  { key: "women/accessories-shoes/belts", label: "BELTS", parentKey: "women/accessories-shoes", depth: 2, sortOrder: 53, defaultCollectionHandle: "women-belts" },
+  { key: "women/accessories-shoes/hats", label: "HATS", parentKey: "women/accessories-shoes", depth: 2, sortOrder: 54, defaultCollectionHandle: "hats" },
+  { key: "women/accessories-shoes/shoes", label: "SHOES", parentKey: "women/accessories-shoes", depth: 2, sortOrder: 55, defaultCollectionHandle: "shoes-women" },
+  { key: "women/accessories-shoes/fragrance-beauty", label: "FRAGRANCE & BEAUTY", parentKey: "women/accessories-shoes", depth: 2, sortOrder: 56, defaultCollectionHandle: "fragrance-beauty-women" },
+  { key: "women/accessories-shoes/all-accessories", label: "ALL ACCESSORIES", parentKey: "women/accessories-shoes", depth: 2, sortOrder: 57, defaultCollectionHandle: "all-accessories-women" },
 
   { key: "men", label: "MEN", parentKey: null, depth: 0, sortOrder: 100, defaultCollectionHandle: "men" },
   { key: "men/new-now", label: "NEW & NOW", parentKey: "men", depth: 1, sortOrder: 101, defaultCollectionHandle: "men-new-now" },
@@ -260,12 +265,20 @@ function getMemoryNodes(shop: string, collections: CollectionOption[]): MenuNode
     return sortNodes(seeded);
   }
 
-  const existingKeys = new Set(existing.map((row) => row.nodeKey));
+  const byKey = new Map(existing.map((row) => [row.nodeKey, row]));
   const seeded = buildSeededNodes(collections);
   for (const seed of seeded) {
-    if (!existingKeys.has(seed.nodeKey)) {
+    const current = byKey.get(seed.nodeKey);
+    if (!current) {
       existing.push(cloneNode(seed));
+      byKey.set(seed.nodeKey, existing[existing.length - 1]);
+      continue;
     }
+    current.label = seed.label;
+    current.parentKey = seed.parentKey;
+    current.depth = seed.depth;
+    current.sortOrder = seed.sortOrder;
+    current.defaultCollectionHandle = seed.defaultCollectionHandle;
   }
 
   memoryNodesByShop.set(shopKey, sortNodes(existing).map(cloneNode));
@@ -366,7 +379,12 @@ async function seedSqlNodesIfMissing(shop: string, collections: CollectionOption
         $7, $8, $9, $10,
         $11, now()
       )
-      ON CONFLICT (shop, node_key) DO NOTHING`,
+      ON CONFLICT (shop, node_key) DO UPDATE
+        SET label = EXCLUDED.label,
+            parent_key = EXCLUDED.parent_key,
+            depth = EXCLUDED.depth,
+            sort_order = EXCLUDED.sort_order,
+            default_collection_handle = EXCLUDED.default_collection_handle`,
       [
         shopKey,
         row.nodeKey,

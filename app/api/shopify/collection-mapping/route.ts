@@ -29,6 +29,16 @@ const MAX_PRODUCT_PAGES = 60;
 const PRODUCT_PAGE_SIZE = 100;
 const MAX_COLLECTION_PAGES = 20;
 const COLLECTION_PAGE_SIZE = 250;
+const COLLECTION_CACHE_TTL_MS = 60 * 1000;
+const PRODUCT_CACHE_TTL_MS = 45 * 1000;
+
+type CacheEntry<T> = {
+  expiresAt: number;
+  value: T;
+};
+
+const collectionsCache = new Map<string, CacheEntry<CollectionOption[]>>();
+const productsCache = new Map<string, CacheEntry<ProductRow[]>>();
 
 function normalizeText(value: unknown) {
   return String(value ?? "").trim();
@@ -122,6 +132,34 @@ async function resolveWorkingToken(shop: string, apiVersion: string) {
     ok: false as const,
     error: `Shop token validation failed.${lastError ? ` ${lastError}` : ""}`,
   };
+}
+
+function buildShopCacheKey(shop: string, apiVersion: string) {
+  const safeShop = normalizeShopDomain(shop) || normalizeText(shop);
+  return `${safeShop}::${normalizeText(apiVersion)}`;
+}
+
+function getCachedValue<T>(cache: Map<string, CacheEntry<T>>, key: string): T | null {
+  const now = Date.now();
+  const hit = cache.get(key);
+  if (!hit) return null;
+  if (hit.expiresAt <= now) {
+    cache.delete(key);
+    return null;
+  }
+  return hit.value;
+}
+
+function setCachedValue<T>(cache: Map<string, CacheEntry<T>>, key: string, value: T, ttlMs: number) {
+  cache.set(key, { value, expiresAt: Date.now() + ttlMs });
+}
+
+function invalidateShopCache<T>(cache: Map<string, CacheEntry<T>>, shop: string) {
+  const safeShop = normalizeShopDomain(shop) || normalizeText(shop);
+  const prefix = `${safeShop}::`;
+  for (const key of cache.keys()) {
+    if (key.startsWith(prefix)) cache.delete(key);
+  }
 }
 
 type ShopifyCollectionNode = {
@@ -224,6 +262,22 @@ async function fetchAllCollections(
 
   out.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: "base" }));
   return { ok: true, collections: out };
+}
+
+async function fetchAllCollectionsCached(
+  shop: string,
+  token: string,
+  apiVersion: string
+): Promise<CollectionsFetchResult> {
+  const cacheKey = buildShopCacheKey(shop, apiVersion);
+  const cached = getCachedValue(collectionsCache, cacheKey);
+  if (cached) return { ok: true, collections: cached };
+
+  const result = await fetchAllCollections(shop, token, apiVersion);
+  if ("collections" in result) {
+    setCachedValue(collectionsCache, cacheKey, result.collections, COLLECTION_CACHE_TTL_MS);
+  }
+  return result;
 }
 
 type ShopifyProductNode = {
@@ -382,6 +436,22 @@ async function fetchAllProducts(
   return { ok: true, products: out };
 }
 
+async function fetchAllProductsCached(
+  shop: string,
+  token: string,
+  apiVersion: string
+): Promise<ProductsFetchResult> {
+  const cacheKey = buildShopCacheKey(shop, apiVersion);
+  const cached = getCachedValue(productsCache, cacheKey);
+  if (cached) return { ok: true, products: cached };
+
+  const result = await fetchAllProducts(shop, token, apiVersion);
+  if ("products" in result) {
+    setCachedValue(productsCache, cacheKey, result.products, PRODUCT_CACHE_TTL_MS);
+  }
+  return result;
+}
+
 type ProductFilters = {
   q: string;
   title: string;
@@ -419,6 +489,7 @@ function productMatchesFilters(row: ProductRow, filters: ProductFilters) {
 
 type SortField = "title" | "upc" | "sku" | "itemType" | "updatedAt";
 type SortDir = "asc" | "desc";
+type UncheckPolicy = "keep-descendants" | "remove-descendants";
 
 function compareRows(left: ProductRow, right: ProductRow, field: SortField) {
   switch (field) {
@@ -464,6 +535,14 @@ function toSortDir(value: string): SortDir {
   return normalizeLower(value) === "desc" ? "desc" : "asc";
 }
 
+function toUncheckPolicy(value: unknown): UncheckPolicy {
+  const normalized = normalizeLower(value);
+  if (normalized === "remove-descendants" || normalized === "remove_descendants") {
+    return "remove-descendants";
+  }
+  return "keep-descendants";
+}
+
 function toProductGid(value: string) {
   const id = normalizeText(value);
   if (!id) return "";
@@ -480,6 +559,18 @@ function buildParentMap(nodes: MenuNodeRecord[]) {
   return map;
 }
 
+function buildChildrenMap(nodes: MenuNodeRecord[]) {
+  const map = new Map<string, string[]>();
+  for (const node of nodes) {
+    const parentKey = normalizeText(node.parentKey);
+    if (!parentKey) continue;
+    const current = map.get(parentKey) || [];
+    current.push(node.nodeKey);
+    map.set(parentKey, current);
+  }
+  return map;
+}
+
 function collectAncestors(nodeKey: string, parentMap: Map<string, string | null>) {
   const ancestors: string[] = [];
   let current = parentMap.get(nodeKey) || null;
@@ -490,6 +581,21 @@ function collectAncestors(nodeKey: string, parentMap: Map<string, string | null>
     current = parentMap.get(current) || null;
   }
   return ancestors;
+}
+
+function collectDescendants(nodeKey: string, childrenMap: Map<string, string[]>) {
+  const out: string[] = [];
+  const queue = [...(childrenMap.get(nodeKey) || [])];
+  const seen = new Set<string>();
+  while (queue.length > 0) {
+    const next = queue.shift();
+    if (!next || seen.has(next)) continue;
+    seen.add(next);
+    out.push(next);
+    const children = childrenMap.get(next) || [];
+    for (const child of children) queue.push(child);
+  }
+  return out;
 }
 
 function enforceAncestorClosure(selected: Set<string>, parentMap: Map<string, string | null>) {
@@ -737,8 +843,8 @@ export async function GET(req: NextRequest) {
     }
 
     const [collectionsResult, productsResult] = await Promise.all([
-      fetchAllCollections(shop, tokenResult.token, apiVersion),
-      fetchAllProducts(shop, tokenResult.token, apiVersion),
+      fetchAllCollectionsCached(shop, tokenResult.token, apiVersion),
+      fetchAllProductsCached(shop, tokenResult.token, apiVersion),
     ]);
 
     if ("error" in collectionsResult) {
@@ -815,18 +921,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: tokenResult.error }, { status: 401 });
     }
 
-    const collectionsResult = await fetchAllCollections(shop, tokenResult.token, apiVersion);
-    if ("error" in collectionsResult) {
-      return NextResponse.json({ ok: false, error: collectionsResult.error }, { status: 500 });
-    }
-    const collections = collectionsResult.collections;
-
     if (action === "save-mappings") {
+      const collectionsResult = await fetchAllCollectionsCached(shop, tokenResult.token, apiVersion);
+      if ("error" in collectionsResult) {
+        return NextResponse.json({ ok: false, error: collectionsResult.error }, { status: 500 });
+      }
+
       const mappings = Array.isArray(body.mappings)
         ? (body.mappings as Array<{ nodeKey: string; collectionId: string | null; enabled?: boolean }>)
         : [];
 
-      const saved = await saveMenuMappings(shop, mappings, collections);
+      const saved = await saveMenuMappings(shop, mappings, collectionsResult.collections);
       return NextResponse.json({
         ok: true,
         shop,
@@ -838,7 +943,12 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === "reset-mappings") {
-      const reset = await resetMenuMappingsToDefault(shop, collections);
+      const collectionsResult = await fetchAllCollectionsCached(shop, tokenResult.token, apiVersion);
+      if ("error" in collectionsResult) {
+        return NextResponse.json({ ok: false, error: collectionsResult.error }, { status: 500 });
+      }
+
+      const reset = await resetMenuMappingsToDefault(shop, collectionsResult.collections);
       return NextResponse.json({
         ok: true,
         shop,
@@ -853,11 +963,17 @@ export async function POST(req: NextRequest) {
       const productId = normalizeText(body.productId || "");
       const nodeKey = normalizeText(body.nodeKey || "");
       const checked = parseBool(body.checked);
+      const uncheckPolicy = toUncheckPolicy(body.uncheckPolicy);
       if (!productId || !nodeKey) {
         return NextResponse.json({ ok: false, error: "productId and nodeKey are required." }, { status: 400 });
       }
 
-      const nodesResult = await listAndEnsureMenuNodes(shop, collections);
+      const collectionsResult = await fetchAllCollectionsCached(shop, tokenResult.token, apiVersion);
+      if ("error" in collectionsResult) {
+        return NextResponse.json({ ok: false, error: collectionsResult.error }, { status: 500 });
+      }
+
+      const nodesResult = await listAndEnsureMenuNodes(shop, collectionsResult.collections);
       const nodes = nodesResult.nodes.filter((node) => node.enabled && Boolean(node.collectionId));
       const nodeByKey = new Map<string, MenuNodeRecord>(
         nodes.map((node): [string, MenuNodeRecord] => [node.nodeKey, node])
@@ -890,6 +1006,7 @@ export async function POST(req: NextRequest) {
 
       const currentCollectionSet = new Set(currentResult.collectionIds);
       const parentMap = buildParentMap(nodes);
+      const childrenMap = buildChildrenMap(nodes);
       const mappedCollectionIds = new Set(nodes.map((node) => normalizeText(node.collectionId)).filter(Boolean));
 
       const currentSelectedNodes = new Set<string>();
@@ -908,6 +1025,11 @@ export async function POST(req: NextRequest) {
         }
       } else {
         desiredNodes.delete(nodeKey);
+        if (uncheckPolicy === "remove-descendants") {
+          for (const descendant of collectDescendants(nodeKey, childrenMap)) {
+            desiredNodes.delete(descendant);
+          }
+        }
       }
 
       const closedNodes = enforceAncestorClosure(desiredNodes, parentMap);
@@ -930,6 +1052,51 @@ export async function POST(req: NextRequest) {
         if (!desiredCollectionIds.has(currentCollectionId)) removals.push(currentCollectionId);
       }
 
+      if (additions.length < 1 && removals.length < 1) {
+        const checkedNodeKeys = nodes
+          .filter((node) => node.collectionId && currentCollectionSet.has(node.collectionId))
+          .map((node) => node.nodeKey);
+
+        let noChangeMessage = "No Shopify collection updates were required.";
+        if (
+          !checked &&
+          uncheckPolicy === "keep-descendants" &&
+          currentSelectedNodes.has(nodeKey) &&
+          checkedNodeKeys.includes(nodeKey)
+        ) {
+          noChangeMessage =
+            "Node stayed checked because at least one selected child still requires its parent category.";
+        }
+
+        await logCollectionMappingAction({
+          shop,
+          productId: currentResult.productId,
+          productTitle: currentResult.title,
+          nodeKey,
+          checked,
+          addedCollectionIds: [],
+          removedCollectionIds: [],
+          status: "ok",
+          errorMessage: noChangeMessage,
+        });
+
+        return NextResponse.json({
+          ok: true,
+          noop: true,
+          shop,
+          uncheckPolicy,
+          product: {
+            id: currentResult.productId,
+            title: currentResult.title,
+            collectionIds: currentResult.collectionIds,
+            checkedNodeKeys,
+          },
+          addedCollectionIds: [],
+          removedCollectionIds: [],
+          warning: noChangeMessage,
+        });
+      }
+
       const errors: string[] = [];
       for (const collectionId of additions) {
         const error = await applyCollectionAdd(shop, tokenResult.token, apiVersion, collectionId, productGid);
@@ -940,6 +1107,8 @@ export async function POST(req: NextRequest) {
         const error = await applyCollectionRemove(shop, tokenResult.token, apiVersion, collectionId, productGid);
         if (error) errors.push(error);
       }
+
+      invalidateShopCache(productsCache, shop);
 
       const refreshedResult = await fetchProductCollections(shop, tokenResult.token, apiVersion, productGid);
       if ("error" in refreshedResult) {
@@ -977,6 +1146,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         ok: errors.length < 1,
         shop,
+        uncheckPolicy,
         product: {
           id: refreshedResult.productId,
           title: refreshedResult.title,

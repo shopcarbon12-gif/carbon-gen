@@ -39,6 +39,7 @@ type ProductRow = {
 
 type CollectionMappingResponse = {
   ok?: boolean;
+  noop?: boolean;
   error?: string;
   warning?: string;
   shop?: string;
@@ -58,6 +59,7 @@ type CollectionMappingResponse = {
 
 type SortField = "title" | "upc" | "sku" | "itemType" | "updatedAt";
 type SortDir = "asc" | "desc";
+type UncheckPolicy = "keep-descendants" | "remove-descendants";
 
 type ProductFilters = {
   q: string;
@@ -113,6 +115,13 @@ export default function ShopifyCollectionMapping() {
   const [busy, setBusy] = useState(false);
   const [mappingBusy, setMappingBusy] = useState(false);
   const [toggleBusyKey, setToggleBusyKey] = useState("");
+  const [showCompactColumns, setShowCompactColumns] = useState(false);
+  const [uncheckPolicy, setUncheckPolicy] = useState<UncheckPolicy>("remove-descendants");
+  const [lastFailedToggle, setLastFailedToggle] = useState<{
+    productId: string;
+    nodeKey: string;
+    checked: boolean;
+  } | null>(null);
   const [status, setStatus] = useState("");
   const [warning, setWarning] = useState("");
   const [error, setError] = useState("");
@@ -165,6 +174,7 @@ export default function ShopifyCollectionMapping() {
         setEnabledDraft(nextEnabledDraft);
 
         setWarning(normalizeText(json.warning));
+        setLastFailedToggle(null);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         setError(message || "Failed to load collection mapping.");
@@ -184,6 +194,79 @@ export default function ShopifyCollectionMapping() {
     [mappedNodes]
   );
 
+  const collectionById = useMemo(() => {
+    const map = new Map<string, CollectionOption>();
+    for (const collection of collections) {
+      const id = normalizeText(collection.id);
+      if (id) map.set(id, collection);
+    }
+    return map;
+  }, [collections]);
+
+  const nodeKeySet = useMemo(() => new Set(nodes.map((node) => node.nodeKey)), [nodes]);
+
+  const mappingValidation = useMemo(() => {
+    const orphanNodes: string[] = [];
+    const missingCollectionNodes: string[] = [];
+    const unmappedEnabledNodes: string[] = [];
+    const duplicateSource = new Map<string, string[]>();
+    let disabledCount = 0;
+    let mappedCount = 0;
+
+    for (const node of nodes) {
+      const nodeKey = node.nodeKey;
+      const enabled = Boolean(enabledDraft[nodeKey]);
+      const collectionId = normalizeText(mappingDraft[nodeKey]);
+      const hasCollection = Boolean(collectionId);
+      const parentKey = normalizeText(node.parentKey);
+
+      if (enabled && parentKey && !nodeKeySet.has(parentKey)) {
+        orphanNodes.push(nodeKey);
+      }
+
+      if (!enabled) {
+        disabledCount += 1;
+      }
+
+      if (enabled && !hasCollection) {
+        unmappedEnabledNodes.push(nodeKey);
+      }
+
+      if (hasCollection && !collectionById.has(collectionId)) {
+        missingCollectionNodes.push(nodeKey);
+      }
+
+      if (enabled && hasCollection) {
+        mappedCount += 1;
+        const list = duplicateSource.get(collectionId) || [];
+        list.push(nodeKey);
+        duplicateSource.set(collectionId, list);
+      }
+    }
+
+    const duplicateMappings = Array.from(duplicateSource.entries())
+      .filter(([, nodeKeys]) => nodeKeys.length > 1)
+      .map(([collectionId, nodeKeys]) => ({
+        collectionId,
+        nodeKeys,
+        count: nodeKeys.length,
+        collectionTitle: collectionById.get(collectionId)?.title || collectionId,
+      }))
+      .sort((left, right) => right.count - left.count || left.collectionTitle.localeCompare(right.collectionTitle));
+
+    const duplicateNodeKeys = new Set(duplicateMappings.flatMap((row) => row.nodeKeys));
+
+    return {
+      orphanNodes,
+      missingCollectionNodes,
+      unmappedEnabledNodes,
+      duplicateMappings,
+      duplicateNodeKeys,
+      mappedCount,
+      disabledCount,
+    };
+  }, [collectionById, enabledDraft, mappingDraft, nodeKeySet, nodes]);
+
   const draftChanged = useMemo(() => {
     return nodes.some((node) => {
       const currentId = normalizeText(node.collectionId);
@@ -196,12 +279,33 @@ export default function ShopifyCollectionMapping() {
 
   async function onSaveMappings() {
     if (mappingBusy) return;
+
+    if (mappingValidation.orphanNodes.length > 0) {
+      setError(
+        `Cannot save mapping: ${mappingValidation.orphanNodes.length} node(s) reference a missing parent. Fix taxonomy first.`
+      );
+      return;
+    }
+
+    if (mappingValidation.missingCollectionNodes.length > 0) {
+      setError(
+        `Cannot save mapping: ${mappingValidation.missingCollectionNodes.length} node(s) point to missing Shopify collections.`
+      );
+      return;
+    }
+
     setMappingBusy(true);
     setError("");
     setWarning("");
     setStatus("Saving menu-to-collection mappings...");
 
     try {
+      if (mappingValidation.duplicateMappings.length > 0) {
+        setWarning(
+          `Warning: ${mappingValidation.duplicateMappings.length} collection(s) are mapped to multiple nodes. Save will continue.`
+        );
+      }
+
       const mappings = nodes.map((node) => ({
         nodeKey: node.nodeKey,
         collectionId: normalizeText(mappingDraft[node.nodeKey]) || null,
@@ -264,6 +368,8 @@ export default function ShopifyCollectionMapping() {
     const key = `${row.id}::${node.nodeKey}`;
     setToggleBusyKey(key);
     setError("");
+    setWarning("");
+    setStatus("");
 
     try {
       const response = await fetch("/api/shopify/collection-mapping", {
@@ -275,13 +381,16 @@ export default function ShopifyCollectionMapping() {
           productId: row.id,
           nodeKey: node.nodeKey,
           checked,
+          uncheckPolicy,
         }),
       });
 
       const json = (await response.json().catch(() => ({}))) as {
         ok?: boolean;
+        noop?: boolean;
         error?: string;
         warning?: string;
+        uncheckPolicy?: UncheckPolicy;
         product?: {
           id: string;
           title: string;
@@ -310,15 +419,43 @@ export default function ShopifyCollectionMapping() {
         )
       );
 
+      setLastFailedToggle(null);
+      if (json.noop) {
+        setStatus(normalizeText(json.warning) || "No Shopify update was needed.");
+      } else {
+        setStatus("Shopify collections updated live.");
+      }
       if (normalizeText(json.warning)) {
         setWarning(normalizeText(json.warning));
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       setError(message || "Failed to update checkbox state.");
+      setLastFailedToggle({
+        productId: row.id,
+        nodeKey: node.nodeKey,
+        checked,
+      });
+      setWarning("Last toggle failed. Use Retry Last Toggle after fixing connectivity/API issues.");
+      setStatus("");
     } finally {
       setToggleBusyKey("");
     }
+  }
+
+  function onRetryLastToggle() {
+    if (!lastFailedToggle) return;
+    const row = rows.find((item) => item.id === lastFailedToggle.productId);
+    const node =
+      mappedNodeColumns.find((item) => item.nodeKey === lastFailedToggle.nodeKey) ||
+      nodes.find((item) => item.nodeKey === lastFailedToggle.nodeKey);
+
+    if (!row || !node) {
+      setError("Retry is unavailable because the product row or mapped node is no longer visible. Click Refresh.");
+      return;
+    }
+
+    void onToggleNode(row, node, lastFailedToggle.checked);
   }
 
   return (
@@ -359,6 +496,13 @@ export default function ShopifyCollectionMapping() {
         {status ? <p className="status-msg">{status}</p> : null}
         {warning ? <p className="warn-msg">{warning}</p> : null}
         {error ? <p className="error-msg">{error}</p> : null}
+        {lastFailedToggle ? (
+          <p className="retry-wrap">
+            <button className="btn-base btn-outline" onClick={onRetryLastToggle} disabled={busy || mappingBusy || Boolean(toggleBusyKey)}>
+              Retry Last Toggle
+            </button>
+          </p>
+        ) : null}
       </section>
 
       <section className="card">
@@ -374,6 +518,41 @@ export default function ShopifyCollectionMapping() {
           </div>
         </div>
 
+        <div className="mapping-health">
+          <span className="pill good">Mapped: {mappingValidation.mappedCount}</span>
+          <span className="pill muted-pill">Unmapped (enabled): {mappingValidation.unmappedEnabledNodes.length}</span>
+          <span className="pill muted-pill">Disabled: {mappingValidation.disabledCount}</span>
+          {mappingValidation.duplicateMappings.length > 0 ? (
+            <span className="pill warn-pill">Duplicate mappings: {mappingValidation.duplicateMappings.length}</span>
+          ) : null}
+          {mappingValidation.missingCollectionNodes.length > 0 ? (
+            <span className="pill error-pill">Missing collections: {mappingValidation.missingCollectionNodes.length}</span>
+          ) : null}
+          {mappingValidation.orphanNodes.length > 0 ? (
+            <span className="pill error-pill">Orphan nodes: {mappingValidation.orphanNodes.length}</span>
+          ) : null}
+        </div>
+        {mappingValidation.duplicateMappings.length > 0 ? (
+          <p className="validation-note warn-note">
+            Duplicate mappings detected:{" "}
+            {mappingValidation.duplicateMappings
+              .slice(0, 5)
+              .map((item) => `${item.collectionTitle} x${item.count}`)
+              .join(", ")}
+            {mappingValidation.duplicateMappings.length > 5 ? "..." : ""}
+          </p>
+        ) : null}
+        {mappingValidation.missingCollectionNodes.length > 0 ? (
+          <p className="validation-note error-note">
+            Some nodes point to removed collections. Choose a valid collection before saving.
+          </p>
+        ) : null}
+        {mappingValidation.orphanNodes.length > 0 ? (
+          <p className="validation-note error-note">
+            Taxonomy contains orphan nodes (missing parent). Save is blocked until fixed.
+          </p>
+        ) : null}
+
         <div className="map-table-wrap">
           <table className="map-table">
             <thead>
@@ -381,16 +560,27 @@ export default function ShopifyCollectionMapping() {
                 <th>Enabled</th>
                 <th>Menu Node</th>
                 <th>Shopify Collection</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody>
               {nodes.length < 1 ? (
                 <tr>
-                  <td colSpan={3} className="muted">No menu nodes available.</td>
+                  <td colSpan={4} className="muted">No menu nodes available.</td>
                 </tr>
               ) : (
                 nodes.map((node) => {
                   const options = [{ id: "", title: "(Not mapped)", handle: "", productsCount: null }, ...collections];
+                  const nodeKey = node.nodeKey;
+                  const draftCollectionId = normalizeText(mappingDraft[nodeKey]);
+                  const draftEnabled = Boolean(enabledDraft[nodeKey]);
+                  const hasCollection = Boolean(draftCollectionId);
+                  const isMapped = draftEnabled && hasCollection && collectionById.has(draftCollectionId);
+                  const isUnmapped = draftEnabled && !hasCollection;
+                  const isMissingCollection = hasCollection && !collectionById.has(draftCollectionId);
+                  const isDuplicate = mappingValidation.duplicateNodeKeys.has(nodeKey);
+                  const isOrphan =
+                    draftEnabled && Boolean(normalizeText(node.parentKey)) && !nodeKeySet.has(normalizeText(node.parentKey));
                   return (
                     <tr key={node.nodeKey}>
                       <td>
@@ -428,6 +618,16 @@ export default function ShopifyCollectionMapping() {
                             </option>
                           ))}
                         </select>
+                      </td>
+                      <td>
+                        <div className="status-tags">
+                          {!draftEnabled ? <span className="mini-tag muted-tag">Disabled</span> : null}
+                          {isMapped ? <span className="mini-tag good-tag">Mapped</span> : null}
+                          {isUnmapped ? <span className="mini-tag muted-tag">Unmapped</span> : null}
+                          {isMissingCollection ? <span className="mini-tag error-tag">Missing Collection</span> : null}
+                          {isDuplicate ? <span className="mini-tag warn-tag">Duplicate</span> : null}
+                          {isOrphan ? <span className="mini-tag error-tag">Orphan Parent</span> : null}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -484,6 +684,18 @@ export default function ShopifyCollectionMapping() {
             <option value="asc">A-Z / Old-New</option>
             <option value="desc">Z-A / New-Old</option>
           </select>
+          <select value={uncheckPolicy} onChange={(e) => setUncheckPolicy(e.target.value as UncheckPolicy)}>
+            <option value="remove-descendants">Uncheck parent + descendants (recommended)</option>
+            <option value="keep-descendants">Uncheck only selected node</option>
+          </select>
+          <label className="inline-toggle">
+            <input
+              type="checkbox"
+              checked={showCompactColumns}
+              onChange={(e) => setShowCompactColumns(e.target.checked)}
+            />
+            Show SKU + Item Type
+          </label>
           <select
             value={String(pageSize)}
             onChange={(e) => {
@@ -528,6 +740,8 @@ export default function ShopifyCollectionMapping() {
                 <th>Picture</th>
                 <th>Title</th>
                 <th>UPC</th>
+                {showCompactColumns ? <th>SKU</th> : null}
+                {showCompactColumns ? <th>Item Type</th> : null}
                 {mappedNodeColumns.map((node) => (
                   <th key={node.nodeKey} title={formatNodeLabel(node)}>
                     {node.label}
@@ -538,7 +752,7 @@ export default function ShopifyCollectionMapping() {
             <tbody>
               {rows.length < 1 ? (
                 <tr>
-                  <td colSpan={3 + mappedNodeColumns.length} className="muted">
+                  <td colSpan={3 + (showCompactColumns ? 2 : 0) + mappedNodeColumns.length} className="muted">
                     No products found.
                   </td>
                 </tr>
@@ -560,17 +774,25 @@ export default function ShopifyCollectionMapping() {
                         <div className="title-cell">{row.title || row.handle || row.id}</div>
                       </td>
                       <td>{row.upc || "-"}</td>
+                      {showCompactColumns ? <td>{row.sku || "-"}</td> : null}
+                      {showCompactColumns ? <td>{row.itemType || "-"}</td> : null}
                       {mappedNodeColumns.map((node) => {
                         const key = `${row.id}::${node.nodeKey}`;
                         const cellBusy = toggleBusyKey === key;
                         return (
                           <td key={key} className="center">
-                            <input
-                              type="checkbox"
-                              checked={checked.has(node.nodeKey)}
-                              onChange={(e) => void onToggleNode(row, node, e.target.checked)}
-                              disabled={cellBusy || busy || mappingBusy}
-                            />
+                            {cellBusy ? (
+                              <span className="cell-spinner" title="Updating Shopify">
+                                ...
+                              </span>
+                            ) : (
+                              <input
+                                type="checkbox"
+                                checked={checked.has(node.nodeKey)}
+                                onChange={(e) => void onToggleNode(row, node, e.target.checked)}
+                                disabled={busy || mappingBusy}
+                              />
+                            )}
                           </td>
                         );
                       })}
@@ -668,6 +890,55 @@ export default function ShopifyCollectionMapping() {
           display: inline-flex;
           gap: 8px;
         }
+        .retry-wrap {
+          margin-top: 10px;
+        }
+        .mapping-health {
+          margin-top: 10px;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+        .pill {
+          border-radius: 999px;
+          padding: 5px 10px;
+          font-size: 0.72rem;
+          font-weight: 700;
+          border: 1px solid rgba(255, 255, 255, 0.24);
+          background: rgba(255, 255, 255, 0.08);
+          color: #e2e8f0;
+        }
+        .pill.good {
+          border-color: rgba(16, 185, 129, 0.45);
+          color: #a7f3d0;
+          background: rgba(16, 185, 129, 0.18);
+        }
+        .pill.warn-pill {
+          border-color: rgba(245, 158, 11, 0.45);
+          color: #fde68a;
+          background: rgba(245, 158, 11, 0.18);
+        }
+        .pill.error-pill {
+          border-color: rgba(248, 113, 113, 0.45);
+          color: #fecaca;
+          background: rgba(220, 38, 38, 0.18);
+        }
+        .validation-note {
+          margin-top: 8px;
+          font-size: 0.82rem;
+          border-radius: 8px;
+          padding: 7px 10px;
+        }
+        .warn-note {
+          border: 1px solid rgba(245, 158, 11, 0.35);
+          background: rgba(245, 158, 11, 0.14);
+          color: #fde68a;
+        }
+        .error-note {
+          border: 1px solid rgba(248, 113, 113, 0.35);
+          background: rgba(220, 38, 38, 0.14);
+          color: #fecaca;
+        }
         .filters {
           margin-top: 10px;
           display: grid;
@@ -682,6 +953,25 @@ export default function ShopifyCollectionMapping() {
           background: rgba(15, 23, 42, 0.74);
           color: #f8fafc;
           padding: 0 10px;
+        }
+        .inline-toggle {
+          min-height: 38px;
+          border-radius: 10px;
+          border: 1px solid rgba(255, 255, 255, 0.24);
+          background: rgba(15, 23, 42, 0.74);
+          color: #f8fafc;
+          padding: 0 10px;
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 0.85rem;
+          font-weight: 600;
+        }
+        .inline-toggle input {
+          width: 16px;
+          height: 16px;
+          min-height: 16px;
+          margin: 0;
         }
         .btn-base {
           min-height: 38px;
@@ -757,8 +1047,47 @@ export default function ShopifyCollectionMapping() {
         .node-cell {
           min-width: 280px;
         }
+        .status-tags {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 4px;
+        }
+        .mini-tag {
+          border-radius: 999px;
+          padding: 2px 8px;
+          font-size: 0.68rem;
+          font-weight: 700;
+          border: 1px solid rgba(255, 255, 255, 0.24);
+        }
+        .good-tag {
+          border-color: rgba(16, 185, 129, 0.45);
+          color: #a7f3d0;
+          background: rgba(16, 185, 129, 0.2);
+        }
+        .warn-tag {
+          border-color: rgba(245, 158, 11, 0.45);
+          color: #fde68a;
+          background: rgba(245, 158, 11, 0.2);
+        }
+        .error-tag {
+          border-color: rgba(248, 113, 113, 0.45);
+          color: #fecaca;
+          background: rgba(220, 38, 38, 0.2);
+        }
+        .muted-tag {
+          border-color: rgba(226, 232, 240, 0.28);
+          color: rgba(226, 232, 240, 0.72);
+          background: rgba(148, 163, 184, 0.12);
+        }
         .center {
           text-align: center;
+        }
+        .cell-spinner {
+          display: inline-flex;
+          min-width: 20px;
+          justify-content: center;
+          color: #fde68a;
+          font-weight: 800;
         }
         .thumb-btn {
           border: 0;
