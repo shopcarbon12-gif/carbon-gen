@@ -148,12 +148,21 @@ export default function BarcodeScanSessionPage() {
 
     let cancelled = false;
     let detectorBusy = false;
+    let lastDetectAt = 0;
     let detector: { detect(source: ImageBitmapSource): Promise<BarcodeDetectionLike[]> } | null = null;
 
     const scanFrame = async () => {
       if (cancelled) return;
       const video = videoRef.current;
       if (video && detector && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && !detectorBusy) {
+        const now = Date.now();
+        if (now - lastDetectAt < 120) {
+          rafRef.current = window.requestAnimationFrame(() => {
+            void scanFrame();
+          });
+          return;
+        }
+        lastDetectAt = now;
         detectorBusy = true;
         try {
           const detections = await detector.detect(video);
@@ -205,8 +214,8 @@ export default function BarcodeScanSessionPage() {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: "environment" },
-            width: { ideal: 3840 },
-            height: { ideal: 2160 },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
           },
           audio: false,
         });
@@ -279,8 +288,8 @@ export default function BarcodeScanSessionPage() {
         const decodeConstraints = {
           video: {
             facingMode: { ideal: "environment" },
-            width: { ideal: 3840 },
-            height: { ideal: 2160 },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
           },
         };
         const controls =
