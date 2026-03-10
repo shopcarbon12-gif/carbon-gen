@@ -1,4 +1,6 @@
 import { randomUUID } from "crypto";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "fs";
+import { dirname, resolve } from "path";
 
 type BarcodeHandoffSession = {
   id: string;
@@ -21,23 +23,69 @@ type ImageHandoffSession = {
 const SESSION_TTL_MS = 10 * 60 * 1000;
 const barcodeSessions = new Map<string, BarcodeHandoffSession>();
 const imageSessions = new Map<string, ImageHandoffSession>();
+const STORE_FILE_PATH = resolve(process.cwd(), ".bridge/runtime/handoff-store.json");
 
 function nowMs() {
   return Date.now();
 }
 
+function loadSessionsFromDisk() {
+  if (!existsSync(STORE_FILE_PATH)) return;
+  try {
+    const raw = readFileSync(STORE_FILE_PATH, "utf8");
+    const parsed = JSON.parse(raw) as {
+      barcodeSessions?: BarcodeHandoffSession[];
+      imageSessions?: ImageHandoffSession[];
+    };
+    barcodeSessions.clear();
+    imageSessions.clear();
+    for (const session of parsed.barcodeSessions || []) {
+      if (session?.id) barcodeSessions.set(session.id, session);
+    }
+    for (const session of parsed.imageSessions || []) {
+      if (session?.id) imageSessions.set(session.id, session);
+    }
+  } catch {
+    // Best-effort disk restore.
+  }
+}
+
+function persistSessionsToDisk() {
+  try {
+    mkdirSync(dirname(STORE_FILE_PATH), { recursive: true });
+    const payload = JSON.stringify(
+      {
+        barcodeSessions: [...barcodeSessions.values()],
+        imageSessions: [...imageSessions.values()],
+      },
+      null,
+      2
+    );
+    const tempPath = `${STORE_FILE_PATH}.tmp`;
+    writeFileSync(tempPath, payload, "utf8");
+    renameSync(tempPath, STORE_FILE_PATH);
+  } catch {
+    // Best-effort disk persistence.
+  }
+}
+
 function cleanupExpiredSessions() {
+  loadSessionsFromDisk();
   const now = nowMs();
+  let changed = false;
   for (const [id, session] of barcodeSessions.entries()) {
     if (session.expiresAt <= now) {
       barcodeSessions.delete(id);
+      changed = true;
     }
   }
   for (const [id, session] of imageSessions.entries()) {
     if (session.expiresAt <= now) {
       imageSessions.delete(id);
+      changed = true;
     }
   }
+  if (changed) persistSessionsToDisk();
 }
 
 export function createBarcodeHandoffSession() {
@@ -51,6 +99,7 @@ export function createBarcodeHandoffSession() {
     receivedAt: null,
   };
   barcodeSessions.set(session.id, session);
+  persistSessionsToDisk();
   return session;
 }
 
@@ -70,6 +119,7 @@ export function saveBarcodeToSession(sessionId: string, barcode: string) {
   if (!session) return null;
   session.barcode = barcode;
   session.receivedAt = nowMs();
+  persistSessionsToDisk();
   return session;
 }
 
@@ -78,6 +128,7 @@ export function consumeBarcodeFromSession(sessionId: string) {
   if (!session || !session.barcode) return null;
   const barcode = session.barcode;
   barcodeSessions.delete(sessionId);
+  persistSessionsToDisk();
   return barcode;
 }
 
@@ -94,6 +145,7 @@ export function createImageHandoffSession() {
     receivedAt: null,
   };
   imageSessions.set(session.id, session);
+  persistSessionsToDisk();
   return session;
 }
 
@@ -119,6 +171,7 @@ export function saveImageToSession(
   session.dataUrl = payload.dataUrl;
   session.receivedAt = nowMs();
   session.expiresAt = nowMs() + SESSION_TTL_MS;
+  persistSessionsToDisk();
   return session;
 }
 
@@ -136,5 +189,6 @@ export function consumeImageFromSession(sessionId: string) {
   session.dataUrl = null;
   session.receivedAt = null;
   session.expiresAt = nowMs() + SESSION_TTL_MS;
+  persistSessionsToDisk();
   return payload;
 }
