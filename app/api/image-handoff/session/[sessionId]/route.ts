@@ -8,11 +8,13 @@ import {
   saveImageToSession,
   isSessionConnected,
 } from "@/lib/image-handoff-store";
+import { getStoragePublicUrl, uploadBytesToStorage } from "@/lib/storageProvider";
 
 export const dynamic = "force-dynamic";
 
 const MAX_DATA_URL_LENGTH = 16_000_000;
 const MAX_IMAGE_BYTES = 12_000_000;
+const HANDOFF_UPLOAD_PREFIX = "bridge/image-handoff/uploads";
 
 function normalizeSessionId(value: string) {
   return String(value || "").trim();
@@ -56,6 +58,7 @@ export async function GET(
       sessionId,
       ready: true,
       ...consumed,
+      objectUrl: consumed.objectPath ? getStoragePublicUrl(consumed.objectPath) : null,
     });
   }
 
@@ -110,7 +113,25 @@ export async function POST(
       return NextResponse.json({ error: "Image is too large." }, { status: 413 });
     }
     const bytes = Buffer.from(await upload.arrayBuffer());
-    dataUrl = `data:${mimeType};base64,${bytes.toString("base64")}`;
+    const objectPath = `${HANDOFF_UPLOAD_PREFIX}/${encodeURIComponent(sessionId)}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${encodeURIComponent(fileName)}`;
+    await uploadBytesToStorage({
+      path: objectPath,
+      bytes,
+      contentType: mimeType,
+    });
+    const updated = await saveImageToSession(sessionId, {
+      fileName,
+      mimeType,
+      objectPath,
+    });
+    if (!updated) {
+      return NextResponse.json({ error: "Session expired or not found." }, { status: 404 });
+    }
+    return NextResponse.json({
+      ok: true,
+      sessionId,
+      pendingCount: Array.isArray((updated as any).images) ? (updated as any).images.length : null,
+    });
   } else {
     try {
       payload = await request.json();

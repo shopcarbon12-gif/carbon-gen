@@ -12,7 +12,8 @@ type ImageHandoffSession = {
     id: string;
     fileName: string;
     mimeType: string;
-    dataUrl: string;
+    dataUrl: string | null;
+    objectPath: string | null;
     receivedAt: number;
   }>;
 };
@@ -43,6 +44,7 @@ function normalizeSessionShape(raw: any): ImageHandoffSession | null {
             fileName: String(raw.fileName),
             mimeType: String(raw.mimeType),
             dataUrl: String(raw.dataUrl),
+            objectPath: null,
             receivedAt: Number(raw.receivedAt || Date.now()),
           },
         ]
@@ -52,14 +54,17 @@ function normalizeSessionShape(raw: any): ImageHandoffSession | null {
         .map((entry: any) => {
           const fileName = String(entry?.fileName || "").trim();
           const mimeType = String(entry?.mimeType || "").trim();
-          const dataUrl = String(entry?.dataUrl || "");
+          const dataUrl = entry?.dataUrl ? String(entry.dataUrl) : null;
+          const objectPath = entry?.objectPath ? String(entry.objectPath).trim() : null;
           const receivedAt = Number(entry?.receivedAt || 0);
-          if (!fileName || !mimeType || !dataUrl || !Number.isFinite(receivedAt)) return null;
+          if (!fileName || !mimeType || (!dataUrl && !objectPath) || !Number.isFinite(receivedAt))
+            return null;
           return {
             id: String(entry?.id || randomUUID()),
             fileName,
             mimeType,
             dataUrl,
+            objectPath,
             receivedAt,
           };
         })
@@ -183,15 +188,19 @@ export async function markImageSessionDisconnected(sessionId: string) {
 
 export async function saveImageToSession(
   sessionId: string,
-  payload: { fileName: string; mimeType: string; dataUrl: string }
+  payload: { fileName: string; mimeType: string; dataUrl?: string | null; objectPath?: string | null }
 ) {
   const session = await getImageHandoffSession(sessionId);
   if (!session) return null;
+  const normalizedDataUrl = payload.dataUrl ? String(payload.dataUrl) : null;
+  const normalizedObjectPath = payload.objectPath ? String(payload.objectPath).trim() : null;
+  if (!normalizedDataUrl && !normalizedObjectPath) return null;
   session.images.push({
     id: randomUUID(),
     fileName: payload.fileName,
     mimeType: payload.mimeType,
-    dataUrl: payload.dataUrl,
+    dataUrl: normalizedDataUrl,
+    objectPath: normalizedObjectPath,
     receivedAt: nowMs(),
   });
   if (session.images.length > 30) {
@@ -215,7 +224,8 @@ export async function consumeImageFromSession(sessionId: string) {
     id: next.id,
     fileName: next.fileName,
     mimeType: next.mimeType,
-    dataUrl: next.dataUrl,
+    dataUrl: next.dataUrl || null,
+    objectPath: next.objectPath || null,
   };
   session.expiresAt = nowMs() + SESSION_TTL_MS;
   try {

@@ -36,6 +36,7 @@ export default function ImageUploadSessionPage() {
   const cameraVideoRef = useRef<HTMLVideoElement | null>(null);
   const cameraStreamRef = useRef<MediaStream | null>(null);
   const uploadQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const closeAfterFlushRef = useRef(false);
   const [busy, setBusy] = useState(false);
   const [pendingUploads, setPendingUploads] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -93,6 +94,21 @@ export default function ImageUploadSessionPage() {
 
   useEffect(() => {
     setBusy(pendingUploads > 0);
+    if (pendingUploads === 0 && closeAfterFlushRef.current) {
+      closeAfterFlushRef.current = false;
+      if (typeof window !== "undefined") {
+        try {
+          window.close();
+        } catch {
+          // ignore
+        }
+        try {
+          window.location.replace("about:blank");
+        } catch {
+          // ignore
+        }
+      }
+    }
   }, [pendingUploads]);
 
   useEffect(() => {
@@ -223,6 +239,11 @@ export default function ImageUploadSessionPage() {
 
   function closeDeviceWindow() {
     void notifyDisconnected();
+    if (pendingUploads > 0) {
+      closeAfterFlushRef.current = true;
+      setStatus(`Finishing ${pendingUploads} upload(s) before close...`);
+      return;
+    }
     if (typeof window === "undefined") return;
     try {
       window.close();

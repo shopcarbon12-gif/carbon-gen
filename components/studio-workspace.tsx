@@ -202,6 +202,29 @@ function dataUrlToFile(dataUrl: string, fileName: string) {
   }
 }
 
+async function remotePayloadToFile(params: {
+  fileName: string;
+  dataUrl?: string | null;
+  objectUrl?: string | null;
+}): Promise<File | null> {
+  const fileName = String(params.fileName || "").trim() || "camera-upload.jpg";
+  const dataUrl = String(params.dataUrl || "");
+  if (dataUrl) {
+    return dataUrlToFile(dataUrl, fileName);
+  }
+  const objectUrl = String(params.objectUrl || "").trim();
+  if (!objectUrl) return null;
+  try {
+    const response = await fetch(objectUrl, { cache: "no-store" });
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    const mimeType = String(blob.type || "").toLowerCase();
+    return new File([blob], fileName, { type: mimeType.startsWith("image/") ? mimeType : "image/jpeg" });
+  } catch {
+    return null;
+  }
+}
+
 async function imageUrlToDataUrl(imageUrl: string) {
   const resp = await fetch(String(imageUrl || ""), { cache: "no-store" });
   if (!resp.ok) {
@@ -2691,15 +2714,25 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         idlePollCount = 0;
         const fileName = String(json?.fileName || "").trim() || "camera-upload.jpg";
         const dataUrl = String(json?.dataUrl || "");
+        const objectPath = String(json?.objectPath || "").trim();
+        const objectUrl = String(json?.objectUrl || "").trim();
         const payloadId = String(json?.id || "").trim();
         const payloadSignature =
-          payloadId || `${fileName}|${dataUrl.length}|${dataUrl.slice(0, 64)}|${dataUrl.slice(-64)}`;
+          payloadId ||
+          `${fileName}|${dataUrl.length}|${objectUrl}|${dataUrl.slice(0, 32)}|${dataUrl.slice(-32)}`;
         if (itemCameraRemoteLastPayloadRef.current === payloadSignature) {
           scheduleNextPoll(1300);
           return;
         }
-        const file = dataUrlToFile(dataUrl, fileName);
+        const file = await remotePayloadToFile({ fileName, dataUrl, objectUrl });
         if (!file) throw new Error("Received invalid image from remote camera.");
+        if (objectPath) {
+          void fetch("/api/storage/delete", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ path: objectPath }),
+          }).catch(() => undefined);
+        }
         itemCameraRemoteLastPayloadRef.current = payloadSignature;
         setItemFiles((prev) => mergeUniqueFiles(prev, [file]));
         setItemCameraRemoteError(null);
