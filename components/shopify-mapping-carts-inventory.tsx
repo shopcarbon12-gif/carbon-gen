@@ -2261,7 +2261,7 @@ export default function ShopifyMappingCartsInventory() {
           letter-spacing: 0.01em;
           text-transform: uppercase;
           font-size: 0.74rem;
-          color: #475569;
+          color: rgba(226, 232, 240, 0.8);
         }
         .status-chip {
           border: 1px solid #e2e8f0;
@@ -2327,7 +2327,7 @@ export default function ShopifyMappingCartsInventory() {
         .status-bar-message {
           font-size: 0.95rem;
           font-weight: 600;
-          color: #0f172a;
+          color: #f8fafc;
           line-height: 1.35;
           white-space: nowrap;
           overflow: hidden;
@@ -2335,7 +2335,7 @@ export default function ShopifyMappingCartsInventory() {
         }
         .status-bar-meta {
           font-size: 0.8rem;
-          color: #475569;
+          color: rgba(226, 232, 240, 0.86);
           line-height: 1.25;
           white-space: nowrap;
           overflow: hidden;
