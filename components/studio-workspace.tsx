@@ -5676,7 +5676,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             </select>
           </div>
           <div
-            className="dropzone"
+            className="dropzone model-registry-dropzone"
             data-integration-anchor="model-dropzone"
             role="button"
             tabIndex={0}
@@ -5722,7 +5722,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             <button className="ghost-btn" type="button" onClick={() => openInputPickerWithMask(modelPickerRef.current)}>
               Choose files
             </button>
-            <button className="ghost-btn" type="button" onClick={() => openInputPickerWithMask(modelFolderRef.current)}>
+            <button className="ghost-btn folder-picker-btn" type="button" onClick={() => openInputPickerWithMask(modelFolderRef.current)}>
               Choose folder
             </button>
           </div>
@@ -5736,7 +5736,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               </div>
             </div>
             {modelPreviewItems.length ? (
-              <div className="preview-grid model-registry-grid">
+              <div className="preview-grid model-registry-grid mobile-carousel">
                 {modelPreviewItems.map((file) => (
                   <div className="preview-card model-registry-preview-card" key={file.id}>
                     <img className="model-registry-preview-image" src={file.localUrl} alt={file.name} />
@@ -5831,7 +5831,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               {previousModelUploadsLoading ? (
                 <div className="muted centered">Loading previous uploads...</div>
               ) : sortedPreviousModelUploads.length ? (
-                <div className="preview-grid previous-upload-grid">
+                <div className="preview-grid previous-upload-grid mobile-carousel">
                   {sortedPreviousModelUploads.map((file) => {
                     const selected = addedPreviousPaths.has(file.path);
                     const previewSrc = String(file.previewUrl || file.url || "").trim();
@@ -5903,7 +5903,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             </div>
           ) : null}
           {!modelRegistryCollapsed && models.length ? (
-            <div className="model-list">
+            <div className="model-list mobile-carousel-row">
               {models.map((m) => (
                 <div className="model-pill" key={m.model_id}>
                   <div className="model-info">
@@ -5950,7 +5950,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               placeholder="Optional - extra styling instruction for accuracy"
             />
           </div>
-          <div className="row">
+          <div className="row barcode-row">
             <input
               suppressHydrationWarning
               value={itemBarcode}
@@ -5965,6 +5965,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               }}
               placeholder="Item barcode (required: 7-9 digits, or C + 6-8 digits)"
             />
+          </div>
+          <div className="row barcode-action-row">
             <button
               suppressHydrationWarning
               className="btn ghost mobile-camera-trigger"
@@ -6247,7 +6249,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             </div>
           ) : null}
           {dropboxListVisible && dropboxResults.length ? (
-            <div className="preview-grid item-catalog-grid">
+            <div className="preview-grid item-catalog-grid mobile-carousel">
               {dropboxResults.map((img) => {
                 const selected = selectedCatalogImages.some((i) => i.id === `dropbox:${img.id}`);
                 return (
@@ -6320,7 +6322,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             <button className="ghost-btn" type="button" onClick={() => openInputPickerWithMask(itemPickerRef.current)}>
               Choose files
             </button>
-            <button className="ghost-btn" type="button" onClick={() => openInputPickerWithMask(itemFolderRef.current)}>
+            <button className="ghost-btn folder-picker-btn" type="button" onClick={() => openInputPickerWithMask(itemFolderRef.current)}>
               Choose folder
             </button>
             <button
@@ -6375,7 +6377,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               <div className="muted centered">Selected pictures will appear here.</div>
             ) : null}
             {itemPreviews.length ? (
-              <div className="preview-grid item-selected-grid">
+              <div className="preview-grid item-selected-grid mobile-carousel">
                 {itemPreviews.map((file, idx) => (
                   <div className="preview-card item-device-selected-card" key={file.url}>
                     <img
@@ -6405,7 +6407,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               </div>
             ) : null}
             {selectedCatalogImages.length ? (
-              <div className="preview-grid item-selected-grid">
+              <div className="preview-grid item-selected-grid mobile-carousel">
                 {selectedCatalogImages.map((img) => (
                   <div className="preview-card item-catalog-selected-card" key={img.id}>
                     <img
@@ -6545,7 +6547,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                           ({product.handle}) | Barcode: {formatProductBarcodes(product)}
                         </span>
                       </div>
-                      <div className="preview-grid item-catalog-grid">
+                      <div className="preview-grid item-catalog-grid mobile-carousel">
                         {product.images.map((img) => {
                           const selectedEntry = selectedCatalogImages.find((i) => i.id === img.id);
                           const selected = Boolean(selectedEntry);
@@ -6951,7 +6953,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             Selected panels: {[...selectedPanels].sort((a, b) => a - b).join(", ")}.
             Generate runs exactly the selected panel(s).
           </div>
-          <div className="row">
+          <div className="row select-panels-row">
             <button
               className="btn ghost"
               type="button"
@@ -7194,7 +7196,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               </button>
             </div>
             <div
-              className="dropzone"
+              className="dropzone final-results-dropzone"
               role="button"
               tabIndex={0}
               onClick={() => openInputPickerWithMask(finalResultPickerRef.current)}
@@ -7228,12 +7230,12 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               <button className="ghost-btn" type="button" onClick={() => openInputPickerWithMask(finalResultPickerRef.current)}>
                 Choose files
               </button>
-              <button className="ghost-btn" type="button" onClick={() => openInputPickerWithMask(finalResultFolderRef.current)}>
+              <button className="ghost-btn folder-picker-btn" type="button" onClick={() => openInputPickerWithMask(finalResultFolderRef.current)}>
                 Choose folder
               </button>
             </div>
             {finalResultPreviews.length ? (
-              <div className="preview-grid final-extra-grid">
+              <div className="preview-grid final-extra-grid mobile-carousel">
                 {finalResultPreviews.map((file, idx) => (
                   <div className="preview-card split-result-card" key={file.id}>
                     <img className="split-result-image" src={file.url} alt={file.name} />
@@ -7252,7 +7254,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               </div>
             ) : null}
             {splitCrops.length ? (
-              <div className="preview-grid split-results-grid">
+              <div className="preview-grid split-results-grid mobile-carousel">
                 {splitCrops.map((crop) => {
                   const selected = selectedSplitKeys.includes(splitCropKey(crop));
                   return (
@@ -7383,7 +7385,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               <button className="ghost-btn" type="button" onClick={() => openInputPickerWithMask(pushPickerRef.current)}>
                 Choose files
               </button>
-              <button className="ghost-btn" type="button" onClick={() => openInputPickerWithMask(pushFolderRef.current)}>
+              <button className="ghost-btn folder-picker-btn" type="button" onClick={() => openInputPickerWithMask(pushFolderRef.current)}>
                 Choose folder
               </button>
               <span className="muted">{pushUploading ? "Uploading..." : ""}</span>
@@ -8177,10 +8179,21 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           gap: 6px;
         }
         .camera-btn-icon {
-          width: 14px;
-          height: 14px;
+          width: 18px;
+          height: 18px;
           display: block;
           flex-shrink: 0;
+        }
+        .barcode-action-row {
+          justify-content: center;
+          gap: 10px;
+        }
+        .select-panels-row {
+          justify-content: center;
+        }
+        .mobile-carousel,
+        .mobile-carousel-row {
+          scroll-behavior: smooth;
         }
         .barcode-scanner-overlay {
           position: fixed;
@@ -9617,18 +9630,19 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         }
         @media (max-width: 900px) {
           .page {
-            padding-left: var(--page-inline-gap);
-            padding-right: var(--page-inline-gap);
+            padding-left: var(--page-inline-gap) !important;
+            padding-right: var(--page-inline-gap) !important;
           }
           :global(.content.menu-open) .page {
-            padding-left: var(--page-inline-gap);
-            padding-right: var(--page-inline-gap);
+            padding-left: var(--page-inline-gap) !important;
+            padding-right: var(--page-inline-gap) !important;
           }
           .grid {
             margin-top: calc(var(--status-bar-height, 96px) - 40px);
-            width: 100%;
-            margin-right: 0;
-            padding-right: 0;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin-right: 0 !important;
+            padding-right: 0 !important;
           }
           .grid > .card {
             width: 100% !important;
@@ -9655,9 +9669,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           .barcode-row > input {
             flex: 1 1 100%;
           }
-          .barcode-row > .btn,
-          .barcode-row > .ghost-btn,
-          .barcode-row > button {
+          .barcode-action-row > .btn,
+          .barcode-action-row > .ghost-btn,
+          .barcode-action-row > button {
             flex: 1 1 calc(50% - 8px);
             min-width: 0;
           }
@@ -9705,16 +9719,25 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             align-self: start;
           }
           .registry-inline-models {
+            display: flex;
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            overflow-y: hidden;
+            scroll-snap-type: x mandatory;
             grid-column: 1 / -1;
             width: 100%;
             justify-content: flex-start;
             gap: 8px;
+            padding-bottom: 4px;
           }
           .model-pill {
-            width: 100%;
-            min-width: 0;
+            width: auto;
+            min-width: 138px;
+            max-width: 168px;
+            flex: 0 0 auto;
+            scroll-snap-align: start;
             justify-content: space-between;
-            padding: 8px 10px;
+            padding: 8px 8px;
             gap: 8px;
           }
           .model-info {
@@ -9737,12 +9760,57 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           }
           .status-bar {
             top: 78px;
-            left: var(--page-inline-gap);
-            right: var(--page-inline-gap);
+            left: var(--page-inline-gap) !important;
+            right: var(--page-inline-gap) !important;
           }
           :global(.content.menu-open) .status-bar {
-            left: var(--page-inline-gap);
-            right: var(--page-inline-gap);
+            left: var(--page-inline-gap) !important;
+            right: var(--page-inline-gap) !important;
+          }
+          .camera-btn-icon {
+            width: 22px;
+            height: 22px;
+          }
+          .model-registry-dropzone,
+          .final-results-dropzone,
+          .folder-picker-btn,
+          .chat-inline-fallback {
+            display: none !important;
+          }
+          .mobile-carousel,
+          .model-list.mobile-carousel-row {
+            display: flex !important;
+            flex-wrap: nowrap !important;
+            justify-content: flex-start !important;
+            overflow-x: auto;
+            overflow-y: hidden;
+            scroll-snap-type: x mandatory;
+            gap: 10px;
+            padding-bottom: 4px;
+          }
+          .mobile-carousel > .preview-card,
+          .mobile-carousel > .catalog-image,
+          .model-list.mobile-carousel-row > .model-pill {
+            flex: 0 0 auto;
+            scroll-snap-align: start;
+          }
+          .model-list.mobile-carousel-row > .model-pill {
+            min-width: 138px;
+            max-width: 168px;
+            width: auto;
+          }
+          .mobile-carousel > .catalog-image,
+          .item-catalog-grid.mobile-carousel > .preview-card {
+            width: 148px;
+          }
+          .item-selected-grid.mobile-carousel > .preview-card {
+            width: 168px;
+          }
+          .split-results-grid.mobile-carousel > .split-result-card,
+          .final-extra-grid.mobile-carousel > .split-result-card,
+          .previous-upload-grid.mobile-carousel > .previous-upload-card,
+          .model-registry-grid.mobile-carousel > .model-registry-preview-card {
+            width: 158px;
           }
           .hero {
             grid-template-columns: 1fr;
@@ -9767,6 +9835,12 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             justify-content: flex-start;
           }
           .model-registry-header-actions .ghost-btn {
+            flex: 1 1 calc(50% - 6px);
+            min-width: 0;
+          }
+          .barcode-action-row > .btn,
+          .barcode-action-row > .ghost-btn,
+          .barcode-action-row > button {
             flex: 1 1 calc(50% - 6px);
             min-width: 0;
           }
