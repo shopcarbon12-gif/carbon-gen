@@ -202,6 +202,20 @@ function dataUrlToFile(dataUrl: string, fileName: string) {
   }
 }
 
+async function imageUrlToDataUrl(imageUrl: string) {
+  const resp = await fetch(String(imageUrl || ""), { cache: "no-store" });
+  if (!resp.ok) {
+    throw new Error(`Failed to load generated flat image (status ${resp.status}).`);
+  }
+  const blob = await resp.blob();
+  return await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Failed to decode generated flat image."));
+    reader.readAsDataURL(blob);
+  });
+}
+
 function normalizePromptInstruction(value: unknown, maxLen = 1200) {
   return String(value || "")
     .replace(/\r/g, "")
@@ -1287,6 +1301,22 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     return text.length > maxLen ? `${text.slice(0, maxLen)}...` : text;
   }
 
+  function resolveApiErrorMessage(errorValue: unknown, fallback: string) {
+    if (typeof errorValue === "string" && errorValue.trim()) return errorValue.trim();
+    if (errorValue && typeof errorValue === "object") {
+      const errorObj = errorValue as Record<string, unknown>;
+      if (typeof errorObj.message === "string" && errorObj.message.trim()) {
+        return errorObj.message.trim();
+      }
+      if (typeof errorObj.code === "string" && errorObj.code.trim()) {
+        return errorObj.code.trim();
+      }
+      const details = shortErrorDetails(errorObj);
+      if (details) return details;
+    }
+    return fallback;
+  }
+
   function isModerationBlockedErrorMessage(value: unknown) {
     const text = String(value || "");
     return (
@@ -1339,7 +1369,18 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   async function parseJsonResponse(resp: Response, endpoint?: string) {
     const contentType = resp.headers.get("content-type") || "";
     if (contentType.includes("application/json")) {
-      return resp.json();
+      const text = await resp.text();
+      try {
+        return text ? JSON.parse(text) : {};
+      } catch (e: any) {
+        const snippet = text.slice(0, 240).replace(/\s+/g, " ").trim();
+        const where = endpoint ? ` (${endpoint})` : "";
+        throw new Error(
+          `Server returned invalid JSON${where} (status ${resp.status}). ${
+            e?.message || "JSON parse failed"
+          }${snippet ? ` Snippet: ${snippet}` : ""}`
+        );
+      }
     }
     const text = await resp.text();
     const snippet = text.slice(0, 200).replace(/\s+/g, " ").trim();
@@ -1640,10 +1681,13 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         throw new Error(details ? `${baseMsg}: ${details}` : baseMsg);
       }
 
-      const b64 = typeof json?.imageBase64 === "string" ? json.imageBase64 : "";
-      if (!b64) {
-        throw new Error("No front/back image returned from OpenAI.");
+      let b64 = typeof json?.imageBase64 === "string" ? json.imageBase64 : "";
+      if (!b64 && typeof json?.imageUrl === "string" && json.imageUrl.trim()) {
+        const dataUrl = await imageUrlToDataUrl(json.imageUrl.trim());
+        const match = String(dataUrl || "").match(/^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/);
+        b64 = String(match?.[1] || "").trim();
       }
+      if (!b64) throw new Error("No front/back image returned from OpenAI.");
 
       setItemFlatCompositeBase64(b64);
       const splitImages = await splitFlatFrontBackToThreeByFour(b64, itemBarcodeSaved.trim());
@@ -2502,8 +2546,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       setItemFiles((prev) => mergeUniqueFiles(prev, [file]));
       setStatus(`Camera upload received: ${fileName}`);
       setError(null);
-      setItemCameraCaptureOpen(false);
-      stopItemCameraCaptureSession();
     } catch (e: any) {
       setItemCameraCaptureError(e?.message || "Failed to capture photo.");
     } finally {
@@ -2568,12 +2610,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         const file = dataUrlToFile(dataUrl, fileName);
         if (!file) throw new Error("Received invalid image from remote camera.");
         setItemFiles((prev) => mergeUniqueFiles(prev, [file]));
-        setItemCameraRemoteOpen(false);
-        setItemCameraChooserOpen(false);
         setItemCameraRemoteError(null);
         setError(null);
         setStatus(`Camera upload received: ${file.name}`);
-        stopItemCameraRemotePolling();
       } catch (e: any) {
         const message = e?.message || "Remote camera polling failed.";
         setItemCameraRemoteError(message);
@@ -3817,8 +3856,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       "- If any item ref conflicts with model identity, ignore the human and keep only garment details.",
       "- Identity source priority is absolute: MODEL refs first and only for person identity; item refs are garment-only.",
       `- LOCKED ITEM TYPE PRIORITY: section 0.5 item type is "${promptItemType || args.itemType || "apparel item"}".`,
-      "- When references include multiple garment categories, prioritize and render only details that match the locked item type.",
-      "- Ignore conflicting category cues that do not match the locked item type.",
+      "- When full-look references are present, preserve the full outfit structure (top, bottom, shoes, accessories) across frames.",
+      "- Use isolated item references only to refine the locked item details; do not restyle or replace non-target full-look pieces.",
       "- Use item refs only for product attributes: shape, color, material, construction, and details.",
       "- If a full-body outfit image is provided, treat it as a single full-look reference and preserve the whole look structure (top, bottom, shoes, accessories).",
       "- If full-look + separate item images are both provided, match each extra item to the corresponding part in the full look and replace only those matched parts.",
@@ -3878,6 +3917,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       "Fail-closed lock: if exact locked model identity and exact locked item look cannot both be shown, do not output an image.",
       "Outfit continuity lock: both left and right frames must represent the same selected outfit/look from item references (unless right frame is an intentional close-up of that same look).",
       "No outfit swaps, no colorway swaps, no garment substitutions across frames.",
+      "No styling reinterpretation lock: do not add styling changes that were not explicitly present in item references.",
       "GLOBAL BACK-DESIGN HARD LOCK (ALL GENDERS, ALL PANELS, ALL POSES):",
       "- For any back-facing frame, never invent, redesign, or hallucinate back graphics/logos/prints.",
       "- If item references include a clear back design, reproduce that exact back design only.",
@@ -4142,7 +4182,10 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               }
 
               const details = shortErrorDetails(json?.details);
-              const baseMsg = json?.error || `Panel ${panelNumber} generation failed`;
+              const baseMsg = resolveApiErrorMessage(
+                json?.error,
+                `Panel ${panelNumber} generation failed`
+              );
               throw new Error(details ? `${baseMsg}: ${details}` : baseMsg);
             }
             if (json?.degraded) {
@@ -4169,32 +4212,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             const primary = await requestOnce();
             return { panelNumber: primary.panelNumber, b64: primary.b64 };
           } catch (err) {
-            const message = String((err as any)?.message || err || "");
-            const looksModeration = isModerationBlockedErrorMessage(message);
-            const fallbackEligible = looksModeration && (panelNumber === 3 || panelNumber === 4);
-
-            if (!fallbackEligible) throw err;
-
-            const fallbackFromPanel = panelNumber === 3 ? 1 : 2;
-            const [fallbackPoseA, fallbackPoseB] = getPanelPosePair(
-              selectedModel.gender,
-              fallbackFromPanel
-            );
-            setStatus(`Panel ${panelNumber}: generating (fallback from panel ${fallbackFromPanel})`);
-
-            const fallback = await requestOnce({
-              poseA: fallbackPoseA,
-              poseB: fallbackPoseB,
-              panelNumberForLocks: fallbackFromPanel,
-              forceActivePoseOverride: true,
-              panelLabelSuffix: `(fallback from panel ${fallbackFromPanel})`,
-            });
-
-            return {
-              panelNumber: fallback.panelNumber,
-              b64: fallback.b64,
-              usedFallbackFromPanel: fallbackFromPanel,
-            };
+            throw err;
           }
         } finally {
           setPanelsInFlight((prev) => prev.filter((id) => id !== panelNumber));
@@ -5859,6 +5877,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                 <div className="muted centered">
                   Scan this QR code on your phone, take a photo, and it will appear here automatically.
                 </div>
+                <div className="muted centered">Keep taking photos on your phone. Each one is added to this session.</div>
                 {itemCameraRemoteError ? (
                   <div className="barcode-scanner-error">{itemCameraRemoteError}</div>
                 ) : null}
@@ -5903,6 +5922,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                     {itemCameraCaptureBusy ? "Capturing..." : "Capture Photo"}
                   </button>
                 </div>
+                <div className="muted centered">You can capture multiple photos. Click Close when finished.</div>
                 {itemCameraCaptureError ? (
                   <div className="barcode-scanner-error">{itemCameraCaptureError}</div>
                 ) : null}
