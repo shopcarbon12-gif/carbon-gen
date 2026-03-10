@@ -124,7 +124,7 @@ const DEFAULT_FILTERS: CartFilters = {
 const PAGE_SIZE_OPTIONS = [20, 50, 75, 100, 200, 500] as const;
 
 type TaskTone = "idle" | "running" | "success" | "error";
-type SortField = "title" | "category" | "brand" | "sku" | "stock" | "price" | "variations" | "details";
+type SortField = "title" | "category" | "brand" | "upc" | "stock" | "price" | "variations" | "details";
 type SortDir = "asc" | "desc";
 type SortState = { field: SortField; dir: SortDir } | null;
 
@@ -167,12 +167,19 @@ function sanitizeUiErrorMessage(raw: unknown, fallback: string) {
   return text;
 }
 
+function getParentUpc(parent: CartInventoryParentRow) {
+  const firstVariantUpc = normalizeText(
+    parent.variants.find((variant) => normalizeText(variant.upc))?.upc
+  );
+  return firstVariantUpc || "-";
+}
+
 function compareField(a: CartInventoryParentRow, b: CartInventoryParentRow, field: SortField): number {
   switch (field) {
     case "title": return (a.title || "").localeCompare(b.title || "", undefined, { numeric: true, sensitivity: "base" });
     case "category": return (a.category || "").localeCompare(b.category || "", undefined, { numeric: true, sensitivity: "base" });
     case "brand": return (a.brand || "").localeCompare(b.brand || "", undefined, { numeric: true, sensitivity: "base" });
-    case "sku": return (a.sku || "").localeCompare(b.sku || "", undefined, { numeric: true, sensitivity: "base" });
+    case "upc": return getParentUpc(a).localeCompare(getParentUpc(b), undefined, { numeric: true, sensitivity: "base" });
     case "stock": return (a.stock ?? -Infinity) - (b.stock ?? -Infinity);
     case "price": return (a.price ?? -Infinity) - (b.price ?? -Infinity);
     case "variations": return (a.variations ?? 0) - (b.variations ?? 0);
@@ -1239,8 +1246,55 @@ export default function ShopifyMappingCartsInventory() {
     return <img src="/badge-error.png" alt="Error" className="sync-badge-img" />;
   }
 
+  const statusTone: "error" | "working" | "success" | "idle" = error
+    ? "error"
+    : task.tone === "running"
+      ? "working"
+      : task.tone === "error"
+        ? "error"
+        : status
+          ? "success"
+          : "idle";
+  const statusHeadline =
+    error ||
+    status ||
+    (statusTone === "working" ? task.label || "Action in progress..." : "Ready.");
+
+  function resetTaskProgressDisplay() {
+    setStatus("");
+    setWarning("");
+    setError("");
+    setTask({ label: "Ready", progress: 0, tone: "idle" });
+  }
+
   return (
     <main className="page">
+      <section className={`card status-bar ${statusTone}`} aria-live="polite" aria-atomic="true">
+        <div className="status-bar-head">
+          <div className="status-bar-title">Progress</div>
+          <div className="status-bar-head-actions">
+            <button className="status-chip status-chip-fixed idle status-reset-btn" type="button" onClick={resetTaskProgressDisplay}>
+              Reset
+            </button>
+            <button className={`status-chip status-chip-fixed status-state-btn ${statusTone}`} type="button" disabled>
+              {statusTone === "error"
+                ? "Error"
+                : statusTone === "working"
+                  ? "Working"
+                  : statusTone === "success"
+                    ? "Done"
+                    : "Idle"}
+            </button>
+          </div>
+        </div>
+        <div className="status-bar-message">
+          {statusTone === "error" ? `Error: ${statusHeadline}` : statusHeadline}
+        </div>
+        <div className="status-bar-meta">
+          {warning || (statusTone === "working" ? "Task in progress..." : "No active tasks.")}
+        </div>
+      </section>
+      <div className="page-content">
       <nav className="quick-nav" aria-label="Inventory sections">
         <Link href="/studio/shopify-mapping-inventory/workset" className="quick-chip">
           Workset
@@ -1561,10 +1615,10 @@ export default function ShopifyMappingCartsInventory() {
                   <span className="sort-mark">{getSortMark("brand")}</span>
                 </button>
               </th>
-              <th aria-sort={getAriaSort("sku")}>
-                <button type="button" className={`sort-btn ${sortState?.field === "sku" ? "active" : ""}`} onClick={() => toggleSort("sku")}>
-                  <span>SKU</span>
-                  <span className="sort-mark">{getSortMark("sku")}</span>
+              <th aria-sort={getAriaSort("upc")}>
+                <button type="button" className={`sort-btn ${sortState?.field === "upc" ? "active" : ""}`} onClick={() => toggleSort("upc")}>
+                  <span>UPC</span>
+                  <span className="sort-mark">{getSortMark("upc")}</span>
                 </button>
               </th>
               <th aria-sort={getAriaSort("stock")}>
@@ -1634,7 +1688,7 @@ export default function ShopifyMappingCartsInventory() {
                     </td>
                     <td>{parent.category || "-"}</td>
                     <td>{parent.brand || "-"}</td>
-                    <td>{parent.sku}</td>
+                    <td>{getParentUpc(parent)}</td>
                     <td>{formatQty(parent.stock)}</td>
                     <td>{formatPrice(parent.price)}</td>
                     <td>{parent.variations}</td>
@@ -2117,19 +2171,138 @@ export default function ShopifyMappingCartsInventory() {
           </div>
         </div>
       ) : null}
+      </div>
 
       <style jsx>{`
         .page {
+          --status-bar-height: 154px;
+          --page-inline-gap: 13px;
           --detail-thumb-w: 56px;
           --detail-thumb-h: 80px;
           --parent-thumb-w: 40px;
           --parent-thumb-h: 58px;
           max-width: 1220px;
           margin: 0 auto;
-          padding: 134px 8px 26px;
+          padding: calc(var(--integration-panel-top, 89px) - 58px) 8px 26px;
           display: grid;
           gap: 12px;
           color: #f8fafc;
+        }
+        .status-bar {
+          position: fixed;
+          top: var(--integration-panel-top, 89px);
+          left: calc(var(--page-inline-gap) + var(--page-edge-gap, 13px));
+          right: calc(
+            var(
+              --content-right-pad,
+              calc(
+                var(--integration-panel-width, 255px) + var(--page-edge-gap, 13px) +
+                  var(--content-api-gap, 13px)
+              )
+            )
+          );
+          z-index: 40;
+          height: var(--status-bar-height, 154px);
+          min-height: var(--status-bar-height, 154px);
+          max-height: var(--status-bar-height, 154px);
+          overflow: hidden;
+          will-change: right, left;
+          transition:
+            left var(--chat-expand-duration, 220ms) var(--chat-expand-ease, cubic-bezier(0.22, 1, 0.36, 1)),
+            right var(--chat-expand-duration, 220ms) var(--chat-expand-ease, cubic-bezier(0.22, 1, 0.36, 1));
+        }
+        :global(.content.menu-open) .status-bar {
+          left: 280px;
+        }
+        :global(.content.no-integration-panel) .status-bar {
+          right: var(--page-inline-gap);
+        }
+        .page-content {
+          margin-top: calc(var(--status-bar-height, 154px) + 13px);
+          display: grid;
+          gap: 12px;
+        }
+        .status-bar-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+        }
+        .status-bar-head-actions {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .status-bar-title {
+          font-weight: 700;
+          letter-spacing: 0.01em;
+          text-transform: uppercase;
+          font-size: 0.74rem;
+          color: rgba(226, 232, 240, 0.8);
+        }
+        .status-chip {
+          border: 1px solid rgba(255, 255, 255, 0.35);
+          border-radius: 10px;
+          padding: 3px 9px;
+          font-size: 0.72rem;
+          font-weight: 700;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          white-space: nowrap;
+        }
+        .status-chip-fixed {
+          min-height: 30px;
+          min-width: 72px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .status-chip.idle {
+          color: rgba(226, 232, 240, 0.96);
+          border-color: rgba(255, 255, 255, 0.52);
+          background: rgba(255, 255, 255, 0.14);
+        }
+        .status-chip.working {
+          color: #f8fafc;
+          border-color: rgba(253, 186, 116, 0.85);
+          background: rgba(245, 158, 11, 0.2);
+        }
+        .status-chip.success {
+          color: #dcfce7;
+          border-color: rgba(134, 239, 172, 0.85);
+          background: rgba(22, 163, 74, 0.22);
+        }
+        .status-chip.error {
+          color: #fecaca;
+          border-color: rgba(252, 165, 165, 0.9);
+          background: rgba(220, 38, 38, 0.2);
+        }
+        .status-bar.idle {
+          border-color: rgba(255, 255, 255, 0.22);
+        }
+        .status-bar.working {
+          border-color: rgba(250, 204, 21, 0.75);
+          box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.15), 0 8px 24px rgba(0, 0, 0, 0.24);
+        }
+        .status-bar.success {
+          border-color: rgba(134, 239, 172, 0.75);
+          box-shadow: 0 0 0 1px rgba(134, 239, 172, 0.14), 0 8px 24px rgba(0, 0, 0, 0.2);
+        }
+        .status-bar.error {
+          border-color: rgba(252, 165, 165, 0.82);
+          box-shadow: 0 0 0 1px rgba(252, 165, 165, 0.16), 0 8px 24px rgba(0, 0, 0, 0.22);
+        }
+        .status-bar-message {
+          font-size: 0.95rem;
+          font-weight: 600;
+          color: #f8fafc;
+          line-height: 1.35;
+        }
+        .status-bar-meta {
+          font-size: 0.8rem;
+          color: rgba(226, 232, 240, 0.86);
+          line-height: 1.25;
+          word-break: break-word;
         }
         .card { padding: 18px; display: grid; gap: 10px; }
         .quick-nav { display: flex; flex-wrap: wrap; gap: 8px; }
