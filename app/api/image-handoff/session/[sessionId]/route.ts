@@ -48,6 +48,7 @@ export async function GET(
         sessionId,
         ready: false,
         connected: isSessionConnected(existing),
+        pendingCount: Array.isArray((existing as any).images) ? (existing as any).images.length : 0,
         expiresAt: new Date(existing.expiresAt).toISOString(),
       });
     }
@@ -65,8 +66,9 @@ export async function GET(
 
   return NextResponse.json({
     sessionId,
-    ready: Boolean(existing.dataUrl),
+    ready: Array.isArray((existing as any).images) ? (existing as any).images.length > 0 : false,
     connected: isSessionConnected(existing),
+    pendingCount: Array.isArray((existing as any).images) ? (existing as any).images.length : 0,
     expiresAt: new Date(existing.expiresAt).toISOString(),
   });
 }
@@ -171,6 +173,6 @@ export async function POST(
   return NextResponse.json({
     ok: true,
     sessionId,
-    receivedAt: updated.receivedAt ? new Date(updated.receivedAt).toISOString() : null,
+    pendingCount: Array.isArray((updated as any).images) ? (updated as any).images.length : null,
   });
 }

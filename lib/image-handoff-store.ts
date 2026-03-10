@@ -8,10 +8,13 @@ type ImageHandoffSession = {
   expiresAt: number;
   connectedAt: number | null;
   disconnectedAt: number | null;
-  fileName: string | null;
-  mimeType: string | null;
-  dataUrl: string | null;
-  receivedAt: number | null;
+  images: Array<{
+    id: string;
+    fileName: string;
+    mimeType: string;
+    dataUrl: string;
+    receivedAt: number;
+  }>;
 };
 
 const SESSION_TTL_MS = 10 * 60 * 1000;
@@ -30,6 +33,48 @@ function cloneSession(session: ImageHandoffSession) {
   return JSON.parse(JSON.stringify(session)) as ImageHandoffSession;
 }
 
+function normalizeSessionShape(raw: any): ImageHandoffSession | null {
+  if (!raw?.id) return null;
+  const legacyImage =
+    raw?.fileName && raw?.mimeType && raw?.dataUrl
+      ? [
+          {
+            id: randomUUID(),
+            fileName: String(raw.fileName),
+            mimeType: String(raw.mimeType),
+            dataUrl: String(raw.dataUrl),
+            receivedAt: Number(raw.receivedAt || Date.now()),
+          },
+        ]
+      : [];
+  const images = Array.isArray(raw?.images)
+    ? raw.images
+        .map((entry: any) => {
+          const fileName = String(entry?.fileName || "").trim();
+          const mimeType = String(entry?.mimeType || "").trim();
+          const dataUrl = String(entry?.dataUrl || "");
+          const receivedAt = Number(entry?.receivedAt || 0);
+          if (!fileName || !mimeType || !dataUrl || !Number.isFinite(receivedAt)) return null;
+          return {
+            id: String(entry?.id || randomUUID()),
+            fileName,
+            mimeType,
+            dataUrl,
+            receivedAt,
+          };
+        })
+        .filter(Boolean)
+    : legacyImage;
+  return {
+    id: String(raw.id),
+    createdAt: Number(raw.createdAt || Date.now()),
+    expiresAt: Number(raw.expiresAt || Date.now() + SESSION_TTL_MS),
+    connectedAt: raw.connectedAt ? Number(raw.connectedAt) : null,
+    disconnectedAt: raw.disconnectedAt ? Number(raw.disconnectedAt) : null,
+    images,
+  };
+}
+
 async function writeSessionToStorage(session: ImageHandoffSession) {
   const bytes = new TextEncoder().encode(JSON.stringify(session));
   await uploadBytesToStorage({
@@ -44,8 +89,7 @@ async function readSessionFromStorage(sessionId: string): Promise<ImageHandoffSe
   if (!normalizedSessionId) return null;
   const { body } = await downloadStorageObject(getSessionPath(normalizedSessionId));
   const text = Buffer.from(body).toString("utf8");
-  const parsed = JSON.parse(text) as ImageHandoffSession;
-  if (!parsed?.id) return null;
+  const parsed = normalizeSessionShape(JSON.parse(text));
   return parsed;
 }
 
@@ -81,10 +125,7 @@ export async function createImageHandoffSession() {
     expiresAt: createdAt + SESSION_TTL_MS,
     connectedAt: null,
     disconnectedAt: null,
-    fileName: null,
-    mimeType: null,
-    dataUrl: null,
-    receivedAt: null,
+    images: [],
   };
   try {
     await writeSessionToStorage(session);
@@ -146,10 +187,16 @@ export async function saveImageToSession(
 ) {
   const session = await getImageHandoffSession(sessionId);
   if (!session) return null;
-  session.fileName = payload.fileName;
-  session.mimeType = payload.mimeType;
-  session.dataUrl = payload.dataUrl;
-  session.receivedAt = nowMs();
+  session.images.push({
+    id: randomUUID(),
+    fileName: payload.fileName,
+    mimeType: payload.mimeType,
+    dataUrl: payload.dataUrl,
+    receivedAt: nowMs(),
+  });
+  if (session.images.length > 30) {
+    session.images = session.images.slice(-30);
+  }
   session.expiresAt = nowMs() + SESSION_TTL_MS;
   try {
     await writeSessionToStorage(session);
@@ -161,16 +208,15 @@ export async function saveImageToSession(
 
 export async function consumeImageFromSession(sessionId: string) {
   const session = await getImageHandoffSession(sessionId);
-  if (!session || !session.dataUrl || !session.fileName || !session.mimeType) return null;
+  if (!session || !session.images.length) return null;
+  const next = session.images.shift();
+  if (!next) return null;
   const payload = {
-    fileName: session.fileName,
-    mimeType: session.mimeType,
-    dataUrl: session.dataUrl,
+    id: next.id,
+    fileName: next.fileName,
+    mimeType: next.mimeType,
+    dataUrl: next.dataUrl,
   };
-  session.fileName = null;
-  session.mimeType = null;
-  session.dataUrl = null;
-  session.receivedAt = null;
   session.expiresAt = nowMs() + SESSION_TTL_MS;
   try {
     await writeSessionToStorage(session);

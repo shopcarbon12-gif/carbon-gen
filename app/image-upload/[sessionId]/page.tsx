@@ -35,7 +35,9 @@ export default function ImageUploadSessionPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraVideoRef = useRef<HTMLVideoElement | null>(null);
   const cameraStreamRef = useRef<MediaStream | null>(null);
+  const uploadQueueRef = useRef<Promise<void>>(Promise.resolve());
   const [busy, setBusy] = useState(false);
+  const [pendingUploads, setPendingUploads] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [cameraBusy, setCameraBusy] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -88,6 +90,10 @@ export default function ImageUploadSessionPage() {
       window.removeEventListener("pagehide", onPageHide);
     };
   }, [notifyDisconnected]);
+
+  useEffect(() => {
+    setBusy(pendingUploads > 0);
+  }, [pendingUploads]);
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof navigator === "undefined") return;
@@ -145,12 +151,11 @@ export default function ImageUploadSessionPage() {
     };
   }, []);
 
-  async function submitFile(file: File) {
+  async function uploadOneFile(file: File) {
     if (!sessionId) {
       setError("Missing session id.");
       return;
     }
-    setBusy(true);
     setError(null);
     try {
       if (!String(file.type || "").toLowerCase().startsWith("image/")) {
@@ -169,9 +174,19 @@ export default function ImageUploadSessionPage() {
       setStatus("Image sent. You can keep sending photos or close this page.");
     } catch (e: any) {
       setError(e?.message || "Failed to send image.");
-    } finally {
-      setBusy(false);
     }
+  }
+
+  function submitFile(file: File) {
+    setPendingUploads((count) => count + 1);
+    uploadQueueRef.current = uploadQueueRef.current
+      .then(() => uploadOneFile(file))
+      .catch(() => {
+        // Error already surfaced by uploadOneFile.
+      })
+      .finally(() => {
+        setPendingUploads((count) => Math.max(0, count - 1));
+      });
   }
 
   async function captureAndSendPhoto() {
@@ -186,7 +201,6 @@ export default function ImageUploadSessionPage() {
       setError("Camera is still warming up. Try again.");
       return;
     }
-    setBusy(true);
     setError(null);
     try {
       const canvas = document.createElement("canvas");
@@ -200,10 +214,10 @@ export default function ImageUploadSessionPage() {
       });
       if (!blob) throw new Error("Failed to capture photo.");
       const file = new File([blob], `camera-${Date.now()}.jpg`, { type: "image/jpeg" });
-      await submitFile(file);
+      submitFile(file);
+      setStatus("Capture queued. Uploading...");
     } catch (e: any) {
       setError(e?.message || "Failed to capture photo.");
-      setBusy(false);
     }
   }
 
@@ -214,11 +228,6 @@ export default function ImageUploadSessionPage() {
       window.close();
     } catch {
       // Ignore close errors and use fallback navigation.
-    }
-    try {
-      window.location.replace("about:blank");
-    } catch {
-      // Ignore fallback navigation errors.
     }
   }
 
@@ -271,7 +280,7 @@ export default function ImageUploadSessionPage() {
             const file = event.currentTarget.files?.[0];
             event.currentTarget.value = "";
             if (!file) return;
-            void submitFile(file);
+            submitFile(file);
           }}
         />
         <input
@@ -283,12 +292,12 @@ export default function ImageUploadSessionPage() {
             const file = event.currentTarget.files?.[0];
             event.currentTarget.value = "";
             if (!file) return;
-            void submitFile(file);
+            submitFile(file);
           }}
         />
         <button
           type="button"
-          disabled={busy || cameraBusy || !cameraReady}
+          disabled={cameraBusy || !cameraReady}
           onClick={() => {
             void captureAndSendPhoto();
           }}
@@ -302,11 +311,10 @@ export default function ImageUploadSessionPage() {
             cursor: "pointer",
           }}
         >
-          {busy ? "Sending..." : cameraBusy ? "Opening camera..." : "Capture & Send"}
+          {pendingUploads > 0 ? `Sending... (${pendingUploads})` : cameraBusy ? "Opening camera..." : "Capture & Send"}
         </button>
         <button
           type="button"
-          disabled={busy}
           onClick={() => fileInputRef.current?.click()}
           style={{
             width: "100%",
@@ -318,7 +326,7 @@ export default function ImageUploadSessionPage() {
             cursor: "pointer",
           }}
         >
-          {busy ? "Sending..." : "Choose Existing Photo"}
+          {pendingUploads > 0 ? `Sending... (${pendingUploads})` : "Choose Existing Photo"}
         </button>
         <button
           type="button"

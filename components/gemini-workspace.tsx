@@ -2690,7 +2690,9 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
         idlePollCount = 0;
         const fileName = String(json?.fileName || "").trim() || "camera-upload.jpg";
         const dataUrl = String(json?.dataUrl || "");
-        const payloadSignature = `${fileName}|${dataUrl.length}|${dataUrl.slice(0, 64)}|${dataUrl.slice(-64)}`;
+        const payloadId = String(json?.id || "").trim();
+        const payloadSignature =
+          payloadId || `${fileName}|${dataUrl.length}|${dataUrl.slice(0, 64)}|${dataUrl.slice(-64)}`;
         if (itemCameraRemoteLastPayloadRef.current === payloadSignature) {
           scheduleNextPoll(1300);
           return;
@@ -9383,8 +9385,8 @@ function buildMasterPanelPrompt(
           place-items: center;
           z-index: 1000;
           padding: 16px;
-          backdrop-filter: none !important;
-          -webkit-backdrop-filter: none !important;
+          backdrop-filter: blur(12px) saturate(1.05);
+          -webkit-backdrop-filter: blur(12px) saturate(1.05);
         }
         .preview-modal {
           width: min(1100px, 95vw);
@@ -9459,8 +9461,6 @@ function buildMasterPanelPrompt(
           transform: translateY(-1px);
         }
         .preview-modal {
-          backdrop-filter: none !important;
-          -webkit-backdrop-filter: none !important;
           background: rgba(15, 23, 42, 0.96);
         }
         /* Bright glass overrides so Image Studio matches Motion Studio styling. */
