@@ -389,6 +389,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   const [itemCameraCaptureError, setItemCameraCaptureError] = useState<string | null>(null);
   const [itemCameraRemoteOpen, setItemCameraRemoteOpen] = useState(false);
   const [itemCameraRemoteBusy, setItemCameraRemoteBusy] = useState(false);
+  const [itemCameraRemotePollingActive, setItemCameraRemotePollingActive] = useState(false);
   const [itemCameraRemoteSessionId, setItemCameraRemoteSessionId] = useState("");
   const [itemCameraRemoteQrCodeUrl, setItemCameraRemoteQrCodeUrl] = useState("");
   const [itemCameraRemoteError, setItemCameraRemoteError] = useState<string | null>(null);
@@ -2490,6 +2491,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   }
 
   function openItemCameraLocalCapture() {
+    setItemCameraRemotePollingActive(false);
+    stopItemCameraRemotePolling();
     setItemCameraChooserOpen(false);
     setItemCameraRemoteOpen(false);
     setItemCameraRemoteError(null);
@@ -2588,6 +2591,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     setItemCameraRemoteSessionId("");
     setItemCameraRemoteQrCodeUrl("");
     setItemCameraRemoteOpen(false);
+    setItemCameraRemotePollingActive(false);
     stopItemCameraRemotePolling();
     try {
       const response = await fetch("/api/image-handoff/session", {
@@ -2606,6 +2610,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       setItemCameraChooserOpen(false);
       setItemCameraRemoteSessionId(sessionId);
       setItemCameraRemoteQrCodeUrl(qrCodeUrl);
+      setItemCameraRemotePollingActive(true);
       setItemCameraRemoteOpen(true);
     } catch (e: any) {
       const message = e?.message || "Failed to open remote camera QR.";
@@ -2617,7 +2622,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   }
 
   useEffect(() => {
-    if (!itemCameraRemoteOpen || !itemCameraRemoteSessionId) {
+    if (!itemCameraRemotePollingActive || !itemCameraRemoteSessionId) {
       stopItemCameraRemotePolling();
       return;
     }
@@ -2633,7 +2638,12 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         if (response.status === 404) {
           throw new Error(String(json?.error || "Remote camera session expired."));
         }
-        if (!response.ok || !json?.ready) return;
+        if (!response.ok) return;
+        if (json?.connected && itemCameraRemoteOpen) {
+          setItemCameraRemoteOpen(false);
+          setStatus("Device connected. Waiting for camera uploads...");
+        }
+        if (!json?.ready) return;
         const fileName = String(json?.fileName || "").trim() || "camera-upload.jpg";
         const dataUrl = String(json?.dataUrl || "");
         const file = dataUrlToFile(dataUrl, fileName);
@@ -2642,10 +2652,12 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         setItemCameraRemoteError(null);
         setError(null);
         setStatus(`Camera upload received: ${file.name}`);
+        setItemCameraRemoteOpen(false);
       } catch (e: any) {
         const message = e?.message || "Remote camera polling failed.";
         setItemCameraRemoteError(message);
         setError(message);
+        setItemCameraRemotePollingActive(false);
         setItemCameraRemoteOpen(false);
         setItemCameraChooserOpen(false);
         stopItemCameraRemotePolling();
@@ -2658,7 +2670,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     return () => {
       stopItemCameraRemotePolling();
     };
-  }, [itemCameraRemoteOpen, itemCameraRemoteSessionId]);
+  }, [itemCameraRemotePollingActive, itemCameraRemoteSessionId]);
 
   useEffect(() => {
     if (!itemCameraCaptureOpen) {
@@ -5910,7 +5922,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                     onClick={() => {
                       setItemCameraRemoteOpen(false);
                       setItemCameraRemoteError(null);
-                      stopItemCameraRemotePolling();
                     }}
                   >
                     Close

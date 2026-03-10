@@ -52,6 +52,29 @@ export default function ImageUploadSessionPage() {
   const [status, setStatus] = useState("Take or choose a photo, then send it to desktop.");
 
   useEffect(() => {
+    if (!sessionId) return;
+    let cancelled = false;
+    const markConnected = async () => {
+      try {
+        await fetch(`/api/image-handoff/session/${encodeURIComponent(sessionId)}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "connect" }),
+        });
+      } catch {
+        // Best-effort: the next image upload still acts as an active signal.
+      }
+      if (!cancelled) {
+        setStatus("Connected to desktop. Take or choose a photo, then send it.");
+      }
+    };
+    void markConnected();
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId]);
+
+  useEffect(() => {
     if (typeof window === "undefined" || typeof navigator === "undefined") return;
     if (!navigator.mediaDevices?.getUserMedia) {
       setCameraError("Live camera preview is not available in this browser.");
@@ -173,6 +196,20 @@ export default function ImageUploadSessionPage() {
     }
   }
 
+  function closeDeviceWindow() {
+    if (typeof window === "undefined") return;
+    try {
+      window.close();
+    } catch {
+      // Ignore close errors and use fallback navigation.
+    }
+    try {
+      window.location.replace("about:blank");
+    } catch {
+      // Ignore fallback navigation errors.
+    }
+  }
+
   return (
     <main
       style={{
@@ -198,6 +235,23 @@ export default function ImageUploadSessionPage() {
         }}
       >
         <strong>Send Camera Photo</strong>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={closeDeviceWindow}
+          style={{
+            width: "100%",
+            borderRadius: 10,
+            border: "1px solid rgba(255,255,255,0.45)",
+            background: "linear-gradient(180deg, #475569 0%, #1e293b 100%)",
+            color: "#f8fafc",
+            padding: "10px 12px",
+            cursor: "pointer",
+            fontWeight: 700,
+          }}
+        >
+          Close Window
+        </button>
         <div style={{ textAlign: "center", opacity: 0.85, fontSize: 13 }}>{status}</div>
         {error ? <div style={{ textAlign: "center", color: "#fecaca", fontSize: 13 }}>{error}</div> : null}
         <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", aspectRatio: "4 / 5", background: "#000" }}>
@@ -270,6 +324,22 @@ export default function ImageUploadSessionPage() {
           }}
         >
           {busy ? "Sending..." : "Choose Existing Photo"}
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={closeDeviceWindow}
+          style={{
+            width: "100%",
+            borderRadius: 10,
+            border: "1px solid rgba(255,255,255,0.35)",
+            background: "rgba(15,23,42,0.9)",
+            color: "#e2e8f0",
+            padding: "10px 12px",
+            cursor: "pointer",
+          }}
+        >
+          Close
         </button>
       </div>
     </main>

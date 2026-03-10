@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { createImageHandoffSession } from "@/lib/barcode-handoff-store";
+import { createImageHandoffSession } from "@/lib/image-handoff-store";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +18,7 @@ function buildRequestOrigin(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const session = createImageHandoffSession();
+  const session = await createImageHandoffSession();
   const origin = buildRequestOrigin(request);
   const scanUrl = `${origin}/image-upload/${session.id}`;
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(scanUrl)}`;
