@@ -72,8 +72,7 @@ function parseProductsCount(raw: unknown): number | null {
 }
 
 function isModuleEnabled() {
-  if (process.env.NODE_ENV !== "production") return true;
-  return normalizeLower(process.env.ENABLE_SHOPIFY_COLLECTION_MAPPING || "") === "true";
+  return normalizeLower(process.env.DISABLE_SHOPIFY_COLLECTION_MAPPING || "") !== "true";
 }
 
 async function resolveShop(rawShop: string): Promise<string> {
@@ -805,7 +804,7 @@ function mapProductRowToResponse(row: ProductRow, nodes: MenuNodeRecord[]) {
 export async function GET(req: NextRequest) {
   if (!isModuleEnabled()) {
     return NextResponse.json(
-      { ok: false, error: "Shopify Collection Mapping is local-only and disabled in production." },
+      { ok: false, error: "Shopify Collection Mapping is disabled by environment flag." },
       { status: 403 }
     );
   }
@@ -897,7 +896,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   if (!isModuleEnabled()) {
     return NextResponse.json(
-      { ok: false, error: "Shopify Collection Mapping is local-only and disabled in production." },
+      { ok: false, error: "Shopify Collection Mapping is disabled by environment flag." },
       { status: 403 }
     );
   }

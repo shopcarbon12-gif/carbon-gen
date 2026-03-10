@@ -576,7 +576,7 @@ export default function SettingsPage() {
         <Link href="/studio/images">Image Studio</Link>
         <Link href="/dashboard">Dashboard</Link>
         <Link href="/studio/seo">Content & SEO</Link>
-        <Link href="/ops/inventory">Collection Mapper</Link>
+        <Link href="/studio/shopify-collection-mapping">Collection Mapping</Link>
       </section>
 
       <section className="card">
