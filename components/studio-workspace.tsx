@@ -2498,6 +2498,31 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     setItemCameraCaptureOpen(true);
   }
 
+  async function optimizeItemCameraTrack(track: MediaStreamTrack | null) {
+    if (!track || track.kind !== "video" || typeof track.applyConstraints !== "function") return;
+    const getCapabilities = (track as MediaStreamTrack & { getCapabilities?: () => any }).getCapabilities;
+    const capabilities = typeof getCapabilities === "function" ? getCapabilities.call(track) : null;
+    const constraints: any = {};
+    if (capabilities?.width?.max) constraints.width = { ideal: capabilities.width.max };
+    if (capabilities?.height?.max) constraints.height = { ideal: capabilities.height.max };
+    if (capabilities?.focusMode && Array.isArray(capabilities.focusMode)) {
+      if (capabilities.focusMode.includes("continuous")) {
+        constraints.focusMode = "continuous";
+      } else if (capabilities.focusMode.includes("single-shot")) {
+        constraints.focusMode = "single-shot";
+      }
+    }
+    if (capabilities && "torch" in capabilities) {
+      constraints.advanced = [{ torch: true }];
+    }
+    if (!Object.keys(constraints).length) return;
+    try {
+      await track.applyConstraints(constraints);
+    } catch {
+      // Best-effort optimization. Ignore unsupported constraints.
+    }
+  }
+
   const captureItemCameraPhoto = useCallback(async () => {
     const video = itemCameraCaptureVideoRef.current;
     if (!video) {
@@ -2657,8 +2682,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: "environment" },
-            width: { ideal: 2560 },
-            height: { ideal: 1440 },
+            width: { ideal: 3840 },
+            height: { ideal: 2160 },
           },
           audio: false,
         });
@@ -2667,6 +2692,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           return;
         }
         itemCameraCaptureStreamRef.current = stream;
+        await optimizeItemCameraTrack(stream.getVideoTracks?.()[0] || null);
         const video = itemCameraCaptureVideoRef.current;
         if (!video) throw new Error("Camera preview is unavailable.");
         video.srcObject = stream;

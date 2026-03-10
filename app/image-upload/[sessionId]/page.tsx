@@ -12,6 +12,31 @@ function toDataUrl(file: File) {
   });
 }
 
+async function optimizeCameraTrack(track: MediaStreamTrack | null) {
+  if (!track || track.kind !== "video" || typeof track.applyConstraints !== "function") return;
+  const getCapabilities = (track as MediaStreamTrack & { getCapabilities?: () => any }).getCapabilities;
+  const capabilities = typeof getCapabilities === "function" ? getCapabilities.call(track) : null;
+  const constraints: any = {};
+  if (capabilities?.width?.max) constraints.width = { ideal: capabilities.width.max };
+  if (capabilities?.height?.max) constraints.height = { ideal: capabilities.height.max };
+  if (capabilities?.focusMode && Array.isArray(capabilities.focusMode)) {
+    if (capabilities.focusMode.includes("continuous")) {
+      constraints.focusMode = "continuous";
+    } else if (capabilities.focusMode.includes("single-shot")) {
+      constraints.focusMode = "single-shot";
+    }
+  }
+  if (capabilities && "torch" in capabilities) {
+    constraints.advanced = [{ torch: true }];
+  }
+  if (!Object.keys(constraints).length) return;
+  try {
+    await track.applyConstraints(constraints);
+  } catch {
+    // Best-effort optimization. Some browsers reject unsupported constraints.
+  }
+}
+
 export default function ImageUploadSessionPage() {
   const params = useParams<{ sessionId: string }>();
   const sessionId = useMemo(() => String(params?.sessionId || "").trim(), [params]);
@@ -39,7 +64,11 @@ export default function ImageUploadSessionPage() {
       setCameraReady(false);
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" } },
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 3840 },
+            height: { ideal: 2160 },
+          },
           audio: false,
         });
         if (cancelled) {
@@ -47,6 +76,7 @@ export default function ImageUploadSessionPage() {
           return;
         }
         cameraStreamRef.current = stream;
+        await optimizeCameraTrack(stream.getVideoTracks?.()[0] || null);
         const video = cameraVideoRef.current;
         if (!video) throw new Error("Camera preview is unavailable.");
         video.srcObject = stream;

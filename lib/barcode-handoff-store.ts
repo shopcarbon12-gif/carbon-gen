@@ -118,6 +118,7 @@ export function saveImageToSession(
   session.mimeType = payload.mimeType;
   session.dataUrl = payload.dataUrl;
   session.receivedAt = nowMs();
+  session.expiresAt = nowMs() + SESSION_TTL_MS;
   return session;
 }
 
@@ -129,6 +130,11 @@ export function consumeImageFromSession(sessionId: string) {
     mimeType: session.mimeType,
     dataUrl: session.dataUrl,
   };
-  imageSessions.delete(sessionId);
+  // Keep the session alive so multiple photos can be sent in one QR session.
+  session.fileName = null;
+  session.mimeType = null;
+  session.dataUrl = null;
+  session.receivedAt = null;
+  session.expiresAt = nowMs() + SESSION_TTL_MS;
   return payload;
 }
