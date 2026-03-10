@@ -495,6 +495,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   const barcodeScannerRemotePollRef = useRef<number | null>(null);
   const itemCameraRemotePollRef = useRef<number | null>(null);
   const itemCameraRemoteLastPayloadRef = useRef<string | null>(null);
+  const itemCameraRemoteWasConnectedRef = useRef(false);
   const itemCameraCaptureVideoRef = useRef<HTMLVideoElement | null>(null);
   const itemCameraCaptureStreamRef = useRef<MediaStream | null>(null);
   const finalResultPickerRef = useRef<HTMLInputElement | null>(null);
@@ -2506,6 +2507,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     setItemCameraRemotePollingActive(false);
     stopItemCameraRemotePolling();
     itemCameraRemoteLastPayloadRef.current = null;
+    itemCameraRemoteWasConnectedRef.current = false;
     setItemCameraChooserOpen(false);
     setItemCameraRemoteOpen(false);
     setItemCameraRemoteError(null);
@@ -2607,6 +2609,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     setItemCameraRemotePollingActive(false);
     stopItemCameraRemotePolling();
     itemCameraRemoteLastPayloadRef.current = null;
+    itemCameraRemoteWasConnectedRef.current = false;
     try {
       const response = await fetch("/api/image-handoff/session", {
         method: "POST",
@@ -2667,10 +2670,14 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           return;
         }
         if (json?.connected && itemCameraRemoteOpen) {
+          itemCameraRemoteWasConnectedRef.current = true;
           setItemCameraRemoteOpen(false);
           setStatus("Device connected. Waiting for camera uploads...");
         }
-        if (!json?.connected && !json?.ready) {
+        if (json?.connected) {
+          itemCameraRemoteWasConnectedRef.current = true;
+        }
+        if (!json?.connected && !json?.ready && itemCameraRemoteWasConnectedRef.current) {
           setStatus("Device disconnected.");
           setItemCameraRemotePollingActive(false);
           stopItemCameraRemotePolling();
