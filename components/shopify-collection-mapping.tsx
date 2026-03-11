@@ -9,6 +9,8 @@ type MenuNode = {
   depth: number;
   enabled: boolean;
   collectionId: string | null;
+  linkedTargetType?: string;
+  linkedTargetLabel?: string;
 };
 
 type ProductRow = {
@@ -279,7 +281,8 @@ export default function ShopifyCollectionMapping() {
                   onClick={() => setActiveNode(node.nodeKey)}
                   type="button"
                 >
-                  {node.label} <span className="muted small">({node.nodeKey})</span>
+                  <span>{node.label}</span>
+                  <span className="muted small">{node.linkedTargetLabel || "No target linked"}</span>
                 </button>
               ))}
             </div>
@@ -287,7 +290,8 @@ export default function ShopifyCollectionMapping() {
 
           <main className="card panel">
             <div className="topbar">
-              <span className="chip">Active Node: {activeNode || "-"}</span>
+              <span className="chip">Active Node: {currentNode?.label || "-"}</span>
+              <span className="chip">{currentNode?.linkedTargetLabel || "No target linked"}</span>
               <span className="chip">{currentNode?.collectionId ? "Mapped Collection" : "Node Not Mapped"}</span>
               <button className="primary" type="button" onClick={() => void bulkAssign(true)} disabled={saving || !activeNode}>
                 Assign Checked Products
@@ -315,7 +319,7 @@ export default function ShopifyCollectionMapping() {
                       />
                     </th>
                     <th>Picture</th>
-                    <th>Product Name</th>
+                    <th className="productNameCol">Product Name</th>
                     <th>UPC</th>
                     <th className="center">Assigned</th>
                     <th>Current Nodes</th>
@@ -349,7 +353,7 @@ export default function ShopifyCollectionMapping() {
                           <td className="center imgCell">
                             {row.image ? <img className="thumb" src={row.image} alt="" /> : null}
                           </td>
-                          <td>{row.title}</td>
+                          <td className="productNameCol">{row.title}</td>
                           <td>{row.upc || "-"}</td>
                           <td className="center">
                             <input
@@ -375,7 +379,7 @@ export default function ShopifyCollectionMapping() {
 
       <style jsx>{`
         .page {
-          max-width: 1700px;
+          width: calc(100vw - 24px);
           margin: 0 auto;
           padding: 12px;
           display: grid;
@@ -485,9 +489,10 @@ export default function ShopifyCollectionMapping() {
           border-radius: 8px;
           border: 1px solid transparent;
           cursor: pointer;
-          white-space: nowrap;
           text-align: left;
           background: transparent;
+          display: grid;
+          gap: 2px;
         }
         .node:hover {
           background: #152236;
@@ -531,6 +536,9 @@ export default function ShopifyCollectionMapping() {
           width: 56px;
           min-width: 56px;
           max-width: 56px;
+          text-align: center;
+        }
+        .productNameCol {
           text-align: center;
         }
         .thumb {

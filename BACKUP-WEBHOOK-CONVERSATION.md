@@ -241,3 +241,11 @@ If session resets, instruct the agent:
 - Replaced blank page with live Shopify-powered dual-pane mapping module UI.
 - Right table columns now limited to: Pick (with Select All), Picture, Product Name, UPC, Assigned, Current Nodes.
 - Wired live search/sort and assignment actions through `app/api/shopify/collection-mapping/route.ts`.
+- Committed and pushed as `434b566`.
+- Deployed to Coolify and verified on live route `https://app.shopcarbon.com/studio/shopify-collection-mapping` in two passes.
+
+## 2026-03-11 Collection Mapping Warning + Layout + Tree Labels
+- Updated `app/api/shopify/collection-mapping/route.ts` to convert noisy Shopify access-denied payloads into concise warning text for link-target scope gaps.
+- Added human-readable linked target metadata per menu node (collection/page/product/blog/url labels) while keeping GID keys internal for actions.
+- Updated `components/shopify-collection-mapping.tsx` tree to show attached target labels instead of raw `gid://...` menu IDs.
+- Stretched page container to full viewport width and centered Product Name column content without changing typography scale.

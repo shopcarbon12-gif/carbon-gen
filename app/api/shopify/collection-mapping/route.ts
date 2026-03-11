@@ -497,6 +497,11 @@ type MenuLinkRecord = {
   resourceId: string | null;
 };
 
+type NodeLinkedTargetMeta = {
+  linkedTargetType: string;
+  linkedTargetLabel: string;
+};
+
 type MenuLinkTargetsQueryData = {
   pages?: {
     nodes?: Array<{ id?: string; title?: string; handle?: string }>;
@@ -970,6 +975,24 @@ function toEntityLinkTargets(
   );
 }
 
+function buildMenuLinkTargetsWarning(errors: unknown) {
+  const messages = parseGraphErrorMessages(errors);
+  const merged = messages.join(" | ").toLowerCase();
+  const blocked: string[] = [];
+  if (merged.includes("access denied for pages field")) blocked.push("pages");
+  if (merged.includes("access denied for products field")) blocked.push("products");
+  if (merged.includes("access denied for blogs field")) blocked.push("blogs");
+
+  if (blocked.length > 0) {
+    return `Some menu link targets are unavailable (${blocked.join(", ")}). Reconnect Shopify with required read scopes to enable full target names.`;
+  }
+
+  const first = messages[0] || "";
+  return first
+    ? `Some menu link targets are unavailable: ${first}`
+    : "Some menu link targets are unavailable.";
+}
+
 async function fetchMenuLinkTargets(
   shop: string,
   token: string,
@@ -1020,7 +1043,7 @@ async function fetchMenuLinkTargets(
   if (!gqlResult.ok || !gqlResult.data) {
     return {
       targets: fallback,
-      warning: `Failed to load menu link targets: ${JSON.stringify(gqlResult.errors || "unknown")}`,
+      warning: buildMenuLinkTargetsWarning(gqlResult.errors),
     };
   }
 
@@ -1052,6 +1075,75 @@ function flattenMenuLinks(items: ShopifyMenuItemNode[]) {
   };
   walk(sanitizeMenuItemTree(items));
   return out;
+}
+
+function buildLinkTargetIndexes(targets: MenuLinkTargets, collections: CollectionOption[]) {
+  return {
+    collectionsById: new Map(collections.map((row) => [normalizeText(row.id), row])),
+    pagesById: new Map(targets.pages.map((row) => [normalizeText(row.id), row])),
+    productsById: new Map(targets.products.map((row) => [normalizeText(row.id), row])),
+    blogsById: new Map(targets.blogs.map((row) => [normalizeText(row.id), row])),
+  };
+}
+
+function resolveNodeLinkedTargetMeta(
+  link: MenuLinkRecord | undefined,
+  targetIndexes: ReturnType<typeof buildLinkTargetIndexes>
+): NodeLinkedTargetMeta {
+  if (!link) return { linkedTargetType: "UNLINKED", linkedTargetLabel: "No target linked" };
+
+  const type = normalizeText(link.type).toUpperCase() || "UNLINKED";
+  const resourceId = normalizeText(link.resourceId);
+  const url = normalizeText(link.url);
+
+  if (type === "COLLECTION") {
+    const collection = resourceId ? targetIndexes.collectionsById.get(resourceId) : undefined;
+    const title = normalizeText(collection?.title);
+    return {
+      linkedTargetType: "COLLECTION",
+      linkedTargetLabel: title ? `Collection: ${title}` : url || "Collection link",
+    };
+  }
+
+  if (type === "PAGE") {
+    const page = resourceId ? targetIndexes.pagesById.get(resourceId) : undefined;
+    const title = normalizeText(page?.title);
+    return {
+      linkedTargetType: "PAGE",
+      linkedTargetLabel: title ? `Page: ${title}` : url || "Page link",
+    };
+  }
+
+  if (type === "PRODUCT") {
+    const product = resourceId ? targetIndexes.productsById.get(resourceId) : undefined;
+    const title = normalizeText(product?.title);
+    return {
+      linkedTargetType: "PRODUCT",
+      linkedTargetLabel: title ? `Product: ${title}` : url || "Product link",
+    };
+  }
+
+  if (type === "BLOG") {
+    const blog = resourceId ? targetIndexes.blogsById.get(resourceId) : undefined;
+    const title = normalizeText(blog?.title);
+    return {
+      linkedTargetType: "BLOG",
+      linkedTargetLabel: title ? `Blog: ${title}` : url || "Blog link",
+    };
+  }
+
+  if (type === "FRONTPAGE") {
+    return { linkedTargetType: "FRONTPAGE", linkedTargetLabel: "Homepage" };
+  }
+
+  if (type === "SEARCH") {
+    return { linkedTargetType: "SEARCH", linkedTargetLabel: "Search page" };
+  }
+
+  return {
+    linkedTargetType: type,
+    linkedTargetLabel: url || "Custom URL",
+  };
 }
 
 function applyMenuNodeLink(
@@ -1861,6 +1953,14 @@ export async function GET(req: NextRequest) {
       normalizeText(logsResult?.warning),
     ].filter(Boolean);
 
+    const menuLinks = flattenMenuLinks(menuSyncResult.menu.items);
+    const menuLinkByNodeKey = new Map(menuLinks.map((row) => [row.nodeKey, row]));
+    const linkTargetIndexes = buildLinkTargetIndexes(linkTargetsResult.targets, collectionsResult.collections);
+    const nodesWithLinkedTargets = nodes.map((node) => ({
+      ...node,
+      ...resolveNodeLinkedTargetMeta(menuLinkByNodeKey.get(node.nodeKey), linkTargetIndexes),
+    }));
+
     return NextResponse.json({
       ok: true,
       shop,
@@ -1877,11 +1977,11 @@ export async function GET(req: NextRequest) {
         handle: menuSyncResult.menu.menuHandle,
         title: menuSyncResult.menu.menuTitle,
       },
-      menuLinks: flattenMenuLinks(menuSyncResult.menu.items),
+      menuLinks,
       linkTargets: linkTargetsResult.targets,
       collections: collectionsResult.collections,
-      nodes,
-      mappedNodes: nodes.filter((node) => node.enabled && Boolean(node.collectionId)),
+      nodes: nodesWithLinkedTargets,
+      mappedNodes: nodesWithLinkedTargets.filter((node) => node.enabled && Boolean(node.collectionId)),
       rows: paged.map((row) => mapProductRowToResponse(row, nodes)),
       logs: logsResult?.logs || [],
       summary: {
