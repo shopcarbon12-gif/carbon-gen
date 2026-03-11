@@ -2515,7 +2515,7 @@ export async function POST(req: NextRequest) {
           summary: `Failed to edit menu node "${nodeKey}"`,
           status: "error",
           errorMessage: menuSync.error,
-          details: { nodeKey, label, linkType, linkTargetId, linkUrl, menuHandle },
+          details: { nodeKey, label, linkType: linkTypeRaw, linkTargetId, linkUrl, menuHandle },
         });
         return NextResponse.json({ ok: false, error: menuSync.error }, { status });
       }

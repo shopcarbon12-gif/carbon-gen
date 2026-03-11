@@ -325,3 +325,8 @@ If session resets, instruct the agent:
 - Tightened `bulk-toggle-nodes` API contract in `app/api/shopify/collection-mapping/route.ts` to use `productIds[]` only (no `productId` fallback on that action), while preserving single-product support for `toggle-node` and `toggle-nodes`.
 - Refined X-axis outdent behavior in `components/shopify-collection-mapping.tsx` drag-over logic: left-drag now targets hovered node parent level (`targetKey = parentKey`, `position = "after"`), right-drag keeps nested `inside`.
 - Updated drop handler guard to honor computed outdent targets and not require hovered row key to equal drop target key.
+
+## 2026-03-11 Build Fix for Phase 4 Backend Edit Action
+- Fixed TypeScript compile failure in `app/api/shopify/collection-mapping/route.ts` (`linkType` used before declaration in `edit-menu-node` error audit details).
+- Replaced pre-declaration reference with `linkTypeRaw` in the failed-menu-fetch audit payload.
+- Verified local `npm run build` completes successfully end-to-end.
