@@ -125,6 +125,21 @@ export default function ShopifyCollectionMapping() {
     return () => window.clearTimeout(timer);
   }, [search, sort]);
 
+  function getHeaderArrow(field: "title" | "upc") {
+    const [activeField, dir] = sort.split("-") as ["title" | "upc", "asc" | "desc"];
+    if (activeField !== field) return "↕";
+    return dir === "asc" ? "▲" : "▼";
+  }
+
+  function toggleHeaderSort(field: "title" | "upc") {
+    const [activeField, dir] = sort.split("-") as ["title" | "upc", "asc" | "desc"];
+    if (activeField === field) {
+      setSort(`${field}-${dir === "asc" ? "desc" : "asc"}` as SortValue);
+      return;
+    }
+    setSort(`${field}-asc` as SortValue);
+  }
+
   useEffect(() => {
     if (!previewImage) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -247,12 +262,6 @@ export default function ShopifyCollectionMapping() {
             placeholder="Search products (title / sku / upc / type)"
             style={{ minWidth: 320 }}
           />
-          <select value={sort} onChange={(event) => setSort(event.target.value as SortValue)}>
-            <option value="title-asc">Title A-Z</option>
-            <option value="title-desc">Title Z-A</option>
-            <option value="upc-asc">UPC A-Z</option>
-            <option value="upc-desc">UPC Z-A</option>
-          </select>
           <span className="pill">Auto-parent logic ON</span>
           <span className="pill">Live Shopify sync ON</span>
         </div>
@@ -329,8 +338,26 @@ export default function ShopifyCollectionMapping() {
                       />
                     </th>
                     <th>Picture</th>
-                    <th className="productNameCol">Product Name</th>
-                    <th className="upcCol">UPC</th>
+                    <th className="productNameCol sortHead">
+                      <button
+                        type="button"
+                        className="sortHeadBtn"
+                        onClick={() => toggleHeaderSort("title")}
+                        aria-label="Sort by product name"
+                      >
+                        Product Name <span className="sortArrow">{getHeaderArrow("title")}</span>
+                      </button>
+                    </th>
+                    <th className="upcCol sortHead">
+                      <button
+                        type="button"
+                        className="sortHeadBtn"
+                        onClick={() => toggleHeaderSort("upc")}
+                        aria-label="Sort by UPC"
+                      >
+                        UPC <span className="sortArrow">{getHeaderArrow("upc")}</span>
+                      </button>
+                    </th>
                     <th className="center">Assigned</th>
                     <th>Current Nodes</th>
                   </tr>
@@ -558,6 +585,28 @@ export default function ShopifyCollectionMapping() {
           text-transform: uppercase;
           font-size: 11px;
           z-index: 2;
+        }
+        .sortHead {
+          padding: 0;
+        }
+        .sortHeadBtn {
+          width: 100%;
+          min-height: 0;
+          border: 0;
+          border-radius: 0;
+          background: transparent;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 5px;
+          text-transform: uppercase;
+          font-size: 11px;
+          color: #cbd5e1;
+          padding: 7px 8px;
+        }
+        .sortArrow {
+          font-size: 10px;
+          line-height: 1;
         }
         .center {
           text-align: center;

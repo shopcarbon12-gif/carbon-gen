@@ -256,3 +256,8 @@ If session resets, instruct the agent:
 - Center-aligned the `UPC` column header and body cells to match table alignment expectations.
 - Updated `app/api/shopify/collection-mapping/route.ts` linked target labels to remove `Collection:` / `Page:` / `Product:` / `Blog:` prefixes, showing only target name or URL.
 - Suppressed non-critical menu-link scope warning banners when only known Shopify access-denied fields are blocked.
+
+## 2026-03-11 Collection Mapping Header Click Sorting
+- Removed the top sort dropdown from `components/shopify-collection-mapping.tsx`.
+- Added clickable sorting on `Product Name` and `UPC` table headers with toggle behavior (asc/desc) and visual arrow indicator (`↕`, `▲`, `▼`).
+- Kept existing server-backed sorting semantics while switching interaction to header-click sorting only.
