@@ -946,13 +946,6 @@ export default function ShopifyCollectionMapping() {
                         </button>
                       </div>
                     </div>
-                    {hasChildren && isExpanded ? (
-                      <div className="treeAddRow" style={{ paddingLeft: 10 + (node.depth + 1) * 32 }}>
-                        <button type="button" className="treeAddBtn" onClick={() => openAddEditor(node.nodeKey)}>
-                          + Add menu item
-                        </button>
-                      </div>
-                    ) : null}
                   </Fragment>
                 );
               })}
@@ -1703,12 +1696,9 @@ export default function ShopifyCollectionMapping() {
           border-color: #7f1d1d;
           background: #1f0f14;
         }
-        .treeAddRow {
-          padding: 4px 8px 8px 8px;
-          border-bottom: 1px dashed #2a3547;
-        }
         .treeAddRoot {
-          padding: 8px;
+          padding: 10px 10px 12px 58px;
+          border-top: 1px dashed #2a3547;
         }
         .treeAddBtn {
           min-height: 28px;
