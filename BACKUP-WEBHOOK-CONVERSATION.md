@@ -298,3 +298,7 @@ If session resets, instruct the agent:
 ## 2026-03-11 Build Failure Hotfix (bulk mapping token narrowing)
 - Fixed TypeScript build failure in `app/api/shopify/collection-mapping/route.ts` for bulk product processing closure by introducing `activeToken` string capture and using it in `fetchProductCollections`, `applyCollectionAdd`, and `applyCollectionRemove`.
 - This resolves Coolify compile error at line ~2741 (`string | undefined` token argument) during `npm run build`.
+
+## 2026-03-11 Build Failure Hotfix (tree indent CSS variable typing)
+- Fixed TypeScript build failure in `components/shopify-collection-mapping.tsx` by removing inline CSS custom property assignment (`--tree-indent`) from `style` object.
+- Replaced pseudo-element dependency on custom variable with explicit connector span elements (`treeConnectorV`, `treeConnectorH`) using numeric `left` inline style values.

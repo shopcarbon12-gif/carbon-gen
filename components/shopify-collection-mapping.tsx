@@ -593,10 +593,7 @@ export default function ShopifyCollectionMapping() {
                 <div
                   key={node.nodeKey}
                   className={`treeRow ${node.parentKey ? "has-parent" : ""} ${isLastSibling ? "is-last" : ""} ${dragging ? "dragging" : ""} ${dropState}`}
-                  style={{
-                    paddingLeft: 10 + node.depth * 32,
-                    ["--tree-indent" as "--tree-indent"]: `${10 + node.depth * 32}px`,
-                  }}
+                  style={{ paddingLeft: 10 + node.depth * 32 }}
                   draggable
                   onDragStart={() => {
                     setDragSourceKey(node.nodeKey);
@@ -622,6 +619,18 @@ export default function ShopifyCollectionMapping() {
                     void moveMenuNode();
                   }}
                 >
+                  {node.parentKey ? (
+                    <>
+                      <span
+                        className={isLastSibling ? "treeConnectorV isLast" : "treeConnectorV"}
+                        style={{ left: 10 + node.depth * 32 - 16 }}
+                      />
+                      <span
+                        className="treeConnectorH"
+                        style={{ left: 10 + node.depth * 32 - 16 }}
+                      />
+                    </>
+                  ) : null}
                   <span className={dragging ? "dragHandle grabbing" : "dragHandle"} aria-hidden="true">
                     <svg viewBox="0 0 10 14" width="10" height="14">
                       <circle cx="2" cy="2" r="1.1" />
@@ -1038,26 +1047,22 @@ export default function ShopifyCollectionMapping() {
         .treeRow:hover {
           background: #122033;
         }
-        .treeRow.has-parent::before {
-          content: "";
+        .treeConnectorV {
           position: absolute;
-          left: calc(var(--tree-indent) - 16px);
           top: 0;
           bottom: 0;
           border-left: 1px solid rgba(229, 231, 235, 0.42);
           pointer-events: none;
         }
-        .treeRow.has-parent::after {
-          content: "";
+        .treeConnectorV.isLast {
+          bottom: 50%;
+        }
+        .treeConnectorH {
           position: absolute;
-          left: calc(var(--tree-indent) - 16px);
           top: 50%;
           width: 14px;
           border-top: 1px solid rgba(229, 231, 235, 0.42);
           pointer-events: none;
-        }
-        .treeRow.has-parent.is-last::before {
-          bottom: 50%;
         }
         .dragHandle {
           width: 18px;
