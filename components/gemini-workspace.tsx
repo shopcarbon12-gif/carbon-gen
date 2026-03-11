@@ -9727,6 +9727,8 @@ function buildMasterPanelPrompt(
             width: 100% !important;
             max-width: 100% !important;
             margin-right: 0 !important;
+            margin-left: 0 !important;
+            padding-left: 0 !important;
             padding-right: 0 !important;
           }
           .grid > .card {
@@ -9817,8 +9819,8 @@ function buildMasterPanelPrompt(
           }
           .model-pill {
             width: auto;
-            min-width: 138px;
-            max-width: 168px;
+            min-width: 124px;
+            max-width: 146px;
             flex: 0 0 auto;
             scroll-snap-align: start;
             justify-content: space-between;
@@ -9853,8 +9855,8 @@ function buildMasterPanelPrompt(
             right: var(--page-inline-gap) !important;
           }
           .camera-btn-icon {
-            width: 22px;
-            height: 22px;
+            width: 24px;
+            height: 24px;
           }
           .model-registry-dropzone,
           .final-results-dropzone,
@@ -9880,8 +9882,8 @@ function buildMasterPanelPrompt(
             scroll-snap-align: start;
           }
           .model-list.mobile-carousel-row > .model-pill {
-            min-width: 138px;
-            max-width: 168px;
+            min-width: 124px;
+            max-width: 146px;
             width: auto;
           }
           .mobile-carousel > .catalog-image,

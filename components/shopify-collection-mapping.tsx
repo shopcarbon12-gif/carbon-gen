@@ -165,6 +165,10 @@ export default function ShopifyCollectionMapping() {
 
   const [logsOpen, setLogsOpen] = useState(false);
   const [logsBusy, setLogsBusy] = useState(false);
+  const [assignNodeKey, setAssignNodeKey] = useState("");
+  const [assignQuery, setAssignQuery] = useState("");
+  const [productEditorId, setProductEditorId] = useState("");
+  const [productEditorQuery, setProductEditorQuery] = useState("");
 
   const loadData = useCallback(
     async (
@@ -273,6 +277,15 @@ export default function ShopifyCollectionMapping() {
     [mappedNodes]
   );
 
+  const nodeByKey = useMemo(() => {
+    const map = new Map<string, MenuNode>();
+    for (const node of nodes) {
+      const key = normalizeText(node.nodeKey);
+      if (key) map.set(key, node);
+    }
+    return map;
+  }, [nodes]);
+
   const mappingSummary = useMemo(() => {
     let mapped = 0;
     let unmapped = 0;
@@ -287,6 +300,44 @@ export default function ShopifyCollectionMapping() {
     }
     return { mapped, unmapped, disabled };
   }, [nodes]);
+
+  const assignNode = useMemo(
+    () => nodes.find((node) => node.nodeKey === assignNodeKey) || null,
+    [assignNodeKey, nodes]
+  );
+
+  const filteredCollections = useMemo(() => {
+    const query = normalizeText(assignQuery).toLowerCase();
+    if (!query) return collections;
+    return collections.filter((collection) => {
+      const title = normalizeText(collection.title).toLowerCase();
+      const handle = normalizeText(collection.handle).toLowerCase();
+      return title.includes(query) || handle.includes(query);
+    });
+  }, [assignQuery, collections]);
+
+  const activeProduct = useMemo(
+    () => rows.find((row) => row.id === productEditorId) || null,
+    [productEditorId, rows]
+  );
+
+  const assignableNodes = useMemo(
+    () =>
+      nodes
+        .filter((node) => node.enabled && Boolean(node.collectionId))
+        .sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label)),
+    [nodes]
+  );
+
+  const filteredAssignableNodes = useMemo(() => {
+    const query = normalizeText(productEditorQuery).toLowerCase();
+    if (!query) return assignableNodes;
+    return assignableNodes.filter((node) => {
+      const label = normalizeText(node.label).toLowerCase();
+      const handle = normalizeText(node.collectionHandle).toLowerCase();
+      return label.includes(query) || handle.includes(query);
+    });
+  }, [assignableNodes, productEditorQuery]);
   const runMenuAction = useCallback(
     async (payload: Record<string, unknown>, actionStatus: string, refreshProducts = true) => {
       setMenuBusy(true);
@@ -331,19 +382,23 @@ export default function ShopifyCollectionMapping() {
     await runMenuAction({ action: "refresh-menu" }, "Syncing menu from Shopify...");
   }
 
-  async function onApplyNodeCollection(node: MenuNode) {
-    if (!editingNodeKey) return;
+  async function onSetNodeCollection(node: MenuNode, collectionId: string | null) {
     setNodeBusyKey(node.nodeKey);
     await runMenuAction(
       {
         action: "set-node-mapping-live",
         nodeKey: node.nodeKey,
-        collectionId: normalizeText(editingCollectionId) || null,
+        collectionId: collectionId || null,
         enabled: node.enabled,
       },
       "Updating node mapping live..."
     );
     setNodeBusyKey("");
+  }
+
+  async function onApplyNodeCollection(node: MenuNode) {
+    if (!editingNodeKey) return;
+    await onSetNodeCollection(node, normalizeText(editingCollectionId) || null);
     setEditingNodeKey("");
     setEditingCollectionId("");
   }
@@ -533,6 +588,13 @@ export default function ShopifyCollectionMapping() {
     void onToggleNode(row, node, lastFailedToggle.checked);
   }
 
+  function getAssignedNodesForProduct(row: ProductRow) {
+    const keys = new Set((row.checkedNodeKeys || []).map((key) => normalizeText(key)));
+    return nodes
+      .filter((node) => keys.has(node.nodeKey) && node.enabled)
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label));
+  }
+
   function toggleCollapse(nodeKey: string) {
     setCollapsedKeys((prev) => {
       const next = new Set(prev);
@@ -540,6 +602,106 @@ export default function ShopifyCollectionMapping() {
       else next.add(nodeKey);
       return next;
     });
+  }
+
+  function renderTreeNodeCard(node: MenuNode): JSX.Element {
+    const children = childrenByParent.get(node.nodeKey) || [];
+    const hasChildren = children.length > 0;
+    const collapsed = collapsedKeys.has(node.nodeKey);
+    const mappedCollection = node.collectionId ? collectionById.get(node.collectionId) : null;
+    const dropClass = dropHint?.targetKey === node.nodeKey ? `drop-${dropHint.position}` : "";
+    const busyNode = nodeBusyKey === node.nodeKey;
+
+    return (
+      <div key={node.nodeKey} className="tree-node-wrap">
+        <div
+          className={`tree-node ${dropClass}`}
+          draggable
+          onDragStart={(event) => {
+            setDragNodeKey(node.nodeKey);
+            event.dataTransfer.setData("text/plain", node.nodeKey);
+            event.dataTransfer.effectAllowed = "move";
+          }}
+          onDragEnd={() => {
+            setDragNodeKey("");
+            setDropHint(null);
+          }}
+          onDragOver={(event) => {
+            event.preventDefault();
+            if (!dragNodeKey || dragNodeKey === node.nodeKey) return;
+            const rect = (event.currentTarget as HTMLDivElement).getBoundingClientRect();
+            const offset = event.clientY - rect.top;
+            const third = rect.height / 3;
+            const position: DropPosition =
+              offset < third ? "before" : offset > third * 2 ? "after" : "inside";
+            setDropHint({ targetKey: node.nodeKey, position });
+          }}
+          onDrop={(event) => {
+            event.preventDefault();
+            const source = dragNodeKey || normalizeText(event.dataTransfer.getData("text/plain"));
+            if (!source || source === node.nodeKey || !dropHint || dropHint.targetKey !== node.nodeKey) return;
+            void onMoveNode(source, node.nodeKey, dropHint.position);
+            setDragNodeKey("");
+            setDropHint(null);
+          }}
+        >
+          <div className="tree-node-main" style={{ paddingLeft: `${Math.max(0, node.depth) * 16}px` }}>
+            <span className="drag-handle" title="Drag to reorder/reparent">::</span>
+            {hasChildren ? (
+              <button className="collapse-btn" onClick={() => toggleCollapse(node.nodeKey)} type="button">
+                {collapsed ? "+" : "-"}
+              </button>
+            ) : (
+              <span className="collapse-spacer" />
+            )}
+            <span className="tree-node-label">{node.label}</span>
+          </div>
+          <div className="tree-node-actions">
+            <label className="enable-toggle compact">
+              <input
+                type="checkbox"
+                checked={Boolean(node.enabled)}
+                onChange={(event) => void onToggleNodeEnabled(node, event.target.checked)}
+                disabled={menuBusy || busy || busyNode}
+              />
+              <span>{node.enabled ? "On" : "Off"}</span>
+            </label>
+            <span className={`tree-node-chip ${mappedCollection ? "mapped" : ""}`}>
+              {mappedCollection ? mappedCollection.handle : "-"}
+            </span>
+            <button
+              className="tiny-btn btn-outline"
+              type="button"
+              onClick={() => {
+                setAssignNodeKey(node.nodeKey);
+                setAssignQuery("");
+              }}
+              disabled={menuBusy || busy}
+            >
+              Assign
+            </button>
+            <button
+              className="tiny-btn btn-outline"
+              type="button"
+              onClick={() => {
+                setCreateOpen(true);
+                setCreateParentKey(node.nodeKey);
+                setCreateLabel("");
+                setCreateCollectionId("");
+              }}
+              disabled={menuBusy || busy}
+            >
+              +
+            </button>
+          </div>
+        </div>
+        {!collapsed && children.length ? (
+          <div className="tree-children">
+            {children.map((child) => renderTreeNodeCard(child))}
+          </div>
+        ) : null}
+      </div>
+    );
   }
 
   function renderNodeRows(node: MenuNode): JSX.Element[] {
@@ -739,27 +901,15 @@ export default function ShopifyCollectionMapping() {
         ) : null}
       </section>
 
-      <section className="card">
-        <div className="section-head">
-          <h2>Menu to Collection Mapping</h2>
-          <button
-            className="btn-base btn-outline"
-            onClick={() => {
-              setCreateOpen(true);
-              setCreateParentKey(null);
-              setCreateLabel("");
-              setCreateCollectionId("");
-            }}
-            disabled={menuBusy || busy}
-          >
-            Add Root Category
+      <section className="card mapping-workspace">
+        <div className="mapping-workspace-head">
+          <div>
+            <h2>Prototype 1: Tree + Search Drawer</h2>
+            <p className="muted">Row-level Assign replaces massive select lists.</p>
+          </div>
+          <button className="btn-base btn-outline" onClick={onRefreshMenu} disabled={busy || menuBusy}>
+            Pull Menu
           </button>
-        </div>
-
-        <div className="mapping-health">
-          <span className="pill good">Mapped: {mappingSummary.mapped}</span>
-          <span className="pill">Unmapped (enabled): {mappingSummary.unmapped}</span>
-          <span className="pill">Disabled: {mappingSummary.disabled}</span>
         </div>
 
         {createOpen ? (
@@ -800,222 +950,314 @@ export default function ShopifyCollectionMapping() {
                 Cancel
               </button>
             </div>
-            <p className="muted">Drag rows to reorder or reparent. Drop in middle to make a child, top/bottom for before/after.</p>
+            <p className="muted">Drag nodes to reorder or reparent. Drop in middle to make a child.</p>
           </div>
         ) : null}
 
-        <div className="map-table-wrap">
-          <table className="map-table">
-            <thead>
-              <tr>
-                <th>Enabled</th>
-                <th>Menu Node</th>
-                <th>Collection Mapping</th>
-                <th>Actions</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
+        <div className="mapping-two-col">
+          <div className="tree-panel">
+            <div className="section-head">
+              <h3>Menu Node Mapping</h3>
+              <button
+                className="btn-base btn-outline"
+                onClick={() => {
+                  setCreateOpen(true);
+                  setCreateParentKey(null);
+                  setCreateLabel("");
+                  setCreateCollectionId("");
+                }}
+                disabled={menuBusy || busy}
+              >
+                Add Root
+              </button>
+            </div>
+            <div className="mapping-health">
+              <span className="pill good">Mapped: {mappingSummary.mapped}</span>
+              <span className="pill">Unmapped: {mappingSummary.unmapped}</span>
+              <span className="pill">Disabled: {mappingSummary.disabled}</span>
+            </div>
+            <div className="tree-list">
               {nodes.length < 1 ? (
-                <tr>
-                  <td colSpan={5} className="muted">
-                    No menu nodes available.
-                  </td>
-                </tr>
+                <div className="muted">No menu nodes available.</div>
               ) : (
-                rootNodes.flatMap((node) => renderNodeRows(node))
+                rootNodes.map((node) => renderTreeNodeCard(node))
               )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+            </div>
+          </div>
 
-      <section className="card">
-        <div className="section-head">
-          <h2>Products</h2>
-          <div className="muted">{total} item(s)</div>
-        </div>
+          <div className="products-panel">
+            <div className="section-head">
+              <h3>Product Grid (Category Chips + Edit)</h3>
+              <div className="muted">{total} item(s)</div>
+            </div>
 
-        <div className="filters">
-          <input
-            value={filters.q}
-            placeholder="Search (partial text)"
-            onChange={(event) => setFilters((prev) => ({ ...prev, q: event.target.value }))}
-          />
-          <input
-            value={filters.title}
-            placeholder="Title"
-            onChange={(event) => setFilters((prev) => ({ ...prev, title: event.target.value }))}
-          />
-          <input
-            value={filters.sku}
-            placeholder="SKU"
-            onChange={(event) => setFilters((prev) => ({ ...prev, sku: event.target.value }))}
-          />
-          <input
-            value={filters.upc}
-            placeholder="UPC"
-            onChange={(event) => setFilters((prev) => ({ ...prev, upc: event.target.value }))}
-          />
-          <input
-            value={filters.itemType}
-            placeholder="Item type"
-            onChange={(event) => setFilters((prev) => ({ ...prev, itemType: event.target.value }))}
-          />
-        </div>
+            <div className="filters">
+              <input
+                value={filters.q}
+                placeholder="Search (partial text)"
+                onChange={(event) => setFilters((prev) => ({ ...prev, q: event.target.value }))}
+              />
+              <input
+                value={filters.title}
+                placeholder="Title"
+                onChange={(event) => setFilters((prev) => ({ ...prev, title: event.target.value }))}
+              />
+              <input
+                value={filters.sku}
+                placeholder="SKU"
+                onChange={(event) => setFilters((prev) => ({ ...prev, sku: event.target.value }))}
+              />
+              <input
+                value={filters.upc}
+                placeholder="UPC"
+                onChange={(event) => setFilters((prev) => ({ ...prev, upc: event.target.value }))}
+              />
+              <input
+                value={filters.itemType}
+                placeholder="Item type"
+                onChange={(event) => setFilters((prev) => ({ ...prev, itemType: event.target.value }))}
+              />
+            </div>
 
-        <div className="filters actions-row">
-          <select value={sortField} onChange={(event) => setSortField(event.target.value as SortField)}>
-            <option value="title">Title</option>
-            <option value="upc">UPC</option>
-            <option value="sku">SKU</option>
-            <option value="itemType">Item Type</option>
-            <option value="updatedAt">Updated</option>
-          </select>
-          <select value={sortDir} onChange={(event) => setSortDir(event.target.value as SortDir)}>
-            <option value="asc">A-Z / Old-New</option>
-            <option value="desc">Z-A / New-Old</option>
-          </select>
-          <select value={uncheckPolicy} onChange={(event) => setUncheckPolicy(event.target.value as UncheckPolicy)}>
-            <option value="remove-descendants">Uncheck parent + descendants (recommended)</option>
-            <option value="keep-descendants">Uncheck only selected node</option>
-          </select>
-          <label className="inline-toggle">
-            <input
-              type="checkbox"
-              checked={showCompactColumns}
-              onChange={(event) => setShowCompactColumns(event.target.checked)}
-            />
-            Show SKU + Item Type
-          </label>
-          <select
-            value={String(pageSize)}
-            onChange={(event) => {
-              const nextSize = Number(event.target.value) || 30;
-              setPageSize(nextSize);
-              void loadData(1, nextSize, appliedFilters, logsOpen);
-            }}
-          >
-            {PAGE_SIZE_OPTIONS.map((size) => (
-              <option key={size} value={size}>
-                {size} / page
-              </option>
-            ))}
-          </select>
-          <button
-            className="btn-base"
-            onClick={() => {
-              setAppliedFilters(filters);
-              void loadData(1, pageSize, filters, logsOpen);
-            }}
-            disabled={busy}
-          >
-            Search
-          </button>
-          <button
-            className="btn-base btn-outline"
-            onClick={() => {
-              setFilters(DEFAULT_FILTERS);
-              setAppliedFilters(DEFAULT_FILTERS);
-              void loadData(1, pageSize, DEFAULT_FILTERS, logsOpen);
-            }}
-            disabled={busy}
-          >
-            Clear
-          </button>
-        </div>
-
-        <div className="table-wrap">
-          <table className="products-table">
-            <thead>
-              <tr>
-                <th>Picture</th>
-                <th>Title</th>
-                <th>UPC</th>
-                {showCompactColumns ? <th>SKU</th> : null}
-                {showCompactColumns ? <th>Item Type</th> : null}
-                {mappedNodeColumns.map((node) => (
-                  <th key={node.nodeKey} title={formatNodeLabel(node)}>
-                    {node.label}
-                  </th>
+            <div className="filters actions-row">
+              <select value={sortField} onChange={(event) => setSortField(event.target.value as SortField)}>
+                <option value="title">Title</option>
+                <option value="upc">UPC</option>
+                <option value="sku">SKU</option>
+                <option value="itemType">Item Type</option>
+                <option value="updatedAt">Updated</option>
+              </select>
+              <select value={sortDir} onChange={(event) => setSortDir(event.target.value as SortDir)}>
+                <option value="asc">A-Z / Old-New</option>
+                <option value="desc">Z-A / New-Old</option>
+              </select>
+              <select value={uncheckPolicy} onChange={(event) => setUncheckPolicy(event.target.value as UncheckPolicy)}>
+                <option value="remove-descendants">Uncheck parent + descendants</option>
+                <option value="keep-descendants">Uncheck only selected node</option>
+              </select>
+              <select
+                value={String(pageSize)}
+                onChange={(event) => {
+                  const nextSize = Number(event.target.value) || 30;
+                  setPageSize(nextSize);
+                  void loadData(1, nextSize, appliedFilters, logsOpen);
+                }}
+              >
+                {PAGE_SIZE_OPTIONS.map((size) => (
+                  <option key={size} value={size}>
+                    {size} / page
+                  </option>
                 ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length < 1 ? (
-                <tr>
-                  <td colSpan={3 + (showCompactColumns ? 2 : 0) + mappedNodeColumns.length} className="muted">
-                    No products found.
-                  </td>
-                </tr>
-              ) : (
-                rows.map((row) => {
-                  const checked = new Set(row.checkedNodeKeys || []);
-                  return (
-                    <tr key={row.id}>
-                      <td className="center">
-                        {row.image ? (
-                          <button className="thumb-btn" onClick={() => setPreviewImage(row.image)} title="Open image preview">
-                            <img src={row.image} alt={row.title} className="thumb" />
-                          </button>
-                        ) : (
-                          <span className="muted">-</span>
-                        )}
+              </select>
+              <button
+                className="btn-base"
+                onClick={() => {
+                  setAppliedFilters(filters);
+                  void loadData(1, pageSize, filters, logsOpen);
+                }}
+                disabled={busy}
+              >
+                Search
+              </button>
+              <button
+                className="btn-base btn-outline"
+                onClick={() => {
+                  setFilters(DEFAULT_FILTERS);
+                  setAppliedFilters(DEFAULT_FILTERS);
+                  void loadData(1, pageSize, DEFAULT_FILTERS, logsOpen);
+                }}
+                disabled={busy}
+              >
+                Clear
+              </button>
+            </div>
+
+            <div className="table-wrap">
+              <table className="products-table products-table-prototype">
+                <thead>
+                  <tr>
+                    <th>Picture</th>
+                    <th>Title</th>
+                    <th>UPC</th>
+                    <th>Assigned Categories</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.length < 1 ? (
+                    <tr>
+                      <td colSpan={5} className="muted">
+                        No products found.
                       </td>
-                      <td>
-                        <div className="title-cell">{row.title || row.handle || row.id}</div>
-                      </td>
-                      <td>{row.upc || "-"}</td>
-                      {showCompactColumns ? <td>{row.sku || "-"}</td> : null}
-                      {showCompactColumns ? <td>{row.itemType || "-"}</td> : null}
-                      {mappedNodeColumns.map((node) => {
-                        const key = `${row.id}::${node.nodeKey}`;
-                        const cellBusy = toggleBusyKey === key;
-                        return (
-                          <td key={key} className="center">
-                            {cellBusy ? (
-                              <span className="cell-spinner" title="Updating Shopify">
-                                ...
-                              </span>
+                    </tr>
+                  ) : (
+                    rows.map((row) => {
+                      const assignedNodes = getAssignedNodesForProduct(row);
+                      return (
+                        <tr key={row.id}>
+                          <td className="center">
+                            {row.image ? (
+                              <button className="thumb-btn" onClick={() => setPreviewImage(row.image)} title="Open image preview">
+                                <img src={row.image} alt={row.title} className="thumb" />
+                              </button>
                             ) : (
-                              <input
-                                type="checkbox"
-                                checked={checked.has(node.nodeKey)}
-                                onChange={(event) => void onToggleNode(row, node, event.target.checked)}
-                                disabled={busy || menuBusy}
-                              />
+                              <span className="muted">-</span>
                             )}
                           </td>
-                        );
-                      })}
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                          <td>
+                            <div className="title-cell">{row.title || row.handle || row.id}</div>
+                          </td>
+                          <td>{row.upc || "-"}</td>
+                          <td>
+                            <div className="category-chip-list">
+                              {assignedNodes.length ? (
+                                assignedNodes.map((node) => (
+                                  <span className="mini-tag good-tag" key={`${row.id}-${node.nodeKey}`}>
+                                    {node.label}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="mini-tag muted-tag">Unassigned</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="center">
+                            <button
+                              className="tiny-btn btn-outline"
+                              type="button"
+                              onClick={() => {
+                                setProductEditorId(row.id);
+                                setProductEditorQuery("");
+                              }}
+                            >
+                              Edit
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
 
-        <div className="pager actions-row">
-          <button
-            className="btn-base btn-outline"
-            disabled={busy || page <= 1}
-            onClick={() => void loadData(page - 1, pageSize, appliedFilters, logsOpen)}
-          >
-            Prev
-          </button>
-          <span>
-            Page {page} / {totalPages}
-          </span>
-          <button
-            className="btn-base btn-outline"
-            disabled={busy || page >= totalPages}
-            onClick={() => void loadData(page + 1, pageSize, appliedFilters, logsOpen)}
-          >
-            Next
-          </button>
+            <div className="pager actions-row">
+              <button
+                className="btn-base btn-outline"
+                disabled={busy || page <= 1}
+                onClick={() => void loadData(page - 1, pageSize, appliedFilters, logsOpen)}
+              >
+                Prev
+              </button>
+              <span>
+                Page {page} / {totalPages}
+              </span>
+              <button
+                className="btn-base btn-outline"
+                disabled={busy || page >= totalPages}
+                onClick={() => void loadData(page + 1, pageSize, appliedFilters, logsOpen)}
+              >
+                Next
+              </button>
+            </div>
+          </div>
         </div>
       </section>
+
+      {assignNode ? (
+        <div className="preview-overlay" onClick={() => setAssignNodeKey("")}>
+          <div className="drawer-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="logs-head">
+              <h3>Assign Collection - {assignNode.label}</h3>
+              <button className="btn-base btn-outline" onClick={() => setAssignNodeKey("")}>
+                Close
+              </button>
+            </div>
+            <input
+              value={assignQuery}
+              placeholder="Search collections by title or handle"
+              onChange={(event) => setAssignQuery(event.target.value)}
+            />
+            <div className="drawer-list">
+              <button
+                className="drawer-option"
+                type="button"
+                onClick={() => {
+                  void onSetNodeCollection(assignNode, null);
+                  setAssignNodeKey("");
+                }}
+                disabled={menuBusy || busy}
+              >
+                <span>(Not mapped)</span>
+              </button>
+              {filteredCollections.map((collection) => (
+                <button
+                  key={collection.id}
+                  className={`drawer-option ${
+                    normalizeText(assignNode.collectionId) === normalizeText(collection.id) ? "active" : ""
+                  }`}
+                  type="button"
+                  onClick={() => {
+                    void onSetNodeCollection(assignNode, collection.id);
+                    setAssignNodeKey("");
+                  }}
+                  disabled={menuBusy || busy}
+                >
+                  <span>{collection.title}</span>
+                  <span className="muted">{collection.handle}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {activeProduct ? (
+        <div className="preview-overlay" onClick={() => setProductEditorId("")}>
+          <div className="drawer-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="logs-head">
+              <h3>Edit Product Categories</h3>
+              <button className="btn-base btn-outline" onClick={() => setProductEditorId("")}>
+                Close
+              </button>
+            </div>
+            <div className="muted">
+              {activeProduct.title} | UPC: {activeProduct.upc || "-"}
+            </div>
+            <input
+              value={productEditorQuery}
+              placeholder="Search category nodes"
+              onChange={(event) => setProductEditorQuery(event.target.value)}
+            />
+            <div className="drawer-list">
+              {filteredAssignableNodes.length ? (
+                filteredAssignableNodes.map((node) => {
+                  const key = `${activeProduct.id}::${node.nodeKey}`;
+                  const checked = (activeProduct.checkedNodeKeys || []).includes(node.nodeKey);
+                  const cellBusy = toggleBusyKey === key;
+                  return (
+                    <label key={node.nodeKey} className="drawer-checkbox">
+                      <span style={{ paddingLeft: `${Math.max(0, node.depth) * 14}px` }}>{node.label}</span>
+                      {cellBusy ? (
+                        <span className="cell-spinner">...</span>
+                      ) : (
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(event) => void onToggleNode(activeProduct, node, event.target.checked)}
+                          disabled={busy || menuBusy}
+                        />
+                      )}
+                    </label>
+                  );
+                })
+              ) : (
+                <div className="muted">No mapped categories match this search.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {logsOpen ? (
         <div className="preview-overlay" onClick={() => setLogsOpen(false)}>
@@ -1147,6 +1389,123 @@ export default function ShopifyCollectionMapping() {
           display: flex;
           flex-wrap: wrap;
           gap: 8px;
+        }
+        .mapping-workspace {
+          display: grid;
+          gap: 12px;
+        }
+        .mapping-workspace-head {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+        .mapping-two-col {
+          display: grid;
+          grid-template-columns: minmax(0, 0.44fr) minmax(0, 0.56fr);
+          gap: 12px;
+        }
+        .tree-panel,
+        .products-panel {
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          border-radius: 12px;
+          background: rgba(15, 23, 42, 0.42);
+          padding: 10px;
+          display: grid;
+          gap: 10px;
+          align-content: start;
+        }
+        .tree-list {
+          display: grid;
+          gap: 8px;
+        }
+        .tree-children {
+          display: grid;
+          gap: 8px;
+          margin-top: 8px;
+        }
+        .tree-node-wrap {
+          display: grid;
+          gap: 0;
+        }
+        .tree-node {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          border: 1px solid rgba(255, 255, 255, 0.16);
+          background: rgba(255, 255, 255, 0.06);
+          border-radius: 10px;
+          padding: 8px 10px;
+        }
+        .tree-node.drop-before {
+          border-top: 2px solid rgba(56, 189, 248, 0.95);
+        }
+        .tree-node.drop-after {
+          border-bottom: 2px solid rgba(56, 189, 248, 0.95);
+        }
+        .tree-node.drop-inside {
+          background: rgba(56, 189, 248, 0.12);
+        }
+        .tree-node-main {
+          min-width: 0;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          flex: 1;
+        }
+        .tree-node-label {
+          font-size: 0.92rem;
+          font-weight: 800;
+          color: #f8fafc;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .tree-node-actions {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          flex-wrap: nowrap;
+        }
+        .tree-node-chip {
+          border-radius: 999px;
+          border: 1px solid rgba(226, 232, 240, 0.35);
+          background: rgba(148, 163, 184, 0.16);
+          color: rgba(226, 232, 240, 0.85);
+          font-size: 0.7rem;
+          font-weight: 700;
+          line-height: 1;
+          padding: 6px 8px;
+          max-width: 160px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .tree-node-chip.mapped {
+          border-color: rgba(16, 185, 129, 0.45);
+          background: rgba(16, 185, 129, 0.2);
+          color: #a7f3d0;
+        }
+        .enable-toggle.compact {
+          border: 1px solid rgba(255, 255, 255, 0.22);
+          border-radius: 999px;
+          padding: 4px 8px;
+          background: rgba(15, 23, 42, 0.5);
+        }
+        .products-table-prototype {
+          min-width: 780px;
+        }
+        .products-table-prototype th,
+        .products-table-prototype td {
+          white-space: normal;
+        }
+        .category-chip-list {
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 6px;
         }
         .pill {
           border-radius: 999px;
@@ -1485,17 +1844,92 @@ export default function ShopifyCollectionMapping() {
         .logs-wrap {
           max-height: 72vh;
         }
+        .drawer-modal {
+          width: min(560px, 96vw);
+          max-height: 90vh;
+          overflow: hidden;
+          border-radius: 14px;
+          border: 1px solid rgba(255, 255, 255, 0.22);
+          background: rgba(2, 6, 23, 0.96);
+          padding: 12px;
+          display: grid;
+          gap: 10px;
+        }
+        .drawer-list {
+          display: grid;
+          gap: 6px;
+          overflow: auto;
+          max-height: 62vh;
+          padding-right: 4px;
+        }
+        .drawer-option {
+          min-height: 40px;
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          border-radius: 10px;
+          background: rgba(255, 255, 255, 0.06);
+          color: #f8fafc;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          padding: 0 12px;
+          cursor: pointer;
+          font-weight: 700;
+          text-align: left;
+        }
+        .drawer-option.active {
+          border-color: rgba(16, 185, 129, 0.5);
+          background: rgba(16, 185, 129, 0.2);
+          color: #a7f3d0;
+        }
+        .drawer-checkbox {
+          min-height: 38px;
+          border: 1px solid rgba(255, 255, 255, 0.18);
+          border-radius: 10px;
+          background: rgba(255, 255, 255, 0.04);
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          padding: 0 10px;
+          font-size: 0.84rem;
+          font-weight: 700;
+          color: #f8fafc;
+        }
+        .drawer-checkbox input {
+          width: 16px;
+          height: 16px;
+          min-height: 16px;
+        }
         @media (max-width: 1080px) {
           .page {
             padding-top: 126px;
             padding-left: 8px;
             padding-right: 8px;
           }
+          .mapping-two-col {
+            grid-template-columns: 1fr;
+          }
           table {
             min-width: 760px;
           }
           .collection-cell {
             min-width: 220px;
+          }
+        }
+        @media (max-width: 760px) {
+          .tree-node {
+            flex-direction: column;
+            align-items: stretch;
+          }
+          .tree-node-actions {
+            justify-content: space-between;
+          }
+          .tree-node-chip {
+            max-width: none;
+          }
+          .products-table-prototype {
+            min-width: 640px;
           }
         }
       `}</style>
