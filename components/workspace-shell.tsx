@@ -359,10 +359,6 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
     setDialogInput("");
   }
 
-  if (isCollectionMappingRoute) {
-    return <>{children}</>;
-  }
-
   return (
     <div className={`shell ${chatExpanded && showChatPanel ? "chat-expanded" : ""}`}>
       <svg
