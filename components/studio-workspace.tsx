@@ -5645,11 +5645,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               ) : null
             ) : null}
             <div className="model-registry-header-actions">
-              {modelRegistryCollapsed && models.length ? (
-                <button className="ghost-btn danger" type="button" onClick={resetModels}>
-                  Reset Models
-                </button>
-              ) : null}
               <button
                 suppressHydrationWarning
                 className="ghost-btn icon-toggle-btn"
@@ -5661,6 +5656,13 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               </button>
             </div>
           </div>
+          {modelRegistryCollapsed && models.length ? (
+            <div className="row model-reset-collapsed-row">
+              <button className="ghost-btn danger" type="button" onClick={resetModels}>
+                Reset Models
+              </button>
+            </div>
+          ) : null}
           {!modelRegistryCollapsed ? (
             <>
           <p className="muted">Upload model profile images.</p>
@@ -5795,9 +5797,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                     setPreviousSort(e.target.value as "date_asc" | "date_desc" | "name_az")
                   }
                 >
-                  <option value="date_desc">↕ Date: Newest</option>
-                  <option value="date_asc">↕ Date: Oldest</option>
-                  <option value="name_az">↕ Name: A-Z</option>
+                  <option value="date_desc">Date: Newest</option>
+                  <option value="date_asc">Date: Oldest</option>
+                  <option value="name_az">Name: A-Z</option>
                 </select>
                 <select
                   value={previousGenderFilter}
@@ -5807,7 +5809,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                     )
                   }
                 >
-                  <option value="all">⚲ All genders</option>
+                  <option value="all">All genders</option>
                   <option value="female">Female only</option>
                   <option value="male">Male only</option>
                 </select>
@@ -6463,16 +6465,16 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             </button>
           </div>
           <div className="catalog-wrap">
-              <div className="row">
+              <div className="row catalog-search-row">
                 <input
                   suppressHydrationWarning
                   value={catalogQuery}
                   onChange={(e) => setCatalogQuery(e.target.value)}
                   onKeyDown={onCatalogSearchKeyDown}
-                  placeholder="Search products"
+                  placeholder="Shopify catalog"
                 />
                 <button className="btn ghost" type="button" onClick={() => loadCatalogImages()}>
-                  {catalogLoading ? "Loading..." : "Search Catalog"}
+                  {catalogLoading ? "Loading..." : "Search"}
                 </button>
               </div>
               {!shop.trim() && (
@@ -6487,7 +6489,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               )}
               {shop.trim() && catalogSearched && catalogResultsHidden ? (
                 <div className="muted centered">
-                  Catalog hidden. Click Search Catalog to show it again.
+                  Catalog hidden. Click Search to show it again.
                 </div>
               ) : null}
               {shop.trim() && catalogSearched && !catalogResultsHidden && !catalogLoading && !catalogProducts.length && (
@@ -6538,17 +6540,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                       </div>
                     </div>
                   ))}
-                </div>
-              ) : null}
-              {catalogSearched && !catalogResultsHidden ? (
-                <div className="row">
-                  <button
-                    className="btn ghost"
-                    type="button"
-                    onClick={() => setCatalogResultsHidden(true)}
-                  >
-                    Hide Catalog
-                  </button>
                 </div>
               ) : null}
               {showCatalogPagination ? (
@@ -7190,7 +7181,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             />
             <div className="picker-row">
               <button className="ghost-btn" type="button" onClick={() => openInputPickerWithMask(finalResultPickerRef.current)}>
-                Choose files
+                Add Pictures
               </button>
               <button className="ghost-btn folder-picker-btn" type="button" onClick={() => openInputPickerWithMask(finalResultFolderRef.current)}>
                 Choose folder
@@ -8286,6 +8277,18 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           display: grid;
           gap: 10px;
         }
+        .catalog-search-row {
+          flex-wrap: nowrap;
+          align-items: stretch;
+        }
+        .catalog-search-row > input {
+          flex: 1 1 auto;
+          min-width: 0;
+        }
+        .catalog-search-row > .btn {
+          flex: 0 0 auto;
+          min-width: 92px;
+        }
         .dropbox-folder-list {
           display: grid;
           gap: 8px;
@@ -8812,6 +8815,10 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           margin-top: 6px;
           gap: 10px;
         }
+        .model-reset-collapsed-row {
+          justify-content: center;
+          margin-top: 2px;
+        }
         .model-save-row .btn,
         .model-save-row .ghost-btn {
           min-width: 148px;
@@ -9085,9 +9092,16 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         }
         .final-download-row {
           justify-content: center;
+          width: 100%;
+          max-width: 360px;
+          margin: 0 auto;
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
         }
         .final-download-row .btn {
-          min-width: 170px;
+          min-width: 0;
+          width: 100%;
         }
         .final-save-row,
         .final-seo-row {
@@ -9867,13 +9881,13 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         }
         @media (max-width: 640px) {
           .model-registry-header-actions {
-            grid-column: 1 / -1;
-            width: 100%;
-            justify-content: flex-start;
+            grid-column: 2;
+            width: auto;
+            justify-content: flex-end;
           }
           .model-registry-header-actions .ghost-btn {
-            flex: 1 1 calc(50% - 6px);
-            min-width: 0;
+            flex: 0 0 auto;
+            min-width: 44px;
           }
           .barcode-action-row > .btn,
           .barcode-action-row > .ghost-btn,
@@ -9903,6 +9917,16 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             order: 1;
             flex: 1 1 100%;
             max-width: 220px;
+          }
+          .catalog-search-row {
+            flex-wrap: nowrap;
+          }
+          .catalog-search-row > input {
+            flex: 1 1 auto;
+          }
+          .catalog-search-row > .btn {
+            flex: 0 0 auto;
+            min-width: 84px;
           }
           .item-catalog-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
