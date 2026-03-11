@@ -3578,12 +3578,14 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     return rows;
   }, [previousModelUploads, previousSort, previousGenderFilter]);
 
-  const showCatalogPagination = useMemo(
-    () =>
-      catalogSearched &&
-      !catalogResultsHidden &&
-      (catalogPage > 1 || catalogHasNextPage || catalogTotalPages > 1),
-    [catalogSearched, catalogResultsHidden, catalogPage, catalogHasNextPage, catalogTotalPages]
+  const showCatalogControls = useMemo(
+    () => catalogSearched && Boolean(shop.trim()),
+    [catalogSearched, shop]
+  );
+
+  const showCatalogPagerButtons = useMemo(
+    () => !catalogResultsHidden && (catalogPage > 1 || catalogHasNextPage || catalogTotalPages > 1),
+    [catalogResultsHidden, catalogPage, catalogHasNextPage, catalogTotalPages]
   );
 
   const visibleCatalogProducts = useMemo(() => catalogProducts, [catalogProducts]);
@@ -4798,15 +4800,48 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     a.click();
   }
 
-  function downloadImageUrl(filename: string, url: string) {
-    if (!url) return;
+  function triggerImageDownload(filename: string, href: string) {
     const a = document.createElement("a");
-    a.href = url;
+    a.href = href;
     a.download = filename || "image.jpg";
     a.rel = "noopener";
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+  }
+
+  async function downloadImageUrl(filename: string, url: string) {
+    const sourceUrl = String(url || "").trim();
+    if (!sourceUrl) return;
+
+    const safeName = String(filename || "").trim() || "image.jpg";
+    if (sourceUrl.startsWith("data:") || sourceUrl.startsWith("blob:")) {
+      triggerImageDownload(safeName, sourceUrl);
+      return;
+    }
+
+    const candidateUrls = sourceUrl.includes("/api/storage/preview?url=")
+      ? [sourceUrl]
+      : [`/api/storage/preview?url=${encodeURIComponent(sourceUrl)}`, sourceUrl];
+
+    for (const candidate of candidateUrls) {
+      try {
+        const response = await fetch(candidate, {
+          cache: "no-store",
+          credentials: "include",
+        });
+        if (!response.ok) continue;
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        triggerImageDownload(safeName, blobUrl);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 1200);
+        return;
+      } catch {
+        // Try next candidate (proxy -> direct URL fallback).
+      }
+    }
+
+    triggerImageDownload(safeName, sourceUrl);
   }
 
   function base64ToFile(base64: string, fileName: string) {
@@ -5797,8 +5832,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                     setPreviousSort(e.target.value as "date_asc" | "date_desc" | "name_az")
                   }
                 >
-                  <option value="date_desc">Date: Newest</option>
-                  <option value="date_asc">Date: Oldest</option>
+                  <option value="date_desc">Date</option>
+                  <option value="date_asc">Date (Oldest)</option>
                   <option value="name_az">Name: A-Z</option>
                 </select>
                 <select
@@ -5809,9 +5844,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                     )
                   }
                 >
-                  <option value="all">All genders</option>
-                  <option value="female">Female only</option>
-                  <option value="male">Male only</option>
+                  <option value="all">Gender</option>
+                  <option value="female">Female</option>
+                  <option value="male">Male</option>
                 </select>
               </div>
               {previousModelUploadsLoading ? (
@@ -6489,7 +6524,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               )}
               {shop.trim() && catalogSearched && catalogResultsHidden ? (
                 <div className="muted centered">
-                  Catalog hidden. Click Search to show it again.
+                  Catalog hidden. Click Show Catalog to display results.
                 </div>
               ) : null}
               {shop.trim() && catalogSearched && !catalogResultsHidden && !catalogLoading && !catalogProducts.length && (
@@ -6542,35 +6577,43 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                   ))}
                 </div>
               ) : null}
-              {showCatalogPagination ? (
+              {showCatalogControls ? (
                 <div className="catalog-pagination">
-                  {catalogSearched && !catalogResultsHidden ? (
-                    <button
-                      className="btn ghost"
-                      type="button"
-                      onClick={() => setCatalogResultsHidden(true)}
-                    >
-                      Hide Catalog
-                    </button>
-                  ) : null}
+                  {showCatalogPagerButtons ? (
+                    <>
+                      <button
+                        className="ghost-btn"
+                        type="button"
+                        onClick={loadCatalogPreviousPage}
+                        disabled={catalogLoading || catalogPage <= 1}
+                      >
+                        {"<-"}
+                      </button>
+                      <div className="muted centered catalog-page-indicator">
+                        <span className="catalog-page-label">Page </span>
+                        {catalogPage} / {catalogTotalPages}
+                      </div>
+                      <button
+                        className="ghost-btn"
+                        type="button"
+                        onClick={loadCatalogNextPage}
+                        disabled={catalogLoading || !catalogHasNextPage}
+                      >
+                        {"->"}
+                      </button>
+                    </>
+                  ) : (
+                    <div className="muted centered catalog-page-indicator">
+                      <span className="catalog-page-label">Page </span>
+                      {catalogPage} / {catalogTotalPages}
+                    </div>
+                  )}
                   <button
-                    className="ghost-btn"
+                    className="btn ghost catalog-toggle-btn"
                     type="button"
-                    onClick={loadCatalogPreviousPage}
-                    disabled={catalogLoading || catalogPage <= 1}
+                    onClick={() => setCatalogResultsHidden((prev) => !prev)}
                   >
-                    {"<-"}
-                  </button>
-                  <div className="muted centered">
-                    Page {catalogPage} / {catalogTotalPages}
-                  </div>
-                  <button
-                    className="ghost-btn"
-                    type="button"
-                    onClick={loadCatalogNextPage}
-                    disabled={catalogLoading || !catalogHasNextPage}
-                  >
-                    {"->"}
+                    {catalogResultsHidden ? "Show Catalog" : "Hide Catalog"}
                   </button>
                 </div>
               ) : null}
@@ -6920,7 +6963,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               Select All Panels
             </button>
           </div>
-          <div className="panel-preview-grid">
+          <div className={`panel-preview-grid ${selectedPanels.length === 1 ? "single-panel" : ""}`}>
             {[...selectedPanels].sort((a, b) => a - b).map((panelNumber) => {
               const b64 = generatedPanels[panelNumber];
               return (
@@ -8314,6 +8357,13 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           align-items: center;
           justify-content: center;
         }
+        .catalog-page-indicator {
+          white-space: nowrap;
+          min-width: 88px;
+        }
+        .catalog-toggle-btn {
+          white-space: nowrap;
+        }
         .catalog-product {
           border: 1px solid #e2e8f0;
           border-radius: 10px;
@@ -8806,10 +8856,14 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           gap: 8px;
         }
         .previous-upload-filters-row {
+          display: flex;
           flex-wrap: nowrap;
+          align-items: center;
+          gap: 8px;
         }
         .previous-upload-filters-row > select {
-          flex: 1 1 50%;
+          flex: 1 1 0%;
+          min-width: 0;
         }
         .model-save-row {
           margin-top: 6px;
@@ -9083,6 +9137,14 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           gap: 10px;
           grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
           min-width: 0;
+        }
+        .panel-preview-grid.single-panel {
+          justify-content: center;
+        }
+        .panel-preview-grid.single-panel > .panel-preview-card {
+          max-width: 340px;
+          margin-left: auto;
+          margin-right: auto;
         }
         .split-external-row {
           gap: 10px;
@@ -9731,6 +9793,25 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           .generation-actions-layout {
             grid-template-columns: 1fr;
           }
+          .section-header,
+          .model-registry-header {
+            position: relative;
+            padding-right: 56px;
+            min-height: 44px;
+            align-items: flex-start;
+          }
+          .section-header .icon-toggle-btn,
+          .model-registry-header .icon-toggle-btn {
+            position: absolute;
+            top: 0;
+            right: 0;
+            margin: 0;
+          }
+          .section-header .card-title,
+          .model-registry-header .card-title {
+            min-width: 0;
+            text-align: left;
+          }
           .panel-row {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -9750,21 +9831,28 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             flex: 0 0 min(82vw, 300px);
             scroll-snap-align: start;
           }
+          .panel-preview-grid.single-panel {
+            justify-content: center;
+            overflow-x: hidden;
+          }
+          .panel-preview-grid.single-panel > .panel-preview-card {
+            flex: 0 0 min(82vw, 300px);
+            margin-left: auto;
+            margin-right: auto;
+          }
           .model-registry-header {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) auto;
-            align-items: start;
+            display: block;
             gap: 8px;
           }
           .model-registry-header .card-title {
-            grid-column: 1;
             min-width: 0;
             text-align: left;
           }
           .model-registry-header-actions {
-            grid-column: 2;
-            margin-left: 0;
-            margin-right: 0;
+            position: absolute;
+            top: 0;
+            right: 0;
+            margin: 0;
             justify-content: flex-end;
             align-self: start;
           }
@@ -9774,10 +9862,10 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             overflow-x: auto;
             overflow-y: hidden;
             scroll-snap-type: x mandatory;
-            grid-column: 1 / -1;
             width: 100%;
             justify-content: flex-start;
             gap: 8px;
+            margin-top: 8px;
             padding-bottom: 4px;
           }
           .model-pill {
@@ -9881,7 +9969,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         }
         @media (max-width: 640px) {
           .model-registry-header-actions {
-            grid-column: 2;
+            position: absolute;
+            top: 0;
+            right: 0;
             width: auto;
             justify-content: flex-end;
           }
@@ -9910,13 +10000,32 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             flex: 1 1 calc(50% - 6px);
           }
           .catalog-pagination {
+            flex-wrap: nowrap;
             justify-content: center;
             gap: 6px;
           }
-          .catalog-pagination .btn.ghost {
-            order: 1;
-            flex: 1 1 100%;
-            max-width: 220px;
+          .catalog-pagination .catalog-toggle-btn {
+            order: 4;
+            flex: 0 0 auto;
+            max-width: none;
+            min-width: 0;
+            padding-left: 10px;
+            padding-right: 10px;
+          }
+          .catalog-page-indicator {
+            min-width: 0;
+            font-size: 0.85rem;
+          }
+          .catalog-page-label {
+            display: none;
+          }
+          .previous-upload-filters-row {
+            flex-wrap: nowrap !important;
+            gap: 6px;
+          }
+          .previous-upload-filters-row > select {
+            flex: 1 1 0%;
+            min-width: 0;
           }
           .catalog-search-row {
             flex-wrap: nowrap;
