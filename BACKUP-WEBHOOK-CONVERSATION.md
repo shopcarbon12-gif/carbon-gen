@@ -289,3 +289,8 @@ If session resets, instruct the agent:
 - Implemented cross-page product selection persistence; header Select All now only affects visible rows on current page.
 - Selection state now auto-clears on product search/sort changes, persists across pagination/view navigation, and clears on bulk unassign action.
 - Updated `app/api/shopify/collection-mapping/route.ts` with `toggle-nodes` multi-node assignment action and raised max `pageSize` clamp to `500`.
+
+## 2026-03-11 Menu Tree Checkbox + Connector Line Visual Fixes
+- Constrained custom tree checkbox dimensions in `components/shopify-collection-mapping.tsx` to fixed `16x16` with explicit min/max sizing and `flex-shrink: 0`.
+- Added tree guide connectors using `::before` and `::after` on `.treeRow.has-parent` to draw vertical and horizontal branch lines between parent/child rows.
+- Added sibling-aware `is-last` row state to trim vertical connector lines at last child for cleaner directory-tree style branching.

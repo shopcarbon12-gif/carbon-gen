@@ -45,6 +45,10 @@ type ToggleResponse = {
     id: string;
     checkedNodeKeys: string[];
   };
+  products?: Array<{
+    id: string;
+    checkedNodeKeys: string[];
+  }>;
 };
 
 type SortValue = "title-asc" | "title-desc" | "upc-asc" | "upc-desc";
@@ -73,6 +77,7 @@ export default function ShopifyCollectionMapping() {
   const [showAuditReport, setShowAuditReport] = useState(false);
   const [dragSourceKey, setDragSourceKey] = useState("");
   const [dropTarget, setDropTarget] = useState<{ targetKey: string; position: DropPosition } | null>(null);
+  const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
 
   const nodeLabelByKey = useMemo(() => {
     const map = new Map<string, string>();
@@ -139,6 +144,41 @@ export default function ShopifyCollectionMapping() {
     }
     return nodes.filter((node) => include.has(node.nodeKey));
   }, [nodes, treeSearch, parentMap]);
+
+  const childrenByParent = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const node of nodes) {
+      const parent = node.parentKey || "";
+      if (!parent) continue;
+      const current = map.get(parent) || [];
+      current.push(node.nodeKey);
+      map.set(parent, current);
+    }
+    return map;
+  }, [nodes]);
+
+  const visibleTreeNodes = useMemo(() => {
+    if (treeSearch.trim()) return treeNodes;
+    const expandedSet = new Set(
+      Object.keys(expandedNodes).filter((key) => Boolean(expandedNodes[key]))
+    );
+    const out: MenuNode[] = [];
+    for (const node of treeNodes) {
+      let visible = true;
+      let current = node.parentKey || null;
+      const seen = new Set<string>();
+      while (current && !seen.has(current)) {
+        if (!expandedSet.has(current)) {
+          visible = false;
+          break;
+        }
+        seen.add(current);
+        current = parentMap.get(current) || null;
+      }
+      if (visible) out.push(node);
+    }
+    return out;
+  }, [treeNodes, expandedNodes, parentMap, treeSearch]);
 
   const collectionAudit = useMemo(() => {
     const titleById = new Map(collections.map((row) => [row.id, row.title]));
@@ -275,6 +315,22 @@ export default function ShopifyCollectionMapping() {
     }, 180);
     return () => window.clearTimeout(timer);
   }, [search, sort, page, pageSize]);
+
+  useEffect(() => {
+    setSelectedProducts({});
+  }, [search, treeSearch, sort]);
+
+  useEffect(() => {
+    setExpandedNodes((prev) => {
+      const out: Record<string, boolean> = {};
+      for (const node of nodes) {
+        if ((childrenByParent.get(node.nodeKey) || []).length > 0) {
+          out[node.nodeKey] = prev[node.nodeKey] !== false;
+        }
+      }
+      return out;
+    });
+  }, [nodes, childrenByParent]);
 
   function getHeaderArrow(field: "title" | "upc") {
     const [activeField, dir] = sort.split("-") as ["title" | "upc", "asc" | "desc"];
@@ -423,39 +479,31 @@ export default function ShopifyCollectionMapping() {
     setSaving(true);
     setError("");
     try {
-      for (const id of ids) {
-        const resp = await fetch("/api/shopify/collection-mapping", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "toggle-nodes",
-            productId: id,
-            nodeKeys: mappedSelectedNodeKeys,
-            checked,
-          }),
-        });
-        const json = (await resp.json()) as ToggleResponse;
-        if (!resp.ok || !json.ok) {
-          throw new Error(json.error || "Bulk assign/unassign failed.");
-        }
-        if (json.product?.id) {
-          setRows((prev) =>
-            prev.map((row) =>
-              row.id === json.product!.id
-                ? {
-                    ...row,
-                    checkedNodeKeys: Array.isArray(json.product?.checkedNodeKeys)
-                      ? json.product!.checkedNodeKeys
-                      : row.checkedNodeKeys,
-                  }
-                : row
-            )
-          );
-        }
+      const resp = await fetch("/api/shopify/collection-mapping", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "bulk-toggle-nodes",
+          productIds: ids,
+          nodeKeys: mappedSelectedNodeKeys,
+          checked,
+        }),
+      });
+      const json = (await resp.json()) as ToggleResponse;
+      if (!resp.ok || !json.ok) {
+        throw new Error(json.error || "Bulk assign/unassign failed.");
       }
-      if (!checked) {
-        setSelectedProducts({});
+      const products = Array.isArray(json.products) ? json.products : [];
+      if (products.length > 0) {
+        const byId = new Map(products.map((row) => [row.id, row.checkedNodeKeys]));
+        setRows((prev) =>
+          prev.map((row) => {
+            const nextKeys = byId.get(row.id);
+            return nextKeys ? { ...row, checkedNodeKeys: nextKeys } : row;
+          })
+        );
       }
+      setSelectedProducts({});
     } catch (err) {
       const message = err instanceof Error ? err.message : "Bulk assign/unassign failed.";
       setError(message);
@@ -531,16 +579,24 @@ export default function ShopifyCollectionMapping() {
               />
             </div>
             <div className="tree" style={{ marginTop: 8 }}>
-              {treeNodes.map((node) => {
+              {visibleTreeNodes.map((node) => {
                 const checked = Boolean(selectedNodes[node.nodeKey]);
                 const dragging = dragSourceKey === node.nodeKey;
                 const dropState =
                   dropTarget?.targetKey === node.nodeKey ? `drop-${dropTarget.position}` : "";
+                const hasChildren = (childrenByParent.get(node.nodeKey) || []).length > 0;
+                const isExpanded = Boolean(expandedNodes[node.nodeKey]);
+                const siblingKeys = node.parentKey ? childrenByParent.get(node.parentKey) || [] : [];
+                const isLastSibling =
+                  siblingKeys.length > 0 && siblingKeys[siblingKeys.length - 1] === node.nodeKey;
                 return (
                 <div
                   key={node.nodeKey}
-                  className={`nodeWrap ${dragging ? "dragging" : ""} ${dropState}`}
-                  style={{ marginLeft: node.depth * 14 }}
+                  className={`treeRow ${node.parentKey ? "has-parent" : ""} ${isLastSibling ? "is-last" : ""} ${dragging ? "dragging" : ""} ${dropState}`}
+                  style={{
+                    paddingLeft: 10 + node.depth * 32,
+                    ["--tree-indent" as "--tree-indent"]: `${10 + node.depth * 32}px`,
+                  }}
                   draggable
                   onDragStart={() => {
                     setDragSourceKey(node.nodeKey);
@@ -566,15 +622,49 @@ export default function ShopifyCollectionMapping() {
                     void moveMenuNode();
                   }}
                 >
-                  <label className={checked ? "node active" : "node"}>
+                  <span className={dragging ? "dragHandle grabbing" : "dragHandle"} aria-hidden="true">
+                    <svg viewBox="0 0 10 14" width="10" height="14">
+                      <circle cx="2" cy="2" r="1.1" />
+                      <circle cx="8" cy="2" r="1.1" />
+                      <circle cx="2" cy="7" r="1.1" />
+                      <circle cx="8" cy="7" r="1.1" />
+                      <circle cx="2" cy="12" r="1.1" />
+                      <circle cx="8" cy="12" r="1.1" />
+                    </svg>
+                  </span>
+                  <label className="treeCheckboxWrap">
                     <input
+                      className="treeCheckboxInput"
                       type="checkbox"
                       checked={checked}
                       onChange={(event) => applyNodeSelection(node.nodeKey, event.target.checked)}
                     />
-                    <span>{node.label}</span>
-                    <span className="muted small">{node.linkedTargetLabel || "No target linked"}</span>
+                    <span className="treeCheckboxVisual" aria-hidden="true">
+                      <svg viewBox="0 0 12 10" width="12" height="10">
+                        <path d="M1 5.5L4.2 8.6L11 1.5" />
+                      </svg>
+                    </span>
                   </label>
+                  {hasChildren ? (
+                    <button
+                      type="button"
+                      className={isExpanded ? "treeChevron open" : "treeChevron"}
+                      onClick={() =>
+                        setExpandedNodes((prev) => ({ ...prev, [node.nodeKey]: !prev[node.nodeKey] }))
+                      }
+                      aria-label={isExpanded ? "Collapse node" : "Expand node"}
+                    >
+                      <svg viewBox="0 0 12 12" width="12" height="12">
+                        <path d="M4 2L8 6L4 10" />
+                      </svg>
+                    </button>
+                  ) : (
+                    <span className="treeChevronSpacer" />
+                  )}
+                  <div className="treeText">
+                    <span className="treeLabel">{node.label}</span>
+                    <span className="treeTargetLabel">{node.linkedTargetLabel || "No target linked"}</span>
+                  </div>
                 </div>
               )})}
             </div>
@@ -926,48 +1016,195 @@ export default function ShopifyCollectionMapping() {
           overflow: auto;
           border: 1px solid #2a3547;
           border-radius: 10px;
-          padding: 8px;
+          padding: 0;
           background: #0a1324;
           display: grid;
-          gap: 4px;
+          gap: 0;
         }
-        .node {
-          padding: 6px 8px;
-          border-radius: 8px;
-          border: 1px solid transparent;
+        .treeRow {
+          position: relative;
+          min-height: 44px;
+          border-bottom: 1px solid #1f2937;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          font-size: 14px;
+          line-height: 1.2;
+          transition: background-color 120ms ease;
+        }
+        .treeRow:last-child {
+          border-bottom: 0;
+        }
+        .treeRow:hover {
+          background: #122033;
+        }
+        .treeRow.has-parent::before {
+          content: "";
+          position: absolute;
+          left: calc(var(--tree-indent) - 16px);
+          top: 0;
+          bottom: 0;
+          border-left: 1px solid rgba(229, 231, 235, 0.42);
+          pointer-events: none;
+        }
+        .treeRow.has-parent::after {
+          content: "";
+          position: absolute;
+          left: calc(var(--tree-indent) - 16px);
+          top: 50%;
+          width: 14px;
+          border-top: 1px solid rgba(229, 231, 235, 0.42);
+          pointer-events: none;
+        }
+        .treeRow.has-parent.is-last::before {
+          bottom: 50%;
+        }
+        .dragHandle {
+          width: 18px;
+          height: 18px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          color: #94a3b8;
+          cursor: grab;
+          flex: 0 0 auto;
+        }
+        .dragHandle.grabbing {
+          cursor: grabbing;
+        }
+        .dragHandle svg circle {
+          fill: currentColor;
+        }
+        .treeCheckboxWrap {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          position: relative;
+          width: 16px;
+          height: 16px;
+          min-width: 16px;
+          min-height: 16px;
+          max-width: 16px;
+          max-height: 16px;
+          flex-shrink: 0;
+          flex: 0 0 auto;
+        }
+        .treeCheckboxInput {
+          position: absolute;
+          opacity: 0;
+          inset: 0;
+          width: 16px;
+          height: 16px;
           cursor: pointer;
-          text-align: left;
+        }
+        .treeCheckboxVisual {
+          width: 16px;
+          height: 16px;
+          min-width: 16px;
+          min-height: 16px;
+          max-width: 16px;
+          max-height: 16px;
+          flex-shrink: 0;
+          border-radius: 6px;
+          border: 1px solid #475569;
+          background: #0f172a;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 120ms ease;
+        }
+        .treeCheckboxVisual svg {
+          width: 10px;
+          height: 8px;
+          opacity: 0;
+          transform: scale(0.8);
+          transition: all 120ms ease;
+        }
+        .treeCheckboxVisual svg path {
+          fill: none;
+          stroke: #dbeafe;
+          stroke-width: 1.8;
+          stroke-linecap: round;
+          stroke-linejoin: round;
+        }
+        .treeCheckboxInput:checked + .treeCheckboxVisual {
+          border-color: #2563eb;
+          background: #1d4ed8;
+        }
+        .treeCheckboxInput:checked + .treeCheckboxVisual svg {
+          opacity: 1;
+          transform: scale(1);
+        }
+        .treeCheckboxInput:focus-visible + .treeCheckboxVisual {
+          outline: 2px solid #60a5fa;
+          outline-offset: 2px;
+        }
+        .treeChevron {
+          width: 20px;
+          height: 20px;
+          min-height: 20px;
+          padding: 0;
+          border: 0;
+          border-radius: 6px;
           background: transparent;
+          color: #94a3b8;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          transition: transform 140ms ease, background-color 120ms ease;
+          flex: 0 0 auto;
+        }
+        .treeChevron:hover {
+          background: #1e293b;
+        }
+        .treeChevron.open {
+          transform: rotate(90deg);
+        }
+        .treeChevron svg path {
+          fill: none;
+          stroke: currentColor;
+          stroke-width: 1.8;
+          stroke-linecap: round;
+          stroke-linejoin: round;
+        }
+        .treeChevronSpacer {
+          width: 20px;
+          height: 20px;
+          flex: 0 0 auto;
+        }
+        .treeText {
+          min-width: 0;
           display: grid;
           gap: 2px;
+          align-items: center;
         }
-        .node input[type="checkbox"] {
-          margin-right: 8px;
-          transform: translateY(1px);
+        .treeLabel {
+          color: #e2e8f0;
+          font-size: 14px;
+          font-weight: 500;
         }
-        .node:hover {
-          background: #152236;
+        .treeTargetLabel {
+          color: #94a3b8;
+          font-size: 12px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          max-width: 100%;
         }
-        .node.active {
-          background: #0f2134;
-          border-color: #164e63;
-        }
-        .nodeWrap {
-          border-radius: 8px;
-          border: 1px solid transparent;
-        }
-        .nodeWrap.dragging {
+        .treeRow.dragging {
           opacity: 0.45;
         }
-        .nodeWrap.drop-before {
+        .treeRow.drop-before {
           border-top-color: #38bdf8;
+          box-shadow: inset 0 2px 0 #38bdf8;
         }
-        .nodeWrap.drop-after {
+        .treeRow.drop-after {
           border-bottom-color: #38bdf8;
+          box-shadow: inset 0 -2px 0 #38bdf8;
         }
-        .nodeWrap.drop-inside {
-          border-color: #38bdf8;
+        .treeRow.drop-inside {
           background: rgba(56, 189, 248, 0.08);
+          box-shadow: inset 0 0 0 1px #38bdf8;
         }
         .tableWrap {
           overflow: auto;

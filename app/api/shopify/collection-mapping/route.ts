@@ -1891,7 +1891,7 @@ export async function GET(req: NextRequest) {
     }
 
     const page = parsePositiveInt(searchParams.get("page"), 1);
-    const pageSize = Math.min(500, parsePositiveInt(searchParams.get("pageSize"), 30));
+    const pageSize = Math.min(500, parsePositiveInt(searchParams.get("pageSize"), 20));
 
     const filters: ProductFilters = {
       q: normalizeText(searchParams.get("q") || ""),
@@ -2667,8 +2667,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    if (action === "toggle-node" || action === "toggle-nodes") {
-      const productId = normalizeText(body.productId || "");
+    if (action === "toggle-node" || action === "toggle-nodes" || action === "bulk-toggle-nodes") {
       const singleNodeKey = normalizeText(body.nodeKey || "");
       const requestedNodeKeys = Array.from(
         new Set(
@@ -2678,11 +2677,20 @@ export async function POST(req: NextRequest) {
             .concat(singleNodeKey ? [singleNodeKey] : [])
         )
       );
+      const requestedProductIds = Array.from(
+        new Set(
+          (Array.isArray(body.productIds) ? body.productIds : [])
+            .map((row) => normalizeText(row))
+            .filter(Boolean)
+            .concat(normalizeText(body.productId || ""))
+            .filter(Boolean)
+        )
+      );
       const checked = parseBool(body.checked);
       const uncheckPolicy = toUncheckPolicy(body.uncheckPolicy);
-      if (!productId || requestedNodeKeys.length < 1) {
+      if (requestedProductIds.length < 1 || requestedNodeKeys.length < 1) {
         return NextResponse.json(
-          { ok: false, error: "productId and at least one node key are required." },
+          { ok: false, error: "productIds and at least one node key are required." },
           { status: 400 }
         );
       }
@@ -2720,206 +2728,232 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const productGid = toProductGid(productId);
-      if (!productGid) {
-        return NextResponse.json({ ok: false, error: "Invalid product ID." }, { status: 400 });
-      }
-
-      const currentResult = await fetchProductCollections(shop, tokenResult.token, apiVersion, productGid);
-      if ("error" in currentResult) {
-        await logCollectionMappingAction({
-          shop,
-          productId,
-          productTitle: "",
-          nodeKey: requestedNodeKeys.join(","),
-          checked,
-          addedCollectionIds: [],
-          removedCollectionIds: [],
-          status: "error",
-          errorMessage: currentResult.error,
-        });
-        return NextResponse.json({ ok: false, error: currentResult.error }, { status: 500 });
-      }
-
-      const currentCollectionSet = new Set(currentResult.collectionIds);
       const parentMap = buildParentMap(nodes);
       const childrenMap = buildChildrenMap(nodes);
       const mappedCollectionIds = new Set(nodes.map((node) => normalizeText(node.collectionId)).filter(Boolean));
 
-      const currentSelectedNodes = new Set<string>();
-      for (const node of nodes) {
-        const collectionId = normalizeText(node.collectionId);
-        if (collectionId && currentCollectionSet.has(collectionId)) {
-          currentSelectedNodes.add(node.nodeKey);
+      async function processOneProduct(productId: string) {
+        const productGid = toProductGid(productId);
+        if (!productGid) {
+          return { ok: false as const, productId, error: "Invalid product ID." };
         }
-      }
 
-      const desiredNodes = new Set(currentSelectedNodes);
-      if (checked) {
-        for (const key of requestedNodeKeys) {
-          desiredNodes.add(key);
-          for (const ancestor of collectAncestors(key, parentMap)) {
-            desiredNodes.add(ancestor);
+        const currentResult = await fetchProductCollections(shop, tokenResult.token, apiVersion, productGid);
+        if ("error" in currentResult) {
+          await logCollectionMappingAction({
+            shop,
+            productId,
+            productTitle: "",
+            nodeKey: requestedNodeKeys.join(","),
+            checked,
+            addedCollectionIds: [],
+            removedCollectionIds: [],
+            status: "error",
+            errorMessage: currentResult.error,
+          });
+          return { ok: false as const, productId, error: currentResult.error };
+        }
+
+        const currentCollectionSet = new Set(currentResult.collectionIds);
+        const currentSelectedNodes = new Set<string>();
+        for (const node of nodes) {
+          const collectionId = normalizeText(node.collectionId);
+          if (collectionId && currentCollectionSet.has(collectionId)) {
+            currentSelectedNodes.add(node.nodeKey);
           }
         }
-      } else {
-        for (const key of requestedNodeKeys) {
-          desiredNodes.delete(key);
-          if (uncheckPolicy === "remove-descendants") {
-            for (const descendant of collectDescendants(key, childrenMap)) {
-              desiredNodes.delete(descendant);
+
+        const desiredNodes = new Set(currentSelectedNodes);
+        if (checked) {
+          for (const key of requestedNodeKeys) {
+            desiredNodes.add(key);
+            for (const ancestor of collectAncestors(key, parentMap)) desiredNodes.add(ancestor);
+          }
+        } else {
+          for (const key of requestedNodeKeys) {
+            desiredNodes.delete(key);
+            if (uncheckPolicy === "remove-descendants") {
+              for (const descendant of collectDescendants(key, childrenMap)) desiredNodes.delete(descendant);
             }
           }
         }
-      }
 
-      const closedNodes = enforceAncestorClosure(desiredNodes, parentMap);
-      const desiredCollectionIds = new Set<string>();
-      for (const key of closedNodes) {
-        const node = nodeByKey.get(key);
-        const collectionId = normalizeText(node?.collectionId);
-        if (collectionId) desiredCollectionIds.add(collectionId);
-      }
-
-      const additions: string[] = [];
-      const removals: string[] = [];
-
-      for (const collectionId of desiredCollectionIds) {
-        if (!currentCollectionSet.has(collectionId)) additions.push(collectionId);
-      }
-
-      for (const currentCollectionId of currentCollectionSet) {
-        if (!mappedCollectionIds.has(currentCollectionId)) continue;
-        if (!desiredCollectionIds.has(currentCollectionId)) removals.push(currentCollectionId);
-      }
-
-      if (additions.length < 1 && removals.length < 1) {
-        const checkedNodeKeys = nodes
-          .filter((node) => node.collectionId && currentCollectionSet.has(node.collectionId))
-          .map((node) => node.nodeKey);
-
-        let noChangeMessage = "No Shopify collection updates were required.";
-        if (
-          !checked &&
-          uncheckPolicy === "keep-descendants" &&
-          requestedNodeKeys.some((key) => currentSelectedNodes.has(key)) &&
-          requestedNodeKeys.some((key) => checkedNodeKeys.includes(key))
-        ) {
-          noChangeMessage =
-            "One or more nodes stayed checked because selected child nodes still require parent categories.";
+        const closedNodes = enforceAncestorClosure(desiredNodes, parentMap);
+        const desiredCollectionIds = new Set<string>();
+        for (const key of closedNodes) {
+          const node = nodeByKey.get(key);
+          const collectionId = normalizeText(node?.collectionId);
+          if (collectionId) desiredCollectionIds.add(collectionId);
         }
 
+        const additions: string[] = [];
+        const removals: string[] = [];
+        for (const collectionId of desiredCollectionIds) {
+          if (!currentCollectionSet.has(collectionId)) additions.push(collectionId);
+        }
+        for (const currentCollectionId of currentCollectionSet) {
+          if (!mappedCollectionIds.has(currentCollectionId)) continue;
+          if (!desiredCollectionIds.has(currentCollectionId)) removals.push(currentCollectionId);
+        }
+
+        if (additions.length < 1 && removals.length < 1) {
+          const checkedNodeKeys = nodes
+            .filter((node) => node.collectionId && currentCollectionSet.has(node.collectionId))
+            .map((node) => node.nodeKey);
+          await logCollectionMappingAction({
+            shop,
+            productId: currentResult.productId,
+            productTitle: currentResult.title,
+            nodeKey: requestedNodeKeys.join(","),
+            checked,
+            addedCollectionIds: [],
+            removedCollectionIds: [],
+            status: "ok",
+            errorMessage: "No Shopify collection updates were required.",
+          });
+          return {
+            ok: true as const,
+            product: {
+              id: currentResult.productId,
+              title: currentResult.title,
+              collectionIds: currentResult.collectionIds,
+              checkedNodeKeys,
+            },
+            addedCollectionIds: additions,
+            removedCollectionIds: removals,
+            warning: "",
+          };
+        }
+
+        const errors: string[] = [];
+        for (const collectionId of additions) {
+          const error = await applyCollectionAdd(shop, tokenResult.token, apiVersion, collectionId, productGid);
+          if (error) errors.push(error);
+        }
+        for (const collectionId of removals) {
+          const error = await applyCollectionRemove(shop, tokenResult.token, apiVersion, collectionId, productGid);
+          if (error) errors.push(error);
+        }
+
+        invalidateShopCache(productsCache, shop);
+        const refreshedResult = await fetchProductCollections(shop, tokenResult.token, apiVersion, productGid);
+        if ("error" in refreshedResult) {
+          await logCollectionMappingAction({
+            shop,
+            productId: currentResult.productId,
+            productTitle: currentResult.title,
+            nodeKey: requestedNodeKeys.join(","),
+            checked,
+            addedCollectionIds: additions,
+            removedCollectionIds: removals,
+            status: "error",
+            errorMessage: refreshedResult.error,
+          });
+          return { ok: false as const, productId, error: refreshedResult.error };
+        }
+
+        const refreshedMembership = new Set(refreshedResult.collectionIds);
+        const checkedNodeKeys = nodes
+          .filter((node) => node.collectionId && refreshedMembership.has(node.collectionId))
+          .map((node) => node.nodeKey);
         await logCollectionMappingAction({
           shop,
-          productId: currentResult.productId,
-          productTitle: currentResult.title,
-          nodeKey: requestedNodeKeys.join(","),
-          checked,
-          addedCollectionIds: [],
-          removedCollectionIds: [],
-          status: "ok",
-          errorMessage: noChangeMessage,
-        });
-        await logMappingAudit({
-          shop,
-          action,
-          summary: `No-op toggle on ${requestedNodeKeys.length} node(s)`,
-          status: "ok",
-          details: { productId: currentResult.productId, checked, requestedNodeKeys, reason: noChangeMessage },
-        });
-
-        return NextResponse.json({
-          ok: true,
-          noop: true,
-          shop,
-          uncheckPolicy,
-          product: {
-            id: currentResult.productId,
-            title: currentResult.title,
-            collectionIds: currentResult.collectionIds,
-            checkedNodeKeys,
-          },
-          requestedNodeKeys,
-          addedCollectionIds: [],
-          removedCollectionIds: [],
-          warning: joinWarnings(noChangeMessage, menuSyncResult.warning, nodesResult.warning),
-        });
-      }
-
-      const errors: string[] = [];
-      for (const collectionId of additions) {
-        const error = await applyCollectionAdd(shop, tokenResult.token, apiVersion, collectionId, productGid);
-        if (error) errors.push(error);
-      }
-
-      for (const collectionId of removals) {
-        const error = await applyCollectionRemove(shop, tokenResult.token, apiVersion, collectionId, productGid);
-        if (error) errors.push(error);
-      }
-
-      invalidateShopCache(productsCache, shop);
-
-      const refreshedResult = await fetchProductCollections(shop, tokenResult.token, apiVersion, productGid);
-      if ("error" in refreshedResult) {
-        await logCollectionMappingAction({
-          shop,
-          productId: currentResult.productId,
-          productTitle: currentResult.title,
+          productId: refreshedResult.productId,
+          productTitle: refreshedResult.title,
           nodeKey: requestedNodeKeys.join(","),
           checked,
           addedCollectionIds: additions,
           removedCollectionIds: removals,
-          status: "error",
-          errorMessage: refreshedResult.error,
+          status: errors.length > 0 ? "error" : "ok",
+          errorMessage: errors.join(" | "),
         });
-        return NextResponse.json({ ok: false, error: refreshedResult.error }, { status: 500 });
+        return {
+          ok: errors.length < 1,
+          product: {
+            id: refreshedResult.productId,
+            title: refreshedResult.title,
+            collectionIds: refreshedResult.collectionIds,
+            checkedNodeKeys,
+          },
+          addedCollectionIds: additions,
+          removedCollectionIds: removals,
+          warning: errors.join(" | "),
+        };
       }
 
-      const refreshedMembership = new Set(refreshedResult.collectionIds);
-      const checkedNodeKeys = nodes
-        .filter((node) => node.collectionId && refreshedMembership.has(node.collectionId))
-        .map((node) => node.nodeKey);
+      const outcomes: Array<
+        | {
+            ok: boolean;
+            product: {
+              id: string;
+              title: string;
+              collectionIds: string[];
+              checkedNodeKeys: string[];
+            };
+            addedCollectionIds: string[];
+            removedCollectionIds: string[];
+            warning: string;
+          }
+        | { ok: false; productId: string; error: string }
+      > = [];
+      for (const id of requestedProductIds) {
+        outcomes.push(await processOneProduct(id));
+      }
 
-      await logCollectionMappingAction({
-        shop,
-        productId: refreshedResult.productId,
-        productTitle: refreshedResult.title,
-        nodeKey: requestedNodeKeys.join(","),
-        checked,
-        addedCollectionIds: additions,
-        removedCollectionIds: removals,
-        status: errors.length > 0 ? "error" : "ok",
-        errorMessage: errors.join(" | "),
-      });
+      const failed = outcomes.filter((row) => !row.ok) as Array<{ ok: false; productId: string; error: string }>;
+      const succeeded = outcomes.filter(
+        (row): row is {
+          ok: boolean;
+          product: {
+            id: string;
+            title: string;
+            collectionIds: string[];
+            checkedNodeKeys: string[];
+          };
+          addedCollectionIds: string[];
+          removedCollectionIds: string[];
+          warning: string;
+        } => "product" in row
+      );
+      const warnings = succeeded.map((row) => row.warning).filter(Boolean);
+
       await logMappingAudit({
         shop,
         action,
-        summary: `${checked ? "Checked" : "Unchecked"} ${requestedNodeKeys.length} node(s) for ${refreshedResult.title}`,
-        status: errors.length > 0 ? "error" : "ok",
+        summary: `${checked ? "Checked" : "Unchecked"} ${requestedNodeKeys.length} node(s) for ${requestedProductIds.length} product(s)`,
+        status: failed.length > 0 ? "error" : "ok",
         details: {
-          productId: refreshedResult.productId,
+          requestedProductIds,
           requestedNodeKeys,
           checked,
-          addedCollectionIds: additions,
-          removedCollectionIds: removals,
+          failedCount: failed.length,
         },
-        errorMessage: errors.join(" | "),
+        errorMessage: failed.map((row) => `${row.productId}: ${row.error}`).join(" | "),
       });
 
+      if (requestedProductIds.length === 1 && succeeded[0]) {
+        return NextResponse.json({
+          ok: failed.length < 1 && succeeded[0].ok,
+          shop,
+          uncheckPolicy,
+          product: succeeded[0].product,
+          requestedNodeKeys,
+          addedCollectionIds: succeeded[0].addedCollectionIds,
+          removedCollectionIds: succeeded[0].removedCollectionIds,
+          warning: joinWarnings(...warnings, ...failed.map((row) => row.error), menuSyncResult.warning, nodesResult.warning),
+        });
+      }
+
       return NextResponse.json({
-        ok: errors.length < 1,
+        ok: failed.length < 1,
         shop,
         uncheckPolicy,
-        product: {
-          id: refreshedResult.productId,
-          title: refreshedResult.title,
-          collectionIds: refreshedResult.collectionIds,
-          checkedNodeKeys,
-        },
         requestedNodeKeys,
-        addedCollectionIds: additions,
-        removedCollectionIds: removals,
-        warning: joinWarnings(errors.join(" | "), menuSyncResult.warning, nodesResult.warning),
+        processedCount: requestedProductIds.length,
+        failedCount: failed.length,
+        products: succeeded.map((row) => row.product),
+        failures: failed,
+        warning: joinWarnings(...warnings, ...failed.map((row) => row.error), menuSyncResult.warning, nodesResult.warning),
       });
     }
 
