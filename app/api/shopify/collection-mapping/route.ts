@@ -1328,8 +1328,13 @@ async function updateMenuTree(
   items: ShopifyMenuItemNode[]
 ): Promise<MenuUpdateResult> {
   const mutation = `
-    mutation UpdateMenuForCollectionMapping($menuUpdate: MenuUpdateInput!) {
-      menuUpdate(menuUpdate: $menuUpdate) {
+    mutation UpdateMenuForCollectionMapping(
+      $id: ID!
+      $title: String!
+      $handle: String!
+      $items: [MenuItemUpdateInput!]!
+    ) {
+      menuUpdate(id: $id, title: $title, handle: $handle, items: $items) {
         menu {
           id
           title
@@ -1376,19 +1381,19 @@ async function updateMenuTree(
     }
   `;
 
-  const menuInput = {
-    id: menuId,
-    title: menuTitle,
-    handle: menuHandle,
-    items: buildMenuUpdateItems(items),
-  };
+  const menuItems = buildMenuUpdateItems(items);
 
   const gqlResult: GraphResult<MenuUpdateData> = (await runShopifyGraphql<MenuUpdateData>({
     shop,
     token,
     apiVersion,
     query: mutation,
-    variables: { menuUpdate: menuInput },
+    variables: {
+      id: menuId,
+      title: menuTitle,
+      handle: menuHandle,
+      items: menuItems,
+    },
   })) as GraphResult<MenuUpdateData>;
 
   if (!gqlResult.ok || !gqlResult.data?.menuUpdate) {
