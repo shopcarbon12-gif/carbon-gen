@@ -271,3 +271,12 @@ If session resets, instruct the agent:
 - Refined page width rule to `width: calc(100vw - 24px)` with `max-width: 100%` so closed-menu state remains fully stretched.
 - Kept `max-width: 100%`, `min-width: 0`, and `box-sizing: border-box` to prevent right-edge overflow when the left menu opens.
 - Verified locally in two passes before deploy; closed-menu stretch remains while right-edge overflow guard remains in place.
+
+## 2026-03-11 Collection Mapping Right-Edge Lock Fix (Shell-Padded)
+- Updated `components/shopify-collection-mapping.tsx` page width to `width: min(100%, calc(100vw - 24px))`.
+- This clamps viewport-based width to the actual parent content box when shell menu padding is applied, preventing right-edge drift in menu-open state.
+- Verified local `npm run build` passes before deploy.
+
+## 2026-03-11 Collection Mapping Right Edge Root Cause + Shell Fix
+- Diagnosed that the right-edge movement in menu-open state comes from `.content` left padding being applied in `components/workspace-shell.tsx` without border-box sizing.
+- Added `box-sizing: border-box` to `.content` in `components/workspace-shell.tsx` so menu-open left padding is absorbed inside container width instead of pushing total layout width past the right edge.

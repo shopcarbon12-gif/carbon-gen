@@ -121,7 +121,8 @@ function getCurrentTitle(pathname: string) {
 export function WorkspaceShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const hideSideRailsOnCollectionMapping = pathname.startsWith("/studio/shopify-collection-mapping");
+  const isCollectionMappingRoute = pathname.startsWith("/studio/shopify-collection-mapping");
+  const hideSideRailsOnCollectionMapping = isCollectionMappingRoute;
   const showIntegrationPanel =
     !pathname.startsWith("/settings") && !hideSideRailsOnCollectionMapping;
   const showChatPanel = !hideSideRailsOnCollectionMapping;
@@ -356,6 +357,10 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
   function clearDialogChat() {
     setDialogMessages([]);
     setDialogInput("");
+  }
+
+  if (isCollectionMappingRoute) {
+    return <>{children}</>;
   }
 
   return (
@@ -1865,6 +1870,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
             var(--right-rail-width) + var(--page-edge-gap) + var(--content-api-gap)
           );
           position: relative;
+          box-sizing: border-box;
           min-height: 100vh;
           padding-top: 100px;
           padding-left: var(--page-edge-gap);
