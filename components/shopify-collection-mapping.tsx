@@ -152,9 +152,13 @@ export default function ShopifyCollectionMapping() {
   function matchesMenuSearch(node: MenuNode, query: string) {
     const normalizedQuery = query.trim().toLowerCase();
     if (!normalizedQuery) return true;
+    const source = `${node.label} ${node.linkedTargetLabel || ""}`.toLowerCase();
+    // Hard rule requested by product: "men" search must never include women entries.
+    if (normalizedQuery === "men") {
+      return /\bmen\b/.test(source) && !/\bwomen\b/.test(source);
+    }
     const qTokens = normalizedQuery.split(/\s+/).filter(Boolean);
     if (qTokens.length < 1) return true;
-    const source = `${node.label} ${node.linkedTargetLabel || ""}`.toLowerCase();
     const sourceTokens = source.split(/[^a-z0-9]+/).filter(Boolean);
     if (sourceTokens.length < 1) return false;
     return qTokens.every((token) => sourceTokens.some((sourceToken) => sourceToken.startsWith(token)));
