@@ -25,7 +25,7 @@ type MappingResponse = {
   ok: boolean;
   error?: string;
   warning?: string;
-  collections?: Array<{ id: string }>;
+  collections?: Array<{ id: string; title?: string }>;
   nodes?: MenuNode[];
   rows?: ProductRow[];
   summary?: {
@@ -53,12 +53,14 @@ export default function ShopifyCollectionMapping() {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortValue>("title-asc");
   const [collectionCount, setCollectionCount] = useState(0);
+  const [collections, setCollections] = useState<Array<{ id: string; title: string }>>([]);
   const [productCount, setProductCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [warning, setWarning] = useState("");
   const [error, setError] = useState("");
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [showAuditReport, setShowAuditReport] = useState(false);
 
   const nodeLabelByKey = useMemo(() => {
     const map = new Map<string, string>();
@@ -76,6 +78,43 @@ export default function ShopifyCollectionMapping() {
   const currentNode = useMemo(() => {
     return nodes.find((node) => node.nodeKey === activeNode) || null;
   }, [nodes, activeNode]);
+
+  const collectionAudit = useMemo(() => {
+    const titleById = new Map(collections.map((row) => [row.id, row.title]));
+    const mappedNodeCollectionIds = nodes
+      .map((node) => (node.collectionId ? String(node.collectionId) : ""))
+      .filter(Boolean);
+    const mappedUniqueIds = Array.from(new Set(mappedNodeCollectionIds));
+
+    const mappedCountByCollection = new Map<string, number>();
+    for (const id of mappedNodeCollectionIds) {
+      mappedCountByCollection.set(id, (mappedCountByCollection.get(id) || 0) + 1);
+    }
+
+    const duplicates = Array.from(mappedCountByCollection.entries())
+      .filter((entry) => entry[1] > 1)
+      .map(([id, count]) => ({
+        id,
+        title: titleById.get(id) || id,
+        count,
+      }))
+      .sort((left, right) => left.title.localeCompare(right.title, undefined, { sensitivity: "base" }));
+
+    const unmapped = collections
+      .filter((row) => !mappedUniqueIds.includes(row.id))
+      .sort((left, right) => left.title.localeCompare(right.title, undefined, { sensitivity: "base" }));
+
+    return {
+      totalCollections: collections.length,
+      mappedNodes: mappedNodeCollectionIds.length,
+      mappedUniqueCollections: mappedUniqueIds.length,
+      unmappedCount: unmapped.length,
+      duplicatesCount: duplicates.length,
+      unmapped,
+      duplicates,
+      generatedAt: new Date().toISOString(),
+    };
+  }, [collections, nodes]);
 
   async function loadData() {
     setLoading(true);
@@ -102,7 +141,12 @@ export default function ShopifyCollectionMapping() {
       const firstWithCollection = nextNodes.find((node) => node.collectionId);
       setNodes(nextNodes);
       setRows(json.rows || []);
-      setCollectionCount((json.collections || []).length);
+      const nextCollections = (json.collections || []).map((row) => ({
+        id: String(row.id || ""),
+        title: String(row.title || "").trim() || String(row.id || ""),
+      }));
+      setCollections(nextCollections);
+      setCollectionCount(nextCollections.length);
       setProductCount(Number(json.summary?.totalProducts || (json.rows || []).length));
       setWarning(String(json.warning || "").trim());
 
@@ -138,6 +182,37 @@ export default function ShopifyCollectionMapping() {
       return;
     }
     setSort(`${field}-asc` as SortValue);
+  }
+
+  function downloadAuditCsv() {
+    const lines: string[] = [];
+    const csvCell = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+    lines.push(`${csvCell("Collection Audit Report")}`);
+    lines.push(`${csvCell("Generated At")},${csvCell(collectionAudit.generatedAt)}`);
+    lines.push(`${csvCell("Total Shopify Collections")},${csvCell(collectionAudit.totalCollections)}`);
+    lines.push(`${csvCell("Mapped Nodes")},${csvCell(collectionAudit.mappedNodes)}`);
+    lines.push(`${csvCell("Mapped Unique Collections")},${csvCell(collectionAudit.mappedUniqueCollections)}`);
+    lines.push(`${csvCell("Unmapped Collections")},${csvCell(collectionAudit.unmappedCount)}`);
+    lines.push(`${csvCell("Duplicate Mapped Collections")},${csvCell(collectionAudit.duplicatesCount)}`);
+    lines.push("");
+    lines.push(`${csvCell("Section")},${csvCell("Collection Title")},${csvCell("Collection ID")},${csvCell("Count")}`);
+
+    for (const row of collectionAudit.unmapped) {
+      lines.push(`${csvCell("Unmapped")},${csvCell(row.title)},${csvCell(row.id)},${csvCell("")}`);
+    }
+    for (const row of collectionAudit.duplicates) {
+      lines.push(`${csvCell("Duplicate Mapping")},${csvCell(row.title)},${csvCell(row.id)},${csvCell(row.count)}`);
+    }
+
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `collection-mapping-audit-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
   }
 
   useEffect(() => {
@@ -264,6 +339,9 @@ export default function ShopifyCollectionMapping() {
           />
           <span className="pill">Auto-parent logic ON</span>
           <span className="pill">Live Shopify sync ON</span>
+          <button type="button" onClick={() => setShowAuditReport(true)}>
+            Collection Audit Log
+          </button>
         </div>
         <div className="kpi" style={{ marginTop: 10 }}>
           <div className="k">
@@ -434,9 +512,77 @@ export default function ShopifyCollectionMapping() {
         </div>
       ) : null}
 
+      {showAuditReport ? (
+        <div className="previewOverlay" onClick={() => setShowAuditReport(false)} role="dialog" aria-label="Collection audit report">
+          <div className="reportModal" onClick={(event) => event.stopPropagation()}>
+            <button type="button" className="previewClose" onClick={() => setShowAuditReport(false)} aria-label="Close report">
+              X
+            </button>
+            <h3>Collection Audit Report</h3>
+            <p className="muted" style={{ marginTop: 4 }}>
+              Generated: {new Date(collectionAudit.generatedAt).toLocaleString()}
+            </p>
+            <div className="kpi" style={{ marginTop: 10 }}>
+              <div className="k">
+                <div className="muted">Total Shopify Collections</div>
+                <b>{collectionAudit.totalCollections}</b>
+              </div>
+              <div className="k">
+                <div className="muted">Mapped Unique Collections</div>
+                <b>{collectionAudit.mappedUniqueCollections}</b>
+              </div>
+              <div className="k">
+                <div className="muted">Unmapped Collections</div>
+                <b>{collectionAudit.unmappedCount}</b>
+              </div>
+              <div className="k">
+                <div className="muted">Duplicate Mapped Collections</div>
+                <b>{collectionAudit.duplicatesCount}</b>
+              </div>
+            </div>
+            <div className="topbar" style={{ marginTop: 10, justifyContent: "space-between" }}>
+              <span className="muted">Formal report includes unmapped and duplicate mappings.</span>
+              <button type="button" className="primary" onClick={downloadAuditCsv}>
+                Download CSV
+              </button>
+            </div>
+            <div className="reportSection">
+              <h4>Unmapped Collections ({collectionAudit.unmappedCount})</h4>
+              <div className="reportList">
+                {collectionAudit.unmapped.length ? (
+                  collectionAudit.unmapped.map((row) => (
+                    <div className="reportRow" key={row.id}>
+                      <span>{row.title}</span>
+                      <span className="muted small">{row.id}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="empty">No unmapped collections.</div>
+                )}
+              </div>
+            </div>
+            <div className="reportSection">
+              <h4>Duplicate Mapped Collections ({collectionAudit.duplicatesCount})</h4>
+              <div className="reportList">
+                {collectionAudit.duplicates.length ? (
+                  collectionAudit.duplicates.map((row) => (
+                    <div className="reportRow" key={row.id}>
+                      <span>{row.title}</span>
+                      <span className="muted small">Mapped in {row.count} nodes</span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="empty">No duplicate mapped collections.</div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <style jsx>{`
         .page {
-          width: calc(100vw - 24px);
+          width: min(100%, calc(100vw - 24px));
           max-width: 100%;
           box-sizing: border-box;
           min-width: 0;
@@ -656,6 +802,43 @@ export default function ShopifyCollectionMapping() {
           position: relative;
           max-width: min(92vw, 980px);
           max-height: 90vh;
+        }
+        .reportModal {
+          position: relative;
+          width: min(980px, 92vw);
+          max-height: 90vh;
+          overflow: auto;
+          border-radius: 12px;
+          border: 1px solid #2a3547;
+          background: #0a1324;
+          padding: 14px;
+          box-shadow: 0 14px 42px rgba(0, 0, 0, 0.6);
+        }
+        .reportSection {
+          margin-top: 12px;
+        }
+        .reportSection h4 {
+          margin: 0 0 8px 0;
+          font-size: 13px;
+          color: #e2e8f0;
+        }
+        .reportList {
+          border: 1px solid #2a3547;
+          border-radius: 10px;
+          background: #0b1322;
+          max-height: 200px;
+          overflow: auto;
+        }
+        .reportRow {
+          display: flex;
+          justify-content: space-between;
+          gap: 10px;
+          padding: 8px 10px;
+          border-bottom: 1px solid #1f2937;
+          font-size: 12px;
+        }
+        .reportRow:last-child {
+          border-bottom: 0;
         }
         .previewImg {
           display: block;

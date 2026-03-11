@@ -9829,6 +9829,14 @@ function buildMasterPanelPrompt(
             display: none;
           }
         }
+        @media (min-width: 901px) {
+          .model-pill .model-info {
+            flex: 1 1 auto;
+          }
+          .model-pill .model-remove {
+            margin-left: auto;
+          }
+        }
         @media (max-width: 900px) {
           .page {
             padding-left: var(--page-inline-gap) !important;
@@ -9983,18 +9991,20 @@ function buildMasterPanelPrompt(
             overflow-y: hidden;
             scroll-snap-type: x mandatory;
             width: 100%;
-            justify-content: flex-start;
+            justify-content: center;
             gap: 8px;
             margin-top: 8px;
             padding-bottom: 4px;
-            padding-inline: 10px;
-            scroll-padding-inline: 10px;
+            padding-inline: 0;
+            scroll-padding-inline: 0;
+            scroll-behavior: smooth;
           }
           .registry-inline-models .model-pill {
-            min-width: calc((100% - 10px) / 2);
-            width: calc((100% - 10px) / 2);
+            min-width: calc((100% - 4px) / 2);
+            width: calc((100% - 4px) / 2);
             max-width: none;
-            flex: 0 0 calc((100% - 10px) / 2);
+            flex: 0 0 calc((100% - 4px) / 2);
+            scroll-snap-align: center;
           }
           .model-pill {
             width: auto;
@@ -10054,8 +10064,8 @@ function buildMasterPanelPrompt(
             scroll-snap-type: x mandatory;
             gap: 10px;
             padding-bottom: 4px;
-            padding-inline: 10px;
-            scroll-padding-inline: 10px;
+            padding-inline: 0;
+            scroll-padding-inline: 0;
           }
           .mobile-carousel,
           .model-list.mobile-carousel-row,
@@ -10079,10 +10089,11 @@ function buildMasterPanelPrompt(
             scroll-snap-align: start;
           }
           .model-list.mobile-carousel-row > .model-pill {
-            min-width: calc((100% - 10px) / 2);
+            min-width: calc((100% - 4px) / 2);
             max-width: none;
-            width: calc((100% - 10px) / 2);
-            flex: 0 0 calc((100% - 10px) / 2);
+            width: calc((100% - 4px) / 2);
+            flex: 0 0 calc((100% - 4px) / 2);
+            scroll-snap-align: center;
           }
           .mobile-carousel > .catalog-image,
           .item-catalog-grid.mobile-carousel > .preview-card {
@@ -10119,11 +10130,26 @@ function buildMasterPanelPrompt(
             top: 0;
             right: 0;
             width: auto;
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: nowrap;
             justify-content: flex-end;
+          }
+          .model-registry-header-actions .icon-toggle-btn {
+            position: static;
+            top: auto;
+            right: auto;
+            margin: 0;
+            order: 2;
           }
           .model-registry-header-actions .ghost-btn {
             flex: 0 0 auto;
             min-width: 44px;
+          }
+          .model-registry-header-actions .danger {
+            order: 1;
           }
           .barcode-action-row > .btn,
           .barcode-action-row > .ghost-btn,
