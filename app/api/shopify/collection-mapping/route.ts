@@ -1891,7 +1891,7 @@ export async function GET(req: NextRequest) {
     }
 
     const page = parsePositiveInt(searchParams.get("page"), 1);
-    const pageSize = Math.min(250, parsePositiveInt(searchParams.get("pageSize"), 30));
+    const pageSize = Math.min(500, parsePositiveInt(searchParams.get("pageSize"), 30));
 
     const filters: ProductFilters = {
       q: normalizeText(searchParams.get("q") || ""),
@@ -2667,13 +2667,24 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    if (action === "toggle-node") {
+    if (action === "toggle-node" || action === "toggle-nodes") {
       const productId = normalizeText(body.productId || "");
-      const nodeKey = normalizeText(body.nodeKey || "");
+      const singleNodeKey = normalizeText(body.nodeKey || "");
+      const requestedNodeKeys = Array.from(
+        new Set(
+          (Array.isArray(body.nodeKeys) ? body.nodeKeys : [])
+            .map((row) => normalizeText(row))
+            .filter(Boolean)
+            .concat(singleNodeKey ? [singleNodeKey] : [])
+        )
+      );
       const checked = parseBool(body.checked);
       const uncheckPolicy = toUncheckPolicy(body.uncheckPolicy);
-      if (!productId || !nodeKey) {
-        return NextResponse.json({ ok: false, error: "productId and nodeKey are required." }, { status: 400 });
+      if (!productId || requestedNodeKeys.length < 1) {
+        return NextResponse.json(
+          { ok: false, error: "productId and at least one node key are required." },
+          { status: 400 }
+        );
       }
 
       const collectionsResult = await fetchAllCollectionsCached(shop, tokenResult.token, apiVersion);
@@ -2698,9 +2709,15 @@ export async function POST(req: NextRequest) {
       const nodeByKey = new Map<string, MenuNodeRecord>(
         nodes.map((node): [string, MenuNodeRecord] => [node.nodeKey, node])
       );
-      const targetNode = nodeByKey.get(nodeKey);
-      if (!targetNode || !targetNode.collectionId) {
-        return NextResponse.json({ ok: false, error: "Selected node is not mapped to a collection." }, { status: 400 });
+      const invalidNodeKeys = requestedNodeKeys.filter((key) => {
+        const candidate = nodeByKey.get(key);
+        return !candidate || !candidate.collectionId;
+      });
+      if (invalidNodeKeys.length > 0) {
+        return NextResponse.json(
+          { ok: false, error: "One or more selected nodes are not mapped to a collection.", invalidNodeKeys },
+          { status: 400 }
+        );
       }
 
       const productGid = toProductGid(productId);
@@ -2714,7 +2731,7 @@ export async function POST(req: NextRequest) {
           shop,
           productId,
           productTitle: "",
-          nodeKey,
+          nodeKey: requestedNodeKeys.join(","),
           checked,
           addedCollectionIds: [],
           removedCollectionIds: [],
@@ -2739,15 +2756,19 @@ export async function POST(req: NextRequest) {
 
       const desiredNodes = new Set(currentSelectedNodes);
       if (checked) {
-        desiredNodes.add(nodeKey);
-        for (const ancestor of collectAncestors(nodeKey, parentMap)) {
-          desiredNodes.add(ancestor);
+        for (const key of requestedNodeKeys) {
+          desiredNodes.add(key);
+          for (const ancestor of collectAncestors(key, parentMap)) {
+            desiredNodes.add(ancestor);
+          }
         }
       } else {
-        desiredNodes.delete(nodeKey);
-        if (uncheckPolicy === "remove-descendants") {
-          for (const descendant of collectDescendants(nodeKey, childrenMap)) {
-            desiredNodes.delete(descendant);
+        for (const key of requestedNodeKeys) {
+          desiredNodes.delete(key);
+          if (uncheckPolicy === "remove-descendants") {
+            for (const descendant of collectDescendants(key, childrenMap)) {
+              desiredNodes.delete(descendant);
+            }
           }
         }
       }
@@ -2781,18 +2802,18 @@ export async function POST(req: NextRequest) {
         if (
           !checked &&
           uncheckPolicy === "keep-descendants" &&
-          currentSelectedNodes.has(nodeKey) &&
-          checkedNodeKeys.includes(nodeKey)
+          requestedNodeKeys.some((key) => currentSelectedNodes.has(key)) &&
+          requestedNodeKeys.some((key) => checkedNodeKeys.includes(key))
         ) {
           noChangeMessage =
-            "Node stayed checked because at least one selected child still requires its parent category.";
+            "One or more nodes stayed checked because selected child nodes still require parent categories.";
         }
 
         await logCollectionMappingAction({
           shop,
           productId: currentResult.productId,
           productTitle: currentResult.title,
-          nodeKey,
+          nodeKey: requestedNodeKeys.join(","),
           checked,
           addedCollectionIds: [],
           removedCollectionIds: [],
@@ -2801,10 +2822,10 @@ export async function POST(req: NextRequest) {
         });
         await logMappingAudit({
           shop,
-          action: "toggle-node",
-          summary: `No-op toggle on ${nodeKey}`,
+          action,
+          summary: `No-op toggle on ${requestedNodeKeys.length} node(s)`,
           status: "ok",
-          details: { productId: currentResult.productId, checked, reason: noChangeMessage },
+          details: { productId: currentResult.productId, checked, requestedNodeKeys, reason: noChangeMessage },
         });
 
         return NextResponse.json({
@@ -2818,6 +2839,7 @@ export async function POST(req: NextRequest) {
             collectionIds: currentResult.collectionIds,
             checkedNodeKeys,
           },
+          requestedNodeKeys,
           addedCollectionIds: [],
           removedCollectionIds: [],
           warning: joinWarnings(noChangeMessage, menuSyncResult.warning, nodesResult.warning),
@@ -2843,7 +2865,7 @@ export async function POST(req: NextRequest) {
           shop,
           productId: currentResult.productId,
           productTitle: currentResult.title,
-          nodeKey,
+          nodeKey: requestedNodeKeys.join(","),
           checked,
           addedCollectionIds: additions,
           removedCollectionIds: removals,
@@ -2862,7 +2884,7 @@ export async function POST(req: NextRequest) {
         shop,
         productId: refreshedResult.productId,
         productTitle: refreshedResult.title,
-        nodeKey,
+        nodeKey: requestedNodeKeys.join(","),
         checked,
         addedCollectionIds: additions,
         removedCollectionIds: removals,
@@ -2871,12 +2893,12 @@ export async function POST(req: NextRequest) {
       });
       await logMappingAudit({
         shop,
-        action: "toggle-node",
-        summary: `${checked ? "Checked" : "Unchecked"} ${nodeKey} for ${refreshedResult.title}`,
+        action,
+        summary: `${checked ? "Checked" : "Unchecked"} ${requestedNodeKeys.length} node(s) for ${refreshedResult.title}`,
         status: errors.length > 0 ? "error" : "ok",
         details: {
           productId: refreshedResult.productId,
-          nodeKey,
+          requestedNodeKeys,
           checked,
           addedCollectionIds: additions,
           removedCollectionIds: removals,
@@ -2894,6 +2916,7 @@ export async function POST(req: NextRequest) {
           collectionIds: refreshedResult.collectionIds,
           checkedNodeKeys,
         },
+        requestedNodeKeys,
         addedCollectionIds: additions,
         removedCollectionIds: removals,
         warning: joinWarnings(errors.join(" | "), menuSyncResult.warning, nodesResult.warning),

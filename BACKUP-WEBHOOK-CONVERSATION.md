@@ -280,3 +280,12 @@ If session resets, instruct the agent:
 ## 2026-03-11 Collection Mapping Right Edge Root Cause + Shell Fix
 - Diagnosed that the right-edge movement in menu-open state comes from `.content` left padding being applied in `components/workspace-shell.tsx` without border-box sizing.
 - Added `box-sizing: border-box` to `.content` in `components/workspace-shell.tsx` so menu-open left padding is absorbed inside container width instead of pushing total layout width past the right edge.
+
+## 2026-03-11 Collection Mapping Multi-Select + Pagination + DragDrop
+- Updated `components/shopify-collection-mapping.tsx` to support multi-select Menu Tree with auto-parent closure preserved for nested selections.
+- Added Menu Tree text search input above the tree that filters by node/linked target text while keeping parent hierarchy visible.
+- Added tree drag-and-drop reorder UX and wired it to live Shopify menu sync via `move-menu-node`.
+- Added product table pagination controls with page-size options `20/50/100/200/500` (default `20`) and server-backed page loading.
+- Implemented cross-page product selection persistence; header Select All now only affects visible rows on current page.
+- Selection state now auto-clears on product search/sort changes, persists across pagination/view navigation, and clears on bulk unassign action.
+- Updated `app/api/shopify/collection-mapping/route.ts` with `toggle-nodes` multi-node assignment action and raised max `pageSize` clamp to `500`.

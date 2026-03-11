@@ -25,6 +25,10 @@ type MappingResponse = {
   ok: boolean;
   error?: string;
   warning?: string;
+  page?: number;
+  pageSize?: number;
+  total?: number;
+  totalPages?: number;
   collections?: Array<{ id: string; title?: string }>;
   nodes?: MenuNode[];
   rows?: ProductRow[];
@@ -45,13 +49,19 @@ type ToggleResponse = {
 
 type SortValue = "title-asc" | "title-desc" | "upc-asc" | "upc-desc";
 
+type DropPosition = "before" | "after" | "inside";
+
 export default function ShopifyCollectionMapping() {
   const [nodes, setNodes] = useState<MenuNode[]>([]);
   const [rows, setRows] = useState<ProductRow[]>([]);
-  const [activeNode, setActiveNode] = useState("");
-  const [selectedRows, setSelectedRows] = useState<Record<string, boolean>>({});
+  const [selectedNodes, setSelectedNodes] = useState<Record<string, boolean>>({});
+  const [selectedProducts, setSelectedProducts] = useState<Record<string, boolean>>({});
+  const [treeSearch, setTreeSearch] = useState("");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortValue>("title-asc");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [totalPages, setTotalPages] = useState(1);
   const [collectionCount, setCollectionCount] = useState(0);
   const [collections, setCollections] = useState<Array<{ id: string; title: string }>>([]);
   const [productCount, setProductCount] = useState(0);
@@ -61,6 +71,8 @@ export default function ShopifyCollectionMapping() {
   const [error, setError] = useState("");
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [showAuditReport, setShowAuditReport] = useState(false);
+  const [dragSourceKey, setDragSourceKey] = useState("");
+  const [dropTarget, setDropTarget] = useState<{ targetKey: string; position: DropPosition } | null>(null);
 
   const nodeLabelByKey = useMemo(() => {
     const map = new Map<string, string>();
@@ -70,14 +82,63 @@ export default function ShopifyCollectionMapping() {
     return map;
   }, [nodes]);
 
-  const allSelected = useMemo(() => {
-    if (rows.length < 1) return false;
-    return rows.every((row) => Boolean(selectedRows[row.id]));
-  }, [rows, selectedRows]);
+  const nodeByKey = useMemo(() => {
+    return new Map(nodes.map((node) => [node.nodeKey, node]));
+  }, [nodes]);
 
-  const currentNode = useMemo(() => {
-    return nodes.find((node) => node.nodeKey === activeNode) || null;
-  }, [nodes, activeNode]);
+  const parentMap = useMemo(() => {
+    const map = new Map<string, string | null>();
+    for (const node of nodes) {
+      map.set(node.nodeKey, node.parentKey || null);
+    }
+    return map;
+  }, [nodes]);
+
+  const selectedNodeKeys = useMemo(() => {
+    return Object.keys(selectedNodes).filter((key) => Boolean(selectedNodes[key]));
+  }, [selectedNodes]);
+
+  const selectedNodeKeysWithParents = useMemo(() => {
+    const out = new Set<string>(selectedNodeKeys);
+    for (const key of selectedNodeKeys) {
+      let current = parentMap.get(key) || null;
+      const seen = new Set<string>();
+      while (current && !seen.has(current)) {
+        out.add(current);
+        seen.add(current);
+        current = parentMap.get(current) || null;
+      }
+    }
+    return Array.from(out);
+  }, [selectedNodeKeys, parentMap]);
+
+  const mappedSelectedNodeKeys = useMemo(() => {
+    return selectedNodeKeysWithParents.filter((key) => Boolean(nodeByKey.get(key)?.collectionId));
+  }, [nodeByKey, selectedNodeKeysWithParents]);
+
+  const allSelectedOnPage = useMemo(() => {
+    if (rows.length < 1) return false;
+    return rows.every((row) => Boolean(selectedProducts[row.id]));
+  }, [rows, selectedProducts]);
+
+  const treeNodes = useMemo(() => {
+    const q = treeSearch.trim().toLowerCase();
+    if (!q) return nodes;
+    const include = new Set<string>();
+    for (const node of nodes) {
+      const haystack = `${node.label} ${node.linkedTargetLabel || ""}`.toLowerCase();
+      if (!haystack.includes(q)) continue;
+      include.add(node.nodeKey);
+      let current = node.parentKey || null;
+      const seen = new Set<string>();
+      while (current && !seen.has(current)) {
+        include.add(current);
+        seen.add(current);
+        current = parentMap.get(current) || null;
+      }
+    }
+    return nodes.filter((node) => include.has(node.nodeKey));
+  }, [nodes, treeSearch, parentMap]);
 
   const collectionAudit = useMemo(() => {
     const titleById = new Map(collections.map((row) => [row.id, row.title]));
@@ -123,8 +184,8 @@ export default function ShopifyCollectionMapping() {
     try {
       const [sortField, sortDir] = sort.split("-") as ["title" | "upc", "asc" | "desc"];
       const params = new URLSearchParams({
-        page: "1",
-        pageSize: "120",
+        page: String(page),
+        pageSize: String(pageSize),
         q: search.trim(),
         sortField,
         sortDir,
@@ -147,13 +208,30 @@ export default function ShopifyCollectionMapping() {
       }));
       setCollections(nextCollections);
       setCollectionCount(nextCollections.length);
-      setProductCount(Number(json.summary?.totalProducts || (json.rows || []).length));
+      setProductCount(Number(json.total || json.summary?.totalProducts || (json.rows || []).length));
+      setTotalPages(Math.max(1, Number(json.totalPages || 1)));
+      if (json.page && Number.isFinite(Number(json.page))) {
+        setPage(Math.max(1, Number(json.page)));
+      }
       setWarning(String(json.warning || "").trim());
 
-      if (!activeNode || !nextNodes.some((node) => node.nodeKey === activeNode)) {
-        setActiveNode(firstWithCollection?.nodeKey || nextNodes[0]?.nodeKey || "");
-      }
-      setSelectedRows({});
+      setSelectedNodes((prev) => {
+        const out: Record<string, boolean> = {};
+        for (const key of Object.keys(prev)) {
+          if (prev[key] && nextNodes.some((node) => node.nodeKey === key)) out[key] = true;
+        }
+        if (Object.keys(out).length < 1 && firstWithCollection?.nodeKey) {
+          out[firstWithCollection.nodeKey] = true;
+        }
+        return out;
+      });
+      setSelectedProducts((prev) => {
+        const out: Record<string, boolean> = {};
+        for (const key of Object.keys(prev)) {
+          if (prev[key]) out[key] = true;
+        }
+        return out;
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to load collection mapping.";
       setError(message);
@@ -162,12 +240,41 @@ export default function ShopifyCollectionMapping() {
     }
   }
 
+  function clearProductSelectionsForDataQuery() {
+    setSelectedProducts({});
+    setPage(1);
+  }
+
+  function applyNodeSelection(nodeKey: string, checked: boolean) {
+    setSelectedNodes((prev) => {
+      const next = new Set<string>(Object.keys(prev).filter((key) => Boolean(prev[key])));
+      if (checked) {
+        next.add(nodeKey);
+      } else {
+        next.delete(nodeKey);
+      }
+      const closed = new Set<string>(next);
+      for (const key of Array.from(closed)) {
+        let current = parentMap.get(key) || null;
+        const seen = new Set<string>();
+        while (current && !seen.has(current)) {
+          closed.add(current);
+          seen.add(current);
+          current = parentMap.get(current) || null;
+        }
+      }
+      const out: Record<string, boolean> = {};
+      for (const key of closed) out[key] = true;
+      return out;
+    });
+  }
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void loadData();
     }, 180);
     return () => window.clearTimeout(timer);
-  }, [search, sort]);
+  }, [search, sort, page, pageSize]);
 
   function getHeaderArrow(field: "title" | "upc") {
     const [activeField, dir] = sort.split("-") as ["title" | "upc", "asc" | "desc"];
@@ -178,9 +285,11 @@ export default function ShopifyCollectionMapping() {
   function toggleHeaderSort(field: "title" | "upc") {
     const [activeField, dir] = sort.split("-") as ["title" | "upc", "asc" | "desc"];
     if (activeField === field) {
+      clearProductSelectionsForDataQuery();
       setSort(`${field}-${dir === "asc" ? "desc" : "asc"}` as SortValue);
       return;
     }
+    clearProductSelectionsForDataQuery();
     setSort(`${field}-asc` as SortValue);
   }
 
@@ -224,8 +333,8 @@ export default function ShopifyCollectionMapping() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [previewImage]);
 
-  async function toggleAssign(productId: string, checked: boolean) {
-    if (!activeNode) return;
+  async function moveMenuNode() {
+    if (!dragSourceKey || !dropTarget) return;
     setSaving(true);
     setError("");
     try {
@@ -233,9 +342,48 @@ export default function ShopifyCollectionMapping() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "toggle-node",
+          action: "move-menu-node",
+          nodeKey: dragSourceKey,
+          targetKey: dropTarget.targetKey,
+          position: dropTarget.position,
+        }),
+      });
+      const json = (await resp.json()) as MappingResponse;
+      if (!resp.ok || !json.ok) {
+        throw new Error(json.error || "Menu reorder failed.");
+      }
+      const nextNodes = (json.nodes || []).filter((node) => node.enabled);
+      setNodes(nextNodes);
+      setWarning(String(json.warning || "").trim());
+      setSelectedNodes((prev) => {
+        const out: Record<string, boolean> = {};
+        for (const key of Object.keys(prev)) {
+          if (prev[key] && nextNodes.some((node) => node.nodeKey === key)) out[key] = true;
+        }
+        return out;
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Menu reorder failed.";
+      setError(message);
+    } finally {
+      setSaving(false);
+      setDragSourceKey("");
+      setDropTarget(null);
+    }
+  }
+
+  async function toggleAssign(productId: string, checked: boolean) {
+    if (mappedSelectedNodeKeys.length < 1) return;
+    setSaving(true);
+    setError("");
+    try {
+      const resp = await fetch("/api/shopify/collection-mapping", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "toggle-nodes",
           productId,
-          nodeKey: activeNode,
+          nodeKeys: mappedSelectedNodeKeys,
           checked,
         }),
       });
@@ -269,8 +417,8 @@ export default function ShopifyCollectionMapping() {
   }
 
   async function bulkAssign(checked: boolean) {
-    if (!activeNode) return;
-    const ids = rows.filter((row) => selectedRows[row.id]).map((row) => row.id);
+    if (mappedSelectedNodeKeys.length < 1) return;
+    const ids = Object.keys(selectedProducts).filter((key) => Boolean(selectedProducts[key]));
     if (ids.length < 1) return;
     setSaving(true);
     setError("");
@@ -280,9 +428,9 @@ export default function ShopifyCollectionMapping() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            action: "toggle-node",
+            action: "toggle-nodes",
             productId: id,
-            nodeKey: activeNode,
+            nodeKeys: mappedSelectedNodeKeys,
             checked,
           }),
         });
@@ -305,7 +453,9 @@ export default function ShopifyCollectionMapping() {
           );
         }
       }
-      setSelectedRows({});
+      if (!checked) {
+        setSelectedProducts({});
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Bulk assign/unassign failed.";
       setError(message);
@@ -333,7 +483,10 @@ export default function ShopifyCollectionMapping() {
         <div className="topbar" style={{ marginTop: 10 }}>
           <input
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              clearProductSelectionsForDataQuery();
+            }}
             placeholder="Search products (title / sku / upc / type)"
             style={{ minWidth: 320 }}
           />
@@ -362,38 +515,89 @@ export default function ShopifyCollectionMapping() {
       </section>
 
       <section className="card">
-        <h2>Dual-Pane Mapper (Tree left, one active node column right)</h2>
+        <h2>Dual-Pane Mapper (Tree left, multi-select columns right)</h2>
         <div className="grid2" style={{ marginTop: 10 }}>
           <aside className="card panel">
             <h3>Menu Tree</h3>
             <p className="muted small" style={{ marginTop: 4 }}>
-              Pick one node. Right side shows a single assignment column.
+              Multi-select nodes. Parent categories are auto-selected when selecting deep children.
             </p>
+            <div className="topbar" style={{ marginTop: 8 }}>
+              <input
+                value={treeSearch}
+                onChange={(event) => setTreeSearch(event.target.value)}
+                placeholder="Search menu nodes..."
+                aria-label="Search menu tree"
+              />
+            </div>
             <div className="tree" style={{ marginTop: 8 }}>
-              {nodes.map((node) => (
-                <button
+              {treeNodes.map((node) => {
+                const checked = Boolean(selectedNodes[node.nodeKey]);
+                const dragging = dragSourceKey === node.nodeKey;
+                const dropState =
+                  dropTarget?.targetKey === node.nodeKey ? `drop-${dropTarget.position}` : "";
+                return (
+                <div
                   key={node.nodeKey}
-                  className={activeNode === node.nodeKey ? "node active" : "node"}
+                  className={`nodeWrap ${dragging ? "dragging" : ""} ${dropState}`}
                   style={{ marginLeft: node.depth * 14 }}
-                  onClick={() => setActiveNode(node.nodeKey)}
-                  type="button"
+                  draggable
+                  onDragStart={() => {
+                    setDragSourceKey(node.nodeKey);
+                    setDropTarget(null);
+                  }}
+                  onDragEnd={() => {
+                    setDragSourceKey("");
+                    setDropTarget(null);
+                  }}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    if (!dragSourceKey || dragSourceKey === node.nodeKey) return;
+                    const rect = (event.currentTarget as HTMLDivElement).getBoundingClientRect();
+                    const y = event.clientY - rect.top;
+                    const third = rect.height / 3;
+                    const position: DropPosition = y < third ? "before" : y > third * 2 ? "after" : "inside";
+                    setDropTarget({ targetKey: node.nodeKey, position });
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    if (!dragSourceKey) return;
+                    if (!dropTarget || dropTarget.targetKey !== node.nodeKey) return;
+                    void moveMenuNode();
+                  }}
                 >
-                  <span>{node.label}</span>
-                  <span className="muted small">{node.linkedTargetLabel || "No target linked"}</span>
-                </button>
-              ))}
+                  <label className={checked ? "node active" : "node"}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(event) => applyNodeSelection(node.nodeKey, event.target.checked)}
+                    />
+                    <span>{node.label}</span>
+                    <span className="muted small">{node.linkedTargetLabel || "No target linked"}</span>
+                  </label>
+                </div>
+              )})}
             </div>
           </aside>
 
           <main className="card panel">
             <div className="topbar">
-              <span className="chip">Active Node: {currentNode?.label || "-"}</span>
-              <span className="chip">{currentNode?.linkedTargetLabel || "No target linked"}</span>
-              <span className="chip">{currentNode?.collectionId ? "Mapped Collection" : "Node Not Mapped"}</span>
-              <button className="primary" type="button" onClick={() => void bulkAssign(true)} disabled={saving || !activeNode}>
+              <span className="chip">Selected Nodes: {selectedNodeKeysWithParents.length}</span>
+              <span className="chip">Mapped Selected: {mappedSelectedNodeKeys.length}</span>
+              <span className="chip">Page {page} / {totalPages}</span>
+              <button
+                className="primary"
+                type="button"
+                onClick={() => void bulkAssign(true)}
+                disabled={saving || mappedSelectedNodeKeys.length < 1}
+              >
                 Assign Checked Products
               </button>
-              <button type="button" onClick={() => void bulkAssign(false)} disabled={saving || !activeNode}>
+              <button
+                type="button"
+                onClick={() => void bulkAssign(false)}
+                disabled={saving || mappedSelectedNodeKeys.length < 1}
+              >
                 Unassign Checked Products
               </button>
             </div>
@@ -405,12 +609,14 @@ export default function ShopifyCollectionMapping() {
                     <th className="center">
                       <input
                         type="checkbox"
-                        checked={allSelected}
+                        checked={allSelectedOnPage}
                         onChange={(event) => {
                           const checked = event.target.checked;
-                          const next: Record<string, boolean> = {};
-                          for (const row of rows) next[row.id] = checked;
-                          setSelectedRows(next);
+                          setSelectedProducts((prev) => {
+                            const next = { ...prev };
+                            for (const row of rows) next[row.id] = checked;
+                            return next;
+                          });
                         }}
                         aria-label="Select all products"
                       />
@@ -451,7 +657,9 @@ export default function ShopifyCollectionMapping() {
                     </tr>
                   ) : (
                     rows.map((row) => {
-                      const assigned = activeNode ? row.checkedNodeKeys.includes(activeNode) : false;
+                      const assigned =
+                        mappedSelectedNodeKeys.length > 0 &&
+                        mappedSelectedNodeKeys.every((key) => row.checkedNodeKeys.includes(key));
                       const currentNodes = row.checkedNodeKeys
                         .map((key) => nodeLabelByKey.get(key) || key)
                         .slice(0, 6)
@@ -461,8 +669,8 @@ export default function ShopifyCollectionMapping() {
                           <td className="center">
                             <input
                               type="checkbox"
-                              checked={Boolean(selectedRows[row.id])}
-                              onChange={(event) => setSelectedRows((prev) => ({ ...prev, [row.id]: event.target.checked }))}
+                              checked={Boolean(selectedProducts[row.id])}
+                              onChange={(event) => setSelectedProducts((prev) => ({ ...prev, [row.id]: event.target.checked }))}
                             />
                           </td>
                           <td className="center imgCell">
@@ -484,7 +692,7 @@ export default function ShopifyCollectionMapping() {
                               type="checkbox"
                               checked={assigned}
                               onChange={(event) => void toggleAssign(row.id, event.target.checked)}
-                              disabled={!activeNode || saving}
+                              disabled={mappedSelectedNodeKeys.length < 1 || saving}
                             />
                           </td>
                           <td>
@@ -496,6 +704,39 @@ export default function ShopifyCollectionMapping() {
                   )}
                 </tbody>
               </table>
+            </div>
+            <div className="topbar pagerBar" style={{ marginTop: 10 }}>
+              <button type="button" onClick={() => setPage(1)} disabled={page <= 1 || loading}>
+                {"<<"}
+              </button>
+              <button type="button" onClick={() => setPage((prev) => Math.max(1, prev - 1))} disabled={page <= 1 || loading}>
+                {"<"}
+              </button>
+              <span className="muted">Page {page} of {totalPages}</span>
+              <button
+                type="button"
+                onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+                disabled={page >= totalPages || loading}
+              >
+                {">"}
+              </button>
+              <button type="button" onClick={() => setPage(totalPages)} disabled={page >= totalPages || loading}>
+                {">>"}
+              </button>
+              <span className="muted">Products per page</span>
+              <select
+                value={pageSize}
+                onChange={(event) => {
+                  setPageSize(Number(event.target.value) || 20);
+                  setPage(1);
+                }}
+              >
+                {[20, 50, 100, 200, 500].map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
             </div>
           </main>
         </div>
@@ -700,12 +941,33 @@ export default function ShopifyCollectionMapping() {
           display: grid;
           gap: 2px;
         }
+        .node input[type="checkbox"] {
+          margin-right: 8px;
+          transform: translateY(1px);
+        }
         .node:hover {
           background: #152236;
         }
         .node.active {
           background: #0f2134;
           border-color: #164e63;
+        }
+        .nodeWrap {
+          border-radius: 8px;
+          border: 1px solid transparent;
+        }
+        .nodeWrap.dragging {
+          opacity: 0.45;
+        }
+        .nodeWrap.drop-before {
+          border-top-color: #38bdf8;
+        }
+        .nodeWrap.drop-after {
+          border-bottom-color: #38bdf8;
+        }
+        .nodeWrap.drop-inside {
+          border-color: #38bdf8;
+          background: rgba(56, 189, 248, 0.08);
         }
         .tableWrap {
           overflow: auto;
@@ -759,6 +1021,9 @@ export default function ShopifyCollectionMapping() {
         }
         .center {
           text-align: center;
+        }
+        .pagerBar {
+          justify-content: flex-end;
         }
         .imgCell {
           width: 80px;
