@@ -636,6 +636,7 @@ export default function ShopifyCollectionMapping() {
           )
         );
       }
+      await loadData();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Assign/unassign failed.";
       setError(message);
@@ -676,6 +677,7 @@ export default function ShopifyCollectionMapping() {
         );
       }
       setSelectedProducts({});
+      await loadData();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Bulk assign/unassign failed.";
       setError(message);

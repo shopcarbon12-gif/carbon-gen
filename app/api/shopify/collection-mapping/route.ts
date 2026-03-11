@@ -2802,7 +2802,7 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        const desiredNodes = new Set(currentSelectedNodes);
+        const desiredNodes = checked ? new Set<string>() : new Set(currentSelectedNodes);
         if (checked) {
           for (const key of requestedNodeKeys) {
             desiredNodes.add(key);
