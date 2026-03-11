@@ -7871,6 +7871,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           flex: 1;
           margin-right: auto;
           text-align: left !important;
+          padding-right: 0;
         }
         h1 {
           margin: 8px 0;
@@ -8089,11 +8090,17 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         }
         .registry-inline-models {
           flex: 1;
+          width: 100%;
           min-width: 0;
           display: flex;
           flex-wrap: wrap;
           gap: 6px;
-          justify-content: center;
+          justify-content: flex-start;
+        }
+        .registry-inline-models .model-pill {
+          flex: 1 1 152px;
+          min-width: 132px;
+          max-width: none;
         }
         .model-registry-header .ghost-btn {
           margin-left: auto;
@@ -8106,8 +8113,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           gap: 8px;
           flex-wrap: wrap;
           position: absolute;
-          top: 16px;
-          right: 16px;
+          top: 8px;
+          right: 8px;
           margin: 0;
           justify-content: flex-end;
         }
@@ -8557,10 +8564,16 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         .section-header .icon-toggle-btn,
         .model-registry-header .icon-toggle-btn {
           position: absolute;
-          top: 16px;
-          right: 16px;
+          top: 8px;
+          right: 8px;
           margin: 0;
           z-index: 2;
+        }
+        .model-registry-header-actions .icon-toggle-btn {
+          position: static;
+          top: auto;
+          right: auto;
+          margin: 0;
         }
         .section-header .card-title,
         .model-registry-header .card-title {
@@ -9815,22 +9828,24 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           }
           .section-header,
           .model-registry-header {
-            position: relative;
-            padding-right: 56px;
-            min-height: 44px;
-            align-items: flex-start;
+            position: static;
+            padding-right: 0;
+            min-height: 0;
+            align-items: center;
           }
           .section-header .icon-toggle-btn,
           .model-registry-header .icon-toggle-btn {
             position: absolute;
-            top: 0;
-            right: 0;
+            top: 8px;
+            right: 8px;
             margin: 0;
+            z-index: 2;
           }
           .section-header .card-title,
           .model-registry-header .card-title {
             min-width: 0;
             text-align: left;
+            padding-right: 56px;
           }
           .panel-row {
             display: grid;
@@ -9870,8 +9885,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           }
           .model-registry-header-actions {
             position: absolute;
-            top: 0;
-            right: 0;
+            top: 8px;
+            right: 8px;
             margin: 0;
             justify-content: flex-end;
             align-self: start;
@@ -9892,9 +9907,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           }
           .model-pill {
             width: auto;
-            min-width: 138px;
-            max-width: 164px;
-            flex: 0 0 auto;
+            min-width: 164px;
+            max-width: 190px;
+            flex: 0 0 164px;
             scroll-snap-align: start;
             justify-content: space-between;
             padding: 8px 8px;
@@ -9958,9 +9973,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             scroll-snap-align: start;
           }
           .model-list.mobile-carousel-row > .model-pill {
-            min-width: 138px;
-            max-width: 164px;
-            width: auto;
+            min-width: 164px;
+            max-width: 190px;
+            width: 164px;
           }
           .mobile-carousel > .catalog-image,
           .item-catalog-grid.mobile-carousel > .preview-card {
