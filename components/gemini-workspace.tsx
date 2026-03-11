@@ -9991,10 +9991,10 @@ function buildMasterPanelPrompt(
             scroll-padding-inline: 10px;
           }
           .registry-inline-models .model-pill {
-            min-width: calc((100% - 30px) / 2);
-            width: calc((100% - 30px) / 2);
+            min-width: calc((100% - 10px) / 2);
+            width: calc((100% - 10px) / 2);
             max-width: none;
-            flex: 0 0 calc((100% - 30px) / 2);
+            flex: 0 0 calc((100% - 10px) / 2);
           }
           .model-pill {
             width: auto;
@@ -10079,10 +10079,10 @@ function buildMasterPanelPrompt(
             scroll-snap-align: start;
           }
           .model-list.mobile-carousel-row > .model-pill {
-            min-width: calc((100% - 30px) / 2);
+            min-width: calc((100% - 10px) / 2);
             max-width: none;
-            width: calc((100% - 30px) / 2);
-            flex: 0 0 calc((100% - 30px) / 2);
+            width: calc((100% - 10px) / 2);
+            flex: 0 0 calc((100% - 10px) / 2);
           }
           .mobile-carousel > .catalog-image,
           .item-catalog-grid.mobile-carousel > .preview-card {
