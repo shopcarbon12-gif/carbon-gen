@@ -823,7 +823,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
       <main
         className={`content ${drawerOpen ? "menu-open" : ""} ${
           showIntegrationPanel ? "" : "no-integration-panel"
-        }`}
+        } ${isCollectionMappingRoute ? "collection-mapping-content" : ""}`}
         style={drawerOpen ? { paddingLeft: "calc(13px + 255px + 13px)" } : undefined}
       >
         {children}
@@ -1888,10 +1888,20 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           );
           padding-right: var(--content-right-pad);
         }
+        .content.collection-mapping-content,
+        .content.collection-mapping-content.no-integration-panel {
+          --content-right-pad: var(--page-edge-gap);
+          padding-right: var(--content-right-pad);
+        }
         .shell.chat-expanded .content.no-integration-panel {
           --content-right-pad: calc(
             var(--chat-expanded-width) + var(--page-edge-gap) + var(--content-api-gap)
           );
+          padding-right: var(--content-right-pad);
+        }
+        .shell.chat-expanded .content.collection-mapping-content,
+        .shell.chat-expanded .content.collection-mapping-content.no-integration-panel {
+          --content-right-pad: var(--page-edge-gap);
           padding-right: var(--content-right-pad);
         }
         :global(.content .page) {
