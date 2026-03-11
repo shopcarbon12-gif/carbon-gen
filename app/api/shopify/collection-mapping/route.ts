@@ -69,6 +69,19 @@ function parseBool(value: unknown) {
   return false;
 }
 
+function parseCsvList(value: unknown) {
+  const raw = normalizeText(value);
+  if (!raw) return [];
+  return Array.from(
+    new Set(
+      raw
+        .split(",")
+        .map((part) => normalizeText(part))
+        .filter(Boolean)
+    )
+  );
+}
+
 function parseProductsCount(raw: unknown): number | null {
   if (typeof raw === "number" && Number.isFinite(raw)) return raw;
   if (raw && typeof raw === "object" && typeof (raw as { count?: unknown }).count === "number") {
@@ -660,6 +673,7 @@ type ProductFilters = {
   sku: string;
   upc: string;
   itemType: string;
+  selectedItemTypes: string[];
 };
 
 function productMatchesFilters(row: ProductRow, filters: ProductFilters) {
@@ -685,6 +699,11 @@ function productMatchesFilters(row: ProductRow, filters: ProductFilters) {
 
   const itemType = normalizeLower(filters.itemType);
   if (itemType && !normalizeLower(row.itemType).includes(itemType)) return false;
+
+  if (filters.selectedItemTypes.length > 0) {
+    const selected = new Set(filters.selectedItemTypes.map((value) => normalizeLower(value)).filter(Boolean));
+    if (selected.size > 0 && !selected.has(normalizeLower(row.itemType))) return false;
+  }
 
   return true;
 }
@@ -1904,6 +1923,7 @@ export async function GET(req: NextRequest) {
       sku: normalizeText(searchParams.get("sku") || ""),
       upc: normalizeText(searchParams.get("upc") || ""),
       itemType: normalizeText(searchParams.get("itemType") || ""),
+      selectedItemTypes: parseCsvList(searchParams.get("types") || ""),
     };
 
     const sortField = toSortField(normalizeText(searchParams.get("sortField") || "title"));
@@ -1948,6 +1968,17 @@ export async function GET(req: NextRequest) {
     const nodesResult = menuSyncResult.synced;
     const nodes = nodesResult.nodes;
 
+    const typeLabelByKey = new Map<string, string>();
+    for (const row of productsResult.products) {
+      const itemType = normalizeText(row.itemType);
+      if (!itemType) continue;
+      const key = normalizeLower(itemType);
+      if (!typeLabelByKey.has(key)) typeLabelByKey.set(key, itemType);
+    }
+    const types = Array.from(typeLabelByKey.values()).sort((left, right) =>
+      left.localeCompare(right, undefined, { sensitivity: "base" })
+    );
+
     const filtered = productsResult.products.filter((row) => productMatchesFilters(row, filters));
 
     const sorted = [...filtered].sort((left, right) => compareRows(left, right, sortField));
@@ -1981,6 +2012,7 @@ export async function GET(req: NextRequest) {
       backend: nodesResult.backend,
       warning: warningParts.join(" | "),
       filters,
+      types,
       sort: { field: sortField, dir: sortDir },
       page: clampedPage,
       pageSize,

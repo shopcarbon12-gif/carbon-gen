@@ -32,6 +32,7 @@ type MappingResponse = {
   collections?: Array<{ id: string; title?: string }>;
   nodes?: MenuNode[];
   rows?: ProductRow[];
+  types?: string[];
   summary?: {
     totalProducts?: number;
   };
@@ -65,6 +66,9 @@ export default function ShopifyCollectionMapping() {
   const [selectedProducts, setSelectedProducts] = useState<Record<string, boolean>>({});
   const [treeSearch, setTreeSearch] = useState("");
   const [search, setSearch] = useState("");
+  const [typeOptions, setTypeOptions] = useState<string[]>([]);
+  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+  const [showTypesDropdown, setShowTypesDropdown] = useState(false);
   const [sort, setSort] = useState<SortValue>("title-asc");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -90,6 +94,7 @@ export default function ShopifyCollectionMapping() {
   const [treePanelWidth, setTreePanelWidth] = useState(320);
   const [resizingPanes, setResizingPanes] = useState(false);
   const paneResizeStart = useRef<{ x: number; width: number } | null>(null);
+  const typesDropdownRef = useRef<HTMLDivElement | null>(null);
 
   const nodeLabelByKey = useMemo(() => {
     const map = new Map<string, string>();
@@ -137,6 +142,12 @@ export default function ShopifyCollectionMapping() {
     if (rows.length < 1) return false;
     return rows.every((row) => Boolean(selectedProducts[row.id]));
   }, [rows, selectedProducts]);
+
+  const selectedTypesLabel = useMemo(() => {
+    if (selectedTypes.length < 1) return "All types";
+    if (selectedTypes.length === 1) return selectedTypes[0];
+    return `${selectedTypes.length} selected`;
+  }, [selectedTypes]);
 
   const treeNodes = useMemo(() => {
     const q = treeSearch.trim().toLowerCase();
@@ -242,6 +253,9 @@ export default function ShopifyCollectionMapping() {
         sortField,
         sortDir,
       });
+      if (selectedTypes.length > 0) {
+        params.set("types", selectedTypes.join(","));
+      }
       const resp = await fetch(`/api/shopify/collection-mapping?${params.toString()}`, {
         cache: "no-store",
       });
@@ -261,6 +275,15 @@ export default function ShopifyCollectionMapping() {
       setCollections(nextCollections);
       setCollectionCount(nextCollections.length);
       setProductCount(Number(json.total || json.summary?.totalProducts || (json.rows || []).length));
+      const nextTypeOptions = Array.isArray(json.types)
+        ? json.types.map((value) => String(value || "").trim()).filter(Boolean)
+        : [];
+      setTypeOptions(nextTypeOptions);
+      setSelectedTypes((prev) => {
+        if (prev.length < 1) return prev;
+        const allowed = new Set(nextTypeOptions.map((value) => value.toLowerCase()));
+        return prev.filter((value) => allowed.has(value.toLowerCase()));
+      });
       setTotalPages(Math.max(1, Number(json.totalPages || 1)));
       if (json.page && Number.isFinite(Number(json.page))) {
         setPage(Math.max(1, Number(json.page)));
@@ -325,11 +348,11 @@ export default function ShopifyCollectionMapping() {
       void loadData();
     }, 180);
     return () => window.clearTimeout(timer);
-  }, [search, sort, page, pageSize]);
+  }, [search, selectedTypes, sort, page, pageSize]);
 
   useEffect(() => {
     setSelectedProducts({});
-  }, [search, treeSearch, sort]);
+  }, [search, selectedTypes, treeSearch, sort]);
 
   useEffect(() => {
     setExpandedNodes((prev) => {
@@ -399,6 +422,27 @@ export default function ShopifyCollectionMapping() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [previewImage]);
+
+  useEffect(() => {
+    if (!showTypesDropdown) return;
+    const onMouseDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (typesDropdownRef.current?.contains(target)) return;
+      setShowTypesDropdown(false);
+    };
+    window.addEventListener("mousedown", onMouseDown);
+    return () => window.removeEventListener("mousedown", onMouseDown);
+  }, [showTypesDropdown]);
+
+  useEffect(() => {
+    if (!showTypesDropdown) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setShowTypesDropdown(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showTypesDropdown]);
 
   useEffect(() => {
     if (!resizingPanes) return;
@@ -640,6 +684,24 @@ export default function ShopifyCollectionMapping() {
     }
   }
 
+  function toggleSelectedType(type: string) {
+    const normalized = type.trim();
+    if (!normalized) return;
+    setSelectedTypes((prev) => {
+      const exists = prev.some((value) => value.toLowerCase() === normalized.toLowerCase());
+      if (exists) {
+        return prev.filter((value) => value.toLowerCase() !== normalized.toLowerCase());
+      }
+      return [...prev, normalized];
+    });
+    resetPageForDataQuery();
+  }
+
+  function clearTypeFilter() {
+    setSelectedTypes([]);
+    resetPageForDataQuery();
+  }
+
   return (
     <main className="page">
       <style jsx global>{`
@@ -657,15 +719,6 @@ export default function ShopifyCollectionMapping() {
       <section className="card">
         <h1>Shopify Collection Mapping</h1>
         <div className="topbar" style={{ marginTop: 10 }}>
-          <input
-            value={search}
-            onChange={(event) => {
-              setSearch(event.target.value);
-              resetPageForDataQuery();
-            }}
-            placeholder="Search products (title / sku / upc / type)"
-            style={{ minWidth: 320 }}
-          />
           <span className="pill">Auto-parent logic ON</span>
           <span className="pill">Live Shopify sync ON</span>
           <button type="button" onClick={() => setShowAuditReport(true)}>
@@ -691,8 +744,7 @@ export default function ShopifyCollectionMapping() {
       </section>
 
       <section className="card">
-        <h2>Dual-Pane Mapper (Tree left, multi-select columns right)</h2>
-        <div className="grid2" style={{ marginTop: 10, gridTemplateColumns: `${treePanelWidth}px 12px minmax(0, 1fr)` }}>
+        <div className="grid2" style={{ gridTemplateColumns: `${treePanelWidth}px 12px minmax(0, 1fr)` }}>
           <aside className="card panel">
             <h3>Menu Tree</h3>
             <p className="muted small" style={{ marginTop: 4 }}>
@@ -885,6 +937,60 @@ export default function ShopifyCollectionMapping() {
           </div>
 
           <main className="card panel">
+            <div className="productControls">
+              <input
+                value={search}
+                onChange={(event) => {
+                  setSearch(event.target.value);
+                  resetPageForDataQuery();
+                }}
+                placeholder="Search products (title / sku / upc / type)"
+                aria-label="Search products"
+                className="productSearchInput"
+              />
+              <div className="typesDropdown" ref={typesDropdownRef}>
+                <button
+                  type="button"
+                  className="typesDropdownBtn"
+                  onClick={() => setShowTypesDropdown((prev) => !prev)}
+                  aria-haspopup="listbox"
+                  aria-expanded={showTypesDropdown}
+                >
+                  Types: {selectedTypesLabel}
+                </button>
+                {showTypesDropdown ? (
+                  <div className="typesDropdownMenu" role="listbox" aria-label="Filter by product types" aria-multiselectable="true">
+                    <button
+                      type="button"
+                      className="typesResetBtn"
+                      onClick={() => clearTypeFilter()}
+                      disabled={selectedTypes.length < 1}
+                    >
+                      All types
+                    </button>
+                    <div className="typesList">
+                      {typeOptions.length < 1 ? (
+                        <div className="typesEmpty">No product types found.</div>
+                      ) : (
+                        typeOptions.map((type) => {
+                          const checked = selectedTypes.some((value) => value.toLowerCase() === type.toLowerCase());
+                          return (
+                            <label key={type} className="typesOption">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleSelectedType(type)}
+                              />
+                              <span>{type}</span>
+                            </label>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
             <div className="topbar">
               <span className="chip">Selected Nodes: {selectedNodeKeysWithParents.length}</span>
               <span className="chip">Mapped Selected: {mappedSelectedNodeKeys.length}</span>
@@ -1274,6 +1380,78 @@ export default function ShopifyCollectionMapping() {
         }
         .panel {
           padding: 10px;
+        }
+        .productControls {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+          align-items: center;
+          margin-bottom: 10px;
+        }
+        .productSearchInput {
+          min-width: 320px;
+          flex: 1 1 360px;
+        }
+        .typesDropdown {
+          position: relative;
+          flex: 0 0 auto;
+        }
+        .typesDropdownBtn {
+          min-width: 170px;
+          justify-content: flex-start;
+        }
+        .typesDropdownMenu {
+          position: absolute;
+          top: calc(100% + 6px);
+          right: 0;
+          width: 280px;
+          max-width: min(90vw, 280px);
+          z-index: 20;
+          border: 1px solid #2a3547;
+          border-radius: 10px;
+          background: #0a1324;
+          box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+          padding: 8px;
+        }
+        .typesResetBtn {
+          width: 100%;
+          justify-content: center;
+          margin-bottom: 8px;
+        }
+        .typesList {
+          max-height: 240px;
+          overflow: auto;
+          border: 1px solid #1f2937;
+          border-radius: 8px;
+          padding: 4px;
+          background: #0b1322;
+          display: grid;
+          gap: 2px;
+        }
+        .typesOption {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 6px 8px;
+          border-radius: 6px;
+          font-size: 12px;
+          cursor: pointer;
+        }
+        .typesOption:hover {
+          background: #122033;
+        }
+        .typesOption input {
+          min-height: 0;
+          width: 14px;
+          height: 14px;
+          margin: 0;
+          padding: 0;
+        }
+        .typesEmpty {
+          padding: 10px;
+          text-align: center;
+          color: #94a3b8;
+          font-size: 12px;
         }
         .tree {
           max-height: 65vh;
