@@ -1876,9 +1876,13 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
 
       // Keep empty-page probing shallow to avoid repeated catalog API chains.
       for (let guard = 0; guard < 5; guard += 1) {
+        const mobileCatalogPageSize =
+          typeof window !== "undefined" && window.matchMedia("(max-width: 900px)").matches
+            ? 2
+            : CATALOG_PAGE_SIZE;
         const params = new URLSearchParams({
           shop: shopValue,
-          first: String(CATALOG_PAGE_SIZE),
+          first: String(mobileCatalogPageSize),
         });
         const shouldIncludeCount = page === 1 && !after;
         if (shouldIncludeCount) params.set("includeCount", "1");
@@ -5648,11 +5652,12 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               ) : null}
               <button
                 suppressHydrationWarning
-                className="ghost-btn"
+                className="ghost-btn icon-toggle-btn"
                 type="button"
                 onClick={() => setModelRegistryCollapsed((prev) => !prev)}
+                title={modelRegistryCollapsed ? "Expand section" : "Collapse section"}
               >
-                {modelRegistryCollapsed ? "Expand" : "Collapse"}
+                {modelRegistryCollapsed ? "⤢" : "⤡"}
               </button>
             </div>
           </div>
@@ -5664,7 +5669,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               suppressHydrationWarning
               value={modelName}
               onChange={(e) => setModelName(e.target.value)}
-              placeholder="Model name (e.g., Sarah)"
+              placeholder="Model name"
             />
             <select
               value={modelGender}
@@ -5771,22 +5776,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               {emptyingBucket ? "Emptying Storage..." : "Empty Storage"}
             </button>
           </div>
-          <div className="row" style={{ justifyContent: "center", alignItems: "center" }}>
-            <button
-              className="btn primary"
-              type="button"
-              onClick={createModel}
-              disabled={modelSaving}
-            >
-              {modelSaving ? "Saving..." : "Save Model"}
-            </button>
-            <span className="muted">
-              Registry: {models.length} model{models.length === 1 ? "" : "s"}
-            </span>
-            <button className="ghost-btn danger" type="button" onClick={resetModels}>
-              Reset all models
-            </button>
-          </div>
           {(modelUploading || modelPreviewItems.some((p) => !p.uploadedUrl)) && (
             <div className="muted centered">
               Uploading{" "}
@@ -5798,22 +5787,17 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           ) : null}
           {!modelRegistryCollapsed && previousUploadsVisible ? (
             <div className="card">
-              <div className="card-title">Previous Uploads (Model Registry)</div>
-              <p className="muted">
-                Shows model images uploaded from this section only. Duplicate files are merged and
-                only the latest upload is shown once. Click any image to add it directly to Model
-                Registry.
-              </p>
-              <div className="row">
+              <div className="card-title">Previous Uploads</div>
+              <div className="row previous-upload-filters-row">
                 <select
                   value={previousSort}
                   onChange={(e) =>
                     setPreviousSort(e.target.value as "date_asc" | "date_desc" | "name_az")
                   }
                 >
-                  <option value="date_asc">Date (Oldest first)</option>
-                  <option value="date_desc">Date (Newest first)</option>
-                  <option value="name_az">Name (A-Z)</option>
+                  <option value="date_desc">↕ Date: Newest</option>
+                  <option value="date_asc">↕ Date: Oldest</option>
+                  <option value="name_az">↕ Name: A-Z</option>
                 </select>
                 <select
                   value={previousGenderFilter}
@@ -5823,7 +5807,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                     )
                   }
                 >
-                  <option value="all">All genders</option>
+                  <option value="all">⚲ All genders</option>
                   <option value="female">Female only</option>
                   <option value="male">Male only</option>
                 </select>
@@ -5902,6 +5886,21 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               )}
             </div>
           ) : null}
+          {!modelRegistryCollapsed ? (
+            <div className="row model-save-row" style={{ justifyContent: "center", alignItems: "center" }}>
+              <button
+                className="btn primary"
+                type="button"
+                onClick={createModel}
+                disabled={modelSaving}
+              >
+                {modelSaving ? "Saving..." : "Save Model"}
+              </button>
+              <button className="ghost-btn danger center-reset-btn" type="button" onClick={resetModels}>
+                Reset all models
+              </button>
+            </div>
+          ) : null}
           {!modelRegistryCollapsed && models.length ? (
             <div className="model-list mobile-carousel-row">
               {models.map((m) => (
@@ -5927,8 +5926,14 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           <div className="eyebrow">02 — References</div>
           <div className="section-header">
             <div className="card-title">Item References</div>
-            <button suppressHydrationWarning className="ghost-btn" type="button" onClick={() => setItemRefsCollapsed((p) => !p)}>
-              {itemRefsCollapsed ? "Expand" : "Collapse"}
+            <button
+              suppressHydrationWarning
+              className="ghost-btn icon-toggle-btn"
+              type="button"
+              onClick={() => setItemRefsCollapsed((p) => !p)}
+              title={itemRefsCollapsed ? "Expand section" : "Collapse section"}
+            >
+              {itemRefsCollapsed ? "⤢" : "⤡"}
             </button>
           </div>
           {!itemRefsCollapsed ? (
@@ -5947,7 +5952,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               suppressHydrationWarning
               value={itemStyleInstructions}
               onChange={(e) => setItemStyleInstructions(e.target.value)}
-              placeholder="Optional - extra styling instruction for accuracy"
+              placeholder="Styling notes (optional)"
             />
           </div>
           <div className="row barcode-row">
@@ -6006,7 +6011,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                 ? "Searching Dropbox..."
                 : dropboxListVisible && (dropboxResults.length > 0 || dropboxFolderResults.length > 0)
                   ? "Hide Dropbox List"
-                  : "Search Dropbox by Barcode"}
+                  : "Search Dropbox"}
             </button>
           </div>
           {itemCameraChooserOpen ? (
@@ -6227,9 +6232,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               </div>
             </div>
           ) : null}
-          <div className="muted centered">
-            Dropbox: {dropboxConnected ? "Connected" : "Not connected"}
-          </div>
           {dropboxSearched && !dropboxSearching && !dropboxResults.length ? (
             <div className="muted centered">No Dropbox images found for this barcode.</div>
           ) : null}
@@ -6266,11 +6268,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               })}
             </div>
           ) : null}
-          <div className="source-note muted">
-            Combine device uploads with Shopify catalog imports.
-          </div>
           <div
-            className="dropzone"
+            className="dropzone item-dropzone"
             role="button"
             tabIndex={0}
             onClick={() => openInputPickerWithMask(itemPickerRef.current)}
@@ -6318,7 +6317,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               setItemFiles((prev) => mergeUniqueFiles(prev, filterImages(e.target.files || [])))
             }
           />
-          <div className="picker-row">
+          <div className="picker-row item-picker-row">
             <button className="ghost-btn" type="button" onClick={() => openInputPickerWithMask(itemPickerRef.current)}>
               Choose files
             </button>
@@ -6470,23 +6469,12 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                   value={catalogQuery}
                   onChange={(e) => setCatalogQuery(e.target.value)}
                   onKeyDown={onCatalogSearchKeyDown}
-                  placeholder="Search products (title, handle, SKU)"
+                  placeholder="Search products"
                 />
                 <button className="btn ghost" type="button" onClick={() => loadCatalogImages()}>
                   {catalogLoading ? "Loading..." : "Search Catalog"}
                 </button>
               </div>
-              {catalogSearched && !catalogResultsHidden ? (
-                <div className="row">
-                  <button
-                    className="btn ghost"
-                    type="button"
-                    onClick={() => setCatalogResultsHidden(true)}
-                  >
-                    Hide Catalog
-                  </button>
-                </div>
-              ) : null}
               {!shop.trim() && (
                 <div className="muted centered">
                   Enter your shop domain above to browse Shopify catalog images.
@@ -6494,7 +6482,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               )}
               {shop.trim() && !catalogSearched && (
                 <div className="muted centered">
-                  Search by product name/handle, or leave search empty to browse 10 products per page.
+                  Search by product name, or leave search empty to browse catalog pages.
                 </div>
               )}
               {shop.trim() && catalogSearched && catalogResultsHidden ? (
@@ -6505,47 +6493,12 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               {shop.trim() && catalogSearched && !catalogResultsHidden && !catalogLoading && !catalogProducts.length && (
                 <div className="muted centered">No matching catalog products with images found.</div>
               )}
-              {showCatalogPagination ? (
-                <div className="catalog-pagination">
-                  <button
-                    className="ghost-btn"
-                    type="button"
-                    onClick={loadCatalogPreviousPage}
-                    disabled={catalogLoading || catalogPage <= 1}
-                  >
-                    {"<-"}
-                  </button>
-                  <div className="muted centered">
-                    Page {catalogPage} / {catalogTotalPages}
-                  </div>
-                  <button
-                    className="ghost-btn"
-                    type="button"
-                    onClick={loadCatalogNextPage}
-                    disabled={catalogLoading || !catalogHasNextPage}
-                  >
-                    {"->"}
-                  </button>
-                  <button
-                    className="ghost-btn"
-                    type="button"
-                    onClick={loadCatalogFirstPage}
-                    disabled={catalogLoading || catalogPage === 1}
-                  >
-                    Back to page 1
-                  </button>
-                </div>
-              ) : null}
               {!catalogResultsHidden && catalogProducts.length ? (
                 <div className="catalog-products">
                   {visibleCatalogProducts.map((product) => (
                     <div className="catalog-product" key={product.id}>
                       <div className="catalog-title">
-                        {product.title}
-                        <span className="muted">
-                          {" "}
-                          ({product.handle}) | Barcode: {formatProductBarcodes(product)}
-                        </span>
+                        {product.title} | Barcode: {formatProductBarcodes(product)}
                       </div>
                       <div className="preview-grid item-catalog-grid mobile-carousel">
                         {product.images.map((img) => {
@@ -6600,6 +6553,15 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               ) : null}
               {showCatalogPagination ? (
                 <div className="catalog-pagination">
+                  {catalogSearched && !catalogResultsHidden ? (
+                    <button
+                      className="btn ghost"
+                      type="button"
+                      onClick={() => setCatalogResultsHidden(true)}
+                    >
+                      Hide Catalog
+                    </button>
+                  ) : null}
                   <button
                     className="ghost-btn"
                     type="button"
@@ -6618,14 +6580,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                     disabled={catalogLoading || !catalogHasNextPage}
                   >
                     {"->"}
-                  </button>
-                  <button
-                    className="ghost-btn"
-                    type="button"
-                    onClick={loadCatalogFirstPage}
-                    disabled={catalogLoading || catalogPage === 1}
-                  >
-                    Back to page 1
                   </button>
                 </div>
               ) : null}
@@ -6893,8 +6847,13 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           <div className="eyebrow">03 — Generate</div>
           <div className="section-header">
             <div className="card-title">Image Generation</div>
-            <button className="ghost-btn" type="button" onClick={() => setGenerateCollapsed((p) => !p)}>
-              {generateCollapsed ? "Expand" : "Collapse"}
+            <button
+              className="ghost-btn icon-toggle-btn"
+              type="button"
+              onClick={() => setGenerateCollapsed((p) => !p)}
+              title={generateCollapsed ? "Expand section" : "Collapse section"}
+            >
+              {generateCollapsed ? "⤢" : "⤡"}
             </button>
           </div>
           {!generateCollapsed ? (
@@ -6922,6 +6881,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                 selectedModelForGeneration?.gender || "female",
                 panel.id
               );
+              const compactPanelLabel = panelLabel.replace(/\s*\(.*?\)\s*/g, "").trim();
               const unavailableForDress = isFemaleDressPanelBlocked(
                 String(selectedModelForGeneration?.gender || ""),
                 resolvedItemType,
@@ -6944,14 +6904,10 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                     });
                   }}
                 >
-                  {unavailableForDress ? `Panel ${panel.id} (Not available for dress)` : panelLabel}
+                  {unavailableForDress ? `Panel ${panel.id} (Not available for dress)` : compactPanelLabel}
                 </button>
               );
             })}
-          </div>
-          <div className="panel-selection-summary">
-            Selected panels: {[...selectedPanels].sort((a, b) => a - b).join(", ")}.
-            Generate runs exactly the selected panel(s).
           </div>
           <div className="row select-panels-row">
             <button
@@ -7032,6 +6988,13 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                   ? "Generating..."
                   : `Generate Selected (${selectedPanels.length})`}
               </button>
+            </div>
+            <div className="generation-comments-wrap">
+              <textarea
+                value={regenerationComments}
+                onChange={(e) => setRegenerationComments(e.target.value)}
+                placeholder='Regeneration comments (example: "make fit less oversized", "match logo placement exactly").'
+              />
               <button
                 className="btn ghost"
                 onClick={() => generatePanels("regenerate_selected")}
@@ -7042,21 +7005,13 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                   : `Regenerate Selected (${selectedPanels.length})`}
               </button>
             </div>
-            <div className="generation-comments-wrap">
-              <textarea
-                value={regenerationComments}
-                onChange={(e) => setRegenerationComments(e.target.value)}
-                placeholder='Regeneration comments to improve accuracy (example: "make fit less oversized", "match logo placement exactly", "keep sleeves tighter").'
-              />
-              <div className="muted generation-comments-note">
-                This note is used when you click Regenerate Selected.
-              </div>
-            </div>
           </div>
           <div className="row" style={{ justifyContent: "center" }}>
             <button className="btn primary" onClick={approveSelectedPanels}>
               Approve Selected
             </button>
+          </div>
+          <div className="row split-external-row" style={{ justifyContent: "center" }}>
             <button className="btn ghost" onClick={splitToThreeByFour}>
               Split to 3:4
             </button>
@@ -7152,16 +7107,18 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           <div className="eyebrow">04 — Results</div>
           <div className="section-header">
             <div className="card-title">Final Results</div>
-            <button className="ghost-btn" type="button" onClick={() => setResultsCollapsed((p) => !p)}>
-              {resultsCollapsed ? "Expand" : "Collapse"}
+            <button
+              className="ghost-btn icon-toggle-btn"
+              type="button"
+              onClick={() => setResultsCollapsed((p) => !p)}
+              title={resultsCollapsed ? "Expand section" : "Collapse section"}
+            >
+              {resultsCollapsed ? "⤢" : "⤡"}
             </button>
           </div>
           {!resultsCollapsed ? (
           <>
-          <div className="row">
-              <button className="btn ghost" onClick={downloadAllSplitCrops} disabled={!splitCrops.length}>
-                Download All Splits
-              </button>
+          <div className="row final-download-row">
               <button
                 className="btn ghost"
                 type="button"
@@ -7170,6 +7127,21 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               >
                 Download Selected
               </button>
+              <button className="btn ghost" onClick={downloadAllSplitCrops} disabled={!splitCrops.length}>
+                Download All Splits
+              </button>
+            </div>
+            <div className="row final-save-row">
+              <button
+                className="btn primary"
+                type="button"
+                onClick={saveFinalResultsToStorage}
+                disabled={savingFinalResults || (!splitCrops.length && !finalResultFiles.length)}
+              >
+                {savingFinalResults ? "Saving..." : "Save Final Results"}
+              </button>
+            </div>
+            <div className="row final-seo-row">
               <button
                 className="btn ghost"
                 type="button"
@@ -7182,17 +7154,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                     ))
                 }
               >
-                {splitSendingToPush ? "Sending Splits..." : "Use Pictures In Shopify Push"}
-              </button>
-            </div>
-            <div className="row">
-              <button
-                className="btn primary"
-                type="button"
-                onClick={saveFinalResultsToStorage}
-                disabled={savingFinalResults || (!splitCrops.length && !finalResultFiles.length)}
-              >
-                {savingFinalResults ? "Saving..." : "Save Final Results"}
+                {splitSendingToPush ? "Sending Results..." : "Use Results In SEO Manager"}
               </button>
             </div>
             <div
@@ -7274,9 +7236,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                   );
                 })}
               </div>
-            ) : (
-            <div className="muted centered">No split results yet. Generate and split first.</div>
-          )}
+            ) : null}
           </>
           ) : null}
         </section>
@@ -8526,6 +8486,13 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           opacity: 0.66;
           cursor: not-allowed;
         }
+        .icon-toggle-btn {
+          min-width: 44px;
+          width: 44px;
+          padding: 0;
+          font-size: 1.05rem;
+          font-weight: 800;
+        }
         .preview-grid {
           display: flex;
           flex-wrap: wrap;
@@ -8835,6 +8802,24 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           justify-content: center;
           gap: 8px;
         }
+        .previous-upload-filters-row {
+          flex-wrap: nowrap;
+        }
+        .previous-upload-filters-row > select {
+          flex: 1 1 50%;
+        }
+        .model-save-row {
+          margin-top: 6px;
+          gap: 10px;
+        }
+        .model-save-row .btn,
+        .model-save-row .ghost-btn {
+          min-width: 148px;
+        }
+        .center-reset-btn {
+          margin-left: 0;
+          margin-right: 0;
+        }
         .model-pill {
           border: 1px solid #e2e8f0;
           border-radius: 10px;
@@ -8970,6 +8955,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           align-items: center;
           min-width: 0;
         }
+        .item-picker-row {
+          justify-content: center;
+        }
         .row > input,
         .row > select,
         .row > textarea {
@@ -9003,6 +8991,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         }
         .generation-comments-wrap textarea {
           min-height: 88px;
+        }
+        .generation-comments-wrap .btn {
+          width: 100%;
         }
         .generation-comments-note {
           text-align: left;
@@ -9085,6 +9076,22 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           gap: 10px;
           grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
           min-width: 0;
+        }
+        .split-external-row {
+          gap: 10px;
+        }
+        .split-external-row .btn {
+          min-width: 150px;
+        }
+        .final-download-row {
+          justify-content: center;
+        }
+        .final-download-row .btn {
+          min-width: 170px;
+        }
+        .final-save-row,
+        .final-seo-row {
+          justify-content: center;
         }
         .panel-preview-card {
           border: 1.5px solid #e2e8f0;
@@ -9686,6 +9693,14 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             flex: 1 1 calc(50% - 8px);
             min-width: 132px;
           }
+          .item-picker-row {
+            flex-wrap: nowrap;
+          }
+          .item-picker-row .ghost-btn,
+          .item-picker-row .btn {
+            flex: 1 1 calc(50% - 8px);
+            min-width: 0;
+          }
           .model-selected-header {
             flex-wrap: wrap;
             align-items: flex-start;
@@ -9701,6 +9716,25 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           }
           .generation-actions-layout {
             grid-template-columns: 1fr;
+          }
+          .panel-row {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            width: 100%;
+          }
+          .panel-row .pill {
+            width: 100%;
+          }
+          .panel-preview-grid {
+            display: flex;
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            scroll-snap-type: x mandatory;
+            gap: 10px;
+          }
+          .panel-preview-grid > .panel-preview-card {
+            flex: 0 0 min(82vw, 300px);
+            scroll-snap-align: start;
           }
           .model-registry-header {
             display: grid;
@@ -9774,6 +9808,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             height: 24px;
           }
           .model-registry-dropzone,
+          .item-dropzone,
           .final-results-dropzone,
           .folder-picker-btn,
           .chat-inline-fallback {
@@ -9852,6 +9887,22 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           .picker-row .ghost-btn,
           .picker-row .btn {
             flex: 1 1 100%;
+          }
+          .item-picker-row {
+            flex-wrap: nowrap;
+          }
+          .item-picker-row .ghost-btn,
+          .item-picker-row .btn {
+            flex: 1 1 calc(50% - 6px);
+          }
+          .catalog-pagination {
+            justify-content: center;
+            gap: 6px;
+          }
+          .catalog-pagination .btn.ghost {
+            order: 1;
+            flex: 1 1 100%;
+            max-width: 220px;
           }
           .item-catalog-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
