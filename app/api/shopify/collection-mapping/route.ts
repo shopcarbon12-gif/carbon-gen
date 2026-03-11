@@ -178,6 +178,7 @@ async function resolveWorkingToken(shop: string, apiVersion: string) {
     return { ok: false as const, error: "Shop not connected." };
   }
 
+  let firstUsableToken: { token: string; source: "db" | "env_token" } | null = null;
   let lastError = "";
   for (const candidate of candidates) {
     const probe = await runShopifyGraphql<{ shop: { id: string } }>({
@@ -188,10 +189,35 @@ async function resolveWorkingToken(shop: string, apiVersion: string) {
     });
 
     if (probe.ok && probe.data?.shop?.id) {
-      return { ok: true as const, token: candidate.token, source: candidate.source };
+      if (!firstUsableToken) {
+        firstUsableToken = { token: candidate.token, source: candidate.source };
+      }
+
+      const menuProbe = await runShopifyGraphql<{ menus: { nodes: Array<{ id?: string }> } }>({
+        shop,
+        token: candidate.token,
+        apiVersion,
+        query: `
+          query ProbeMenusScope {
+            menus(first: 1) {
+              nodes {
+                id
+              }
+            }
+          }
+        `,
+      });
+
+      if (menuProbe.ok && menuProbe.data?.menus?.nodes) {
+        return { ok: true as const, token: candidate.token, source: candidate.source };
+      }
     }
 
     lastError = probe.errors ? JSON.stringify(probe.errors).slice(0, 240) : "Invalid Shopify token";
+  }
+
+  if (firstUsableToken) {
+    return { ok: true as const, token: firstUsableToken.token, source: firstUsableToken.source };
   }
 
   return {
@@ -448,6 +474,39 @@ type MenuNodeIndex = {
   parentKey: string | null;
   depth: number;
   siblingIndex: number;
+};
+
+type LinkTargetOption = {
+  id: string;
+  title: string;
+  handle: string;
+  url: string;
+};
+
+type MenuLinkTargets = {
+  collections: LinkTargetOption[];
+  pages: LinkTargetOption[];
+  products: LinkTargetOption[];
+  blogs: LinkTargetOption[];
+};
+
+type MenuLinkRecord = {
+  nodeKey: string;
+  type: string;
+  url: string | null;
+  resourceId: string | null;
+};
+
+type MenuLinkTargetsQueryData = {
+  pages?: {
+    nodes?: Array<{ id?: string; title?: string; handle?: string }>;
+  };
+  products?: {
+    nodes?: Array<{ id?: string; title?: string; handle?: string }>;
+  };
+  blogs?: {
+    nodes?: Array<{ id?: string; title?: string; handle?: string }>;
+  };
 };
 
 function getFirstNonEmpty(values: Array<unknown>): string {
@@ -860,6 +919,197 @@ function updateItemCollectionLink(item: ShopifyMenuItemNode, collection: Collect
   item.url = normalizeText(item.url) || "/collections/all";
 }
 
+function normalizeHttpLink(value: unknown) {
+  const text = normalizeText(value);
+  if (!text) return "";
+  if (text.startsWith("/") || text.startsWith("#")) return text;
+  if (/^[a-z][a-z0-9+\-.]*:/i.test(text)) return text;
+  return `/${text.replace(/^\/+/, "")}`;
+}
+
+function sortLinkTargets(rows: LinkTargetOption[]) {
+  return [...rows].sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: "base" }));
+}
+
+function toCollectionLinkTargets(collections: CollectionOption[]) {
+  return sortLinkTargets(
+    collections
+      .map((collection) => {
+        const id = normalizeText(collection.id);
+        if (!id) return null;
+        const handle = normalizeText(collection.handle);
+        return {
+          id,
+          title: normalizeText(collection.title) || handle || id,
+          handle,
+          url: handle ? `/collections/${handle}` : "/collections/all",
+        } satisfies LinkTargetOption;
+      })
+      .filter((row): row is LinkTargetOption => Boolean(row))
+  );
+}
+
+function toEntityLinkTargets(
+  rows: Array<{ id?: string; title?: string; handle?: string }> | undefined,
+  urlPrefix: string
+) {
+  return sortLinkTargets(
+    (Array.isArray(rows) ? rows : [])
+      .map((row) => {
+        const id = normalizeText(row?.id);
+        if (!id) return null;
+        const handle = normalizeText(row?.handle);
+        return {
+          id,
+          title: normalizeText(row?.title) || handle || id,
+          handle,
+          url: handle ? `${urlPrefix}${handle}` : "",
+        } satisfies LinkTargetOption;
+      })
+      .filter((row): row is LinkTargetOption => Boolean(row))
+  );
+}
+
+async function fetchMenuLinkTargets(
+  shop: string,
+  token: string,
+  apiVersion: string,
+  collections: CollectionOption[]
+) {
+  const fallback: MenuLinkTargets = {
+    collections: toCollectionLinkTargets(collections),
+    pages: [],
+    products: [],
+    blogs: [],
+  };
+
+  const query = `
+    query CollectionMappingMenuLinkTargets($pageFirst: Int!, $productFirst: Int!, $blogFirst: Int!) {
+      pages(first: $pageFirst, sortKey: TITLE) {
+        nodes {
+          id
+          title
+          handle
+        }
+      }
+      products(first: $productFirst, sortKey: TITLE, query: "status:active") {
+        nodes {
+          id
+          title
+          handle
+        }
+      }
+      blogs(first: $blogFirst) {
+        nodes {
+          id
+          title
+          handle
+        }
+      }
+    }
+  `;
+
+  const gqlResult: GraphResult<MenuLinkTargetsQueryData> = (await runShopifyGraphql<MenuLinkTargetsQueryData>({
+    shop,
+    token,
+    apiVersion,
+    query,
+    variables: { pageFirst: 250, productFirst: 250, blogFirst: 100 },
+  })) as GraphResult<MenuLinkTargetsQueryData>;
+
+  if (!gqlResult.ok || !gqlResult.data) {
+    return {
+      targets: fallback,
+      warning: `Failed to load menu link targets: ${JSON.stringify(gqlResult.errors || "unknown")}`,
+    };
+  }
+
+  return {
+    targets: {
+      collections: fallback.collections,
+      pages: toEntityLinkTargets(gqlResult.data.pages?.nodes, "/pages/"),
+      products: toEntityLinkTargets(gqlResult.data.products?.nodes, "/products/"),
+      blogs: toEntityLinkTargets(gqlResult.data.blogs?.nodes, "/blogs/"),
+    } satisfies MenuLinkTargets,
+    warning: "",
+  };
+}
+
+function flattenMenuLinks(items: ShopifyMenuItemNode[]) {
+  const out: MenuLinkRecord[] = [];
+  const walk = (rows: ShopifyMenuItemNode[]) => {
+    for (const row of rows) {
+      const nodeKey = normalizeText(row.id);
+      if (!nodeKey) continue;
+      out.push({
+        nodeKey,
+        type: normalizeText(row.type).toUpperCase() || "HTTP",
+        url: normalizeText(row.url) || null,
+        resourceId: normalizeText(row.resourceId) || null,
+      });
+      walk(Array.isArray(row.items) ? row.items : []);
+    }
+  };
+  walk(sanitizeMenuItemTree(items));
+  return out;
+}
+
+function applyMenuNodeLink(
+  item: ShopifyMenuItemNode,
+  linkTypeRaw: unknown,
+  linkTargetIdRaw: unknown,
+  linkUrlRaw: unknown,
+  collections: CollectionOption[],
+  linkTargets: MenuLinkTargets
+): { ok: true } | { ok: false; error: string } {
+  const linkType = normalizeText(linkTypeRaw).toUpperCase() || "HTTP";
+  const targetId = normalizeText(linkTargetIdRaw);
+  const linkUrl = normalizeHttpLink(linkUrlRaw);
+
+  if (linkType === "COLLECTION") {
+    const collection = collections.find((row) => normalizeText(row.id) === targetId) || null;
+    if (!collection) return { ok: false, error: "Collection target was not found." };
+    updateItemCollectionLink(item, collection);
+    return { ok: true };
+  }
+
+  if (linkType === "PAGE" || linkType === "PRODUCT" || linkType === "BLOG") {
+    if (!targetId) return { ok: false, error: `${linkType} target is required.` };
+    const source =
+      linkType === "PAGE" ? linkTargets.pages : linkType === "PRODUCT" ? linkTargets.products : linkTargets.blogs;
+    const target = source.find((row) => normalizeText(row.id) === targetId) || null;
+    if (!target) return { ok: false, error: `${linkType} target was not found.` };
+    item.type = linkType;
+    item.resourceId = target.id;
+    item.url = target.url || normalizeText(item.url) || null;
+    return { ok: true };
+  }
+
+  if (linkType === "FRONTPAGE") {
+    item.type = "FRONTPAGE";
+    item.resourceId = null;
+    item.url = "/";
+    return { ok: true };
+  }
+
+  if (linkType === "SEARCH") {
+    item.type = "SEARCH";
+    item.resourceId = null;
+    item.url = "/search";
+    return { ok: true };
+  }
+
+  if (linkType === "HTTP" || linkType === "URL") {
+    if (!linkUrl) return { ok: false, error: "URL link requires a valid URL." };
+    item.type = "HTTP";
+    item.resourceId = null;
+    item.url = linkUrl;
+    return { ok: true };
+  }
+
+  return { ok: false, error: `Unsupported link type "${linkType || "unknown"}".` };
+}
+
 function resolvePreferredMenu(
   menus: ShopifyMenuNode[],
   requestedHandle: string
@@ -1159,6 +1409,32 @@ function mappingLogsToCsv(rows: MappingAuditLogRow[]) {
     );
   }
   return lines.join("\n");
+}
+
+function removeMenuNode(
+  rows: ShopifyMenuItemNode[],
+  nodeKey: string
+): { rows: ShopifyMenuItemNode[]; removed: ShopifyMenuItemNode | null } {
+  let removed: ShopifyMenuItemNode | null = null;
+  const nextRows: ShopifyMenuItemNode[] = [];
+
+  for (const row of rows) {
+    const currentKey = normalizeText(row.id);
+    if (!removed && currentKey === nodeKey) {
+      removed = row;
+      continue;
+    }
+
+    const nested = removeMenuNode(Array.isArray(row.items) ? row.items : [], nodeKey);
+    if (nested.removed) {
+      removed = nested.removed;
+      nextRows.push({ ...row, items: nested.rows });
+    } else {
+      nextRows.push(row);
+    }
+  }
+
+  return { rows: nextRows, removed };
 }
 
 function moveMenuNode(
@@ -1556,6 +1832,13 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ok: false, error: menuSyncResult.error }, { status: 500 });
     }
 
+    const linkTargetsResult = await fetchMenuLinkTargets(
+      shop,
+      tokenResult.token,
+      apiVersion,
+      collectionsResult.collections
+    );
+
     const nodesResult = menuSyncResult.synced;
     const nodes = nodesResult.nodes;
 
@@ -1574,6 +1857,7 @@ export async function GET(req: NextRequest) {
     const warningParts = [
       normalizeText(menuSyncResult.warning),
       normalizeText(nodesResult.warning),
+      normalizeText(linkTargetsResult.warning),
       normalizeText(logsResult?.warning),
     ].filter(Boolean);
 
@@ -1593,6 +1877,8 @@ export async function GET(req: NextRequest) {
         handle: menuSyncResult.menu.menuHandle,
         title: menuSyncResult.menu.menuTitle,
       },
+      menuLinks: flattenMenuLinks(menuSyncResult.menu.items),
+      linkTargets: linkTargetsResult.targets,
       collections: collectionsResult.collections,
       nodes,
       mappedNodes: nodes.filter((node) => node.enabled && Boolean(node.collectionId)),
@@ -1666,6 +1952,12 @@ export async function POST(req: NextRequest) {
       if ("error" in collectionsResult) {
         return NextResponse.json({ ok: false, error: collectionsResult.error }, { status: 500 });
       }
+      const linkTargetsResult = await fetchMenuLinkTargets(
+        shop,
+        tokenResult.token,
+        apiVersion,
+        collectionsResult.collections
+      );
 
       const menuSyncResult = await syncMenuNodesFromShopify(
         shop,
@@ -1706,7 +1998,9 @@ export async function POST(req: NextRequest) {
           title: menuSyncResult.menu.menuTitle,
         },
         backend: menuSyncResult.synced.backend,
-        warning: joinWarnings(menuSyncResult.warning, menuSyncResult.synced.warning),
+        warning: joinWarnings(menuSyncResult.warning, menuSyncResult.synced.warning, linkTargetsResult.warning),
+        menuLinks: flattenMenuLinks(menuSyncResult.menu.items),
+        linkTargets: linkTargetsResult.targets,
         collections: collectionsResult.collections,
         nodes: menuSyncResult.synced.nodes,
         mappedNodes: menuSyncResult.synced.nodes.filter((node) => node.enabled && Boolean(node.collectionId)),
@@ -1860,7 +2154,10 @@ export async function POST(req: NextRequest) {
     if (action === "create-menu-node") {
       const label = normalizeText(body.label || "");
       const parentKey = normalizeText(body.parentKey || "") || null;
-      const collectionId = normalizeText(body.collectionId || "") || null;
+      const legacyCollectionId = normalizeText(body.collectionId || "");
+      const linkType = normalizeText(body.linkType || (legacyCollectionId ? "COLLECTION" : "HTTP")).toUpperCase() || "HTTP";
+      const linkTargetId = normalizeText(body.linkTargetId || legacyCollectionId) || null;
+      const linkUrl = normalizeText(body.linkUrl || "");
       if (!label) {
         return NextResponse.json({ ok: false, error: "label is required." }, { status: 400 });
       }
@@ -1869,9 +2166,12 @@ export async function POST(req: NextRequest) {
       if ("error" in collectionsResult) {
         return NextResponse.json({ ok: false, error: collectionsResult.error }, { status: 500 });
       }
-      const collectionMatch = collectionId
-        ? collectionsResult.collections.find((row) => normalizeText(row.id) === collectionId) || null
-        : null;
+      const linkTargetsResult = await fetchMenuLinkTargets(
+        shop,
+        tokenResult.token,
+        apiVersion,
+        collectionsResult.collections
+      );
 
       const menuSync = await fetchMenuTree(shop, tokenResult.token, apiVersion, menuHandle);
       if (!menuSync.ok) {
@@ -1882,7 +2182,7 @@ export async function POST(req: NextRequest) {
           summary: `Failed to create menu node "${label}"`,
           status: "error",
           errorMessage: menuSync.error,
-          details: { label, parentKey, collectionId, menuHandle },
+          details: { label, parentKey, linkType, linkTargetId, linkUrl, menuHandle },
         });
         return NextResponse.json({ ok: false, error: menuSync.error }, { status });
       }
@@ -1910,7 +2210,17 @@ export async function POST(req: NextRequest) {
         tags: [],
         items: [],
       };
-      updateItemCollectionLink(newItem, collectionMatch);
+      const linkApplyResult = applyMenuNodeLink(
+        newItem,
+        linkType,
+        linkTargetId,
+        linkUrl,
+        collectionsResult.collections,
+        linkTargetsResult.targets
+      );
+      if (!linkApplyResult.ok) {
+        return NextResponse.json({ ok: false, error: linkApplyResult.error }, { status: 400 });
+      }
 
       const insertNode = (
         rows: ShopifyMenuItemNode[],
@@ -1947,7 +2257,7 @@ export async function POST(req: NextRequest) {
           summary: `Failed to create menu node "${label}"`,
           status: "error",
           errorMessage: updateResult.error,
-          details: { label, parentKey, collectionId },
+          details: { label, parentKey, linkType, linkTargetId, linkUrl },
         });
         return NextResponse.json({ ok: false, error: updateResult.error }, { status: 500 });
       }
@@ -1958,10 +2268,10 @@ export async function POST(req: NextRequest) {
         updateResult.liveNodes.find((row) => !beforeKeys.has(row.nodeKey)) ||
         null;
 
-      if (createdNode && collectionMatch) {
+      if (createdNode && normalizeText(newItem.type).toUpperCase() === "COLLECTION" && normalizeText(newItem.resourceId)) {
         await saveMenuMappings(
           shop,
-          [{ nodeKey: createdNode.nodeKey, collectionId: collectionMatch.id, enabled: true }],
+          [{ nodeKey: createdNode.nodeKey, collectionId: normalizeText(newItem.resourceId), enabled: true }],
           collectionsResult.collections
         );
       }
@@ -1971,7 +2281,7 @@ export async function POST(req: NextRequest) {
         action,
         summary: `Created menu node "${label}"`,
         status: "ok",
-        details: { parentKey, collectionId, nodeKey: createdNode?.nodeKey || null },
+        details: { parentKey, linkType, linkTargetId, linkUrl, nodeKey: createdNode?.nodeKey || null },
       });
 
       return NextResponse.json({
@@ -1979,8 +2289,10 @@ export async function POST(req: NextRequest) {
         shop,
         menu: { id: updateResult.menuId, handle: updateResult.menuHandle, title: updateResult.menuTitle },
         backend: synced.backend,
-        warning: synced.warning || "",
+        warning: joinWarnings(synced.warning, linkTargetsResult.warning),
         createdNodeKey: createdNode?.nodeKey || null,
+        menuLinks: flattenMenuLinks(updateResult.items),
+        linkTargets: linkTargetsResult.targets,
         nodes: synced.nodes,
         mappedNodes: synced.nodes.filter((node) => node.enabled && Boolean(node.collectionId)),
       });
@@ -2055,6 +2367,192 @@ export async function POST(req: NextRequest) {
         menu: { id: updateResult.menuId, handle: updateResult.menuHandle, title: updateResult.menuTitle },
         backend: synced.backend,
         warning: synced.warning || "",
+        menuLinks: flattenMenuLinks(updateResult.items),
+        nodes: synced.nodes,
+        mappedNodes: synced.nodes.filter((node) => node.enabled && Boolean(node.collectionId)),
+      });
+    }
+
+    if (action === "edit-menu-node") {
+      const nodeKey = normalizeText(body.nodeKey || "");
+      const label = normalizeText(body.label || "");
+      const linkType = normalizeText(body.linkType || "").toUpperCase();
+      const linkTargetId = normalizeText(body.linkTargetId || "") || null;
+      const linkUrl = normalizeText(body.linkUrl || "");
+
+      if (!nodeKey) {
+        return NextResponse.json({ ok: false, error: "nodeKey is required." }, { status: 400 });
+      }
+      if (!label) {
+        return NextResponse.json({ ok: false, error: "label is required." }, { status: 400 });
+      }
+      if (!linkType) {
+        return NextResponse.json({ ok: false, error: "linkType is required." }, { status: 400 });
+      }
+
+      const collectionsResult = await fetchAllCollectionsCached(shop, tokenResult.token, apiVersion);
+      if ("error" in collectionsResult) {
+        return NextResponse.json({ ok: false, error: collectionsResult.error }, { status: 500 });
+      }
+
+      const linkTargetsResult = await fetchMenuLinkTargets(
+        shop,
+        tokenResult.token,
+        apiVersion,
+        collectionsResult.collections
+      );
+      const menuSync = await fetchMenuTree(shop, tokenResult.token, apiVersion, menuHandle);
+      if (!menuSync.ok) {
+        const status = isMenuScopeErrorMessage(menuSync.error) ? 403 : 500;
+        await logMappingAudit({
+          shop,
+          action,
+          summary: `Failed to edit menu node "${nodeKey}"`,
+          status: "error",
+          errorMessage: menuSync.error,
+          details: { nodeKey, label, linkType, linkTargetId, linkUrl, menuHandle },
+        });
+        return NextResponse.json({ ok: false, error: menuSync.error }, { status });
+      }
+
+      const items = sanitizeMenuItemTree(menuSync.items);
+      const index = findMenuNodeIndex(items);
+      const target = index.get(nodeKey);
+      if (!target) {
+        return NextResponse.json({ ok: false, error: "Menu node was not found." }, { status: 404 });
+      }
+
+      target.node.title = label;
+      const linkApplyResult = applyMenuNodeLink(
+        target.node,
+        linkType,
+        linkTargetId,
+        linkUrl,
+        collectionsResult.collections,
+        linkTargetsResult.targets
+      );
+      if (!linkApplyResult.ok) {
+        return NextResponse.json({ ok: false, error: linkApplyResult.error }, { status: 400 });
+      }
+
+      const updateResult = await updateMenuTree(
+        shop,
+        tokenResult.token,
+        apiVersion,
+        menuSync.menuId,
+        menuSync.menuTitle,
+        menuSync.menuHandle,
+        items
+      );
+      if (!updateResult.ok) {
+        await logMappingAudit({
+          shop,
+          action,
+          summary: `Failed to edit menu node "${nodeKey}"`,
+          status: "error",
+          errorMessage: updateResult.error,
+          details: { nodeKey, label, linkType, linkTargetId, linkUrl },
+        });
+        return NextResponse.json({ ok: false, error: updateResult.error }, { status: 500 });
+      }
+
+      const synced = await syncLiveMenuNodes(shop, updateResult.liveNodes, collectionsResult.collections);
+      await logMappingAudit({
+        shop,
+        action,
+        summary: `Edited menu node "${label}"`,
+        status: "ok",
+        details: { nodeKey, linkType, linkTargetId, linkUrl },
+      });
+
+      return NextResponse.json({
+        ok: true,
+        shop,
+        menu: { id: updateResult.menuId, handle: updateResult.menuHandle, title: updateResult.menuTitle },
+        backend: synced.backend,
+        warning: joinWarnings(synced.warning, linkTargetsResult.warning),
+        menuLinks: flattenMenuLinks(updateResult.items),
+        linkTargets: linkTargetsResult.targets,
+        nodes: synced.nodes,
+        mappedNodes: synced.nodes.filter((node) => node.enabled && Boolean(node.collectionId)),
+      });
+    }
+
+    if (action === "delete-menu-node") {
+      const nodeKey = normalizeText(body.nodeKey || "");
+      if (!nodeKey) {
+        return NextResponse.json({ ok: false, error: "nodeKey is required." }, { status: 400 });
+      }
+
+      const collectionsResult = await fetchAllCollectionsCached(shop, tokenResult.token, apiVersion);
+      if ("error" in collectionsResult) {
+        return NextResponse.json({ ok: false, error: collectionsResult.error }, { status: 500 });
+      }
+
+      const linkTargetsResult = await fetchMenuLinkTargets(
+        shop,
+        tokenResult.token,
+        apiVersion,
+        collectionsResult.collections
+      );
+      const menuSync = await fetchMenuTree(shop, tokenResult.token, apiVersion, menuHandle);
+      if (!menuSync.ok) {
+        const status = isMenuScopeErrorMessage(menuSync.error) ? 403 : 500;
+        await logMappingAudit({
+          shop,
+          action,
+          summary: `Failed to delete menu node "${nodeKey}"`,
+          status: "error",
+          errorMessage: menuSync.error,
+          details: { nodeKey, menuHandle },
+        });
+        return NextResponse.json({ ok: false, error: menuSync.error }, { status });
+      }
+
+      const items = sanitizeMenuItemTree(menuSync.items);
+      const removed = removeMenuNode(items, nodeKey);
+      if (!removed.removed) {
+        return NextResponse.json({ ok: false, error: "Menu node was not found." }, { status: 404 });
+      }
+
+      const updateResult = await updateMenuTree(
+        shop,
+        tokenResult.token,
+        apiVersion,
+        menuSync.menuId,
+        menuSync.menuTitle,
+        menuSync.menuHandle,
+        removed.rows
+      );
+      if (!updateResult.ok) {
+        await logMappingAudit({
+          shop,
+          action,
+          summary: `Failed to delete menu node "${nodeKey}"`,
+          status: "error",
+          errorMessage: updateResult.error,
+          details: { nodeKey },
+        });
+        return NextResponse.json({ ok: false, error: updateResult.error }, { status: 500 });
+      }
+
+      const synced = await syncLiveMenuNodes(shop, updateResult.liveNodes, collectionsResult.collections);
+      await logMappingAudit({
+        shop,
+        action,
+        summary: `Deleted menu node "${normalizeText(removed.removed.title) || nodeKey}"`,
+        status: "ok",
+        details: { nodeKey },
+      });
+
+      return NextResponse.json({
+        ok: true,
+        shop,
+        menu: { id: updateResult.menuId, handle: updateResult.menuHandle, title: updateResult.menuTitle },
+        backend: synced.backend,
+        warning: joinWarnings(synced.warning, linkTargetsResult.warning),
+        menuLinks: flattenMenuLinks(updateResult.items),
+        linkTargets: linkTargetsResult.targets,
         nodes: synced.nodes,
         mappedNodes: synced.nodes.filter((node) => node.enabled && Boolean(node.collectionId)),
       });

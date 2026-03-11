@@ -53,6 +53,27 @@ type MenuMeta = {
   title: string;
 };
 
+type MenuLinkRecord = {
+  nodeKey: string;
+  type: string;
+  url: string | null;
+  resourceId: string | null;
+};
+
+type LinkTargetOption = {
+  id: string;
+  title: string;
+  handle: string;
+  url: string;
+};
+
+type MenuLinkTargets = {
+  collections: LinkTargetOption[];
+  pages: LinkTargetOption[];
+  products: LinkTargetOption[];
+  blogs: LinkTargetOption[];
+};
+
 type CollectionMappingResponse = {
   ok?: boolean;
   noop?: boolean;
@@ -69,12 +90,15 @@ type CollectionMappingResponse = {
   rows?: ProductRow[];
   logs?: MappingLogRow[];
   menu?: MenuMeta;
+  menuLinks?: MenuLinkRecord[];
+  linkTargets?: MenuLinkTargets;
 };
 
 type SortField = "title" | "upc" | "sku" | "itemType" | "updatedAt";
 type SortDir = "asc" | "desc";
 type UncheckPolicy = "keep-descendants" | "remove-descendants";
 type DropPosition = "before" | "after" | "inside";
+type MenuLinkType = "COLLECTION" | "PAGE" | "PRODUCT" | "BLOG" | "URL" | "FRONTPAGE" | "SEARCH";
 
 type ProductFilters = {
   q: string;
@@ -100,11 +124,6 @@ function normalizeText(value: unknown) {
 
 function byLabel(left: CollectionOption, right: CollectionOption) {
   return left.title.localeCompare(right.title, undefined, { sensitivity: "base" });
-}
-
-function formatNodeLabel(node: MenuNode) {
-  const suffix = node.collectionHandle ? ` -> ${node.collectionHandle}` : "";
-  return `${"  ".repeat(node.depth)}${node.label}${suffix}`;
 }
 
 function prettyDate(value: string | null | undefined) {
@@ -155,18 +174,29 @@ export default function ShopifyCollectionMapping() {
   const [dragNodeKey, setDragNodeKey] = useState("");
   const [dropHint, setDropHint] = useState<{ targetKey: string; position: DropPosition } | null>(null);
 
+  const [menuLinks, setMenuLinks] = useState<MenuLinkRecord[]>([]);
+  const [linkTargets, setLinkTargets] = useState<MenuLinkTargets>({
+    collections: [],
+    pages: [],
+    products: [],
+    blogs: [],
+  });
+
   const [editingNodeKey, setEditingNodeKey] = useState("");
-  const [editingCollectionId, setEditingCollectionId] = useState("");
+  const [editLabel, setEditLabel] = useState("");
+  const [editLinkType, setEditLinkType] = useState<MenuLinkType>("COLLECTION");
+  const [editLinkTargetId, setEditLinkTargetId] = useState("");
+  const [editLinkUrl, setEditLinkUrl] = useState("");
 
   const [createParentKey, setCreateParentKey] = useState<string | null>(null);
   const [createLabel, setCreateLabel] = useState("");
-  const [createCollectionId, setCreateCollectionId] = useState("");
+  const [createLinkType, setCreateLinkType] = useState<MenuLinkType>("COLLECTION");
+  const [createLinkTargetId, setCreateLinkTargetId] = useState("");
+  const [createLinkUrl, setCreateLinkUrl] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
 
   const [logsOpen, setLogsOpen] = useState(false);
   const [logsBusy, setLogsBusy] = useState(false);
-  const [assignNodeKey, setAssignNodeKey] = useState("");
-  const [assignQuery, setAssignQuery] = useState("");
   const [productEditorId, setProductEditorId] = useState("");
   const [productEditorQuery, setProductEditorQuery] = useState("");
 
@@ -214,6 +244,13 @@ export default function ShopifyCollectionMapping() {
         setNodes(nextNodes);
         setMappedNodes(nextMappedNodes);
         setCollections(nextCollections);
+        setMenuLinks(Array.isArray(json.menuLinks) ? json.menuLinks : []);
+        setLinkTargets({
+          collections: Array.isArray(json.linkTargets?.collections) ? json.linkTargets!.collections : [],
+          pages: Array.isArray(json.linkTargets?.pages) ? json.linkTargets!.pages : [],
+          products: Array.isArray(json.linkTargets?.products) ? json.linkTargets!.products : [],
+          blogs: Array.isArray(json.linkTargets?.blogs) ? json.linkTargets!.blogs : [],
+        });
         if (includeLogs) {
           setLogs(Array.isArray(json.logs) ? json.logs : []);
         }
@@ -237,15 +274,6 @@ export default function ShopifyCollectionMapping() {
   useEffect(() => {
     void loadData(1, pageSize, appliedFilters);
   }, [sortField, sortDir]);
-
-  const collectionById = useMemo(() => {
-    const map = new Map<string, CollectionOption>();
-    for (const collection of collections) {
-      const id = normalizeText(collection.id);
-      if (id) map.set(id, collection);
-    }
-    return map;
-  }, [collections]);
 
   const childrenByParent = useMemo(() => {
     const map = new Map<string, MenuNode[]>();
@@ -286,6 +314,28 @@ export default function ShopifyCollectionMapping() {
     return map;
   }, [nodes]);
 
+  const menuLinkByNodeKey = useMemo(() => {
+    const map = new Map<string, MenuLinkRecord>();
+    for (const link of menuLinks) {
+      const key = normalizeText(link.nodeKey);
+      if (key) map.set(key, link);
+    }
+    return map;
+  }, [menuLinks]);
+
+  const linkTypeOptions: Array<{ value: MenuLinkType; label: string }> = useMemo(
+    () => [
+      { value: "COLLECTION", label: "Collection" },
+      { value: "PAGE", label: "Page" },
+      { value: "PRODUCT", label: "Product" },
+      { value: "BLOG", label: "Blog" },
+      { value: "URL", label: "URL" },
+      { value: "FRONTPAGE", label: "Home page" },
+      { value: "SEARCH", label: "Search" },
+    ],
+    []
+  );
+
   const mappingSummary = useMemo(() => {
     let mapped = 0;
     let unmapped = 0;
@@ -295,26 +345,13 @@ export default function ShopifyCollectionMapping() {
         disabled += 1;
         continue;
       }
-      if (node.collectionId) mapped += 1;
+      const link = menuLinkByNodeKey.get(node.nodeKey);
+      const hasLink = Boolean(normalizeText(link?.resourceId) || normalizeText(link?.url));
+      if (hasLink) mapped += 1;
       else unmapped += 1;
     }
     return { mapped, unmapped, disabled };
-  }, [nodes]);
-
-  const assignNode = useMemo(
-    () => nodes.find((node) => node.nodeKey === assignNodeKey) || null,
-    [assignNodeKey, nodes]
-  );
-
-  const filteredCollections = useMemo(() => {
-    const query = normalizeText(assignQuery).toLowerCase();
-    if (!query) return collections;
-    return collections.filter((collection) => {
-      const title = normalizeText(collection.title).toLowerCase();
-      const handle = normalizeText(collection.handle).toLowerCase();
-      return title.includes(query) || handle.includes(query);
-    });
-  }, [assignQuery, collections]);
+  }, [menuLinkByNodeKey, nodes]);
 
   const activeProduct = useMemo(
     () => rows.find((row) => row.id === productEditorId) || null,
@@ -364,6 +401,15 @@ export default function ShopifyCollectionMapping() {
         } else {
           if (Array.isArray(json.nodes)) setNodes(json.nodes);
           if (Array.isArray(json.mappedNodes)) setMappedNodes(json.mappedNodes);
+          if (Array.isArray(json.menuLinks)) setMenuLinks(json.menuLinks);
+          if (json.linkTargets) {
+            setLinkTargets({
+              collections: Array.isArray(json.linkTargets.collections) ? json.linkTargets.collections : [],
+              pages: Array.isArray(json.linkTargets.pages) ? json.linkTargets.pages : [],
+              products: Array.isArray(json.linkTargets.products) ? json.linkTargets.products : [],
+              blogs: Array.isArray(json.linkTargets.blogs) ? json.linkTargets.blogs : [],
+            });
+          }
           if (json.menu) setMenu(json.menu);
           if (normalizeText(json.warning)) setWarning(normalizeText(json.warning));
         }
@@ -382,40 +428,31 @@ export default function ShopifyCollectionMapping() {
     await runMenuAction({ action: "refresh-menu" }, "Syncing menu from Shopify...");
   }
 
-  async function onSetNodeCollection(node: MenuNode, collectionId: string | null) {
-    setNodeBusyKey(node.nodeKey);
-    await runMenuAction(
-      {
-        action: "set-node-mapping-live",
-        nodeKey: node.nodeKey,
-        collectionId: collectionId || null,
-        enabled: node.enabled,
-      },
-      "Updating node mapping live..."
-    );
-    setNodeBusyKey("");
+  function targetsForLinkType(type: MenuLinkType) {
+    if (type === "COLLECTION") return linkTargets.collections;
+    if (type === "PAGE") return linkTargets.pages;
+    if (type === "PRODUCT") return linkTargets.products;
+    if (type === "BLOG") return linkTargets.blogs;
+    return [];
   }
 
-  async function onApplyNodeCollection(node: MenuNode) {
-    if (!editingNodeKey) return;
-    await onSetNodeCollection(node, normalizeText(editingCollectionId) || null);
-    setEditingNodeKey("");
-    setEditingCollectionId("");
-  }
-
-  async function onToggleNodeEnabled(node: MenuNode, enabled: boolean) {
-    setNodeBusyKey(node.nodeKey);
-    await runMenuAction(
-      {
-        action: "set-node-mapping-live",
-        nodeKey: node.nodeKey,
-        collectionId: node.collectionId || null,
-        enabled,
-        syncMenuLink: false,
-      },
-      "Updating node state live..."
+  function startEditNode(node: MenuNode) {
+    const link = menuLinkByNodeKey.get(node.nodeKey);
+    const type = (normalizeText(link?.type).toUpperCase() || "COLLECTION") as MenuLinkType;
+    setEditingNodeKey(node.nodeKey);
+    setEditLabel(node.label);
+    setEditLinkType(
+      type === "COLLECTION" ||
+        type === "PAGE" ||
+        type === "PRODUCT" ||
+        type === "BLOG" ||
+        type === "FRONTPAGE" ||
+        type === "SEARCH"
+        ? type
+        : "URL"
     );
-    setNodeBusyKey("");
+    setEditLinkTargetId(normalizeText(link?.resourceId));
+    setEditLinkUrl(normalizeText(link?.url));
   }
 
   async function onCreateNode() {
@@ -429,14 +466,61 @@ export default function ShopifyCollectionMapping() {
         action: "create-menu-node",
         label,
         parentKey: createParentKey || null,
-        collectionId: normalizeText(createCollectionId) || null,
+        linkType: createLinkType,
+        linkTargetId:
+          createLinkType === "COLLECTION" ||
+          createLinkType === "PAGE" ||
+          createLinkType === "PRODUCT" ||
+          createLinkType === "BLOG"
+            ? normalizeText(createLinkTargetId) || null
+            : null,
+        linkUrl: createLinkType === "URL" ? normalizeText(createLinkUrl) : "",
       },
       "Creating category in Shopify menu..."
     );
     setCreateOpen(false);
     setCreateLabel("");
-    setCreateCollectionId("");
+    setCreateLinkType("COLLECTION");
+    setCreateLinkTargetId("");
+    setCreateLinkUrl("");
     setCreateParentKey(null);
+  }
+
+  async function onSaveNodeEdit(node: MenuNode) {
+    const nextLabel = normalizeText(editLabel);
+    if (!nextLabel) {
+      setError("Label is required.");
+      return;
+    }
+    await runMenuAction(
+      {
+        action: "edit-menu-node",
+        nodeKey: node.nodeKey,
+        label: nextLabel,
+        linkType: editLinkType,
+        linkTargetId:
+          editLinkType === "COLLECTION" ||
+          editLinkType === "PAGE" ||
+          editLinkType === "PRODUCT" ||
+          editLinkType === "BLOG"
+            ? normalizeText(editLinkTargetId) || null
+            : null,
+        linkUrl: editLinkType === "URL" ? normalizeText(editLinkUrl) : "",
+      },
+      "Saving menu item live..."
+    );
+    setEditingNodeKey("");
+  }
+
+  async function onDeleteNode(node: MenuNode) {
+    if (!window.confirm(`Delete "${node.label}" and its submenu items?`)) return;
+    await runMenuAction(
+      {
+        action: "delete-menu-node",
+        nodeKey: node.nodeKey,
+      },
+      "Deleting menu item live..."
+    );
   }
 
   async function onMoveNode(nodeKey: string, targetKey: string, position: DropPosition) {
@@ -604,19 +688,128 @@ export default function ShopifyCollectionMapping() {
     });
   }
 
+  function linkSummaryByNode(node: MenuNode) {
+    const link = menuLinkByNodeKey.get(node.nodeKey);
+    if (!link) return "";
+    const type = normalizeText(link.type).toUpperCase();
+    const id = normalizeText(link.resourceId);
+    const url = normalizeText(link.url);
+    if (type === "FRONTPAGE") return "Home page";
+    if (type === "SEARCH") return "Search";
+    if (type === "URL") return url || "URL";
+    const targets =
+      type === "COLLECTION"
+        ? linkTargets.collections
+        : type === "PAGE"
+          ? linkTargets.pages
+          : type === "PRODUCT"
+            ? linkTargets.products
+            : type === "BLOG"
+              ? linkTargets.blogs
+              : [];
+    const target = targets.find((item) => normalizeText(item.id) === id);
+    if (target) return target.title;
+    return url || "-";
+  }
+
+  function openCreateFor(parentKey: string | null) {
+    setCreateOpen(true);
+    setCreateParentKey(parentKey);
+    setCreateLabel("");
+    setCreateLinkType("COLLECTION");
+    setCreateLinkTargetId("");
+    setCreateLinkUrl("");
+  }
+
+  function renderInlineCreate(depth: number) {
+    const targetOptions = targetsForLinkType(createLinkType);
+    return (
+      <div className="tree-node create-node" style={{ marginLeft: `${Math.max(0, depth) * 24}px` }}>
+        <div className="menu-edit-grid">
+          <input
+            value={createLabel}
+            placeholder="Label"
+            onChange={(event) => setCreateLabel(event.target.value)}
+            disabled={menuBusy || busy}
+          />
+          <div className="menu-link-grid">
+            <select
+              value={createLinkType}
+              onChange={(event) => {
+                setCreateLinkType(event.target.value as MenuLinkType);
+                setCreateLinkTargetId("");
+                setCreateLinkUrl("");
+              }}
+              disabled={menuBusy || busy}
+            >
+              {linkTypeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            {createLinkType === "URL" ? (
+              <input
+                value={createLinkUrl}
+                placeholder="https://..."
+                onChange={(event) => setCreateLinkUrl(event.target.value)}
+                disabled={menuBusy || busy}
+              />
+            ) : createLinkType === "COLLECTION" ||
+                createLinkType === "PAGE" ||
+                createLinkType === "PRODUCT" ||
+                createLinkType === "BLOG" ? (
+              <select
+                value={createLinkTargetId}
+                onChange={(event) => setCreateLinkTargetId(normalizeText(event.target.value))}
+                disabled={menuBusy || busy}
+              >
+                <option value="">Select target</option>
+                {targetOptions.map((target) => (
+                  <option key={target.id} value={target.id}>
+                    {target.title}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="menu-link-static">No extra target needed</span>
+            )}
+          </div>
+        </div>
+        <div className="tree-node-actions always-visible">
+          <button className="action-icon action-save" type="button" onClick={() => void onCreateNode()} disabled={menuBusy || busy}>
+            {"\u2713"}
+          </button>
+          <button
+            className="action-icon"
+            type="button"
+            onClick={() => {
+              setCreateOpen(false);
+              setCreateParentKey(null);
+            }}
+            disabled={menuBusy || busy}
+          >
+            {"\u2715"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   function renderTreeNodeCard(node: MenuNode): JSX.Element {
     const children = childrenByParent.get(node.nodeKey) || [];
     const hasChildren = children.length > 0;
     const collapsed = collapsedKeys.has(node.nodeKey);
-    const mappedCollection = node.collectionId ? collectionById.get(node.collectionId) : null;
     const dropClass = dropHint?.targetKey === node.nodeKey ? `drop-${dropHint.position}` : "";
-    const busyNode = nodeBusyKey === node.nodeKey;
+    const isEditing = editingNodeKey === node.nodeKey;
+    const showCreateUnder = createOpen && createParentKey === node.nodeKey;
+    const targetOptions = targetsForLinkType(editLinkType);
 
     return (
       <div key={node.nodeKey} className="tree-node-wrap">
         <div
-          className={`tree-node ${dropClass}`}
-          draggable
+          className={`tree-node shopify-node ${dropClass} ${isEditing ? "editing" : ""}`}
+          draggable={!isEditing}
           onDragStart={(event) => {
             setDragNodeKey(node.nodeKey);
             event.dataTransfer.setData("text/plain", node.nodeKey);
@@ -645,207 +838,119 @@ export default function ShopifyCollectionMapping() {
             setDropHint(null);
           }}
         >
-          <div className="tree-node-main" style={{ paddingLeft: `${Math.max(0, node.depth) * 16}px` }}>
+          <div className="tree-node-main" style={{ paddingLeft: `${Math.max(0, node.depth) * 24}px` }}>
             <span className="drag-handle" title="Drag to reorder/reparent">::</span>
             {hasChildren ? (
               <button className="collapse-btn" onClick={() => toggleCollapse(node.nodeKey)} type="button">
-                {collapsed ? "+" : "-"}
+                {collapsed ? ">" : "v"}
               </button>
             ) : (
               <span className="collapse-spacer" />
             )}
-            <span className="tree-node-label">{node.label}</span>
+            {isEditing ? (
+              <div className="menu-edit-grid">
+                <input
+                  value={editLabel}
+                  placeholder="Label"
+                  onChange={(event) => setEditLabel(event.target.value)}
+                  disabled={menuBusy || busy}
+                />
+                <div className="menu-link-grid">
+                  <select
+                    value={editLinkType}
+                    onChange={(event) => {
+                      setEditLinkType(event.target.value as MenuLinkType);
+                      setEditLinkTargetId("");
+                      setEditLinkUrl("");
+                    }}
+                    disabled={menuBusy || busy}
+                  >
+                    {linkTypeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  {editLinkType === "URL" ? (
+                    <input
+                      value={editLinkUrl}
+                      placeholder="https://..."
+                      onChange={(event) => setEditLinkUrl(event.target.value)}
+                      disabled={menuBusy || busy}
+                    />
+                  ) : editLinkType === "COLLECTION" ||
+                      editLinkType === "PAGE" ||
+                      editLinkType === "PRODUCT" ||
+                      editLinkType === "BLOG" ? (
+                    <select
+                      value={editLinkTargetId}
+                      onChange={(event) => setEditLinkTargetId(normalizeText(event.target.value))}
+                      disabled={menuBusy || busy}
+                    >
+                      <option value="">Select target</option>
+                      {targetOptions.map((target) => (
+                        <option key={target.id} value={target.id}>
+                          {target.title}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="menu-link-static">No extra target needed</span>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="tree-node-copy">
+                <span className="tree-node-label">{node.label}</span>
+                <span className="tree-node-sub">{linkSummaryByNode(node) || "No link selected"}</span>
+              </div>
+            )}
           </div>
-          <div className="tree-node-actions">
-            <label className="enable-toggle compact">
-              <input
-                type="checkbox"
-                checked={Boolean(node.enabled)}
-                onChange={(event) => void onToggleNodeEnabled(node, event.target.checked)}
-                disabled={menuBusy || busy || busyNode}
-              />
-              <span>{node.enabled ? "On" : "Off"}</span>
-            </label>
-            <span className={`tree-node-chip ${mappedCollection ? "mapped" : ""}`}>
-              {mappedCollection ? mappedCollection.handle : "-"}
-            </span>
-            <button
-              className="tiny-btn btn-outline"
-              type="button"
-              onClick={() => {
-                setAssignNodeKey(node.nodeKey);
-                setAssignQuery("");
-              }}
-              disabled={menuBusy || busy}
-            >
-              Assign
-            </button>
-            <button
-              className="tiny-btn btn-outline"
-              type="button"
-              onClick={() => {
-                setCreateOpen(true);
-                setCreateParentKey(node.nodeKey);
-                setCreateLabel("");
-                setCreateCollectionId("");
-              }}
-              disabled={menuBusy || busy}
-            >
-              +
-            </button>
-          </div>
+          {isEditing ? (
+            <div className="tree-node-actions always-visible">
+              <button className="action-icon action-save" type="button" onClick={() => void onSaveNodeEdit(node)} disabled={menuBusy || busy}>
+                {"\u2713"}
+              </button>
+              <button className="action-icon" type="button" onClick={() => setEditingNodeKey("")} disabled={menuBusy || busy}>
+                {"\u2715"}
+              </button>
+              <button className="action-icon action-danger" type="button" onClick={() => void onDeleteNode(node)} disabled={menuBusy || busy}>
+                {"\u{1F5D1}"}
+              </button>
+            </div>
+          ) : (
+            <div className="tree-node-actions hover-actions">
+              <button className="action-icon" type="button" onClick={() => startEditNode(node)} disabled={menuBusy || busy}>
+                {"\u270E"}
+              </button>
+              <button className="action-icon action-danger" type="button" onClick={() => void onDeleteNode(node)} disabled={menuBusy || busy}>
+                {"\u{1F5D1}"}
+              </button>
+            </div>
+          )}
         </div>
+
         {!collapsed && children.length ? (
           <div className="tree-children">
             {children.map((child) => renderTreeNodeCard(child))}
           </div>
         ) : null}
-      </div>
-    );
-  }
 
-  function renderNodeRows(node: MenuNode): JSX.Element[] {
-    const children = childrenByParent.get(node.nodeKey) || [];
-    const hasChildren = children.length > 0;
-    const collapsed = collapsedKeys.has(node.nodeKey);
-    const isEditing = editingNodeKey === node.nodeKey;
-    const busyNode = nodeBusyKey === node.nodeKey;
-    const mappedCollection = node.collectionId ? collectionById.get(node.collectionId) : null;
-    const dropClass = dropHint?.targetKey === node.nodeKey ? `drop-${dropHint.position}` : "";
-
-    const rowsOut: JSX.Element[] = [];
-    rowsOut.push(
-      <tr
-        key={node.nodeKey}
-        className={`node-row ${dropClass}`}
-        draggable
-        onDragStart={(event) => {
-          setDragNodeKey(node.nodeKey);
-          event.dataTransfer.setData("text/plain", node.nodeKey);
-          event.dataTransfer.effectAllowed = "move";
-        }}
-        onDragEnd={() => {
-          setDragNodeKey("");
-          setDropHint(null);
-        }}
-        onDragOver={(event) => {
-          event.preventDefault();
-          if (!dragNodeKey || dragNodeKey === node.nodeKey) return;
-          const rect = (event.currentTarget as HTMLTableRowElement).getBoundingClientRect();
-          const offset = event.clientY - rect.top;
-          const third = rect.height / 3;
-          const position: DropPosition =
-            offset < third ? "before" : offset > third * 2 ? "after" : "inside";
-          setDropHint({ targetKey: node.nodeKey, position });
-        }}
-        onDrop={(event) => {
-          event.preventDefault();
-          const source = dragNodeKey || normalizeText(event.dataTransfer.getData("text/plain"));
-          if (!source || source === node.nodeKey || !dropHint || dropHint.targetKey !== node.nodeKey) return;
-          void onMoveNode(source, node.nodeKey, dropHint.position);
-          setDragNodeKey("");
-          setDropHint(null);
-        }}
-      >
-        <td>
-          <label className="enable-toggle">
-            <input
-              type="checkbox"
-              checked={Boolean(node.enabled)}
-              onChange={(event) => void onToggleNodeEnabled(node, event.target.checked)}
-              disabled={menuBusy || busy || busyNode}
-            />
-            <span>{node.enabled ? "On" : "Off"}</span>
-          </label>
-        </td>
-        <td className="node-cell">
-          <div className="node-line" style={{ paddingLeft: `${Math.max(0, node.depth) * 22}px` }}>
-            <span className="drag-handle" title="Drag to reorder/reparent">::</span>
-            {hasChildren ? (
-              <button className="collapse-btn" onClick={() => toggleCollapse(node.nodeKey)} type="button">
-                {collapsed ? "+" : "-"}
-              </button>
-            ) : (
-              <span className="collapse-spacer" />
-            )}
-            <span className="node-label">{node.label}</span>
-          </div>
-        </td>
-        <td className="collection-cell">
-          {!isEditing ? (
-            <button
-              className="collection-chip"
-              onClick={() => {
-                setEditingNodeKey(node.nodeKey);
-                setEditingCollectionId(normalizeText(node.collectionId));
-              }}
-              disabled={menuBusy || busy}
-            >
-              {mappedCollection
-                ? `${mappedCollection.title} (${mappedCollection.handle})`
-                : "Assign collection"}
-            </button>
-          ) : (
-            <div className="collection-editor">
-              <select
-                value={editingCollectionId}
-                onChange={(event) => setEditingCollectionId(normalizeText(event.target.value))}
-                disabled={menuBusy || busy}
-              >
-                <option value="">(Not mapped)</option>
-                {collections.map((collection) => (
-                  <option key={collection.id} value={collection.id}>
-                    {collection.title} ({collection.handle})
-                  </option>
-                ))}
-              </select>
-              <button className="tiny-btn" onClick={() => void onApplyNodeCollection(node)} disabled={menuBusy || busy}>
-                Apply
-              </button>
-              <button
-                className="tiny-btn btn-outline"
-                onClick={() => {
-                  setEditingNodeKey("");
-                  setEditingCollectionId("");
-                }}
-                disabled={menuBusy || busy}
-              >
-                Cancel
-              </button>
-            </div>
-          )}
-        </td>
-        <td>
+        {showCreateUnder ? (
+          renderInlineCreate(node.depth + 1)
+        ) : (
           <button
-            className="tiny-btn btn-outline"
-            onClick={() => {
-              setCreateOpen(true);
-              setCreateParentKey(node.nodeKey);
-              setCreateLabel("");
-              setCreateCollectionId("");
-            }}
+            className="add-item-row"
+            type="button"
+            style={{ marginLeft: `${Math.max(0, node.depth + 1) * 24}px` }}
+            onClick={() => openCreateFor(node.nodeKey)}
             disabled={menuBusy || busy}
           >
-            Add Child
+            + Add menu item to {node.label}
           </button>
-        </td>
-        <td>
-          <div className="status-tags">
-            {!node.enabled ? <span className="mini-tag muted-tag">Disabled</span> : null}
-            {node.enabled && node.collectionId ? <span className="mini-tag good-tag">Mapped</span> : null}
-            {node.enabled && !node.collectionId ? <span className="mini-tag muted-tag">Unmapped</span> : null}
-            {dragNodeKey === node.nodeKey ? <span className="mini-tag warn-tag">Dragging</span> : null}
-          </div>
-        </td>
-      </tr>
+        )}
+      </div>
     );
-
-    if (!collapsed) {
-      for (const child of children) {
-        rowsOut.push(...renderNodeRows(child));
-      }
-    }
-    return rowsOut;
   }
 
   return (
@@ -904,72 +1009,18 @@ export default function ShopifyCollectionMapping() {
       <section className="card mapping-workspace">
         <div className="mapping-workspace-head">
           <div>
-            <h2>Prototype 1: Tree + Search Drawer</h2>
-            <p className="muted">Row-level Assign replaces massive select lists.</p>
+            <h2>Menu Tree + Live Product Mapping</h2>
+            <p className="muted">Shopify-like menu tree with live edit, delete, add, and drag hierarchy updates.</p>
           </div>
           <button className="btn-base btn-outline" onClick={onRefreshMenu} disabled={busy || menuBusy}>
             Pull Menu
           </button>
         </div>
 
-        {createOpen ? (
-          <div className="create-panel">
-            <h3>Create Category</h3>
-            <div className="create-grid">
-              <input
-                value={createLabel}
-                placeholder="Category label"
-                onChange={(event) => setCreateLabel(event.target.value)}
-              />
-              <select
-                value={createParentKey || ""}
-                onChange={(event) => setCreateParentKey(normalizeText(event.target.value) || null)}
-              >
-                <option value="">Root level</option>
-                {nodes.map((node) => (
-                  <option key={node.nodeKey} value={node.nodeKey}>
-                    {formatNodeLabel(node)}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={createCollectionId}
-                onChange={(event) => setCreateCollectionId(normalizeText(event.target.value))}
-              >
-                <option value="">(No collection)</option>
-                {collections.map((collection) => (
-                  <option key={collection.id} value={collection.id}>
-                    {collection.title} ({collection.handle})
-                  </option>
-                ))}
-              </select>
-              <button className="btn-base" onClick={() => void onCreateNode()} disabled={menuBusy || busy}>
-                Create Live
-              </button>
-              <button className="btn-base btn-outline" onClick={() => setCreateOpen(false)} disabled={menuBusy || busy}>
-                Cancel
-              </button>
-            </div>
-            <p className="muted">Drag nodes to reorder or reparent. Drop in middle to make a child.</p>
-          </div>
-        ) : null}
-
         <div className="mapping-two-col">
           <div className="tree-panel">
             <div className="section-head">
               <h3>Menu Node Mapping</h3>
-              <button
-                className="btn-base btn-outline"
-                onClick={() => {
-                  setCreateOpen(true);
-                  setCreateParentKey(null);
-                  setCreateLabel("");
-                  setCreateCollectionId("");
-                }}
-                disabled={menuBusy || busy}
-              >
-                Add Root
-              </button>
             </div>
             <div className="mapping-health">
               <span className="pill good">Mapped: {mappingSummary.mapped}</span>
@@ -981,6 +1032,13 @@ export default function ShopifyCollectionMapping() {
                 <div className="muted">No menu nodes available.</div>
               ) : (
                 rootNodes.map((node) => renderTreeNodeCard(node))
+              )}
+              {createOpen && !createParentKey ? (
+                renderInlineCreate(0)
+              ) : (
+                <button className="add-item-row" type="button" onClick={() => openCreateFor(null)} disabled={menuBusy || busy}>
+                  + Add menu item
+                </button>
               )}
             </div>
           </div>
@@ -1163,54 +1221,6 @@ export default function ShopifyCollectionMapping() {
           </div>
         </div>
       </section>
-
-      {assignNode ? (
-        <div className="preview-overlay" onClick={() => setAssignNodeKey("")}>
-          <div className="drawer-modal" onClick={(event) => event.stopPropagation()}>
-            <div className="logs-head">
-              <h3>Assign Collection - {assignNode.label}</h3>
-              <button className="btn-base btn-outline" onClick={() => setAssignNodeKey("")}>
-                Close
-              </button>
-            </div>
-            <input
-              value={assignQuery}
-              placeholder="Search collections by title or handle"
-              onChange={(event) => setAssignQuery(event.target.value)}
-            />
-            <div className="drawer-list">
-              <button
-                className="drawer-option"
-                type="button"
-                onClick={() => {
-                  void onSetNodeCollection(assignNode, null);
-                  setAssignNodeKey("");
-                }}
-                disabled={menuBusy || busy}
-              >
-                <span>(Not mapped)</span>
-              </button>
-              {filteredCollections.map((collection) => (
-                <button
-                  key={collection.id}
-                  className={`drawer-option ${
-                    normalizeText(assignNode.collectionId) === normalizeText(collection.id) ? "active" : ""
-                  }`}
-                  type="button"
-                  onClick={() => {
-                    void onSetNodeCollection(assignNode, collection.id);
-                    setAssignNodeKey("");
-                  }}
-                  disabled={menuBusy || busy}
-                >
-                  <span>{collection.title}</span>
-                  <span className="muted">{collection.handle}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       {activeProduct ? (
         <div className="preview-overlay" onClick={() => setProductEditorId("")}>
@@ -1418,26 +1428,31 @@ export default function ShopifyCollectionMapping() {
         }
         .tree-list {
           display: grid;
-          gap: 8px;
+          gap: 10px;
         }
         .tree-children {
           display: grid;
           gap: 8px;
-          margin-top: 8px;
+          margin: 8px 0 0;
+          border-left: 1px solid rgba(255, 255, 255, 0.12);
         }
         .tree-node-wrap {
           display: grid;
-          gap: 0;
+          gap: 6px;
         }
         .tree-node {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 10px;
-          border: 1px solid rgba(255, 255, 255, 0.16);
-          background: rgba(255, 255, 255, 0.06);
+          gap: 12px;
+          border: 1px solid rgba(255, 255, 255, 0.18);
+          background: rgba(255, 255, 255, 0.05);
           border-radius: 10px;
-          padding: 8px 10px;
+          padding: 10px 12px;
+        }
+        .shopify-node.editing,
+        .create-node {
+          background: rgba(15, 23, 42, 0.72);
         }
         .tree-node.drop-before {
           border-top: 2px solid rgba(56, 189, 248, 0.95);
@@ -1450,15 +1465,27 @@ export default function ShopifyCollectionMapping() {
         }
         .tree-node-main {
           min-width: 0;
-          display: inline-flex;
+          display: flex;
           align-items: center;
-          gap: 6px;
+          gap: 8px;
           flex: 1;
         }
+        .tree-node-copy {
+          min-width: 0;
+          display: grid;
+          gap: 2px;
+        }
         .tree-node-label {
-          font-size: 0.92rem;
+          font-size: 0.95rem;
           font-weight: 800;
           color: #f8fafc;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .tree-node-sub {
+          font-size: 0.72rem;
+          color: rgba(226, 232, 240, 0.72);
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
@@ -1466,33 +1493,85 @@ export default function ShopifyCollectionMapping() {
         .tree-node-actions {
           display: inline-flex;
           align-items: center;
-          gap: 6px;
+          gap: 8px;
           flex-wrap: nowrap;
         }
-        .tree-node-chip {
-          border-radius: 999px;
-          border: 1px solid rgba(226, 232, 240, 0.35);
-          background: rgba(148, 163, 184, 0.16);
-          color: rgba(226, 232, 240, 0.85);
-          font-size: 0.7rem;
+        .hover-actions {
+          opacity: 0;
+          pointer-events: none;
+          transition: opacity 0.16s ease;
+        }
+        .tree-node:hover .hover-actions,
+        .tree-node:focus-within .hover-actions {
+          opacity: 1;
+          pointer-events: auto;
+        }
+        .always-visible {
+          opacity: 1;
+          pointer-events: auto;
+        }
+        .action-icon {
+          width: 30px;
+          height: 30px;
+          border-radius: 8px;
+          border: 1px solid rgba(255, 255, 255, 0.28);
+          background: rgba(255, 255, 255, 0.08);
+          color: #f8fafc;
+          font-size: 0.95rem;
           font-weight: 700;
-          line-height: 1;
-          padding: 6px 8px;
-          max-width: 160px;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
         }
-        .tree-node-chip.mapped {
-          border-color: rgba(16, 185, 129, 0.45);
-          background: rgba(16, 185, 129, 0.2);
-          color: #a7f3d0;
+        .action-icon.action-save {
+          border-color: rgba(34, 197, 94, 0.5);
+          background: rgba(34, 197, 94, 0.18);
+          color: #bbf7d0;
         }
-        .enable-toggle.compact {
+        .action-icon.action-danger {
+          border-color: rgba(248, 113, 113, 0.42);
+          color: #fecaca;
+          background: rgba(248, 113, 113, 0.12);
+        }
+        .menu-edit-grid {
+          display: grid;
+          grid-template-columns: minmax(170px, 1fr) minmax(220px, 1.2fr);
+          gap: 8px;
+          width: 100%;
+        }
+        .menu-link-grid {
+          display: grid;
+          grid-template-columns: minmax(110px, 0.45fr) minmax(130px, 0.55fr);
+          gap: 8px;
+        }
+        .menu-link-static {
+          min-height: 38px;
+          border-radius: 10px;
+          border: 1px solid rgba(255, 255, 255, 0.18);
+          background: rgba(255, 255, 255, 0.06);
+          color: rgba(226, 232, 240, 0.82);
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 0.8rem;
+          font-weight: 700;
+          padding: 0 10px;
+        }
+        .create-node {
+          margin-top: 2px;
+        }
+        .add-item-row {
+          min-height: 38px;
+          border-radius: 10px;
           border: 1px solid rgba(255, 255, 255, 0.22);
-          border-radius: 999px;
-          padding: 4px 8px;
-          background: rgba(15, 23, 42, 0.5);
+          background: rgba(255, 255, 255, 0.07);
+          color: #dbeafe;
+          font-size: 0.9rem;
+          font-weight: 700;
+          text-align: left;
+          padding: 0 12px;
+          cursor: pointer;
         }
         .products-table-prototype {
           min-width: 780px;
@@ -1922,11 +2001,16 @@ export default function ShopifyCollectionMapping() {
             flex-direction: column;
             align-items: stretch;
           }
+          .hover-actions {
+            opacity: 1;
+            pointer-events: auto;
+          }
           .tree-node-actions {
             justify-content: space-between;
           }
-          .tree-node-chip {
-            max-width: none;
+          .menu-edit-grid,
+          .menu-link-grid {
+            grid-template-columns: 1fr;
           }
           .products-table-prototype {
             min-width: 640px;
