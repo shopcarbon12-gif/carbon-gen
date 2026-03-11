@@ -13,10 +13,12 @@ import {
 } from "@/lib/shopifyTokenRepository";
 import {
   type CollectionOption,
+  type ProductActionStatus,
   type LiveMenuNodeInput,
   type MappingAuditLogRow,
   type MenuNodeRecord,
   listAndEnsureMenuNodes,
+  listLatestProductActionStatus,
   listMappingAuditLogs,
   logMappingAudit,
   saveMenuMappings,
@@ -1573,15 +1575,15 @@ function moveMenuNode(
   const source = indexBefore.get(sourceKey);
   const target = indexBefore.get(targetKey);
   if (!source || !target) {
-    return { ok: false, error: "Invalid drag target/source node." };
+    return { ok: false, error: "Invalid drag target/source collection." };
   }
   if (sourceKey === targetKey) {
-    return { ok: false, error: "Cannot move a node onto itself." };
+    return { ok: false, error: "Cannot move a collection onto itself." };
   }
 
   const descendants = collectMenuDescendantKeys(source.node);
   if (descendants.has(targetKey)) {
-    return { ok: false, error: "Cannot move a parent node into one of its descendants." };
+    return { ok: false, error: "Cannot move a parent collection into one of its descendants." };
   }
 
   const subtreeDepth = (node: ShopifyMenuItemNode, baseDepth = 0): number => {
@@ -1626,7 +1628,7 @@ function moveMenuNode(
 
   const detached = detachNode(items, sourceKey);
   if (!detached.removed) {
-    return { ok: false, error: "Failed to detach source node for move." };
+    return { ok: false, error: "Failed to detach source collection for move." };
   }
 
   const movedNode = detached.removed;
@@ -1691,7 +1693,7 @@ function moveMenuNode(
       : insertAroundTarget(detached.rows, targetKey, movedNode, position);
 
   if (!inserted.inserted) {
-    return { ok: false, error: "Failed to insert moved node at the target position." };
+    return { ok: false, error: "Failed to insert moved collection at the target position." };
   }
 
   return { ok: true, items: inserted.rows };
@@ -1871,7 +1873,11 @@ async function applyCollectionRemove(
   return null;
 }
 
-function mapProductRowToResponse(row: ProductRow, nodes: MenuNodeRecord[]) {
+function mapProductRowToResponse(
+  row: ProductRow,
+  nodes: MenuNodeRecord[],
+  actionStatusByProductId: Map<string, ProductActionStatus>
+) {
   const membership = new Set(row.collectionIds);
   const checkedNodeKeys = nodes
     .filter((node) => node.enabled && node.collectionId && membership.has(node.collectionId))
@@ -1888,6 +1894,7 @@ function mapProductRowToResponse(row: ProductRow, nodes: MenuNodeRecord[]) {
     upc: row.upc,
     collectionIds: row.collectionIds,
     checkedNodeKeys,
+    actionStatus: actionStatusByProductId.get(row.id) || "",
   };
 }
 
@@ -1909,6 +1916,7 @@ export async function GET(req: NextRequest) {
     const menuHandle = parseMenuHandleParam(searchParams.get("menuHandle"));
     const includeLogs = parseBool(searchParams.get("includeLogs"));
     const logLimit = parseLogLimit(searchParams.get("logLimit"));
+    const refreshProducts = parseBool(searchParams.get("refreshProducts"));
     const shop = await resolveShop(rawShop);
     if (!shop) {
       return NextResponse.json({ ok: false, error: "Missing Shopify shop." }, { status: 400 });
@@ -1937,7 +1945,9 @@ export async function GET(req: NextRequest) {
 
     const [collectionsResult, productsResult] = await Promise.all([
       fetchAllCollectionsCached(shop, tokenResult.token, apiVersion),
-      fetchAllProductsCached(shop, tokenResult.token, apiVersion),
+      refreshProducts
+        ? fetchAllProducts(shop, tokenResult.token, apiVersion)
+        : fetchAllProductsCached(shop, tokenResult.token, apiVersion),
     ]);
 
     if ("error" in collectionsResult) {
@@ -1989,12 +1999,17 @@ export async function GET(req: NextRequest) {
     const clampedPage = Math.max(1, Math.min(page, totalPages));
     const start = (clampedPage - 1) * pageSize;
     const paged = sorted.slice(start, start + pageSize);
+    const actionStatusResult = await listLatestProductActionStatus(
+      shop,
+      paged.map((row) => row.id)
+    );
 
     const logsResult = includeLogs ? await listMappingAuditLogs(shop, logLimit) : null;
     const warningParts = [
       normalizeText(menuSyncResult.warning),
       normalizeText(nodesResult.warning),
       normalizeText(linkTargetsResult.warning),
+      normalizeText(actionStatusResult.warning),
       normalizeText(logsResult?.warning),
     ].filter(Boolean);
 
@@ -2028,7 +2043,7 @@ export async function GET(req: NextRequest) {
       collections: collectionsResult.collections,
       nodes: nodesWithLinkedTargets,
       mappedNodes: nodesWithLinkedTargets.filter((node) => node.enabled && Boolean(node.collectionId)),
-      rows: paged.map((row) => mapProductRowToResponse(row, nodes)),
+      rows: paged.map((row) => mapProductRowToResponse(row, nodes, actionStatusResult.statusByProductId)),
       logs: logsResult?.logs || [],
       summary: {
         totalProducts: total,
@@ -2230,7 +2245,7 @@ export async function POST(req: NextRequest) {
         const index = findMenuNodeIndex(items);
         const target = index.get(nodeKey);
         if (!target) {
-          return NextResponse.json({ ok: false, error: "Menu node was not found." }, { status: 404 });
+          return NextResponse.json({ ok: false, error: "Menu collection was not found." }, { status: 404 });
         }
 
         updateItemCollectionLink(target.node, collectionMatch);
@@ -2338,7 +2353,7 @@ export async function POST(req: NextRequest) {
       if (parentKey) {
         const parent = index.get(parentKey);
         if (!parent) {
-          return NextResponse.json({ ok: false, error: "Parent menu node was not found." }, { status: 404 });
+          return NextResponse.json({ ok: false, error: "Parent menu collection was not found." }, { status: 404 });
         }
         if (parent.depth + 1 > MAX_MENU_DEPTH) {
           return NextResponse.json(
@@ -2761,7 +2776,7 @@ export async function POST(req: NextRequest) {
       });
       if (invalidNodeKeys.length > 0) {
         return NextResponse.json(
-          { ok: false, error: "One or more selected nodes are not mapped to a collection.", invalidNodeKeys },
+          { ok: false, error: "One or more selected collections are not mapped to a collection.", invalidNodeKeys },
           { status: 400 }
         );
       }

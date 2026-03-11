@@ -87,6 +87,8 @@ export type MappingAuditLogRow = {
   createdAt: string;
 };
 
+export type ProductActionStatus = "PROCESSED" | "";
+
 type PersistedMappingAuditRow = {
   id: string;
   action: string;
@@ -927,6 +929,57 @@ export async function listMappingAuditLogs(
     backend: "sql",
     logs: rows.map(parsePersistedMappingAuditRow),
   };
+}
+
+export async function listLatestProductActionStatus(
+  shop: string,
+  productIds: string[]
+): Promise<{
+  backend: "sql" | "memory";
+  statusByProductId: Map<string, ProductActionStatus>;
+  warning?: string;
+}> {
+  const safeShop = normalizeShopKey(shop);
+  const normalizedIds = Array.from(
+    new Set(
+      (Array.isArray(productIds) ? productIds : [])
+        .map((row) => normalizeText(row))
+        .filter(Boolean)
+    )
+  );
+  const empty = new Map<string, ProductActionStatus>();
+  if (normalizedIds.length < 1) {
+    return { backend: (await canUseSql()) ? "sql" : "memory", statusByProductId: empty };
+  }
+
+  if (!(await canUseSql())) {
+    return {
+      backend: "memory",
+      warning: "SQL is not configured. Product mapping status is unavailable in this local session.",
+      statusByProductId: empty,
+    };
+  }
+
+  type LatestActionRow = {
+    product_id: string;
+    status: string;
+  };
+  const rows = await sqlQuery<LatestActionRow>(
+    `SELECT DISTINCT ON (product_id) product_id, status
+     FROM shopify_collection_mapping_actions
+     WHERE shop = $1
+       AND product_id = ANY($2::text[])
+     ORDER BY product_id ASC, created_at DESC`,
+    [safeShop, normalizedIds]
+  );
+  const statusByProductId = new Map<string, ProductActionStatus>();
+  for (const row of rows) {
+    const productId = normalizeText(row.product_id);
+    if (!productId) continue;
+    const status = normalizeLower(row.status) === "ok" ? "PROCESSED" : "";
+    statusByProductId.set(productId, status);
+  }
+  return { backend: "sql", statusByProductId };
 }
 
 export function getDefaultMenuNodes() {

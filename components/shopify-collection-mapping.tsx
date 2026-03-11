@@ -19,6 +19,7 @@ type ProductRow = {
   image: string | null;
   upc: string;
   checkedNodeKeys: string[];
+  actionStatus?: "PROCESSED" | "";
 };
 
 type MappingResponse = {
@@ -145,17 +146,26 @@ export default function ShopifyCollectionMapping() {
 
   const selectedTypesLabel = useMemo(() => {
     if (selectedTypes.length < 1) return "All types";
-    if (selectedTypes.length === 1) return selectedTypes[0];
-    return `${selectedTypes.length} selected`;
+    return selectedTypes[0];
   }, [selectedTypes]);
+
+  function matchesMenuSearch(node: MenuNode, query: string) {
+    const normalizedQuery = query.trim().toLowerCase();
+    if (!normalizedQuery) return true;
+    const qTokens = normalizedQuery.split(/\s+/).filter(Boolean);
+    if (qTokens.length < 1) return true;
+    const source = `${node.label} ${node.linkedTargetLabel || ""}`.toLowerCase();
+    const sourceTokens = source.split(/[^a-z0-9]+/).filter(Boolean);
+    if (sourceTokens.length < 1) return false;
+    return qTokens.every((token) => sourceTokens.some((sourceToken) => sourceToken.startsWith(token)));
+  }
 
   const treeNodes = useMemo(() => {
     const q = treeSearch.trim().toLowerCase();
     if (!q) return nodes;
     const include = new Set<string>();
     for (const node of nodes) {
-      const haystack = `${node.label} ${node.linkedTargetLabel || ""}`.toLowerCase();
-      if (!haystack.includes(q)) continue;
+      if (!matchesMenuSearch(node, q)) continue;
       include.add(node.nodeKey);
       let current = node.parentKey || null;
       const seen = new Set<string>();
@@ -240,7 +250,7 @@ export default function ShopifyCollectionMapping() {
     };
   }, [collections, nodes]);
 
-  async function loadData() {
+  async function loadData(options?: { refreshProducts?: boolean }) {
     setLoading(true);
     setError("");
     setWarning("");
@@ -254,7 +264,10 @@ export default function ShopifyCollectionMapping() {
         sortDir,
       });
       if (selectedTypes.length > 0) {
-        params.set("types", selectedTypes.join(","));
+        params.set("types", selectedTypes[0]);
+      }
+      if (options?.refreshProducts) {
+        params.set("refreshProducts", "true");
       }
       const resp = await fetch(`/api/shopify/collection-mapping?${params.toString()}`, {
         cache: "no-store",
@@ -265,7 +278,6 @@ export default function ShopifyCollectionMapping() {
       }
 
       const nextNodes = (json.nodes || []).filter((node) => node.enabled);
-      const firstWithCollection = nextNodes.find((node) => node.collectionId);
       setNodes(nextNodes);
       setRows(json.rows || []);
       const nextCollections = (json.collections || []).map((row) => ({
@@ -293,17 +305,6 @@ export default function ShopifyCollectionMapping() {
         setPage(Math.max(1, Number(json.page)));
       }
       setWarning(String(json.warning || "").trim());
-
-      setSelectedNodes((prev) => {
-        const out: Record<string, boolean> = {};
-        for (const key of Object.keys(prev)) {
-          if (prev[key] && nextNodes.some((node) => node.nodeKey === key)) out[key] = true;
-        }
-        if (Object.keys(out).length < 1 && firstWithCollection?.nodeKey) {
-          out[firstWithCollection.nodeKey] = true;
-        }
-        return out;
-      });
       setSelectedProducts((prev) => {
         const out: Record<string, boolean> = {};
         for (const key of Object.keys(prev)) {
@@ -321,6 +322,10 @@ export default function ShopifyCollectionMapping() {
 
   function resetPageForDataQuery() {
     setPage(1);
+  }
+
+  function resetTreeSelectionToDefault() {
+    setSelectedNodes({});
   }
 
   function applyNodeSelection(nodeKey: string, checked: boolean) {
@@ -393,7 +398,7 @@ export default function ShopifyCollectionMapping() {
     lines.push(`${csvCell("Collection Audit Report")}`);
     lines.push(`${csvCell("Generated At")},${csvCell(collectionAudit.generatedAt)}`);
     lines.push(`${csvCell("Total Shopify Collections")},${csvCell(collectionAudit.totalCollections)}`);
-    lines.push(`${csvCell("Mapped Nodes")},${csvCell(collectionAudit.mappedNodes)}`);
+    lines.push(`${csvCell("Mapped Collections")},${csvCell(collectionAudit.mappedNodes)}`);
     lines.push(`${csvCell("Mapped Unique Collections")},${csvCell(collectionAudit.mappedUniqueCollections)}`);
     lines.push(`${csvCell("Unmapped Collections")},${csvCell(collectionAudit.unmappedCount)}`);
     lines.push(`${csvCell("Duplicate Mapped Collections")},${csvCell(collectionAudit.duplicatesCount)}`);
@@ -593,11 +598,11 @@ export default function ShopifyCollectionMapping() {
       });
       const json = (await resp.json()) as MappingResponse;
       if (!resp.ok || !json.ok) {
-        throw new Error(json.error || "Delete node failed.");
+        throw new Error(json.error || "Delete collection failed.");
       }
       applyMenuNodesFromResponse(json);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Delete node failed.";
+      const message = err instanceof Error ? err.message : "Delete collection failed.";
       setError(message);
     } finally {
       setSaving(false);
@@ -640,7 +645,9 @@ export default function ShopifyCollectionMapping() {
           )
         );
       }
-      await loadData();
+      resetTreeSelectionToDefault();
+      setSelectedProducts({});
+      await loadData({ refreshProducts: true });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Assign/unassign failed.";
       setError(message);
@@ -680,8 +687,9 @@ export default function ShopifyCollectionMapping() {
           })
         );
       }
+      resetTreeSelectionToDefault();
       setSelectedProducts({});
-      await loadData();
+      await loadData({ refreshProducts: true });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Bulk assign/unassign failed.";
       setError(message);
@@ -695,10 +703,7 @@ export default function ShopifyCollectionMapping() {
     if (!normalized) return;
     setSelectedTypes((prev) => {
       const exists = prev.some((value) => value.toLowerCase() === normalized.toLowerCase());
-      if (exists) {
-        return prev.filter((value) => value.toLowerCase() !== normalized.toLowerCase());
-      }
-      return [...prev, normalized];
+      return exists ? [] : [normalized];
     });
     resetPageForDataQuery();
   }
@@ -706,6 +711,37 @@ export default function ShopifyCollectionMapping() {
   function clearTypeFilter() {
     setSelectedTypes([]);
     resetPageForDataQuery();
+  }
+
+  async function refreshProductsSection() {
+    setSelectedProducts({});
+    await loadData({ refreshProducts: true });
+  }
+
+  async function refreshMenuTreeSection() {
+    setSaving(true);
+    setError("");
+    try {
+      const resp = await fetch("/api/shopify/collection-mapping", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "refresh-menu" }),
+      });
+      const json = (await resp.json()) as MappingResponse;
+      if (!resp.ok || !json.ok) {
+        throw new Error(json.error || "Menu refresh failed.");
+      }
+      const nextNodes = (json.nodes || []).filter((node) => node.enabled);
+      setNodes(nextNodes);
+      setTreeSearch("");
+      setSelectedNodes({});
+      setWarning(String(json.warning || "").trim());
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Menu refresh failed.";
+      setError(message);
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -737,7 +773,7 @@ export default function ShopifyCollectionMapping() {
             <b>{collectionCount}</b>
           </div>
           <div className="k">
-            <div className="muted">Menu Nodes</div>
+            <div className="muted">Menu Collections</div>
             <b>{nodes.length}</b>
           </div>
           <div className="k">
@@ -754,15 +790,24 @@ export default function ShopifyCollectionMapping() {
           <aside className="card panel">
             <h3>Menu Tree</h3>
             <p className="muted small" style={{ marginTop: 4 }}>
-              Multi-select nodes. Parent categories are auto-selected when selecting deep children.
+              Multi-select collections. Parent categories are auto-selected when selecting deep children.
             </p>
             <div className="topbar" style={{ marginTop: 8 }}>
               <input
                 value={treeSearch}
                 onChange={(event) => setTreeSearch(event.target.value)}
-                placeholder="Search menu nodes..."
+                placeholder="Search menu collections..."
                 aria-label="Search menu tree"
               />
+              <button
+                type="button"
+                className="treeRefreshBtn"
+                aria-label="Refresh menu tree"
+                onClick={() => void refreshMenuTreeSection()}
+                disabled={saving}
+              >
+                ⟳
+              </button>
             </div>
             <div className="tree" style={{ marginTop: 8 }}>
               {visibleTreeNodes.map((node) => {
@@ -861,7 +906,7 @@ export default function ShopifyCollectionMapping() {
                             event.stopPropagation();
                             setExpandedNodes((prev) => ({ ...prev, [node.nodeKey]: !prev[node.nodeKey] }));
                           }}
-                          aria-label={isExpanded ? "Collapse node" : "Expand node"}
+                          aria-label={isExpanded ? "Collapse collection" : "Expand collection"}
                         >
                           <svg viewBox="0 0 12 12" width="12" height="12">
                             <path d="M4 2L8 6L4 10" />
@@ -889,7 +934,7 @@ export default function ShopifyCollectionMapping() {
                           type="button"
                           className="iconBtn danger"
                           onClick={() => void deleteMenuNode(node.nodeKey)}
-                          aria-label="Delete menu item"
+                          aria-label="Delete menu collection"
                         >
                           <svg viewBox="0 0 16 16" width="14" height="14">
                             <path d="M6 2h4l1 1h3v1H2V3h3l1-1zm-2 3h8l-.6 8.2A1 1 0 0 1 10.4 14H5.6a1 1 0 0 1-1-.8L4 5z" />
@@ -996,9 +1041,17 @@ export default function ShopifyCollectionMapping() {
                   </div>
                 ) : null}
               </div>
+              <button
+                type="button"
+                className="productRefreshBtn"
+                onClick={() => void refreshProductsSection()}
+                disabled={loading || saving}
+              >
+                Refresh Products
+              </button>
             </div>
             <div className="topbar">
-              <span className="chip">Selected Nodes: {selectedNodeKeysWithParents.length}</span>
+              <span className="chip">Selected Collections: {selectedNodeKeysWithParents.length}</span>
               <span className="chip">Mapped Selected: {mappedSelectedNodeKeys.length}</span>
               <span className="chip">Page {page} / {totalPages}</span>
               <button
@@ -1058,8 +1111,8 @@ export default function ShopifyCollectionMapping() {
                         UPC <span className="sortArrow">{getHeaderArrow("upc")}</span>
                       </button>
                     </th>
-                    <th className="center">Assigned</th>
-                    <th>Current Nodes</th>
+                    <th className="center">Status</th>
+                    <th>Current Collections</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1073,10 +1126,7 @@ export default function ShopifyCollectionMapping() {
                     </tr>
                   ) : (
                     rows.map((row) => {
-                      const assigned =
-                        mappedSelectedNodeKeys.length > 0 &&
-                        mappedSelectedNodeKeys.every((key) => row.checkedNodeKeys.includes(key));
-                      const currentNodes = row.checkedNodeKeys
+                      const currentCollections = row.checkedNodeKeys
                         .map((key) => nodeLabelByKey.get(key) || key)
                         .slice(0, 6)
                         .join(", ");
@@ -1099,20 +1149,21 @@ export default function ShopifyCollectionMapping() {
                               >
                                 <img className="thumb" src={row.image} alt={row.title} />
                               </button>
-                            ) : null}
+                            ) : (
+                              <span className="thumbPlaceholder" aria-hidden="true" />
+                            )}
                           </td>
                           <td className="productNameCol">{row.title}</td>
                           <td className="upcCol">{row.upc || "-"}</td>
                           <td className="center">
-                            <input
-                              type="checkbox"
-                              checked={assigned}
-                              onChange={(event) => void toggleAssign(row.id, event.target.checked)}
-                              disabled={mappedSelectedNodeKeys.length < 1 || saving}
-                            />
+                            {row.actionStatus === "PROCESSED" ? (
+                              <img src="/badge-processed.png" alt="Processed" className="statusBadgeImg" />
+                            ) : (
+                              <span className="muted">-</span>
+                            )}
                           </td>
                           <td>
-                            <span className="muted small">{currentNodes || "-"}</span>
+                            <span className="muted small">{currentCollections || "-"}</span>
                           </td>
                         </tr>
                       );
@@ -1225,7 +1276,7 @@ export default function ShopifyCollectionMapping() {
                   collectionAudit.duplicates.map((row) => (
                     <div className="reportRow" key={row.id}>
                       <span>{row.title}</span>
-                      <span className="muted small">Mapped in {row.count} nodes</span>
+                      <span className="muted small">Mapped in {row.count} collections</span>
                     </div>
                   ))
                 ) : (
@@ -1402,9 +1453,23 @@ export default function ShopifyCollectionMapping() {
           position: relative;
           flex: 0 0 auto;
         }
+        .productRefreshBtn {
+          min-width: 150px;
+        }
         .typesDropdownBtn {
           min-width: 170px;
           justify-content: flex-start;
+        }
+        .treeRefreshBtn {
+          width: 36px;
+          min-width: 36px;
+          min-height: 36px;
+          padding: 0;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 18px;
+          line-height: 1;
         }
         .typesDropdownMenu {
           position: absolute;
@@ -1599,9 +1664,7 @@ export default function ShopifyCollectionMapping() {
           opacity: 0;
           transition: opacity 120ms ease;
         }
-        .treeRow:hover .treeRowActions,
-        .treeRow:focus-within .treeRowActions,
-        .treeRow.active .treeRowActions {
+        .treeRow:hover .treeRowActions {
           opacity: 1;
         }
         .iconBtn {
@@ -1611,14 +1674,22 @@ export default function ShopifyCollectionMapping() {
           padding: 0;
           border: 1px solid #334155;
           border-radius: 6px;
-          background: #0f172a;
+          background: rgba(15, 23, 42, 0.45);
           color: #cbd5e1;
           display: inline-flex;
           align-items: center;
           justify-content: center;
+          opacity: 0.72;
         }
         .iconBtn:hover {
-          background: #1e293b;
+          background: rgba(30, 41, 59, 0.88);
+          opacity: 1;
+        }
+        .iconBtn:active {
+          background: #2563eb;
+          border-color: #2563eb;
+          color: #ffffff;
+          opacity: 1;
         }
         .iconBtn svg path {
           fill: currentColor;
@@ -1696,6 +1767,11 @@ export default function ShopifyCollectionMapping() {
           white-space: nowrap;
           font-size: 12px;
         }
+        tbody td {
+          height: 96px;
+          box-sizing: border-box;
+          vertical-align: middle;
+        }
         th {
           position: sticky;
           top: 0;
@@ -1759,6 +1835,21 @@ export default function ShopifyCollectionMapping() {
           border-radius: 4px;
           object-fit: cover;
           border: 1px solid #334155;
+        }
+        .thumbPlaceholder {
+          display: inline-block;
+          width: 56px;
+          height: 80px;
+          border-radius: 4px;
+          border: 1px dashed #334155;
+          background: rgba(15, 23, 42, 0.5);
+        }
+        .statusBadgeImg {
+          width: 54px;
+          height: 54px;
+          object-fit: contain;
+          display: inline-block;
+          vertical-align: middle;
         }
         .previewOverlay {
           position: fixed;
