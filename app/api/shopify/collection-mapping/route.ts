@@ -2731,6 +2731,7 @@ export async function POST(req: NextRequest) {
       const parentMap = buildParentMap(nodes);
       const childrenMap = buildChildrenMap(nodes);
       const mappedCollectionIds = new Set(nodes.map((node) => normalizeText(node.collectionId)).filter(Boolean));
+      const activeToken = String(tokenResult.token || "");
 
       async function processOneProduct(productId: string) {
         const productGid = toProductGid(productId);
@@ -2738,7 +2739,7 @@ export async function POST(req: NextRequest) {
           return { ok: false as const, productId, error: "Invalid product ID." };
         }
 
-        const currentResult = await fetchProductCollections(shop, tokenResult.token, apiVersion, productGid);
+        const currentResult = await fetchProductCollections(shop, activeToken, apiVersion, productGid);
         if ("error" in currentResult) {
           await logCollectionMappingAction({
             shop,
@@ -2827,16 +2828,16 @@ export async function POST(req: NextRequest) {
 
         const errors: string[] = [];
         for (const collectionId of additions) {
-          const error = await applyCollectionAdd(shop, tokenResult.token, apiVersion, collectionId, productGid);
+          const error = await applyCollectionAdd(shop, activeToken, apiVersion, collectionId, productGid);
           if (error) errors.push(error);
         }
         for (const collectionId of removals) {
-          const error = await applyCollectionRemove(shop, tokenResult.token, apiVersion, collectionId, productGid);
+          const error = await applyCollectionRemove(shop, activeToken, apiVersion, collectionId, productGid);
           if (error) errors.push(error);
         }
 
         invalidateShopCache(productsCache, shop);
-        const refreshedResult = await fetchProductCollections(shop, tokenResult.token, apiVersion, productGid);
+        const refreshedResult = await fetchProductCollections(shop, activeToken, apiVersion, productGid);
         if ("error" in refreshedResult) {
           await logCollectionMappingAction({
             shop,

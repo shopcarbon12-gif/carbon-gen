@@ -294,3 +294,7 @@ If session resets, instruct the agent:
 - Constrained custom tree checkbox dimensions in `components/shopify-collection-mapping.tsx` to fixed `16x16` with explicit min/max sizing and `flex-shrink: 0`.
 - Added tree guide connectors using `::before` and `::after` on `.treeRow.has-parent` to draw vertical and horizontal branch lines between parent/child rows.
 - Added sibling-aware `is-last` row state to trim vertical connector lines at last child for cleaner directory-tree style branching.
+
+## 2026-03-11 Build Failure Hotfix (bulk mapping token narrowing)
+- Fixed TypeScript build failure in `app/api/shopify/collection-mapping/route.ts` for bulk product processing closure by introducing `activeToken` string capture and using it in `fetchProductCollections`, `applyCollectionAdd`, and `applyCollectionRemove`.
+- This resolves Coolify compile error at line ~2741 (`string | undefined` token argument) during `npm run build`.
