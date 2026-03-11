@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
 type MenuNode = {
   nodeKey: string;
@@ -55,6 +55,8 @@ type SortValue = "title-asc" | "title-desc" | "upc-asc" | "upc-desc";
 
 type DropPosition = "before" | "after" | "inside";
 type MenuEditorMode = "add" | "edit";
+const TREE_PANEL_MIN_WIDTH = 260;
+const TREE_PANEL_MAX_WIDTH = 620;
 
 export default function ShopifyCollectionMapping() {
   const [nodes, setNodes] = useState<MenuNode[]>([]);
@@ -85,6 +87,9 @@ export default function ShopifyCollectionMapping() {
   const [menuEditorLabel, setMenuEditorLabel] = useState("");
   const [menuEditorParentKey, setMenuEditorParentKey] = useState<string | null>(null);
   const [menuEditorNodeKey, setMenuEditorNodeKey] = useState("");
+  const [treePanelWidth, setTreePanelWidth] = useState(320);
+  const [resizingPanes, setResizingPanes] = useState(false);
+  const paneResizeStart = useRef<{ x: number; width: number } | null>(null);
 
   const nodeLabelByKey = useMemo(() => {
     const map = new Map<string, string>();
@@ -395,6 +400,35 @@ export default function ShopifyCollectionMapping() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [previewImage]);
 
+  useEffect(() => {
+    if (!resizingPanes) return;
+    const onMouseMove = (event: MouseEvent) => {
+      if (!paneResizeStart.current) return;
+      const deltaX = event.clientX - paneResizeStart.current.x;
+      const nextWidth = Math.min(
+        TREE_PANEL_MAX_WIDTH,
+        Math.max(TREE_PANEL_MIN_WIDTH, paneResizeStart.current.width + deltaX)
+      );
+      setTreePanelWidth(nextWidth);
+    };
+    const stopResize = () => {
+      setResizingPanes(false);
+      paneResizeStart.current = null;
+    };
+    const priorCursor = document.body.style.cursor;
+    const priorUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", stopResize);
+    return () => {
+      document.body.style.cursor = priorCursor;
+      document.body.style.userSelect = priorUserSelect;
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", stopResize);
+    };
+  }, [resizingPanes]);
+
   async function moveMenuNode() {
     if (!dragSourceKey || !dropTarget) return;
     setSaving(true);
@@ -658,7 +692,7 @@ export default function ShopifyCollectionMapping() {
 
       <section className="card">
         <h2>Dual-Pane Mapper (Tree left, multi-select columns right)</h2>
-        <div className="grid2" style={{ marginTop: 10 }}>
+        <div className="grid2" style={{ marginTop: 10, gridTemplateColumns: `${treePanelWidth}px 12px minmax(0, 1fr)` }}>
           <aside className="card panel">
             <h3>Menu Tree</h3>
             <p className="muted small" style={{ marginTop: 4 }}>
@@ -822,6 +856,33 @@ export default function ShopifyCollectionMapping() {
               </div>
             </div>
           </aside>
+
+          <div
+            className={resizingPanes ? "paneDivider resizing" : "paneDivider"}
+            role="separator"
+            aria-label="Resize tree and product sections"
+            aria-orientation="vertical"
+            aria-valuemin={TREE_PANEL_MIN_WIDTH}
+            aria-valuemax={TREE_PANEL_MAX_WIDTH}
+            aria-valuenow={treePanelWidth}
+            tabIndex={0}
+            onMouseDown={(event) => {
+              event.preventDefault();
+              paneResizeStart.current = { x: event.clientX, width: treePanelWidth };
+              setResizingPanes(true);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowLeft") {
+                event.preventDefault();
+                setTreePanelWidth((prev) => Math.max(TREE_PANEL_MIN_WIDTH, prev - 16));
+              } else if (event.key === "ArrowRight") {
+                event.preventDefault();
+                setTreePanelWidth((prev) => Math.min(TREE_PANEL_MAX_WIDTH, prev + 16));
+              }
+            }}
+          >
+            <span className="paneDividerGrip" aria-hidden="true" />
+          </div>
 
           <main className="card panel">
             <div className="topbar">
@@ -1184,8 +1245,32 @@ export default function ShopifyCollectionMapping() {
         }
         .grid2 {
           display: grid;
-          grid-template-columns: 300px 1fr;
+          grid-template-columns: 300px 12px minmax(0, 1fr);
           gap: 12px;
+        }
+        .paneDivider {
+          display: flex;
+          align-items: stretch;
+          justify-content: center;
+          cursor: col-resize;
+          border-radius: 999px;
+          outline: none;
+        }
+        .paneDividerGrip {
+          width: 4px;
+          border-radius: 999px;
+          background: #33506e;
+          transition: background-color 120ms ease, box-shadow 120ms ease;
+        }
+        .paneDivider:hover .paneDividerGrip,
+        .paneDivider.resizing .paneDividerGrip,
+        .paneDivider:focus-visible .paneDividerGrip {
+          background: #60a5fa;
+          box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.4);
+        }
+        .paneDivider:focus-visible {
+          box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.4);
+          border-radius: 999px;
         }
         .panel {
           padding: 10px;
@@ -1589,6 +1674,9 @@ export default function ShopifyCollectionMapping() {
         @media (max-width: 1200px) {
           .grid2 {
             grid-template-columns: 1fr;
+          }
+          .paneDivider {
+            display: none;
           }
         }
       `}</style>
