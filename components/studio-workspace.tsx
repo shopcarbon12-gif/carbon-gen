@@ -10294,37 +10294,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           color: rgba(255,255,255,0.5);
           font-style: italic;
         }
-        /* Force section collapse/expand button to true top-right corner (desktop + mobile) */
-        .card {
-          position: relative;
-        }
-        .section-header,
-        .model-registry-header {
-          position: static !important;
-          padding-right: 58px !important;
-        }
-        .model-registry-header-actions {
-          position: static !important;
-          margin: 0 !important;
-          display: contents;
-        }
-        .icon-toggle-btn {
-          position: absolute !important;
-          top: 14px !important;
-          right: 14px !important;
-          margin: 0 !important;
-          z-index: 5;
-        }
-        @media (max-width: 900px) {
-          .icon-toggle-btn {
-            top: 12px !important;
-            right: 12px !important;
-          }
-          .section-header,
-          .model-registry-header {
-            padding-right: 56px !important;
-          }
-        }
       `}</style>
     </div>
   );
