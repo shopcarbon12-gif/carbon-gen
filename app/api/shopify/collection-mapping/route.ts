@@ -984,7 +984,16 @@ function buildMenuLinkTargetsWarning(errors: unknown) {
   if (merged.includes("access denied for blogs field")) blocked.push("blogs");
 
   if (blocked.length > 0) {
-    return `Some menu link targets are unavailable (${blocked.join(", ")}). Reconnect Shopify with required read scopes to enable full target names.`;
+    const remaining = messages.filter((message) => {
+      const lower = message.toLowerCase();
+      return !(
+        lower.includes("access denied for pages field") ||
+        lower.includes("access denied for products field") ||
+        lower.includes("access denied for blogs field")
+      );
+    });
+    if (remaining.length < 1) return "";
+    return `Some menu link targets are unavailable: ${remaining[0]}`;
   }
 
   const first = messages[0] || "";
@@ -1101,7 +1110,7 @@ function resolveNodeLinkedTargetMeta(
     const title = normalizeText(collection?.title);
     return {
       linkedTargetType: "COLLECTION",
-      linkedTargetLabel: title ? `Collection: ${title}` : url || "Collection link",
+      linkedTargetLabel: title || url || "Collection link",
     };
   }
 
@@ -1110,7 +1119,7 @@ function resolveNodeLinkedTargetMeta(
     const title = normalizeText(page?.title);
     return {
       linkedTargetType: "PAGE",
-      linkedTargetLabel: title ? `Page: ${title}` : url || "Page link",
+      linkedTargetLabel: title || url || "Page link",
     };
   }
 
@@ -1119,7 +1128,7 @@ function resolveNodeLinkedTargetMeta(
     const title = normalizeText(product?.title);
     return {
       linkedTargetType: "PRODUCT",
-      linkedTargetLabel: title ? `Product: ${title}` : url || "Product link",
+      linkedTargetLabel: title || url || "Product link",
     };
   }
 
@@ -1128,7 +1137,7 @@ function resolveNodeLinkedTargetMeta(
     const title = normalizeText(blog?.title);
     return {
       linkedTargetType: "BLOG",
-      linkedTargetLabel: title ? `Blog: ${title}` : url || "Blog link",
+      linkedTargetLabel: title || url || "Blog link",
     };
   }
 

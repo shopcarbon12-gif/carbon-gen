@@ -249,3 +249,10 @@ If session resets, instruct the agent:
 - Added human-readable linked target metadata per menu node (collection/page/product/blog/url labels) while keeping GID keys internal for actions.
 - Updated `components/shopify-collection-mapping.tsx` tree to show attached target labels instead of raw `gid://...` menu IDs.
 - Stretched page container to full viewport width and centered Product Name column content without changing typography scale.
+
+## 2026-03-11 Collection Mapping Image Preview + Label Cleanup
+- Updated `components/shopify-collection-mapping.tsx` picture column thumbnails to expanded-style size (`56x80`) and made them clickable.
+- Added full-size image popup preview with top-right close `X`, outside-click close, `Esc` close, and blurred background while keeping the page visible behind it.
+- Center-aligned the `UPC` column header and body cells to match table alignment expectations.
+- Updated `app/api/shopify/collection-mapping/route.ts` linked target labels to remove `Collection:` / `Page:` / `Product:` / `Blog:` prefixes, showing only target name or URL.
+- Suppressed non-critical menu-link scope warning banners when only known Shopify access-denied fields are blocked.

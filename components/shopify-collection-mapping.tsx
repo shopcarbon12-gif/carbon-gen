@@ -58,6 +58,7 @@ export default function ShopifyCollectionMapping() {
   const [saving, setSaving] = useState(false);
   const [warning, setWarning] = useState("");
   const [error, setError] = useState("");
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const nodeLabelByKey = useMemo(() => {
     const map = new Map<string, string>();
@@ -123,6 +124,15 @@ export default function ShopifyCollectionMapping() {
     }, 180);
     return () => window.clearTimeout(timer);
   }, [search, sort]);
+
+  useEffect(() => {
+    if (!previewImage) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPreviewImage(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [previewImage]);
 
   async function toggleAssign(productId: string, checked: boolean) {
     if (!activeNode) return;
@@ -320,7 +330,7 @@ export default function ShopifyCollectionMapping() {
                     </th>
                     <th>Picture</th>
                     <th className="productNameCol">Product Name</th>
-                    <th>UPC</th>
+                    <th className="upcCol">UPC</th>
                     <th className="center">Assigned</th>
                     <th>Current Nodes</th>
                   </tr>
@@ -351,10 +361,19 @@ export default function ShopifyCollectionMapping() {
                             />
                           </td>
                           <td className="center imgCell">
-                            {row.image ? <img className="thumb" src={row.image} alt="" /> : null}
+                            {row.image ? (
+                              <button
+                                type="button"
+                                className="thumbBtn"
+                                onClick={() => setPreviewImage(row.image)}
+                                aria-label="Open product image preview"
+                              >
+                                <img className="thumb" src={row.image} alt={row.title} />
+                              </button>
+                            ) : null}
                           </td>
                           <td className="productNameCol">{row.title}</td>
-                          <td>{row.upc || "-"}</td>
+                          <td className="upcCol">{row.upc || "-"}</td>
                           <td className="center">
                             <input
                               type="checkbox"
@@ -376,6 +395,17 @@ export default function ShopifyCollectionMapping() {
           </main>
         </div>
       </section>
+
+      {previewImage ? (
+        <div className="previewOverlay" onClick={() => setPreviewImage(null)} role="dialog" aria-label="Product image preview">
+          <div className="previewContent" onClick={(event) => event.stopPropagation()}>
+            <img src={previewImage} alt="Product preview" className="previewImg" />
+            <button type="button" className="previewClose" onClick={() => setPreviewImage(null)} aria-label="Close image preview">
+              ×
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <style jsx>{`
         .page {
@@ -533,20 +563,73 @@ export default function ShopifyCollectionMapping() {
           text-align: center;
         }
         .imgCell {
-          width: 56px;
-          min-width: 56px;
-          max-width: 56px;
+          width: 80px;
+          min-width: 80px;
+          max-width: 80px;
           text-align: center;
+        }
+        .thumbBtn {
+          border: 0;
+          padding: 0;
+          background: transparent;
+          min-height: 0;
+          line-height: 0;
+          border-radius: 4px;
         }
         .productNameCol {
           text-align: center;
         }
+        .upcCol {
+          text-align: center;
+        }
         .thumb {
-          width: 34px;
-          height: 34px;
-          border-radius: 6px;
+          width: 56px;
+          height: 80px;
+          border-radius: 4px;
           object-fit: cover;
           border: 1px solid #334155;
+        }
+        .previewOverlay {
+          position: fixed;
+          inset: 0;
+          z-index: 9999;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: rgba(3, 8, 18, 0.46);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+        }
+        .previewContent {
+          position: relative;
+          max-width: min(92vw, 980px);
+          max-height: 90vh;
+        }
+        .previewImg {
+          display: block;
+          max-width: min(92vw, 980px);
+          max-height: 86vh;
+          object-fit: contain;
+          border-radius: 10px;
+          box-shadow: 0 10px 42px rgba(0, 0, 0, 0.55);
+        }
+        .previewClose {
+          position: absolute;
+          top: -12px;
+          right: -12px;
+          width: 34px;
+          height: 34px;
+          min-height: 0;
+          border-radius: 999px;
+          border: 2px solid rgba(255, 255, 255, 0.7);
+          background: rgba(0, 0, 0, 0.72);
+          color: #fff;
+          font-size: 24px;
+          line-height: 1;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0;
         }
         .warning {
           margin-top: 8px;
