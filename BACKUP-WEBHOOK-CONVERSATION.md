@@ -330,3 +330,7 @@ If session resets, instruct the agent:
 - Fixed TypeScript compile failure in `app/api/shopify/collection-mapping/route.ts` (`linkType` used before declaration in `edit-menu-node` error audit details).
 - Replaced pre-declaration reference with `linkTypeRaw` in the failed-menu-fetch audit payload.
 - Verified local `npm run build` completes successfully end-to-end.
+
+## 2026-03-11 Hotfix: Shopify menuUpdate argument contract
+- Fixed Shopify GraphQL menu mutation variable/argument mismatch in `app/api/shopify/collection-mapping/route.ts`.
+- Updated mutation from `menuUpdate(menu: $menu)` to `menuUpdate(menuUpdate: $menuUpdate)` and aligned variables payload key to `menuUpdate`.
