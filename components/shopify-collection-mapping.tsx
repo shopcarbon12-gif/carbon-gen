@@ -282,7 +282,11 @@ export default function ShopifyCollectionMapping() {
       setSelectedTypes((prev) => {
         if (prev.length < 1) return prev;
         const allowed = new Set(nextTypeOptions.map((value) => value.toLowerCase()));
-        return prev.filter((value) => allowed.has(value.toLowerCase()));
+        const nextSelected = prev.filter((value) => allowed.has(value.toLowerCase()));
+        if (nextSelected.length === prev.length && nextSelected.every((value, index) => value === prev[index])) {
+          return prev;
+        }
+        return nextSelected;
       });
       setTotalPages(Math.max(1, Number(json.totalPages || 1)));
       if (json.page && Number.isFinite(Number(json.page))) {
