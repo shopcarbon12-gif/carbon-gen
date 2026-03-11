@@ -5743,28 +5743,12 @@ function buildMasterPanelPrompt(
           <div className="eyebrow">01 — Setup</div>
           <div className="model-registry-header">
             <div className="card-title">Model Registry</div>
-            {modelRegistryCollapsed ? (
-              models.length ? (
-                <div className="registry-inline-models">
-                  {models.map((m) => (
-                    <div className="model-pill" key={m.model_id}>
-                      <div className="model-info">
-                        <span className="model-name">{m.name}</span>
-                        <span className="model-meta">{m.gender}</span>
-                      </div>
-                      <button
-                        className="model-remove"
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); removeModel(m.model_id); }}
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ) : null
-            ) : null}
             <div className="model-registry-header-actions">
+              {modelRegistryCollapsed && models.length ? (
+                <button className="ghost-btn danger" type="button" onClick={resetModels}>
+                  Reset Models
+                </button>
+              ) : null}
               <button
                 suppressHydrationWarning
                 className="ghost-btn icon-toggle-btn"
@@ -5777,10 +5761,22 @@ function buildMasterPanelPrompt(
             </div>
           </div>
           {modelRegistryCollapsed && models.length ? (
-            <div className="row model-reset-collapsed-row">
-              <button className="ghost-btn danger" type="button" onClick={resetModels}>
-                Reset Models
-              </button>
+            <div className="registry-inline-models model-registry-collapsed-models">
+              {models.map((m) => (
+                <div className="model-pill" key={m.model_id}>
+                  <div className="model-info">
+                    <span className="model-name">{m.name}</span>
+                    <span className="model-meta">{m.gender}</span>
+                  </div>
+                  <button
+                    className="model-remove"
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); removeModel(m.model_id); }}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
             </div>
           ) : null}
           {!modelRegistryCollapsed ? (
@@ -8177,13 +8173,12 @@ function buildMasterPanelPrompt(
           text-align: center;
         }
         .registry-inline-models {
-          flex: 1;
           width: 100%;
           min-width: 0;
           display: flex;
           flex-wrap: wrap;
           gap: 6px;
-          justify-content: flex-start;
+          justify-content: center;
         }
         .registry-inline-models .model-pill {
           flex: 1 1 152px;
@@ -8199,12 +8194,17 @@ function buildMasterPanelPrompt(
           align-items: center;
           margin-left: auto;
           gap: 8px;
-          flex-wrap: wrap;
+          flex-wrap: nowrap;
           position: absolute;
           top: 8px;
           right: 8px;
           margin: 0;
           justify-content: flex-end;
+        }
+        .model-registry-collapsed-models {
+          margin-top: 8px;
+          justify-content: center;
+          align-items: center;
         }
         .grid {
           display: grid;
