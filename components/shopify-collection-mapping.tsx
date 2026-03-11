@@ -436,7 +436,7 @@ export default function ShopifyCollectionMapping() {
 
       <style jsx>{`
         .page {
-          width: 100%;
+          width: calc(100vw - 24px);
           max-width: 100%;
           box-sizing: border-box;
           min-width: 0;

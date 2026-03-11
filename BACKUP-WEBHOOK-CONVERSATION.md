@@ -266,3 +266,8 @@ If session resets, instruct the agent:
 - Updated `components/shopify-collection-mapping.tsx` page container sizing to `width: 100%` with `max-width: 100%`, `min-width: 0`, and `box-sizing: border-box`.
 - This prevents right-edge overflow/push when the left workspace menu opens, keeping the right boundary stable while content shrinks from left to right.
 - Verified local `npm run build` succeeds (exit 0), indicating prior `f165537` failure was not a reproducible code/build error.
+
+## 2026-03-11 Collection Mapping Stretch + Right Edge Lock Refinement
+- Refined page width rule to `width: calc(100vw - 24px)` with `max-width: 100%` so closed-menu state remains fully stretched.
+- Kept `max-width: 100%`, `min-width: 0`, and `box-sizing: border-box` to prevent right-edge overflow when the left menu opens.
+- Verified locally in two passes before deploy; closed-menu stretch remains while right-edge overflow guard remains in place.
