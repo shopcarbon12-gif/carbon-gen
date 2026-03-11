@@ -7865,6 +7865,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           justify-content: space-between !important;
           gap: 10px;
           flex-wrap: nowrap !important;
+          position: static;
         }
         .section-header .card-title {
           flex: 1;
@@ -7900,6 +7901,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           word-break: break-word;
           text-align: center;
           justify-items: center;
+          position: relative;
         }
         .connect-card > *,
         .card > * {
@@ -8071,6 +8073,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           align-items: center;
           gap: 10px;
           min-width: 0;
+          position: static;
         }
         .model-registry-header .card-title {
           white-space: nowrap;
@@ -8102,6 +8105,11 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           margin-left: auto;
           gap: 8px;
           flex-wrap: wrap;
+          position: absolute;
+          top: 16px;
+          right: 16px;
+          margin: 0;
+          justify-content: flex-end;
         }
         .grid {
           display: grid;
@@ -8545,6 +8553,18 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           padding: 0;
           font-size: 1.05rem;
           font-weight: 800;
+        }
+        .section-header .icon-toggle-btn,
+        .model-registry-header .icon-toggle-btn {
+          position: absolute;
+          top: 16px;
+          right: 16px;
+          margin: 0;
+          z-index: 2;
+        }
+        .section-header .card-title,
+        .model-registry-header .card-title {
+          padding-right: 56px;
         }
         .preview-grid {
           display: flex;
@@ -9867,11 +9887,13 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             gap: 8px;
             margin-top: 8px;
             padding-bottom: 4px;
+            padding-inline: 10px;
+            scroll-padding-inline: 10px;
           }
           .model-pill {
             width: auto;
-            min-width: 124px;
-            max-width: 146px;
+            min-width: 138px;
+            max-width: 164px;
             flex: 0 0 auto;
             scroll-snap-align: start;
             justify-content: space-between;
@@ -9926,6 +9948,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             scroll-snap-type: x mandatory;
             gap: 10px;
             padding-bottom: 4px;
+            padding-inline: 10px;
+            scroll-padding-inline: 10px;
           }
           .mobile-carousel > .preview-card,
           .mobile-carousel > .catalog-image,
@@ -9934,8 +9958,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             scroll-snap-align: start;
           }
           .model-list.mobile-carousel-row > .model-pill {
-            min-width: 124px;
-            max-width: 146px;
+            min-width: 138px;
+            max-width: 164px;
             width: auto;
           }
           .mobile-carousel > .catalog-image,
