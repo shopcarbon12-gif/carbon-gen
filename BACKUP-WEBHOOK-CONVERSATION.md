@@ -261,3 +261,8 @@ If session resets, instruct the agent:
 - Removed the top sort dropdown from `components/shopify-collection-mapping.tsx`.
 - Added clickable sorting on `Product Name` and `UPC` table headers with toggle behavior (asc/desc) and visual arrow indicator (`↕`, `▲`, `▼`).
 - Kept existing server-backed sorting semantics while switching interaction to header-click sorting only.
+
+## 2026-03-11 Collection Mapping Menu-Open Width Stabilization
+- Updated `components/shopify-collection-mapping.tsx` page container sizing to `width: 100%` with `max-width: 100%`, `min-width: 0`, and `box-sizing: border-box`.
+- This prevents right-edge overflow/push when the left workspace menu opens, keeping the right boundary stable while content shrinks from left to right.
+- Verified local `npm run build` succeeds (exit 0), indicating prior `f165537` failure was not a reproducible code/build error.
