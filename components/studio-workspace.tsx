@@ -10042,13 +10042,13 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         @media (max-width: 640px) {
           .model-registry-header-actions {
             position: absolute;
-            top: 0;
-            right: 0;
+            top: 8px;
+            right: 8px;
             width: auto;
             display: flex;
             flex-direction: row;
             align-items: center;
-            gap: 6px;
+            gap: 8px;
             flex-wrap: nowrap;
             justify-content: flex-end;
           }
