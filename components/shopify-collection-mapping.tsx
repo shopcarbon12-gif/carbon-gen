@@ -1,843 +1,499 @@
 "use client";
 
-import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+
+type TabId = "idea2" | "idea3" | "idea4";
+type SortValue = "title-asc" | "title-desc" | "upc-asc" | "upc-desc";
+type SectionValue = "women" | "men" | "jeans";
+type RuleField = "itemType" | "title" | "sku" | "upc";
 
 type MenuNode = {
-  nodeKey: string;
+  key: string;
   label: string;
-  parentKey: string | null;
+  parent: string | null;
   depth: number;
-  sortOrder: number;
-  enabled: boolean;
-  collectionId: string | null;
-  collectionTitle: string | null;
-  collectionHandle: string | null;
 };
 
 type ProductRow = {
   id: string;
   title: string;
-  handle: string;
-  itemType: string;
-  updatedAt: string;
-  image: string | null;
   sku: string;
   upc: string;
-  checkedNodeKeys: string[];
+  itemType: string;
+  image: string;
 };
 
-type CollectionMappingResponse = {
-  ok?: boolean;
-  error?: string;
-  warning?: string;
-  shop?: string;
-  page?: number;
-  pageSize?: number;
-  total?: number;
-  totalPages?: number;
-  nodes?: MenuNode[];
-  mappedNodes?: MenuNode[];
-  rows?: ProductRow[];
+type Rule = {
+  field: RuleField;
+  value: string;
+  nodeKey: string;
 };
 
-type SortField = "title" | "upc" | "sku" | "itemType" | "updatedAt";
-type SortDir = "asc" | "desc";
-type ProductFilters = {
-  q: string;
+type QueueItem = {
+  productId: string;
   title: string;
-  sku: string;
   upc: string;
-  itemType: string;
+  nodeKey: string;
+  confidence: number;
 };
 
-const DEFAULT_FILTERS: ProductFilters = {
-  q: "",
-  title: "",
-  sku: "",
-  upc: "",
-  itemType: "",
-};
+const collectionsCount = 82;
 
-const PAGE_SIZE_OPTIONS = [20, 30, 50, 75, 100] as const;
+const menuNodes: MenuNode[] = [
+  { key: "women", label: "WOMEN", parent: null, depth: 0 },
+  { key: "women/new-now", label: "NEW & NOW", parent: "women", depth: 1 },
+  { key: "women/new-now/new-arrivals", label: "NEW ARRIVALS", parent: "women/new-now", depth: 2 },
+  { key: "women/new-now/limited-edition", label: "LIMITED EDITION", parent: "women/new-now", depth: 2 },
+  { key: "women/new-now/summer-sets", label: "SUMMER SETS", parent: "women/new-now", depth: 2 },
+  { key: "women/new-now/winter-sets", label: "WINTER SETS", parent: "women/new-now", depth: 2 },
+  { key: "women/clothing", label: "CLOTHING", parent: "women", depth: 1 },
+  { key: "women/clothing/matching-sets", label: "MATCHING SETS", parent: "women/clothing", depth: 2 },
+  { key: "women/clothing/dresses", label: "DRESSES", parent: "women/clothing", depth: 2 },
+  { key: "women/clothing/jeans", label: "JEANS", parent: "women/clothing", depth: 2 },
+  { key: "women/clothing/shorts", label: "SHORTS", parent: "women/clothing", depth: 2 },
+  { key: "women/clothing/skirts", label: "SKIRTS", parent: "women/clothing", depth: 2 },
+  { key: "women/clothing/tops", label: "TOPS", parent: "women/clothing", depth: 2 },
+  { key: "women/clothing/tank-tops", label: "TANK TOPS", parent: "women/clothing", depth: 2 },
+  { key: "women/clothing/t-shirts", label: "T-SHIRTS", parent: "women/clothing", depth: 2 },
+  { key: "women/clothing/jumpsuits-rompers", label: "JUMPSUITS & ROMPERS", parent: "women/clothing", depth: 2 },
+  { key: "women/clothing/jackets-coats", label: "JACKETS & COATS", parent: "women/clothing", depth: 2 },
+  { key: "women/clothing/bodysuits", label: "BODYSUITS", parent: "women/clothing", depth: 2 },
+  { key: "women/clothing/tracksuits", label: "TRACKSUITS", parent: "women/clothing", depth: 2 },
+  { key: "women/clothing/sweatpants", label: "SWEATPANTS", parent: "women/clothing", depth: 2 },
+  { key: "women/clothing/pants-leggings", label: "PANTS & LEGGINGS", parent: "women/clothing", depth: 2 },
+  { key: "women/clothing/sweatshirts-hoodies", label: "SWEATSHIRTS & HOODIES", parent: "women/clothing", depth: 2 },
+  { key: "women/clothing/swimwear", label: "SWIMWEAR", parent: "women/clothing", depth: 2 },
+  { key: "women/clothing/sweaters", label: "SWEATERS", parent: "women/clothing", depth: 2 },
+  { key: "women/accessories-shoes", label: "ACCESSORIES & SHOES", parent: "women", depth: 1 },
+  { key: "women/accessories-shoes/jewelry", label: "JEWELRY", parent: "women/accessories-shoes", depth: 2 },
+  { key: "women/accessories-shoes/sunglasses", label: "SUNGLASSES", parent: "women/accessories-shoes", depth: 2 },
+  { key: "women/accessories-shoes/belts", label: "BELTS", parent: "women/accessories-shoes", depth: 2 },
+  { key: "women/accessories-shoes/hats", label: "HATS", parent: "women/accessories-shoes", depth: 2 },
+  { key: "women/accessories-shoes/shoes", label: "SHOES", parent: "women/accessories-shoes", depth: 2 },
+  { key: "women/accessories-shoes/fragrance-beauty", label: "FRAGRANCE & BEAUTY", parent: "women/accessories-shoes", depth: 2 },
+  { key: "women/accessories-shoes/all-accessories", label: "ALL ACCESSORIES", parent: "women/accessories-shoes", depth: 2 },
+  { key: "men", label: "MEN", parent: null, depth: 0 },
+  { key: "men/new-now", label: "NEW & NOW", parent: "men", depth: 1 },
+  { key: "men/new-now/new-arrivals", label: "NEW ARRIVALS", parent: "men/new-now", depth: 2 },
+  { key: "men/new-now/summer-sets", label: "SUMMER SETS", parent: "men/new-now", depth: 2 },
+  { key: "men/new-now/winter-sets", label: "WINTER SETS", parent: "men/new-now", depth: 2 },
+  { key: "men/clothing", label: "CLOTHING", parent: "men", depth: 1 },
+  { key: "men/clothing/jeans", label: "JEANS", parent: "men/clothing", depth: 2 },
+  { key: "men/clothing/baggy", label: "BAGGY", parent: "men/clothing", depth: 2 },
+  { key: "men/clothing/super-skinny-jeans", label: "SUPER SKINNY JEANS", parent: "men/clothing", depth: 2 },
+  { key: "men/clothing/skinny-jeans", label: "SKINNY JEANS", parent: "men/clothing", depth: 2 },
+  { key: "men/clothing/slim-jeans", label: "SLIM JEANS", parent: "men/clothing", depth: 2 },
+  { key: "men/clothing/shirts", label: "SHIRTS", parent: "men/clothing", depth: 2 },
+  { key: "men/clothing/dress-shirt", label: "DRESS SHIRT", parent: "men/clothing", depth: 2 },
+  { key: "men/clothing/denim-shirts", label: "DENIM SHIRTS", parent: "men/clothing", depth: 2 },
+  { key: "men/clothing/linen-shirts", label: "LINEN SHIRTS", parent: "men/clothing", depth: 2 },
+  { key: "men/clothing/graphic-t-shirts-summer", label: "GRAPHIC T-SHIRTS (SUMMER)", parent: "men/clothing", depth: 2 },
+  { key: "men/clothing/graphic-t-shirts-winter", label: "GRAPHIC T-SHIRTS (WINTER)", parent: "men/clothing", depth: 2 },
+  { key: "men/clothing/t-shirts", label: "T-SHIRTS", parent: "men/clothing", depth: 2 },
+  { key: "men/clothing/tank-tops", label: "TANK TOPS", parent: "men/clothing", depth: 2 },
+  { key: "men/clothing/tops", label: "TOPS", parent: "men/clothing", depth: 2 },
+  { key: "men/clothing/shorts", label: "SHORTS", parent: "men/clothing", depth: 2 },
+  { key: "men/clothing/pants", label: "PANTS", parent: "men/clothing", depth: 2 },
+  { key: "men/clothing/jackets-coats", label: "JACKETS & COATS", parent: "men/clothing", depth: 2 },
+  { key: "men/clothing/tracksuits", label: "TRACKSUITS", parent: "men/clothing", depth: 2 },
+  { key: "men/clothing/sweatpants", label: "SWEATPANTS", parent: "men/clothing", depth: 2 },
+  { key: "men/clothing/sweatshirts-hoodies", label: "SWEATSHIRTS & HOODIES", parent: "men/clothing", depth: 2 },
+  { key: "men/clothing/overalls", label: "OVERALLS", parent: "men/clothing", depth: 2 },
+  { key: "men/clothing/swimwear", label: "SWIMWEAR", parent: "men/clothing", depth: 2 },
+  { key: "men/clothing/sweaters", label: "SWEATERS", parent: "men/clothing", depth: 2 },
+  { key: "men/clothing/polos", label: "POLOS", parent: "men/clothing", depth: 2 },
+  { key: "men/clothing/shirt-shop", label: "SHIRT SHOP", parent: "men/clothing", depth: 2 },
+  { key: "men/accessories-shoes", label: "ACCESSORIES & SHOES", parent: "men", depth: 1 },
+  { key: "men/accessories-shoes/jewelry", label: "JEWELRY", parent: "men/accessories-shoes", depth: 2 },
+  { key: "men/accessories-shoes/sunglasses", label: "SUNGLASSES", parent: "men/accessories-shoes", depth: 2 },
+  { key: "men/accessories-shoes/belts", label: "BELTS", parent: "men/accessories-shoes", depth: 2 },
+  { key: "men/accessories-shoes/hats", label: "HATS", parent: "men/accessories-shoes", depth: 2 },
+  { key: "men/accessories-shoes/shoes", label: "SHOES", parent: "men/accessories-shoes", depth: 2 },
+  { key: "men/accessories-shoes/fragrance-beauty", label: "FRAGRANCE & BEAUTY", parent: "men/accessories-shoes", depth: 2 },
+  { key: "men/accessories-shoes/socks-underwear", label: "SOCKS & UNDERWEAR", parent: "men/accessories-shoes", depth: 2 },
+  { key: "men/accessories-shoes/ties", label: "TIES", parent: "men/accessories-shoes", depth: 2 },
+  { key: "men/accessories-shoes/all-accessories", label: "ALL ACCESSORIES", parent: "men/accessories-shoes", depth: 2 },
+  { key: "jeans", label: "JEANS", parent: null, depth: 0 },
+  { key: "jeans/men", label: "MEN", parent: "jeans", depth: 1 },
+  { key: "jeans/men/skinny-jeans", label: "SKINNY JEANS", parent: "jeans/men", depth: 2 },
+  { key: "jeans/men/super-skinny-jeans", label: "SUPER SKINNY JEANS", parent: "jeans/men", depth: 2 },
+  { key: "jeans/men/baggy", label: "BAGGY", parent: "jeans/men", depth: 2 },
+  { key: "jeans/men/slim-jeans", label: "SLIM JEANS", parent: "jeans/men", depth: 2 },
+  { key: "jeans/women", label: "WOMEN", parent: "jeans", depth: 1 },
+  { key: "jeans/women/skinny-jeans", label: "SKINNY JEANS", parent: "jeans/women", depth: 2 },
+  { key: "jeans/women/relaxed-jeans", label: "RELAXED JEANS", parent: "jeans/women", depth: 2 },
+  { key: "jeans/women/flare-wide-leg-jeans", label: "FLARE & WIDE LEG JEANS", parent: "jeans/women", depth: 2 },
+];
 
-function normalizeText(value: unknown) {
-  return String(value ?? "").trim();
+const wordsA = ["Slim", "Classic", "Street", "Premium", "Core", "Urban", "Soft", "Summer", "Modern", "Essential"];
+const wordsB = ["Tee", "Shirt", "Dress", "Jacket", "Jeans", "Skirt", "Top", "Pants", "Hoodie", "Shorts"];
+const wordsC = ["White", "Black", "Navy", "Olive", "Gray", "Beige", "Rose", "Green", "Stone", "Blue"];
+
+function seeded(seed: number) {
+  const x = Math.sin(seed) * 10000;
+  return x - Math.floor(x);
 }
 
-function prettyDate(value: string | null | undefined) {
-  const text = normalizeText(value);
-  if (!text) return "-";
-  const parsed = Date.parse(text);
-  if (!Number.isFinite(parsed)) return text;
-  return new Date(parsed).toLocaleString();
-}
-
-function buildParentMap(nodes: MenuNode[]) {
-  const out = new Map<string, string | null>();
-  for (const node of nodes) out.set(node.nodeKey, node.parentKey || null);
-  return out;
-}
-
-function collectAncestors(nodeKey: string, parentMap: Map<string, string | null>) {
+function getAncestors(key: string, nodeMap: Map<string, MenuNode>) {
   const out: string[] = [];
-  let current = parentMap.get(nodeKey) || null;
+  let current = nodeMap.get(key)?.parent || null;
   const seen = new Set<string>();
   while (current && !seen.has(current)) {
     out.push(current);
     seen.add(current);
-    current = parentMap.get(current) || null;
+    current = nodeMap.get(current)?.parent || null;
   }
   return out;
 }
 
+function matchesRule(row: ProductRow, rule: Rule) {
+  const text = rule.value.toLowerCase();
+  if (rule.field === "itemType") return row.itemType.toLowerCase().includes(text);
+  if (rule.field === "title") return row.title.toLowerCase().includes(text);
+  if (rule.field === "sku") return row.sku.toLowerCase().startsWith(text);
+  if (rule.field === "upc") return row.upc.toLowerCase().startsWith(text);
+  return false;
+}
+
 export default function ShopifyCollectionMapping() {
-  const [filters, setFilters] = useState<ProductFilters>(DEFAULT_FILTERS);
-  const [appliedFilters, setAppliedFilters] = useState<ProductFilters>(DEFAULT_FILTERS);
-  const [sortField, setSortField] = useState<SortField>("title");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [tab, setTab] = useState<TabId>("idea3");
+  const [globalSearch, setGlobalSearch] = useState("");
+  const [globalSort, setGlobalSort] = useState<SortValue>("title-asc");
+  const [section, setSection] = useState<SectionValue>("women");
+  const [idea3ActiveNode, setIdea3ActiveNode] = useState<string>("women/clothing/matching-sets");
+  const [idea3SelectedRows, setIdea3SelectedRows] = useState<Record<string, boolean>>({});
+  const [rules, setRules] = useState<Rule[]>([]);
+  const [queue, setQueue] = useState<QueueItem[]>([]);
+  const [ruleField, setRuleField] = useState<RuleField>("itemType");
+  const [ruleValue, setRuleValue] = useState("");
+  const [ruleNodeKey, setRuleNodeKey] = useState(menuNodes[0]?.key || "");
 
-  const [shop, setShop] = useState("");
-  const [rows, setRows] = useState<ProductRow[]>([]);
-  const [nodes, setNodes] = useState<MenuNode[]>([]);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<number>(30);
-  const [total, setTotal] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
-
-  const [selectedRows, setSelectedRows] = useState<Record<string, boolean>>({});
-  const [activeNodeKey, setActiveNodeKey] = useState("");
-  const [toggleBusyKey, setToggleBusyKey] = useState("");
-  const [bulkBusy, setBulkBusy] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [status, setStatus] = useState("");
-  const [warning, setWarning] = useState("");
-  const [error, setError] = useState("");
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
-
-  const mappedNodes = useMemo(
-    () => nodes.filter((node) => node.enabled && Boolean(node.collectionId)),
-    [nodes]
-  );
-
-  const parentMap = useMemo(() => buildParentMap(mappedNodes), [mappedNodes]);
-  const activeNode = useMemo(
-    () => mappedNodes.find((node) => node.nodeKey === activeNodeKey) || null,
-    [mappedNodes, activeNodeKey]
-  );
-
-  const loadData = useCallback(
-    async (targetPage = page, targetPageSize = pageSize, targetFilters = appliedFilters) => {
-      setBusy(true);
-      setError("");
-      setWarning("");
-      try {
-        const params = new URLSearchParams();
-        params.set("page", String(targetPage));
-        params.set("pageSize", String(targetPageSize));
-        params.set("sortField", sortField);
-        params.set("sortDir", sortDir);
-        for (const [key, value] of Object.entries(targetFilters)) {
-          const text = normalizeText(value);
-          if (text) params.set(key, text);
-        }
-        const response = await fetch(`/api/shopify/collection-mapping?${params.toString()}`, {
-          cache: "no-store",
-        });
-        const json = (await response.json().catch(() => ({}))) as CollectionMappingResponse;
-        if (!response.ok || json.ok === false) {
-          throw new Error(normalizeText(json.error) || `Failed to load (${response.status})`);
-        }
-
-        const nextNodes = Array.isArray(json.mappedNodes)
-          ? json.mappedNodes.filter((node) => node.enabled && Boolean(node.collectionId))
-          : [];
-        const nextRows = Array.isArray(json.rows) ? json.rows : [];
-        setShop(normalizeText(json.shop));
-        setNodes(nextNodes);
-        setRows(nextRows);
-        setPage(Number(json.page || targetPage));
-        setPageSize(Number(json.pageSize || targetPageSize));
-        setTotal(Number(json.total || 0));
-        setTotalPages(Math.max(1, Number(json.totalPages || 1)));
-        setWarning(normalizeText(json.warning));
-        setSelectedRows({});
-
-        setActiveNodeKey((prev) => {
-          if (prev && nextNodes.some((node) => node.nodeKey === prev)) return prev;
-          return nextNodes[0]?.nodeKey || "";
-        });
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        setError(message || "Failed to load collection mapping.");
-      } finally {
-        setBusy(false);
-      }
-    },
-    [appliedFilters, page, pageSize, sortField, sortDir]
-  );
-
-  useEffect(() => {
-    void loadData(1, pageSize, appliedFilters);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sortField, sortDir]);
-
-  useEffect(() => {
-    void loadData(1, pageSize, appliedFilters);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  const products = useMemo<ProductRow[]>(() => {
+    const out: ProductRow[] = [];
+    for (let i = 1; i <= 120; i += 1) {
+      out.push({
+        id: `p-${i}`,
+        title: `${wordsA[Math.floor(seeded(i * 1.8) * wordsA.length)]} ${wordsB[Math.floor(seeded(i * 2.2) * wordsB.length)]} ${wordsC[Math.floor(seeded(i * 3.1) * wordsC.length)]}`,
+        sku: `SKU-${String(i).padStart(4, "0")}`,
+        upc: String(800000000000 + i),
+        itemType: wordsB[Math.floor(seeded(i * 2.2) * wordsB.length)],
+        image: `https://picsum.photos/seed/idea3-${i}/80/80`,
+      });
+    }
+    return out;
   }, []);
 
-  const selectedProductIds = useMemo(
-    () => Object.keys(selectedRows).filter((id) => selectedRows[id]),
-    [selectedRows]
+  const [assignedByProduct, setAssignedByProduct] = useState<Record<string, Set<string>>>(() => {
+    const out: Record<string, Set<string>> = {};
+    for (const row of products) out[row.id] = new Set<string>();
+    return out;
+  });
+
+  const nodeMap = useMemo(() => new Map(menuNodes.map((node) => [node.key, node])), []);
+
+  const filteredProducts = useMemo(() => {
+    const q = globalSearch.trim().toLowerCase();
+    const list = products.filter((row) =>
+      `${row.title} ${row.sku} ${row.upc} ${row.itemType}`.toLowerCase().includes(q)
+    );
+    list.sort((a, b) => {
+      if (globalSort === "title-asc") return a.title.localeCompare(b.title);
+      if (globalSort === "title-desc") return b.title.localeCompare(a.title);
+      if (globalSort === "upc-asc") return a.upc.localeCompare(b.upc, undefined, { numeric: true });
+      return b.upc.localeCompare(a.upc, undefined, { numeric: true });
+    });
+    return list;
+  }, [globalSearch, globalSort, products]);
+
+  const sectionNodes = useMemo(
+    () => menuNodes.filter((node) => node.key === section || node.key.startsWith(`${section}/`)),
+    [section]
   );
 
-  const allRowsSelected = rows.length > 0 && rows.every((row) => Boolean(selectedRows[row.id]));
-
-  async function onToggleNode(row: ProductRow, nodeKey: string, checked: boolean) {
-    const key = `${row.id}::${nodeKey}`;
-    setToggleBusyKey(key);
-    setError("");
-    setStatus("");
-    try {
-      const response = await fetch("/api/shopify/collection-mapping", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "toggle-node",
-          shop,
-          productId: row.id,
-          nodeKey,
-          checked,
-        }),
-      });
-      const json = (await response.json().catch(() => ({}))) as {
-        ok?: boolean;
-        error?: string;
-        warning?: string;
-        product?: { id: string; checkedNodeKeys: string[] };
-      };
-      if (!response.ok || json.ok === false || !json.product) {
-        throw new Error(normalizeText(json.error) || "Failed to update mapping.");
+  function toggleAssign(productId: string, nodeKey: string, checked: boolean) {
+    setAssignedByProduct((prev) => {
+      const next: Record<string, Set<string>> = {};
+      for (const [id, selected] of Object.entries(prev)) next[id] = new Set(selected);
+      if (!next[productId]) next[productId] = new Set<string>();
+      if (checked) {
+        next[productId].add(nodeKey);
+        for (const parent of getAncestors(nodeKey, nodeMap)) next[productId].add(parent);
+      } else {
+        next[productId].delete(nodeKey);
       }
-      setRows((prev) =>
-        prev.map((current) =>
-          current.id === json.product!.id
-            ? {
-                ...current,
-                checkedNodeKeys: Array.isArray(json.product!.checkedNodeKeys)
-                  ? json.product!.checkedNodeKeys
-                  : [],
-              }
-            : current
-        )
-      );
-      if (normalizeText(json.warning)) {
-        setWarning(normalizeText(json.warning));
-      }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      setError(message || "Failed to update checkbox state.");
-    } finally {
-      setToggleBusyKey("");
-    }
+      return next;
+    });
   }
 
-  async function bulkAssign(checked: boolean) {
-    if (!activeNode || selectedProductIds.length < 1 || bulkBusy) return;
-    setBulkBusy(true);
-    setError("");
-    setStatus(checked ? "Assigning selected products..." : "Removing selected products...");
-    try {
-      const updates = selectedProductIds.map(async (productId) => {
-        const row = rows.find((r) => r.id === productId);
-        if (!row) return null;
+  function bulkIdea3(checked: boolean) {
+    const selectedIds = Object.keys(idea3SelectedRows).filter((id) => idea3SelectedRows[id]);
+    for (const productId of selectedIds) toggleAssign(productId, idea3ActiveNode, checked);
+  }
 
-        if (checked) {
-          const targets = [activeNode.nodeKey, ...collectAncestors(activeNode.nodeKey, parentMap)];
-          for (const nodeKey of targets) {
-            if (row.checkedNodeKeys.includes(nodeKey)) continue;
-            await onToggleNode(
-              { ...row, checkedNodeKeys: row.checkedNodeKeys },
-              nodeKey,
-              true
-            );
-          }
-          return null;
-        }
+  function addRule() {
+    const value = ruleValue.trim();
+    if (!value) return;
+    setRules((prev) => [...prev, { field: ruleField, value, nodeKey: ruleNodeKey }]);
+    setRuleValue("");
+  }
 
-        if (!row.checkedNodeKeys.includes(activeNode.nodeKey)) return null;
-        await onToggleNode({ ...row, checkedNodeKeys: row.checkedNodeKeys }, activeNode.nodeKey, false);
-        return null;
-      });
-      await Promise.all(updates);
-      setStatus(
-        checked
-          ? `Assigned ${selectedProductIds.length} product(s) to ${activeNode.label}.`
-          : `Removed ${selectedProductIds.length} product(s) from ${activeNode.label}.`
-      );
-    } finally {
-      setBulkBusy(false);
+  function generateQueue() {
+    const out: QueueItem[] = [];
+    for (const row of filteredProducts) {
+      for (const rule of rules) {
+        if (!matchesRule(row, rule)) continue;
+        out.push({
+          productId: row.id,
+          title: row.title,
+          upc: row.upc,
+          nodeKey: rule.nodeKey,
+          confidence: 70 + Math.floor((seeded(Number(row.upc.slice(-4))) || 0) * 29),
+        });
+        break;
+      }
     }
+    setQueue(out);
+  }
+
+  function approveQueue(index: number) {
+    const item = queue[index];
+    if (!item) return;
+    toggleAssign(item.productId, item.nodeKey, true);
+    setQueue((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function rejectQueue(index: number) {
+    setQueue((prev) => prev.filter((_, i) => i !== index));
   }
 
   return (
     <main className="page">
-      <section className="card top-nav">
-        <Link href="/studio/shopify-mapping-inventory/workset" className="quick-chip">
-          Workset
-        </Link>
-        <Link href="/studio/shopify-mapping-inventory/sales" className="quick-chip">
-          Sales
-        </Link>
-        <Link href="/studio/shopify-mapping-inventory/inventory" className="quick-chip">
-          Inventory
-        </Link>
-        <Link href="/studio/shopify-mapping-inventory/carts-inventory" className="quick-chip">
-          Carts Inventory
-        </Link>
-        <Link href="/studio/shopify-collection-mapping" className="quick-chip active">
-          Collection Mapping
-        </Link>
+      <section className="card hero">
+        <h1>Shopify Collection Mapping — 3 Ideas In One</h1>
+        <p className="muted">Single file preview: Idea #2 (Sectioned Matrix), #3 (Dual-Pane), #4 (Rules + Review Queue).</p>
+        <div className="toolbar">
+          <input
+            value={globalSearch}
+            onChange={(event) => setGlobalSearch(event.target.value)}
+            placeholder="Search products (title / sku / upc / type)"
+          />
+          <select value={globalSort} onChange={(event) => setGlobalSort(event.target.value as SortValue)}>
+            <option value="title-asc">Title A-Z</option>
+            <option value="title-desc">Title Z-A</option>
+            <option value="upc-asc">UPC A-Z</option>
+            <option value="upc-desc">UPC Z-A</option>
+          </select>
+          <span className="pill">Auto-parent logic ON</span>
+          <span className="pill">Live Shopify sync simulated</span>
+        </div>
+        <div className="kpi">
+          <div className="kpi-item"><span>Collections</span><strong>{collectionsCount}</strong></div>
+          <div className="kpi-item"><span>Menu Nodes</span><strong>{menuNodes.length}</strong></div>
+          <div className="kpi-item"><span>Products (sample)</span><strong>{products.length}</strong></div>
+        </div>
       </section>
 
       <section className="card">
-        <div className="header-row">
-          <div>
-            <h1>Shopify Collection Mapping</h1>
-            <p className="muted">Dual-pane mapper focused on fast and accurate category assignment.</p>
-            <p className="muted">
-              Shop: <strong>{shop || "(auto)"}</strong> · Products: <strong>{total}</strong>
-            </p>
-          </div>
-          <div className="header-actions">
-            <button
-              className="btn-base btn-outline"
-              onClick={() => void loadData(page, pageSize, appliedFilters)}
-              disabled={busy || bulkBusy}
-            >
-              Refresh
-            </button>
-          </div>
+        <div className="tabs">
+          <button className={tab === "idea2" ? "tab active" : "tab"} onClick={() => setTab("idea2")}>Idea #2 — Sectioned Matrix</button>
+          <button className={tab === "idea3" ? "tab active" : "tab"} onClick={() => setTab("idea3")}>Idea #3 — Dual-Pane Mapper</button>
+          <button className={tab === "idea4" ? "tab active" : "tab"} onClick={() => setTab("idea4")}>Idea #4 — Rules + Review Queue</button>
         </div>
-
-        {status ? <p className="status-msg">{status}</p> : null}
-        {warning ? <p className="warn-msg">{warning}</p> : null}
-        {error ? <p className="error-msg">{error}</p> : null}
       </section>
 
-      <section className="grid-two">
-        <aside className="card side-pane">
-          <h2>Menu Categories</h2>
-          <p className="muted">Choose a single node, then assign products in the right pane.</p>
-          <div className="tree-wrap">
-            {mappedNodes.length < 1 ? (
-              <p className="muted">No mapped categories available.</p>
-            ) : (
-              mappedNodes.map((node) => (
-                <button
-                  key={node.nodeKey}
-                  type="button"
-                  className={`node-item ${activeNodeKey === node.nodeKey ? "active" : ""}`}
-                  style={{ paddingLeft: `${12 + node.depth * 18}px` }}
-                  onClick={() => setActiveNodeKey(node.nodeKey)}
-                >
-                  <span>{node.label}</span>
-                  <span className="node-meta">{node.collectionHandle || "-"}</span>
-                </button>
-              ))
-            )}
+      {tab === "idea2" ? (
+        <section className="card">
+          <h2>Idea #2: Sectioned Matrix (Women / Men / Jeans tabs)</h2>
+          <div className="toolbar">
+            <button className={section === "women" ? "tab active" : "tab"} onClick={() => setSection("women")}>Women</button>
+            <button className={section === "men" ? "tab active" : "tab"} onClick={() => setSection("men")}>Men</button>
+            <button className={section === "jeans" ? "tab active" : "tab"} onClick={() => setSection("jeans")}>Jeans</button>
+            <span className="pill">Columns: {sectionNodes.length}</span>
           </div>
-        </aside>
-
-        <section className="card main-pane">
-          <div className="section-head">
-            <h2>Products</h2>
-            <div className="node-pill">
-              Active Node:{" "}
-              <strong>{activeNode ? `${activeNode.label} (${activeNode.collectionHandle})` : "-"}</strong>
-            </div>
-          </div>
-
-          <div className="filters">
-            <input
-              value={filters.q}
-              placeholder="Search title / sku / upc / type"
-              onChange={(e) => setFilters((prev) => ({ ...prev, q: e.target.value }))}
-            />
-            <input
-              value={filters.title}
-              placeholder="Title"
-              onChange={(e) => setFilters((prev) => ({ ...prev, title: e.target.value }))}
-            />
-            <input
-              value={filters.sku}
-              placeholder="SKU"
-              onChange={(e) => setFilters((prev) => ({ ...prev, sku: e.target.value }))}
-            />
-            <input
-              value={filters.upc}
-              placeholder="UPC"
-              onChange={(e) => setFilters((prev) => ({ ...prev, upc: e.target.value }))}
-            />
-            <input
-              value={filters.itemType}
-              placeholder="Item type"
-              onChange={(e) => setFilters((prev) => ({ ...prev, itemType: e.target.value }))}
-            />
-          </div>
-
-          <div className="actions-row">
-            <select value={sortField} onChange={(e) => setSortField(e.target.value as SortField)}>
-              <option value="title">Title</option>
-              <option value="upc">UPC</option>
-              <option value="sku">SKU</option>
-              <option value="itemType">Item Type</option>
-              <option value="updatedAt">Updated</option>
-            </select>
-            <select value={sortDir} onChange={(e) => setSortDir(e.target.value as SortDir)}>
-              <option value="asc">A-Z / Old-New</option>
-              <option value="desc">Z-A / New-Old</option>
-            </select>
-            <select
-              value={String(pageSize)}
-              onChange={(e) => {
-                const nextSize = Number(e.target.value) || 30;
-                setPageSize(nextSize);
-                void loadData(1, nextSize, appliedFilters);
-              }}
-            >
-              {PAGE_SIZE_OPTIONS.map((size) => (
-                <option key={size} value={size}>
-                  {size} / page
-                </option>
-              ))}
-            </select>
-            <button
-              className="btn-base"
-              onClick={() => {
-                setAppliedFilters(filters);
-                void loadData(1, pageSize, filters);
-              }}
-              disabled={busy || bulkBusy}
-            >
-              Search
-            </button>
-            <button
-              className="btn-base btn-outline"
-              onClick={() => {
-                setFilters(DEFAULT_FILTERS);
-                setAppliedFilters(DEFAULT_FILTERS);
-                void loadData(1, pageSize, DEFAULT_FILTERS);
-              }}
-              disabled={busy || bulkBusy}
-            >
-              Clear
-            </button>
-            <button
-              className="btn-base"
-              disabled={busy || bulkBusy || !activeNode || selectedProductIds.length < 1}
-              onClick={() => void bulkAssign(true)}
-            >
-              Assign Selected
-            </button>
-            <button
-              className="btn-base btn-outline"
-              disabled={busy || bulkBusy || !activeNode || selectedProductIds.length < 1}
-              onClick={() => void bulkAssign(false)}
-            >
-              Unassign Selected
-            </button>
-          </div>
-
           <div className="table-wrap">
-            <table className="products-table">
+            <table>
               <thead>
                 <tr>
-                  <th className="center">
-                    <input
-                      type="checkbox"
-                      checked={allRowsSelected}
-                      onChange={(e) => {
-                        const checked = e.target.checked;
-                        const next: Record<string, boolean> = {};
-                        for (const row of rows) next[row.id] = checked;
-                        setSelectedRows(next);
-                      }}
-                    />
-                  </th>
-                  <th>Picture</th>
-                  <th>Title</th>
-                  <th>UPC</th>
-                  <th>SKU</th>
-                  <th>Item Type</th>
-                  <th>Updated</th>
-                  <th className="center">Assigned?</th>
+                  <th className="sticky-a">IMG</th>
+                  <th className="sticky-b">TITLE</th>
+                  <th className="sticky-c">UPC</th>
+                  {sectionNodes.map((node) => <th key={node.key}>{node.label}</th>)}
                 </tr>
               </thead>
               <tbody>
-                {rows.length < 1 ? (
-                  <tr>
-                    <td colSpan={8} className="muted">
-                      No products found.
-                    </td>
+                {filteredProducts.slice(0, 45).map((row) => (
+                  <tr key={`i2-${row.id}`}>
+                    <td className="sticky-a center"><img src={row.image} alt="" className="thumb" /></td>
+                    <td className="sticky-b"><div>{row.title}</div><small>SKU {row.sku} · {row.itemType}</small></td>
+                    <td className="sticky-c">{row.upc}</td>
+                    {sectionNodes.map((node) => (
+                      <td key={`${row.id}-${node.key}`} className="center">
+                        <input type="checkbox" checked={assignedByProduct[row.id]?.has(node.key) || false} onChange={(event) => toggleAssign(row.id, node.key, event.target.checked)} />
+                      </td>
+                    ))}
                   </tr>
-                ) : (
-                  rows.map((row) => {
-                    const checked = new Set(row.checkedNodeKeys || []);
-                    const assignedToActive = Boolean(activeNode && checked.has(activeNode.nodeKey));
-                    const cellBusy = toggleBusyKey === `${row.id}::${activeNode?.nodeKey || ""}`;
-                    return (
-                      <tr key={row.id}>
-                        <td className="center">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(selectedRows[row.id])}
-                            onChange={(e) =>
-                              setSelectedRows((prev) => ({ ...prev, [row.id]: e.target.checked }))
-                            }
-                          />
-                        </td>
-                        <td className="center">
-                          {row.image ? (
-                            <button
-                              className="thumb-btn"
-                              onClick={() => setPreviewImage(row.image)}
-                              title="Open image preview"
-                            >
-                              <img src={row.image} alt={row.title} className="thumb" />
-                            </button>
-                          ) : (
-                            <span className="muted">-</span>
-                          )}
-                        </td>
-                        <td>
-                          <div className="title-cell">{row.title || row.handle || row.id}</div>
-                        </td>
-                        <td>{row.upc || "-"}</td>
-                        <td>{row.sku || "-"}</td>
-                        <td>{row.itemType || "-"}</td>
-                        <td>{prettyDate(row.updatedAt)}</td>
-                        <td className="center">
-                          <input
-                            type="checkbox"
-                            checked={assignedToActive}
-                            disabled={!activeNode || busy || bulkBusy || cellBusy}
-                            onChange={(e) => {
-                              if (!activeNode) return;
-                              void onToggleNode(row, activeNode.nodeKey, e.target.checked);
-                            }}
-                          />
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
+                ))}
               </tbody>
             </table>
           </div>
+        </section>
+      ) : null}
 
-          <div className="pager actions-row">
-            <button
-              className="btn-base btn-outline"
-              disabled={busy || bulkBusy || page <= 1}
-              onClick={() => void loadData(page - 1, pageSize, appliedFilters)}
-            >
-              Prev
-            </button>
-            <span className="muted">
-              Page {page} / {totalPages} · Selected {selectedProductIds.length}
-            </span>
-            <button
-              className="btn-base btn-outline"
-              disabled={busy || bulkBusy || page >= totalPages}
-              onClick={() => void loadData(page + 1, pageSize, appliedFilters)}
-            >
-              Next
-            </button>
+      {tab === "idea3" ? (
+        <section className="card">
+          <h2>Idea #3: Dual-Pane Mapper (Tree left, one active node column right)</h2>
+          <div className="split">
+            <aside className="panel">
+              <h3>Menu Tree</h3>
+              <p className="muted">Pick one node. Right side shows a single assignment column.</p>
+              <div className="tree">
+                {menuNodes.map((node) => (
+                  <button key={node.key} className={idea3ActiveNode === node.key ? "node active" : "node"} style={{ paddingLeft: `${10 + node.depth * 16}px` }} onClick={() => setIdea3ActiveNode(node.key)}>
+                    {node.label}
+                    <small>{node.key}</small>
+                  </button>
+                ))}
+              </div>
+            </aside>
+            <section className="panel">
+              <div className="toolbar">
+                <span className="pill">Active Node: {idea3ActiveNode}</span>
+                <button className="action" onClick={() => bulkIdea3(true)}>Assign Checked Products</button>
+                <button className="action" onClick={() => bulkIdea3(false)}>Unassign Checked Products</button>
+              </div>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>PICK</th>
+                      <th>IMG</th>
+                      <th>TITLE</th>
+                      <th>UPC</th>
+                      <th>ASSIGNED?</th>
+                      <th>CURRENT NODES</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredProducts.slice(0, 55).map((row) => (
+                      <tr key={`i3-${row.id}`}>
+                        <td className="center">
+                          <input type="checkbox" checked={Boolean(idea3SelectedRows[row.id])} onChange={(event) => setIdea3SelectedRows((prev) => ({ ...prev, [row.id]: event.target.checked }))} />
+                        </td>
+                        <td className="center"><img src={row.image} alt="" className="thumb" /></td>
+                        <td><div>{row.title}</div><small>SKU {row.sku}</small></td>
+                        <td>{row.upc}</td>
+                        <td className="center">
+                          <input type="checkbox" checked={assignedByProduct[row.id]?.has(idea3ActiveNode) || false} onChange={(event) => toggleAssign(row.id, idea3ActiveNode, event.target.checked)} />
+                        </td>
+                        <td><small>{Array.from(assignedByProduct[row.id] || []).slice(0, 6).join(", ") || "-"}</small></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
           </div>
         </section>
-      </section>
+      ) : null}
 
-      {previewImage ? (
-        <div className="preview-overlay" onClick={() => setPreviewImage(null)}>
-          <div className="preview-content" onClick={(e) => e.stopPropagation()}>
-            <img src={previewImage} alt="Preview" className="preview-img" />
-            <button className="preview-close" onClick={() => setPreviewImage(null)}>
-              x
-            </button>
+      {tab === "idea4" ? (
+        <section className="card">
+          <h2>Idea #4: Rules-First Smart Mapping + Review Queue</h2>
+          <div className="rule-row">
+            <select value={ruleField} onChange={(event) => setRuleField(event.target.value as RuleField)}>
+              <option value="itemType">itemType contains</option>
+              <option value="title">title contains</option>
+              <option value="sku">sku startsWith</option>
+              <option value="upc">upc startsWith</option>
+            </select>
+            <input value={ruleValue} onChange={(event) => setRuleValue(event.target.value)} placeholder="Rule value" />
+            <select value={ruleNodeKey} onChange={(event) => setRuleNodeKey(event.target.value)}>
+              {menuNodes.map((node) => (
+                <option key={`rule-${node.key}`} value={node.key}>{`${" ".repeat(node.depth * 2)}${node.label} (${node.key})`}</option>
+              ))}
+            </select>
+            <button className="action" onClick={addRule}>Add Rule</button>
           </div>
-        </div>
+          <div className="rule-list">
+            {rules.length < 1 ? (
+              <p className="muted">No rules yet.</p>
+            ) : (
+              rules.map((rule, index) => (
+                <div key={`rule-${index}`} className="rule-item">
+                  <span>Rule {index + 1}</span>
+                  <span>{`${rule.field} -> "${rule.value}"`}</span>
+                  <span>{rule.nodeKey}</span>
+                  <button className="danger" onClick={() => setRules((prev) => prev.filter((_, i) => i !== index))}>Remove</button>
+                </div>
+              ))
+            )}
+          </div>
+          <div className="toolbar">
+            <button className="action" onClick={generateQueue}>Generate Suggestions Queue</button>
+            <span className="pill">Queue: {queue.length}</span>
+          </div>
+          <div className="queue">
+            {queue.length < 1 ? (
+              <p className="muted">No suggestions. Add rules and generate queue.</p>
+            ) : (
+              queue.map((item, index) => (
+                <div key={`${item.productId}-${index}`} className="queue-item">
+                  <img className="thumb" src={`https://picsum.photos/seed/${item.productId}/80/80`} alt="" />
+                  <div><div>{item.title}</div><small>{`UPC ${item.upc} -> ${item.nodeKey} (${item.confidence}%)`}</small></div>
+                  <button className="action" onClick={() => approveQueue(index)}>Approve</button>
+                  <button className="danger" onClick={() => rejectQueue(index)}>Reject</button>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
       ) : null}
 
       <style jsx>{`
-        .page {
-          max-width: 100%;
-          margin: 0 auto;
-          padding: 118px 12px 24px;
-          display: grid;
-          gap: 14px;
-        }
-        .card {
-          background: rgba(15, 23, 42, 0.86);
-          border: 1px solid rgba(255, 255, 255, 0.14);
-          border-radius: 14px;
-          padding: 14px;
-          color: #f8fafc;
-        }
-        h1,
-        h2,
-        p {
-          margin: 0;
-        }
-        .muted {
-          color: rgba(226, 232, 240, 0.72);
-          font-size: 0.84rem;
-        }
-        .top-nav {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 8px;
-        }
-        .quick-chip {
-          text-decoration: none;
-          border-radius: 10px;
-          border: 1px solid rgba(255, 255, 255, 0.28);
-          background: rgba(255, 255, 255, 0.08);
-          color: #f8fafc;
-          padding: 8px 12px;
-          font-size: 0.82rem;
-          font-weight: 700;
-        }
-        .quick-chip.active {
-          border-color: rgba(34, 197, 94, 0.66);
-          background: rgba(34, 197, 94, 0.18);
-          color: #bbf7d0;
-        }
-        .header-row,
-        .section-head,
-        .actions-row,
-        .pager {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 10px;
-          flex-wrap: wrap;
-        }
-        .header-actions {
-          display: inline-flex;
-          gap: 8px;
-        }
-        .status-msg,
-        .warn-msg,
-        .error-msg {
-          margin-top: 10px;
-          border-radius: 10px;
-          padding: 8px 10px;
-          font-size: 0.9rem;
-          font-weight: 600;
-        }
-        .status-msg {
-          border: 1px solid rgba(16, 185, 129, 0.35);
-          background: rgba(16, 185, 129, 0.14);
-          color: #a7f3d0;
-        }
-        .warn-msg {
-          border: 1px solid rgba(245, 158, 11, 0.35);
-          background: rgba(245, 158, 11, 0.14);
-          color: #fde68a;
-        }
-        .error-msg {
-          border: 1px solid rgba(248, 113, 113, 0.35);
-          background: rgba(220, 38, 38, 0.14);
-          color: #fecaca;
-        }
-        .grid-two {
-          display: grid;
-          grid-template-columns: 360px 1fr;
-          gap: 12px;
-        }
-        .side-pane,
-        .main-pane {
-          min-height: 62vh;
-        }
-        .tree-wrap {
-          margin-top: 10px;
-          border: 1px solid rgba(255, 255, 255, 0.12);
-          border-radius: 10px;
-          overflow: auto;
-          max-height: 56vh;
-          background: rgba(15, 23, 42, 0.72);
-          padding: 6px;
-          display: grid;
-          gap: 6px;
-        }
-        .node-item {
-          min-height: 34px;
-          border-radius: 8px;
-          border: 1px solid transparent;
-          background: transparent;
-          color: #e2e8f0;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 8px;
-          text-align: left;
-          cursor: pointer;
-        }
-        .node-item:hover {
-          background: rgba(255, 255, 255, 0.06);
-        }
-        .node-item.active {
-          border-color: rgba(56, 189, 248, 0.55);
-          background: rgba(56, 189, 248, 0.18);
-          color: #e0f2fe;
-        }
-        .node-meta {
-          font-size: 0.72rem;
-          color: rgba(226, 232, 240, 0.7);
-        }
-        .node-pill {
-          display: inline-flex;
-          align-items: center;
-          min-height: 30px;
-          border-radius: 999px;
-          border: 1px solid rgba(255, 255, 255, 0.2);
-          padding: 0 10px;
-          background: rgba(255, 255, 255, 0.06);
-          font-size: 0.8rem;
-        }
-        .filters {
-          margin-top: 10px;
-          display: grid;
-          grid-template-columns: repeat(5, minmax(140px, 1fr));
-          gap: 8px;
-        }
-        input,
-        select {
-          min-height: 38px;
-          border-radius: 10px;
-          border: 1px solid rgba(255, 255, 255, 0.24);
-          background: rgba(15, 23, 42, 0.74);
-          color: #f8fafc;
-          padding: 0 10px;
-        }
-        .btn-base {
-          min-height: 38px;
-          border: 1px solid rgba(34, 197, 94, 0.6);
-          background: linear-gradient(
-            180deg,
-            rgba(34, 197, 94, 0.32) 0%,
-            rgba(22, 163, 74, 0.28) 100%
-          );
-          color: #ecfdf5;
-          border-radius: 10px;
-          padding: 0 14px;
-          font-weight: 700;
-          cursor: pointer;
-        }
-        .btn-base:disabled {
-          opacity: 0.6;
-          cursor: wait;
-        }
-        .btn-outline {
-          background: rgba(255, 255, 255, 0.08);
-          border-color: rgba(255, 255, 255, 0.28);
-          color: #e2e8f0;
-        }
-        .table-wrap {
-          margin-top: 10px;
-          overflow: auto;
-          border-radius: 10px;
-          border: 1px solid rgba(255, 255, 255, 0.12);
-        }
-        table {
-          width: 100%;
-          border-collapse: collapse;
-          min-width: 980px;
-        }
-        th,
-        td {
-          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-          padding: 8px 10px;
-          white-space: nowrap;
-          text-align: left;
-        }
-        th {
-          font-size: 0.76rem;
-          text-transform: uppercase;
-          letter-spacing: 0.03em;
-          color: rgba(226, 232, 240, 0.86);
-        }
-        .center {
-          text-align: center;
-        }
-        .thumb-btn {
-          border: 0;
-          background: transparent;
-          cursor: pointer;
-          padding: 0;
-          line-height: 0;
-        }
-        .thumb {
-          width: 44px;
-          height: 44px;
-          object-fit: cover;
-          border-radius: 6px;
-          border: 1px solid rgba(255, 255, 255, 0.2);
-          background: rgba(255, 255, 255, 0.06);
-        }
-        .title-cell {
-          max-width: 300px;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-        .preview-overlay {
-          position: fixed;
-          inset: 0;
-          z-index: 9999;
-          background: rgba(0, 0, 0, 0.72);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 14px;
-        }
-        .preview-content {
-          position: relative;
-          max-width: 92vw;
-          max-height: 92vh;
-        }
-        .preview-img {
-          display: block;
-          max-width: 92vw;
-          max-height: 88vh;
-          border-radius: 10px;
-          object-fit: contain;
-        }
-        .preview-close {
-          position: absolute;
-          top: -14px;
-          right: -14px;
-          width: 34px;
-          height: 34px;
-          border-radius: 999px;
-          border: 1px solid rgba(255, 255, 255, 0.6);
-          background: rgba(0, 0, 0, 0.66);
-          color: #fff;
-          font-weight: 700;
-          cursor: pointer;
-        }
+        .page { max-width: 1700px; margin: 0 auto; padding: 118px 10px 26px; display: grid; gap: 12px; color: #e5e7eb; }
+        .card { background: #10172a; border: 1px solid #263146; border-radius: 12px; padding: 12px; }
+        h1 { font-size: 2rem; margin: 0 0 8px; letter-spacing: .01em; }
+        h2 { font-size: 1rem; margin: 0; }
+        h3 { margin: 0 0 4px; font-size: .85rem; }
+        p { margin: 0; }
+        .muted, small { color: #91a0ba; font-size: .75rem; }
+        .hero { padding: 14px; }
+        .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+        input, select { min-height: 34px; border-radius: 8px; border: 1px solid #2d3a51; background: #091024; color: #dbe4f5; padding: 0 10px; font-size: .78rem; }
+        input { min-width: 260px; flex: 1 1 260px; }
+        .pill { display: inline-flex; align-items: center; border: 1px solid #1f6e4b; background: #12422f; color: #9cf7d2; border-radius: 999px; min-height: 27px; padding: 0 10px; font-size: .68rem; font-weight: 700; }
+        .kpi { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+        .kpi-item { min-width: 130px; border: 1px solid #2c3952; border-radius: 8px; background: #0a1328; padding: 8px 10px; display: grid; gap: 4px; }
+        .kpi-item span { color: #91a0ba; font-size: .68rem; }
+        .kpi-item strong { font-size: .95rem; }
+        .tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+        .tab { min-height: 34px; border-radius: 8px; border: 1px solid #35435e; background: #0a1326; color: #c8d5eb; font-size: .74rem; padding: 0 10px; cursor: pointer; }
+        .tab.active { border-color: #3cb5ee; background: #0b2538; color: #e6f7ff; }
+        .table-wrap { overflow: auto; border: 1px solid #2a3650; border-radius: 10px; margin-top: 10px; max-height: 64vh; background: #0a1326; }
+        table { width: 100%; min-width: 1000px; border-collapse: collapse; }
+        th, td { border-bottom: 1px solid #1f2a40; padding: 7px 8px; white-space: nowrap; font-size: .75rem; text-align: left; }
+        th { position: sticky; top: 0; z-index: 2; background: #0b1429; color: #c5d4eb; font-size: .66rem; text-transform: uppercase; letter-spacing: .03em; }
+        .sticky-a { position: sticky; left: 0; z-index: 3; background: #0b1429; }
+        .sticky-b { position: sticky; left: 52px; z-index: 3; background: #0b1429; }
+        .sticky-c { position: sticky; left: 300px; z-index: 3; background: #0b1429; }
+        .center { text-align: center; }
+        .thumb { width: 30px; height: 30px; object-fit: cover; border-radius: 6px; border: 1px solid #3d4962; }
+        .split { display: grid; grid-template-columns: 330px 1fr; gap: 10px; margin-top: 10px; }
+        .panel { border: 1px solid #2a3550; border-radius: 10px; background: #0a1327; padding: 10px; }
+        .tree { margin-top: 8px; max-height: 56vh; overflow: auto; border: 1px solid #2c3853; border-radius: 8px; padding: 6px; display: grid; gap: 4px; }
+        .node { min-height: 30px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: #dde7fa; cursor: pointer; text-align: left; display: flex; align-items: center; justify-content: space-between; font-size: .73rem; }
+        .node.active { border-color: #3caee7; background: #103349; color: #e6f8ff; }
+        .action, .danger { min-height: 32px; border-radius: 8px; border: 1px solid #1f7e5a; background: linear-gradient(180deg, #1a6f52 0%, #14553f 100%); color: #defeed; font-size: .72rem; padding: 0 10px; font-weight: 700; cursor: pointer; }
+        .danger { border-color: #88313a; background: linear-gradient(180deg, #5b1c27 0%, #45151f 100%); color: #ffd9dd; }
+        .rule-row { margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 8px; }
+        .rule-list { margin-top: 8px; display: grid; gap: 6px; }
+        .rule-item, .queue-item { display: grid; grid-template-columns: 80px 1fr 1fr auto; gap: 8px; align-items: center; border: 1px solid #2d3a53; border-radius: 8px; background: #0a1328; padding: 8px; font-size: .73rem; }
+        .queue { margin-top: 10px; display: grid; gap: 8px; }
+        .queue-item { grid-template-columns: 34px 1fr auto auto; }
         @media (max-width: 1200px) {
-          .grid-two {
-            grid-template-columns: 1fr;
-          }
-          .side-pane,
-          .main-pane {
-            min-height: auto;
-          }
-          .filters {
-            grid-template-columns: repeat(2, minmax(140px, 1fr));
-          }
+          h1 { font-size: 1.45rem; }
+          .split { grid-template-columns: 1fr; }
+          .rule-row { grid-template-columns: 1fr; }
         }
       `}</style>
     </main>

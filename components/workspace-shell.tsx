@@ -121,8 +121,10 @@ function getCurrentTitle(pathname: string) {
 export function WorkspaceShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const showIntegrationPanel = !pathname.startsWith("/settings");
-  const showChatPanel = true;
+  const hideSideRailsOnCollectionMapping = pathname.startsWith("/studio/shopify-collection-mapping");
+  const showIntegrationPanel =
+    !pathname.startsWith("/settings") && !hideSideRailsOnCollectionMapping;
+  const showChatPanel = !hideSideRailsOnCollectionMapping;
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPinned, setMenuPinned] = useState(false);
   const [picturesGenOpen, setPicturesGenOpen] = useState(false);

@@ -225,3 +225,9 @@ If session resets, instruct the agent:
 - Right pane: product list with focused assignment checkbox for active node and bulk assign/unassign on selected products.
 - Kept existing live Shopify `toggle-node` flow and filter/sort/pagination controls.
 - Triggered Coolify deploy hook and verified route render in browser at `/studio/shopify-collection-mapping`.
+
+## 2026-03-11 Collection Mapping Prototype Hard Reset
+- Fully reset `components/shopify-collection-mapping.tsx` to the static "3 Ideas In One" prototype layout.
+- Removed API/chat-driven behavior from this page implementation (local-only simulation UI).
+- Hid right-side WorkspaceShell integration/chat rails specifically on `/studio/shopify-collection-mapping`.
+- Re-verified in browser that collection mapping route renders without API status/chat boxes.
