@@ -9905,6 +9905,12 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             padding-inline: 10px;
             scroll-padding-inline: 10px;
           }
+          .registry-inline-models .model-pill {
+            min-width: calc((100% - 30px) / 2);
+            width: calc((100% - 30px) / 2);
+            max-width: none;
+            flex: 0 0 calc((100% - 30px) / 2);
+          }
           .model-pill {
             width: auto;
             min-width: 164px;
@@ -9966,6 +9972,21 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             padding-inline: 10px;
             scroll-padding-inline: 10px;
           }
+          .mobile-carousel,
+          .model-list.mobile-carousel-row,
+          .registry-inline-models,
+          .panel-preview-grid {
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+          }
+          .mobile-carousel::-webkit-scrollbar,
+          .model-list.mobile-carousel-row::-webkit-scrollbar,
+          .registry-inline-models::-webkit-scrollbar,
+          .panel-preview-grid::-webkit-scrollbar {
+            display: none;
+            width: 0;
+            height: 0;
+          }
           .mobile-carousel > .preview-card,
           .mobile-carousel > .catalog-image,
           .model-list.mobile-carousel-row > .model-pill {
@@ -9973,9 +9994,10 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             scroll-snap-align: start;
           }
           .model-list.mobile-carousel-row > .model-pill {
-            min-width: 164px;
-            max-width: 190px;
-            width: 164px;
+            min-width: calc((100% - 30px) / 2);
+            max-width: none;
+            width: calc((100% - 30px) / 2);
+            flex: 0 0 calc((100% - 30px) / 2);
           }
           .mobile-carousel > .catalog-image,
           .item-catalog-grid.mobile-carousel > .preview-card {
