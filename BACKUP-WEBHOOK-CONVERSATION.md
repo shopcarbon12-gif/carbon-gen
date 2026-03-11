@@ -231,3 +231,13 @@ If session resets, instruct the agent:
 - Removed API/chat-driven behavior from this page implementation (local-only simulation UI).
 - Hid right-side WorkspaceShell integration/chat rails specifically on `/studio/shopify-collection-mapping`.
 - Re-verified in browser that collection mapping route renders without API status/chat boxes.
+
+## 2026-03-11 Collection Mapping Full Rebuild (Local)
+- Deleted and rebuilt `components/shopify-collection-mapping.tsx` from scratch as a clean standalone UI.
+- Kept the page free of Carbon shell/chat/API elements (route is rendered as plain content on this path).
+- Reimplemented design tokens (dark cards, pills, tabs, dual-pane tree/table layout) with local-only interaction behavior.
+
+## 2026-03-11 Collection Mapping Live Idea-3 Behavior
+- Replaced blank page with live Shopify-powered dual-pane mapping module UI.
+- Right table columns now limited to: Pick (with Select All), Picture, Product Name, UPC, Assigned, Current Nodes.
+- Wired live search/sort and assignment actions through `app/api/shopify/collection-mapping/route.ts`.
