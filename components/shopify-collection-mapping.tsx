@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 
 type MenuNode = {
   nodeKey: string;
@@ -54,6 +54,7 @@ type ToggleResponse = {
 type SortValue = "title-asc" | "title-desc" | "upc-asc" | "upc-desc";
 
 type DropPosition = "before" | "after" | "inside";
+type MenuEditorMode = "add" | "edit";
 
 export default function ShopifyCollectionMapping() {
   const [nodes, setNodes] = useState<MenuNode[]>([]);
@@ -77,7 +78,13 @@ export default function ShopifyCollectionMapping() {
   const [showAuditReport, setShowAuditReport] = useState(false);
   const [dragSourceKey, setDragSourceKey] = useState("");
   const [dropTarget, setDropTarget] = useState<{ targetKey: string; position: DropPosition } | null>(null);
+  const [dragStartX, setDragStartX] = useState(0);
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
+  const [showMenuEditor, setShowMenuEditor] = useState(false);
+  const [menuEditorMode, setMenuEditorMode] = useState<MenuEditorMode>("add");
+  const [menuEditorLabel, setMenuEditorLabel] = useState("");
+  const [menuEditorParentKey, setMenuEditorParentKey] = useState<string | null>(null);
+  const [menuEditorNodeKey, setMenuEditorNodeKey] = useState("");
 
   const nodeLabelByKey = useMemo(() => {
     const map = new Map<string, string>();
@@ -280,8 +287,7 @@ export default function ShopifyCollectionMapping() {
     }
   }
 
-  function clearProductSelectionsForDataQuery() {
-    setSelectedProducts({});
+  function resetPageForDataQuery() {
     setPage(1);
   }
 
@@ -341,11 +347,11 @@ export default function ShopifyCollectionMapping() {
   function toggleHeaderSort(field: "title" | "upc") {
     const [activeField, dir] = sort.split("-") as ["title" | "upc", "asc" | "desc"];
     if (activeField === field) {
-      clearProductSelectionsForDataQuery();
+      resetPageForDataQuery();
       setSort(`${field}-${dir === "asc" ? "desc" : "asc"}` as SortValue);
       return;
     }
-    clearProductSelectionsForDataQuery();
+    resetPageForDataQuery();
     setSort(`${field}-asc` as SortValue);
   }
 
@@ -425,6 +431,94 @@ export default function ShopifyCollectionMapping() {
       setSaving(false);
       setDragSourceKey("");
       setDropTarget(null);
+    }
+  }
+
+  function applyMenuNodesFromResponse(json: MappingResponse) {
+    const nextNodes = (json.nodes || []).filter((node) => node.enabled);
+    setNodes(nextNodes);
+    setWarning(String(json.warning || "").trim());
+    setSelectedNodes((prev) => {
+      const out: Record<string, boolean> = {};
+      for (const key of Object.keys(prev)) {
+        if (prev[key] && nextNodes.some((node) => node.nodeKey === key)) out[key] = true;
+      }
+      return out;
+    });
+  }
+
+  function openAddEditor(parentKey: string | null) {
+    setMenuEditorMode("add");
+    setMenuEditorLabel("");
+    setMenuEditorParentKey(parentKey);
+    setMenuEditorNodeKey("");
+    setShowMenuEditor(true);
+  }
+
+  function openEditEditor(node: MenuNode) {
+    setMenuEditorMode("edit");
+    setMenuEditorLabel(node.label);
+    setMenuEditorParentKey(node.parentKey || null);
+    setMenuEditorNodeKey(node.nodeKey);
+    setShowMenuEditor(true);
+  }
+
+  async function saveMenuEditor() {
+    const label = menuEditorLabel.trim();
+    if (!label) return;
+    setSaving(true);
+    setError("");
+    try {
+      const body =
+        menuEditorMode === "add"
+          ? {
+              action: "add-menu-node",
+              parentKey: menuEditorParentKey,
+              label,
+            }
+          : {
+              action: "edit-menu-node",
+              nodeKey: menuEditorNodeKey,
+              label,
+            };
+      const resp = await fetch("/api/shopify/collection-mapping", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const json = (await resp.json()) as MappingResponse;
+      if (!resp.ok || !json.ok) {
+        throw new Error(json.error || "Menu update failed.");
+      }
+      applyMenuNodesFromResponse(json);
+      setShowMenuEditor(false);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Menu update failed.";
+      setError(message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteMenuNode(nodeKey: string) {
+    setSaving(true);
+    setError("");
+    try {
+      const resp = await fetch("/api/shopify/collection-mapping", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete-menu-node", nodeKey }),
+      });
+      const json = (await resp.json()) as MappingResponse;
+      if (!resp.ok || !json.ok) {
+        throw new Error(json.error || "Delete node failed.");
+      }
+      applyMenuNodesFromResponse(json);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Delete node failed.";
+      setError(message);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -533,7 +627,7 @@ export default function ShopifyCollectionMapping() {
             value={search}
             onChange={(event) => {
               setSearch(event.target.value);
-              clearProductSelectionsForDataQuery();
+              resetPageForDataQuery();
             }}
             placeholder="Search products (title / sku / upc / type)"
             style={{ minWidth: 320 }}
@@ -590,92 +684,142 @@ export default function ShopifyCollectionMapping() {
                 const isLastSibling =
                   siblingKeys.length > 0 && siblingKeys[siblingKeys.length - 1] === node.nodeKey;
                 return (
-                <div
-                  key={node.nodeKey}
-                  className={`treeRow ${node.parentKey ? "has-parent" : ""} ${isLastSibling ? "is-last" : ""} ${dragging ? "dragging" : ""} ${dropState}`}
-                  style={{ paddingLeft: 10 + node.depth * 32 }}
-                  draggable
-                  onDragStart={() => {
-                    setDragSourceKey(node.nodeKey);
-                    setDropTarget(null);
-                  }}
-                  onDragEnd={() => {
-                    setDragSourceKey("");
-                    setDropTarget(null);
-                  }}
-                  onDragOver={(event) => {
-                    event.preventDefault();
-                    if (!dragSourceKey || dragSourceKey === node.nodeKey) return;
-                    const rect = (event.currentTarget as HTMLDivElement).getBoundingClientRect();
-                    const y = event.clientY - rect.top;
-                    const third = rect.height / 3;
-                    const position: DropPosition = y < third ? "before" : y > third * 2 ? "after" : "inside";
-                    setDropTarget({ targetKey: node.nodeKey, position });
-                  }}
-                  onDrop={(event) => {
-                    event.preventDefault();
-                    if (!dragSourceKey) return;
-                    if (!dropTarget || dropTarget.targetKey !== node.nodeKey) return;
-                    void moveMenuNode();
-                  }}
-                >
-                  {node.parentKey ? (
-                    <>
-                      <span
-                        className={isLastSibling ? "treeConnectorV isLast" : "treeConnectorV"}
-                        style={{ left: 10 + node.depth * 32 - 16 }}
-                      />
-                      <span
-                        className="treeConnectorH"
-                        style={{ left: 10 + node.depth * 32 - 16 }}
-                      />
-                    </>
-                  ) : null}
-                  <span className={dragging ? "dragHandle grabbing" : "dragHandle"} aria-hidden="true">
-                    <svg viewBox="0 0 10 14" width="10" height="14">
-                      <circle cx="2" cy="2" r="1.1" />
-                      <circle cx="8" cy="2" r="1.1" />
-                      <circle cx="2" cy="7" r="1.1" />
-                      <circle cx="8" cy="7" r="1.1" />
-                      <circle cx="2" cy="12" r="1.1" />
-                      <circle cx="8" cy="12" r="1.1" />
-                    </svg>
-                  </span>
-                  <label className="treeCheckboxWrap">
-                    <input
-                      className="treeCheckboxInput"
-                      type="checkbox"
-                      checked={checked}
-                      onChange={(event) => applyNodeSelection(node.nodeKey, event.target.checked)}
-                    />
-                    <span className="treeCheckboxVisual" aria-hidden="true">
-                      <svg viewBox="0 0 12 10" width="12" height="10">
-                        <path d="M1 5.5L4.2 8.6L11 1.5" />
-                      </svg>
-                    </span>
-                  </label>
-                  {hasChildren ? (
-                    <button
-                      type="button"
-                      className={isExpanded ? "treeChevron open" : "treeChevron"}
-                      onClick={() =>
-                        setExpandedNodes((prev) => ({ ...prev, [node.nodeKey]: !prev[node.nodeKey] }))
-                      }
-                      aria-label={isExpanded ? "Collapse node" : "Expand node"}
+                  <Fragment key={node.nodeKey}>
+                    <div
+                      className={`treeRow ${checked ? "active" : ""} ${node.parentKey ? "has-parent" : ""} ${isLastSibling ? "is-last" : ""} ${dragging ? "dragging" : ""} ${dropState}`}
+                      style={{ paddingLeft: 10 + node.depth * 32 }}
+                      draggable
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => applyNodeSelection(node.nodeKey, !checked)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          applyNodeSelection(node.nodeKey, !checked);
+                        }
+                      }}
+                      onDragStart={(event) => {
+                        setDragSourceKey(node.nodeKey);
+                        setDragStartX(event.clientX);
+                        setDropTarget(null);
+                      }}
+                      onDragEnd={() => {
+                        setDragSourceKey("");
+                        setDropTarget(null);
+                      }}
+                      onDragOver={(event) => {
+                        event.preventDefault();
+                        if (!dragSourceKey || dragSourceKey === node.nodeKey) return;
+                        const rect = (event.currentTarget as HTMLDivElement).getBoundingClientRect();
+                        const y = event.clientY - rect.top;
+                        const third = rect.height / 3;
+                        const deltaX = event.clientX - dragStartX;
+                        let position: DropPosition;
+                        let targetKey = node.nodeKey;
+                        if (deltaX > 28) {
+                          position = "inside";
+                        } else if (deltaX < -28) {
+                          // Left drag attempts outdent by targeting the hovered node's parent level.
+                          const parentKey = node.parentKey;
+                          if (parentKey) {
+                            targetKey = parentKey;
+                            position = "after";
+                          } else {
+                            position = "before";
+                          }
+                        } else {
+                          position = y < third ? "before" : y > third * 2 ? "after" : "inside";
+                        }
+                        setDropTarget({ targetKey, position });
+                      }}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        if (!dragSourceKey) return;
+                        if (!dropTarget) return;
+                        void moveMenuNode();
+                      }}
                     >
-                      <svg viewBox="0 0 12 12" width="12" height="12">
-                        <path d="M4 2L8 6L4 10" />
-                      </svg>
-                    </button>
-                  ) : (
-                    <span className="treeChevronSpacer" />
-                  )}
-                  <div className="treeText">
-                    <span className="treeLabel">{node.label}</span>
-                    <span className="treeTargetLabel">{node.linkedTargetLabel || "No target linked"}</span>
-                  </div>
-                </div>
-              )})}
+                      {node.parentKey ? (
+                        <>
+                          <span
+                            className={isLastSibling ? "treeConnectorV isLast" : "treeConnectorV"}
+                            style={{ left: 10 + node.depth * 32 - 16 }}
+                          />
+                          <span
+                            className="treeConnectorH"
+                            style={{ left: 10 + node.depth * 32 - 16 }}
+                          />
+                        </>
+                      ) : null}
+                      <span className={dragging ? "dragHandle grabbing" : "dragHandle"} aria-hidden="true">
+                        <svg viewBox="0 0 10 14" width="10" height="14">
+                          <circle cx="2" cy="2" r="1.1" />
+                          <circle cx="8" cy="2" r="1.1" />
+                          <circle cx="2" cy="7" r="1.1" />
+                          <circle cx="8" cy="7" r="1.1" />
+                          <circle cx="2" cy="12" r="1.1" />
+                          <circle cx="8" cy="12" r="1.1" />
+                        </svg>
+                      </span>
+                      {hasChildren ? (
+                        <button
+                          type="button"
+                          className={isExpanded ? "treeChevron open" : "treeChevron"}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setExpandedNodes((prev) => ({ ...prev, [node.nodeKey]: !prev[node.nodeKey] }));
+                          }}
+                          aria-label={isExpanded ? "Collapse node" : "Expand node"}
+                        >
+                          <svg viewBox="0 0 12 12" width="12" height="12">
+                            <path d="M4 2L8 6L4 10" />
+                          </svg>
+                        </button>
+                      ) : (
+                        <span className="treeChevronSpacer" />
+                      )}
+                      <div className="treeText">
+                        <span className="treeLabel">{node.label}</span>
+                        <span className="treeTargetLabel">{node.linkedTargetLabel || "No target linked"}</span>
+                      </div>
+                      <div className="treeRowActions" onClick={(event) => event.stopPropagation()}>
+                        <button
+                          type="button"
+                          className="iconBtn"
+                          onClick={() => openEditEditor(node)}
+                          aria-label="Edit menu item"
+                        >
+                          <svg viewBox="0 0 16 16" width="14" height="14">
+                            <path d="M11.7 2.3a1 1 0 0 1 1.4 0l.6.6a1 1 0 0 1 0 1.4L6.1 12H3v-3.1l8.7-6.6zM2 13h12v1H2z" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          className="iconBtn danger"
+                          onClick={() => void deleteMenuNode(node.nodeKey)}
+                          aria-label="Delete menu item"
+                        >
+                          <svg viewBox="0 0 16 16" width="14" height="14">
+                            <path d="M6 2h4l1 1h3v1H2V3h3l1-1zm-2 3h8l-.6 8.2A1 1 0 0 1 10.4 14H5.6a1 1 0 0 1-1-.8L4 5z" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                    {hasChildren && isExpanded ? (
+                      <div className="treeAddRow" style={{ paddingLeft: 10 + (node.depth + 1) * 32 }}>
+                        <button type="button" className="treeAddBtn" onClick={() => openAddEditor(node.nodeKey)}>
+                          + Add menu item
+                        </button>
+                      </div>
+                    ) : null}
+                  </Fragment>
+                );
+              })}
+              <div className="treeAddRoot">
+                <button type="button" className="treeAddBtn" onClick={() => openAddEditor(null)}>
+                  + Add menu item
+                </button>
+              </div>
             </div>
           </aside>
 
@@ -920,6 +1064,32 @@ export default function ShopifyCollectionMapping() {
         </div>
       ) : null}
 
+      {showMenuEditor ? (
+        <div className="previewOverlay" onClick={() => setShowMenuEditor(false)} role="dialog" aria-label="Menu item editor">
+          <div className="editorModal" onClick={(event) => event.stopPropagation()}>
+            <h3>{menuEditorMode === "add" ? "Add Menu Item" : "Edit Menu Item"}</h3>
+            <div className="editorField">
+              <label htmlFor="menu-item-label">Label</label>
+              <input
+                id="menu-item-label"
+                value={menuEditorLabel}
+                onChange={(event) => setMenuEditorLabel(event.target.value)}
+                placeholder="Menu label"
+                autoFocus
+              />
+            </div>
+            <div className="topbar" style={{ justifyContent: "flex-end" }}>
+              <button type="button" onClick={() => setShowMenuEditor(false)}>
+                Cancel
+              </button>
+              <button type="button" className="primary" onClick={() => void saveMenuEditor()} disabled={saving || !menuEditorLabel.trim()}>
+                {menuEditorMode === "add" ? "Add Item" : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <style jsx>{`
         .page {
           width: min(100%, calc(100vw - 24px));
@@ -1047,6 +1217,16 @@ export default function ShopifyCollectionMapping() {
         .treeRow:hover {
           background: #122033;
         }
+        .treeRow:focus-visible {
+          outline: 2px solid #60a5fa;
+          outline-offset: -2px;
+        }
+        .treeRow.active {
+          background: #0b5fff;
+        }
+        .treeRow.active:hover {
+          background: #0061f2;
+        }
         .treeConnectorV {
           position: absolute;
           top: 0;
@@ -1079,70 +1259,6 @@ export default function ShopifyCollectionMapping() {
         }
         .dragHandle svg circle {
           fill: currentColor;
-        }
-        .treeCheckboxWrap {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          position: relative;
-          width: 16px;
-          height: 16px;
-          min-width: 16px;
-          min-height: 16px;
-          max-width: 16px;
-          max-height: 16px;
-          flex-shrink: 0;
-          flex: 0 0 auto;
-        }
-        .treeCheckboxInput {
-          position: absolute;
-          opacity: 0;
-          inset: 0;
-          width: 16px;
-          height: 16px;
-          cursor: pointer;
-        }
-        .treeCheckboxVisual {
-          width: 16px;
-          height: 16px;
-          min-width: 16px;
-          min-height: 16px;
-          max-width: 16px;
-          max-height: 16px;
-          flex-shrink: 0;
-          border-radius: 6px;
-          border: 1px solid #475569;
-          background: #0f172a;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          transition: all 120ms ease;
-        }
-        .treeCheckboxVisual svg {
-          width: 10px;
-          height: 8px;
-          opacity: 0;
-          transform: scale(0.8);
-          transition: all 120ms ease;
-        }
-        .treeCheckboxVisual svg path {
-          fill: none;
-          stroke: #dbeafe;
-          stroke-width: 1.8;
-          stroke-linecap: round;
-          stroke-linejoin: round;
-        }
-        .treeCheckboxInput:checked + .treeCheckboxVisual {
-          border-color: #2563eb;
-          background: #1d4ed8;
-        }
-        .treeCheckboxInput:checked + .treeCheckboxVisual svg {
-          opacity: 1;
-          transform: scale(1);
-        }
-        .treeCheckboxInput:focus-visible + .treeCheckboxVisual {
-          outline: 2px solid #60a5fa;
-          outline-offset: 2px;
         }
         .treeChevron {
           width: 20px;
@@ -1195,6 +1311,87 @@ export default function ShopifyCollectionMapping() {
           text-overflow: ellipsis;
           white-space: nowrap;
           max-width: 100%;
+        }
+        .treeRow.active .treeLabel,
+        .treeRow.active .treeTargetLabel,
+        .treeRow.active .dragHandle,
+        .treeRow.active .treeChevron,
+        .treeRow.active .treeChevronSpacer {
+          color: #ffffff;
+        }
+        .treeRow.active .treeConnectorV,
+        .treeRow.active .treeConnectorH {
+          opacity: 0.45;
+        }
+        .treeRowActions {
+          margin-left: auto;
+          display: inline-flex;
+          gap: 6px;
+          opacity: 0;
+          transition: opacity 120ms ease;
+        }
+        .treeRow:hover .treeRowActions,
+        .treeRow:focus-within .treeRowActions,
+        .treeRow.active .treeRowActions {
+          opacity: 1;
+        }
+        .iconBtn {
+          width: 24px;
+          height: 24px;
+          min-height: 24px;
+          padding: 0;
+          border: 1px solid #334155;
+          border-radius: 6px;
+          background: #0f172a;
+          color: #cbd5e1;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .iconBtn:hover {
+          background: #1e293b;
+        }
+        .iconBtn svg path {
+          fill: currentColor;
+        }
+        .iconBtn.danger {
+          color: #fecaca;
+          border-color: #7f1d1d;
+          background: #1f0f14;
+        }
+        .treeAddRow {
+          padding: 4px 8px 8px 8px;
+          border-bottom: 1px dashed #2a3547;
+        }
+        .treeAddRoot {
+          padding: 8px;
+        }
+        .treeAddBtn {
+          min-height: 28px;
+          height: 28px;
+          padding: 0 10px;
+          border-radius: 6px;
+          border: 1px dashed #33506e;
+          background: #0f1d33;
+          color: #cde0ff;
+          font-size: 12px;
+        }
+        .editorModal {
+          width: min(460px, 92vw);
+          border-radius: 12px;
+          border: 1px solid #2a3547;
+          background: #0b1322;
+          padding: 14px;
+          display: grid;
+          gap: 12px;
+        }
+        .editorField {
+          display: grid;
+          gap: 6px;
+        }
+        .editorField label {
+          font-size: 12px;
+          color: #cbd5e1;
         }
         .treeRow.dragging {
           opacity: 0.45;

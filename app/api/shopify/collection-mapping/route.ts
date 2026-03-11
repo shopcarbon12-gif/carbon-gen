@@ -2260,7 +2260,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    if (action === "create-menu-node") {
+    if (action === "create-menu-node" || action === "add-menu-node") {
       const label = normalizeText(body.label || "");
       const parentKey = normalizeText(body.parentKey || "") || null;
       const legacyCollectionId = normalizeText(body.collectionId || "");
@@ -2485,7 +2485,7 @@ export async function POST(req: NextRequest) {
     if (action === "edit-menu-node") {
       const nodeKey = normalizeText(body.nodeKey || "");
       const label = normalizeText(body.label || "");
-      const linkType = normalizeText(body.linkType || "").toUpperCase();
+      const linkTypeRaw = normalizeText(body.linkType || "").toUpperCase();
       const linkTargetId = normalizeText(body.linkTargetId || "") || null;
       const linkUrl = normalizeText(body.linkUrl || "");
 
@@ -2495,10 +2495,6 @@ export async function POST(req: NextRequest) {
       if (!label) {
         return NextResponse.json({ ok: false, error: "label is required." }, { status: 400 });
       }
-      if (!linkType) {
-        return NextResponse.json({ ok: false, error: "linkType is required." }, { status: 400 });
-      }
-
       const collectionsResult = await fetchAllCollectionsCached(shop, tokenResult.token, apiVersion);
       if ("error" in collectionsResult) {
         return NextResponse.json({ ok: false, error: collectionsResult.error }, { status: 500 });
@@ -2531,12 +2527,16 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: false, error: "Menu node was not found." }, { status: 404 });
       }
 
+      const linkType = linkTypeRaw || normalizeText(target.node.type || "HTTP").toUpperCase() || "HTTP";
+      const effectiveTargetId = linkTargetId || normalizeText(target.node.resourceId || "") || null;
+      const effectiveLinkUrl = linkUrl || normalizeText(target.node.url || "");
+
       target.node.title = label;
       const linkApplyResult = applyMenuNodeLink(
         target.node,
         linkType,
-        linkTargetId,
-        linkUrl,
+        effectiveTargetId,
+        effectiveLinkUrl,
         collectionsResult.collections,
         linkTargetsResult.targets
       );
@@ -2677,15 +2677,16 @@ export async function POST(req: NextRequest) {
             .concat(singleNodeKey ? [singleNodeKey] : [])
         )
       );
-      const requestedProductIds = Array.from(
-        new Set(
-          (Array.isArray(body.productIds) ? body.productIds : [])
-            .map((row) => normalizeText(row))
-            .filter(Boolean)
-            .concat(normalizeText(body.productId || ""))
-            .filter(Boolean)
-        )
-      );
+      const requestedProductIds =
+        action === "bulk-toggle-nodes"
+          ? Array.from(
+              new Set(
+                (Array.isArray(body.productIds) ? body.productIds : [])
+                  .map((row) => normalizeText(row))
+                  .filter(Boolean)
+              )
+            )
+          : Array.from(new Set([normalizeText(body.productId || "")].filter(Boolean)));
       const checked = parseBool(body.checked);
       const uncheckPolicy = toUncheckPolicy(body.uncheckPolicy);
       if (requestedProductIds.length < 1 || requestedNodeKeys.length < 1) {

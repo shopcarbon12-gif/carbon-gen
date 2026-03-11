@@ -302,3 +302,26 @@ If session resets, instruct the agent:
 ## 2026-03-11 Build Failure Hotfix (tree indent CSS variable typing)
 - Fixed TypeScript build failure in `components/shopify-collection-mapping.tsx` by removing inline CSS custom property assignment (`--tree-indent`) from `style` object.
 - Replaced pseudo-element dependency on custom variable with explicit connector span elements (`treeConnectorV`, `treeConnectorH`) using numeric `left` inline style values.
+
+## 2026-03-11 Phase 2 Frontend State & Bulk Buttons
+- Confirmed bulk buttons in `components/shopify-collection-mapping.tsx` send `productIds` array to `bulk-toggle-nodes` and clear `selectedProducts` only after successful API response.
+- Enforced explicit selection reset via `useEffect([search, treeSearch, sort])` and removed direct selection clearing from query-change handlers.
+- Updated query-change helper behavior to reset only pagination (`setPage(1)`) while selection clear responsibility remains in the strict `useEffect`.
+
+## 2026-03-11 Phase 3 Menu Tree Click-Select + Polaris Active State
+- Removed tree checkbox markup/styles from `components/shopify-collection-mapping.tsx`.
+- Updated each tree row to be fully clickable (`role=button`, keyboard Enter/Space support) and toggle node selection while preserving existing auto-parenting behavior.
+- Added Polaris-style active row state (`.treeRow.active`) with blue background and white text/icons.
+- Kept visual directory connector lines (`treeConnectorV`, `treeConnectorH`) and ensured chevron expand/collapse no longer triggers row selection via `stopPropagation()`.
+
+## 2026-03-11 Phase 4 Advanced Tree Interactions
+- Added hover-only right-aligned Edit/Delete icon actions per tree row in `components/shopify-collection-mapping.tsx`.
+- Added inline `+ Add menu item` buttons for expanded submenus and root tree footer.
+- Added inline Add/Edit modal workflow with live API calls (`add-menu-node`, `edit-menu-node`, `delete-menu-node`).
+- Upgraded drag/drop hover behavior to track X-axis offset (`dragStartX`) and choose nested `inside` on right-drag and outdent-oriented `before` on left-drag.
+- Added backend action alias in `app/api/shopify/collection-mapping/route.ts` so `add-menu-node` maps to existing create-node flow; updated edit flow to allow label-only edits by reusing existing link target when link fields are omitted.
+
+## 2026-03-11 Comprehensive Phase Corrections Pass
+- Tightened `bulk-toggle-nodes` API contract in `app/api/shopify/collection-mapping/route.ts` to use `productIds[]` only (no `productId` fallback on that action), while preserving single-product support for `toggle-node` and `toggle-nodes`.
+- Refined X-axis outdent behavior in `components/shopify-collection-mapping.tsx` drag-over logic: left-drag now targets hovered node parent level (`targetKey = parentKey`, `position = "after"`), right-drag keeps nested `inside`.
+- Updated drop handler guard to honor computed outdent targets and not require hovered row key to equal drop target key.
