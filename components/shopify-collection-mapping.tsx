@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState, type JSX } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 type MenuNode = {
   nodeKey: string;
@@ -13,15 +13,6 @@ type MenuNode = {
   collectionId: string | null;
   collectionTitle: string | null;
   collectionHandle: string | null;
-  defaultCollectionHandle: string | null;
-  updatedAt: string | null;
-};
-
-type CollectionOption = {
-  id: string;
-  title: string;
-  handle: string;
-  productsCount: number | null;
 };
 
 type ProductRow = {
@@ -33,50 +24,11 @@ type ProductRow = {
   image: string | null;
   sku: string;
   upc: string;
-  collectionIds: string[];
   checkedNodeKeys: string[];
-};
-
-type MappingLogRow = {
-  id: string;
-  action: string;
-  summary: string;
-  status: "ok" | "error";
-  details: Record<string, unknown>;
-  errorMessage: string | null;
-  createdAt: string;
-};
-
-type MenuMeta = {
-  id: string;
-  handle: string;
-  title: string;
-};
-
-type MenuLinkRecord = {
-  nodeKey: string;
-  type: string;
-  url: string | null;
-  resourceId: string | null;
-};
-
-type LinkTargetOption = {
-  id: string;
-  title: string;
-  handle: string;
-  url: string;
-};
-
-type MenuLinkTargets = {
-  collections: LinkTargetOption[];
-  pages: LinkTargetOption[];
-  products: LinkTargetOption[];
-  blogs: LinkTargetOption[];
 };
 
 type CollectionMappingResponse = {
   ok?: boolean;
-  noop?: boolean;
   error?: string;
   warning?: string;
   shop?: string;
@@ -86,20 +38,11 @@ type CollectionMappingResponse = {
   totalPages?: number;
   nodes?: MenuNode[];
   mappedNodes?: MenuNode[];
-  collections?: CollectionOption[];
   rows?: ProductRow[];
-  logs?: MappingLogRow[];
-  menu?: MenuMeta;
-  menuLinks?: MenuLinkRecord[];
-  linkTargets?: MenuLinkTargets;
 };
 
 type SortField = "title" | "upc" | "sku" | "itemType" | "updatedAt";
 type SortDir = "asc" | "desc";
-type UncheckPolicy = "keep-descendants" | "remove-descendants";
-type DropPosition = "before" | "after" | "inside";
-type MenuLinkType = "COLLECTION" | "PAGE" | "PRODUCT" | "BLOG" | "URL" | "FRONTPAGE" | "SEARCH";
-
 type ProductFilters = {
   q: string;
   title: string;
@@ -122,16 +65,30 @@ function normalizeText(value: unknown) {
   return String(value ?? "").trim();
 }
 
-function byLabel(left: CollectionOption, right: CollectionOption) {
-  return left.title.localeCompare(right.title, undefined, { sensitivity: "base" });
-}
-
 function prettyDate(value: string | null | undefined) {
   const text = normalizeText(value);
   if (!text) return "-";
   const parsed = Date.parse(text);
   if (!Number.isFinite(parsed)) return text;
   return new Date(parsed).toLocaleString();
+}
+
+function buildParentMap(nodes: MenuNode[]) {
+  const out = new Map<string, string | null>();
+  for (const node of nodes) out.set(node.nodeKey, node.parentKey || null);
+  return out;
+}
+
+function collectAncestors(nodeKey: string, parentMap: Map<string, string | null>) {
+  const out: string[] = [];
+  let current = parentMap.get(nodeKey) || null;
+  const seen = new Set<string>();
+  while (current && !seen.has(current)) {
+    out.push(current);
+    seen.add(current);
+    current = parentMap.get(current) || null;
+  }
+  return out;
 }
 
 export default function ShopifyCollectionMapping() {
@@ -141,72 +98,36 @@ export default function ShopifyCollectionMapping() {
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   const [shop, setShop] = useState("");
-  const [menu, setMenu] = useState<MenuMeta | null>(null);
   const [rows, setRows] = useState<ProductRow[]>([]);
   const [nodes, setNodes] = useState<MenuNode[]>([]);
-  const [mappedNodes, setMappedNodes] = useState<MenuNode[]>([]);
-  const [collections, setCollections] = useState<CollectionOption[]>([]);
-  const [logs, setLogs] = useState<MappingLogRow[]>([]);
-
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(30);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
 
-  const [busy, setBusy] = useState(false);
-  const [menuBusy, setMenuBusy] = useState(false);
+  const [selectedRows, setSelectedRows] = useState<Record<string, boolean>>({});
+  const [activeNodeKey, setActiveNodeKey] = useState("");
   const [toggleBusyKey, setToggleBusyKey] = useState("");
-  const [nodeBusyKey, setNodeBusyKey] = useState("");
-  const [showCompactColumns, setShowCompactColumns] = useState(false);
-  const [uncheckPolicy, setUncheckPolicy] = useState<UncheckPolicy>("remove-descendants");
-  const [lastFailedToggle, setLastFailedToggle] = useState<{
-    productId: string;
-    nodeKey: string;
-    checked: boolean;
-  } | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
   const [warning, setWarning] = useState("");
   const [error, setError] = useState("");
-
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
-  const [collapsedKeys, setCollapsedKeys] = useState<Set<string>>(new Set());
-  const [dragNodeKey, setDragNodeKey] = useState("");
-  const [dropHint, setDropHint] = useState<{ targetKey: string; position: DropPosition } | null>(null);
+  const mappedNodes = useMemo(
+    () => nodes.filter((node) => node.enabled && Boolean(node.collectionId)),
+    [nodes]
+  );
 
-  const [menuLinks, setMenuLinks] = useState<MenuLinkRecord[]>([]);
-  const [linkTargets, setLinkTargets] = useState<MenuLinkTargets>({
-    collections: [],
-    pages: [],
-    products: [],
-    blogs: [],
-  });
-
-  const [editingNodeKey, setEditingNodeKey] = useState("");
-  const [editLabel, setEditLabel] = useState("");
-  const [editLinkType, setEditLinkType] = useState<MenuLinkType>("COLLECTION");
-  const [editLinkTargetId, setEditLinkTargetId] = useState("");
-  const [editLinkUrl, setEditLinkUrl] = useState("");
-
-  const [createParentKey, setCreateParentKey] = useState<string | null>(null);
-  const [createLabel, setCreateLabel] = useState("");
-  const [createLinkType, setCreateLinkType] = useState<MenuLinkType>("COLLECTION");
-  const [createLinkTargetId, setCreateLinkTargetId] = useState("");
-  const [createLinkUrl, setCreateLinkUrl] = useState("");
-  const [createOpen, setCreateOpen] = useState(false);
-
-  const [logsOpen, setLogsOpen] = useState(false);
-  const [logsBusy, setLogsBusy] = useState(false);
-  const [productEditorId, setProductEditorId] = useState("");
-  const [productEditorQuery, setProductEditorQuery] = useState("");
+  const parentMap = useMemo(() => buildParentMap(mappedNodes), [mappedNodes]);
+  const activeNode = useMemo(
+    () => mappedNodes.find((node) => node.nodeKey === activeNodeKey) || null,
+    [mappedNodes, activeNodeKey]
+  );
 
   const loadData = useCallback(
-    async (
-      targetPage = page,
-      targetPageSize = pageSize,
-      targetFilters = appliedFilters,
-      includeLogs = false
-    ) => {
+    async (targetPage = page, targetPageSize = pageSize, targetFilters = appliedFilters) => {
       setBusy(true);
       setError("");
       setWarning("");
@@ -216,16 +137,10 @@ export default function ShopifyCollectionMapping() {
         params.set("pageSize", String(targetPageSize));
         params.set("sortField", sortField);
         params.set("sortDir", sortDir);
-        if (menu?.handle) params.set("menuHandle", menu.handle);
-        if (includeLogs) {
-          params.set("includeLogs", "1");
-          params.set("logLimit", "200");
-        }
         for (const [key, value] of Object.entries(targetFilters)) {
           const text = normalizeText(value);
           if (text) params.set(key, text);
         }
-
         const response = await fetch(`/api/shopify/collection-mapping?${params.toString()}`, {
           cache: "no-store",
         });
@@ -234,33 +149,24 @@ export default function ShopifyCollectionMapping() {
           throw new Error(normalizeText(json.error) || `Failed to load (${response.status})`);
         }
 
-        const nextNodes = Array.isArray(json.nodes) ? json.nodes : [];
-        const nextCollections = Array.isArray(json.collections) ? [...json.collections].sort(byLabel) : [];
-        const nextMappedNodes = Array.isArray(json.mappedNodes) ? json.mappedNodes : [];
-
+        const nextNodes = Array.isArray(json.mappedNodes)
+          ? json.mappedNodes.filter((node) => node.enabled && Boolean(node.collectionId))
+          : [];
+        const nextRows = Array.isArray(json.rows) ? json.rows : [];
         setShop(normalizeText(json.shop));
-        setMenu(json.menu || null);
-        setRows(Array.isArray(json.rows) ? json.rows : []);
         setNodes(nextNodes);
-        setMappedNodes(nextMappedNodes);
-        setCollections(nextCollections);
-        setMenuLinks(Array.isArray(json.menuLinks) ? json.menuLinks : []);
-        setLinkTargets({
-          collections: Array.isArray(json.linkTargets?.collections) ? json.linkTargets!.collections : [],
-          pages: Array.isArray(json.linkTargets?.pages) ? json.linkTargets!.pages : [],
-          products: Array.isArray(json.linkTargets?.products) ? json.linkTargets!.products : [],
-          blogs: Array.isArray(json.linkTargets?.blogs) ? json.linkTargets!.blogs : [],
-        });
-        if (includeLogs) {
-          setLogs(Array.isArray(json.logs) ? json.logs : []);
-        }
+        setRows(nextRows);
         setPage(Number(json.page || targetPage));
         setPageSize(Number(json.pageSize || targetPageSize));
         setTotal(Number(json.total || 0));
         setTotalPages(Math.max(1, Number(json.totalPages || 1)));
-
         setWarning(normalizeText(json.warning));
-        setLastFailedToggle(null);
+        setSelectedRows({});
+
+        setActiveNodeKey((prev) => {
+          if (prev && nextNodes.some((node) => node.nodeKey === prev)) return prev;
+          return nextNodes[0]?.nodeKey || "";
+        });
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         setError(message || "Failed to load collection mapping.");
@@ -268,327 +174,31 @@ export default function ShopifyCollectionMapping() {
         setBusy(false);
       }
     },
-    [appliedFilters, menu?.handle, page, pageSize, sortDir, sortField]
+    [appliedFilters, page, pageSize, sortField, sortDir]
   );
 
   useEffect(() => {
     void loadData(1, pageSize, appliedFilters);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sortField, sortDir]);
 
-  const childrenByParent = useMemo(() => {
-    const map = new Map<string, MenuNode[]>();
-    for (const node of nodes) {
-      const parentKey = normalizeText(node.parentKey) || "__root__";
-      const list = map.get(parentKey) || [];
-      list.push(node);
-      map.set(parentKey, list);
-    }
-    for (const [key, list] of map.entries()) {
-      map.set(
-        key,
-        [...list].sort((a, b) => {
-          if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
-          return a.label.localeCompare(b.label, undefined, { sensitivity: "base" });
-        })
-      );
-    }
-    return map;
-  }, [nodes]);
+  useEffect(() => {
+    void loadData(1, pageSize, appliedFilters);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const rootNodes = useMemo(() => childrenByParent.get("__root__") || [], [childrenByParent]);
-
-  const mappedNodeColumns = useMemo(
-    () =>
-      mappedNodes
-        .filter((node) => node.enabled && Boolean(node.collectionId))
-        .sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label)),
-    [mappedNodes]
+  const selectedProductIds = useMemo(
+    () => Object.keys(selectedRows).filter((id) => selectedRows[id]),
+    [selectedRows]
   );
 
-  const nodeByKey = useMemo(() => {
-    const map = new Map<string, MenuNode>();
-    for (const node of nodes) {
-      const key = normalizeText(node.nodeKey);
-      if (key) map.set(key, node);
-    }
-    return map;
-  }, [nodes]);
+  const allRowsSelected = rows.length > 0 && rows.every((row) => Boolean(selectedRows[row.id]));
 
-  const menuLinkByNodeKey = useMemo(() => {
-    const map = new Map<string, MenuLinkRecord>();
-    for (const link of menuLinks) {
-      const key = normalizeText(link.nodeKey);
-      if (key) map.set(key, link);
-    }
-    return map;
-  }, [menuLinks]);
-
-  const linkTypeOptions: Array<{ value: MenuLinkType; label: string }> = useMemo(
-    () => [
-      { value: "COLLECTION", label: "Collection" },
-      { value: "PAGE", label: "Page" },
-      { value: "PRODUCT", label: "Product" },
-      { value: "BLOG", label: "Blog" },
-      { value: "URL", label: "URL" },
-      { value: "FRONTPAGE", label: "Home page" },
-      { value: "SEARCH", label: "Search" },
-    ],
-    []
-  );
-
-  const mappingSummary = useMemo(() => {
-    let mapped = 0;
-    let unmapped = 0;
-    let disabled = 0;
-    for (const node of nodes) {
-      if (!node.enabled) {
-        disabled += 1;
-        continue;
-      }
-      const link = menuLinkByNodeKey.get(node.nodeKey);
-      const hasLink = Boolean(normalizeText(link?.resourceId) || normalizeText(link?.url));
-      if (hasLink) mapped += 1;
-      else unmapped += 1;
-    }
-    return { mapped, unmapped, disabled };
-  }, [menuLinkByNodeKey, nodes]);
-
-  const activeProduct = useMemo(
-    () => rows.find((row) => row.id === productEditorId) || null,
-    [productEditorId, rows]
-  );
-
-  const assignableNodes = useMemo(
-    () =>
-      nodes
-        .filter((node) => node.enabled && Boolean(node.collectionId))
-        .sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label)),
-    [nodes]
-  );
-
-  const filteredAssignableNodes = useMemo(() => {
-    const query = normalizeText(productEditorQuery).toLowerCase();
-    if (!query) return assignableNodes;
-    return assignableNodes.filter((node) => {
-      const label = normalizeText(node.label).toLowerCase();
-      const handle = normalizeText(node.collectionHandle).toLowerCase();
-      return label.includes(query) || handle.includes(query);
-    });
-  }, [assignableNodes, productEditorQuery]);
-  const runMenuAction = useCallback(
-    async (payload: Record<string, unknown>, actionStatus: string, refreshProducts = true) => {
-      setMenuBusy(true);
-      setError("");
-      setWarning("");
-      setStatus(actionStatus);
-      try {
-        const response = await fetch("/api/shopify/collection-mapping", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            shop,
-            menuHandle: menu?.handle || "",
-            ...payload,
-          }),
-        });
-        const json = (await response.json().catch(() => ({}))) as CollectionMappingResponse;
-        if (!response.ok || json.ok === false) {
-          throw new Error(normalizeText(json.error) || `Action failed (${response.status})`);
-        }
-
-        if (refreshProducts) {
-          await loadData(page, pageSize, appliedFilters, logsOpen);
-        } else {
-          if (Array.isArray(json.nodes)) setNodes(json.nodes);
-          if (Array.isArray(json.mappedNodes)) setMappedNodes(json.mappedNodes);
-          if (Array.isArray(json.menuLinks)) setMenuLinks(json.menuLinks);
-          if (json.linkTargets) {
-            setLinkTargets({
-              collections: Array.isArray(json.linkTargets.collections) ? json.linkTargets.collections : [],
-              pages: Array.isArray(json.linkTargets.pages) ? json.linkTargets.pages : [],
-              products: Array.isArray(json.linkTargets.products) ? json.linkTargets.products : [],
-              blogs: Array.isArray(json.linkTargets.blogs) ? json.linkTargets.blogs : [],
-            });
-          }
-          if (json.menu) setMenu(json.menu);
-          if (normalizeText(json.warning)) setWarning(normalizeText(json.warning));
-        }
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        setError(message || "Action failed.");
-        setStatus("");
-      } finally {
-        setMenuBusy(false);
-      }
-    },
-    [appliedFilters, loadData, logsOpen, menu?.handle, page, pageSize, shop]
-  );
-
-  async function onRefreshMenu() {
-    await runMenuAction({ action: "refresh-menu" }, "Syncing menu from Shopify...");
-  }
-
-  function targetsForLinkType(type: MenuLinkType) {
-    if (type === "COLLECTION") return linkTargets.collections;
-    if (type === "PAGE") return linkTargets.pages;
-    if (type === "PRODUCT") return linkTargets.products;
-    if (type === "BLOG") return linkTargets.blogs;
-    return [];
-  }
-
-  function startEditNode(node: MenuNode) {
-    const link = menuLinkByNodeKey.get(node.nodeKey);
-    const type = (normalizeText(link?.type).toUpperCase() || "COLLECTION") as MenuLinkType;
-    setEditingNodeKey(node.nodeKey);
-    setEditLabel(node.label);
-    setEditLinkType(
-      type === "COLLECTION" ||
-        type === "PAGE" ||
-        type === "PRODUCT" ||
-        type === "BLOG" ||
-        type === "FRONTPAGE" ||
-        type === "SEARCH"
-        ? type
-        : "URL"
-    );
-    setEditLinkTargetId(normalizeText(link?.resourceId));
-    setEditLinkUrl(normalizeText(link?.url));
-  }
-
-  async function onCreateNode() {
-    const label = normalizeText(createLabel);
-    if (!label) {
-      setError("Category label is required.");
-      return;
-    }
-    await runMenuAction(
-      {
-        action: "create-menu-node",
-        label,
-        parentKey: createParentKey || null,
-        linkType: createLinkType,
-        linkTargetId:
-          createLinkType === "COLLECTION" ||
-          createLinkType === "PAGE" ||
-          createLinkType === "PRODUCT" ||
-          createLinkType === "BLOG"
-            ? normalizeText(createLinkTargetId) || null
-            : null,
-        linkUrl: createLinkType === "URL" ? normalizeText(createLinkUrl) : "",
-      },
-      "Creating category in Shopify menu..."
-    );
-    setCreateOpen(false);
-    setCreateLabel("");
-    setCreateLinkType("COLLECTION");
-    setCreateLinkTargetId("");
-    setCreateLinkUrl("");
-    setCreateParentKey(null);
-  }
-
-  async function onSaveNodeEdit(node: MenuNode) {
-    const nextLabel = normalizeText(editLabel);
-    if (!nextLabel) {
-      setError("Label is required.");
-      return;
-    }
-    await runMenuAction(
-      {
-        action: "edit-menu-node",
-        nodeKey: node.nodeKey,
-        label: nextLabel,
-        linkType: editLinkType,
-        linkTargetId:
-          editLinkType === "COLLECTION" ||
-          editLinkType === "PAGE" ||
-          editLinkType === "PRODUCT" ||
-          editLinkType === "BLOG"
-            ? normalizeText(editLinkTargetId) || null
-            : null,
-        linkUrl: editLinkType === "URL" ? normalizeText(editLinkUrl) : "",
-      },
-      "Saving menu item live..."
-    );
-    setEditingNodeKey("");
-  }
-
-  async function onDeleteNode(node: MenuNode) {
-    if (!window.confirm(`Delete "${node.label}" and its submenu items?`)) return;
-    await runMenuAction(
-      {
-        action: "delete-menu-node",
-        nodeKey: node.nodeKey,
-      },
-      "Deleting menu item live..."
-    );
-  }
-
-  async function onMoveNode(nodeKey: string, targetKey: string, position: DropPosition) {
-    await runMenuAction(
-      {
-        action: "move-menu-node",
-        nodeKey,
-        targetKey,
-        position,
-      },
-      "Updating menu hierarchy live..."
-    );
-  }
-
-  async function onOpenLogs() {
-    setLogsOpen(true);
-    setLogsBusy(true);
-    setError("");
-    try {
-      const response = await fetch("/api/shopify/collection-mapping", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "get-logs", shop, limit: 200 }),
-      });
-      const json = (await response.json().catch(() => ({}))) as CollectionMappingResponse;
-      if (!response.ok || json.ok === false) {
-        throw new Error(normalizeText(json.error) || "Failed to load logs.");
-      }
-      setLogs(Array.isArray(json.logs) ? json.logs : []);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      setError(message || "Failed to load logs.");
-    } finally {
-      setLogsBusy(false);
-    }
-  }
-
-  async function onDownloadLogsCsv() {
-    try {
-      const response = await fetch("/api/shopify/collection-mapping", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "download-logs-csv", shop, limit: 1000 }),
-      });
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(normalizeText(text) || "Failed to download logs CSV.");
-      }
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `collection-mapping-logs-${new Date().toISOString().slice(0, 10)}.csv`;
-      anchor.click();
-      URL.revokeObjectURL(url);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      setError(message || "Failed to download logs.");
-    }
-  }
-
-  async function onToggleNode(row: ProductRow, node: MenuNode, checked: boolean) {
-    const key = `${row.id}::${node.nodeKey}`;
+  async function onToggleNode(row: ProductRow, nodeKey: string, checked: boolean) {
+    const key = `${row.id}::${nodeKey}`;
     setToggleBusyKey(key);
     setError("");
-    setWarning("");
     setStatus("");
-
     try {
       const response = await fetch("/api/shopify/collection-mapping", {
         method: "POST",
@@ -596,39 +206,25 @@ export default function ShopifyCollectionMapping() {
         body: JSON.stringify({
           action: "toggle-node",
           shop,
-          menuHandle: menu?.handle || "",
           productId: row.id,
-          nodeKey: node.nodeKey,
+          nodeKey,
           checked,
-          uncheckPolicy,
         }),
       });
-
       const json = (await response.json().catch(() => ({}))) as {
         ok?: boolean;
-        noop?: boolean;
         error?: string;
         warning?: string;
-        product?: {
-          id: string;
-          title: string;
-          collectionIds: string[];
-          checkedNodeKeys: string[];
-        };
+        product?: { id: string; checkedNodeKeys: string[] };
       };
-
       if (!response.ok || json.ok === false || !json.product) {
-        throw new Error(normalizeText(json.error) || "Failed to update Shopify collection mapping.");
+        throw new Error(normalizeText(json.error) || "Failed to update mapping.");
       }
-
       setRows((prev) =>
         prev.map((current) =>
           current.id === json.product!.id
             ? {
                 ...current,
-                collectionIds: Array.isArray(json.product!.collectionIds)
-                  ? json.product!.collectionIds
-                  : [],
                 checkedNodeKeys: Array.isArray(json.product!.checkedNodeKeys)
                   ? json.product!.checkedNodeKeys
                   : [],
@@ -636,356 +232,91 @@ export default function ShopifyCollectionMapping() {
             : current
         )
       );
-
-      setLastFailedToggle(null);
-      if (json.noop) {
-        setStatus(normalizeText(json.warning) || "No Shopify update was needed.");
-      } else {
-        setStatus("Shopify collections updated live.");
-      }
       if (normalizeText(json.warning)) {
         setWarning(normalizeText(json.warning));
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       setError(message || "Failed to update checkbox state.");
-      setLastFailedToggle({ productId: row.id, nodeKey: node.nodeKey, checked });
-      setWarning("Last toggle failed. Use Retry Last Toggle after fixing connectivity/API issues.");
-      setStatus("");
     } finally {
       setToggleBusyKey("");
     }
   }
 
-  function onRetryLastToggle() {
-    if (!lastFailedToggle) return;
-    const row = rows.find((item) => item.id === lastFailedToggle.productId);
-    const node =
-      mappedNodeColumns.find((item) => item.nodeKey === lastFailedToggle.nodeKey) ||
-      nodes.find((item) => item.nodeKey === lastFailedToggle.nodeKey);
+  async function bulkAssign(checked: boolean) {
+    if (!activeNode || selectedProductIds.length < 1 || bulkBusy) return;
+    setBulkBusy(true);
+    setError("");
+    setStatus(checked ? "Assigning selected products..." : "Removing selected products...");
+    try {
+      const updates = selectedProductIds.map(async (productId) => {
+        const row = rows.find((r) => r.id === productId);
+        if (!row) return null;
 
-    if (!row || !node) {
-      setError("Retry is unavailable because the product row or mapped node is no longer visible. Click Refresh.");
-      return;
+        if (checked) {
+          const targets = [activeNode.nodeKey, ...collectAncestors(activeNode.nodeKey, parentMap)];
+          for (const nodeKey of targets) {
+            if (row.checkedNodeKeys.includes(nodeKey)) continue;
+            await onToggleNode(
+              { ...row, checkedNodeKeys: row.checkedNodeKeys },
+              nodeKey,
+              true
+            );
+          }
+          return null;
+        }
+
+        if (!row.checkedNodeKeys.includes(activeNode.nodeKey)) return null;
+        await onToggleNode({ ...row, checkedNodeKeys: row.checkedNodeKeys }, activeNode.nodeKey, false);
+        return null;
+      });
+      await Promise.all(updates);
+      setStatus(
+        checked
+          ? `Assigned ${selectedProductIds.length} product(s) to ${activeNode.label}.`
+          : `Removed ${selectedProductIds.length} product(s) from ${activeNode.label}.`
+      );
+    } finally {
+      setBulkBusy(false);
     }
-
-    void onToggleNode(row, node, lastFailedToggle.checked);
-  }
-
-  function getAssignedNodesForProduct(row: ProductRow) {
-    const keys = new Set((row.checkedNodeKeys || []).map((key) => normalizeText(key)));
-    return nodes
-      .filter((node) => keys.has(node.nodeKey) && node.enabled)
-      .sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label));
-  }
-
-  function toggleCollapse(nodeKey: string) {
-    setCollapsedKeys((prev) => {
-      const next = new Set(prev);
-      if (next.has(nodeKey)) next.delete(nodeKey);
-      else next.add(nodeKey);
-      return next;
-    });
-  }
-
-  function linkSummaryByNode(node: MenuNode) {
-    const link = menuLinkByNodeKey.get(node.nodeKey);
-    if (!link) return "";
-    const type = normalizeText(link.type).toUpperCase();
-    const id = normalizeText(link.resourceId);
-    const url = normalizeText(link.url);
-    if (type === "FRONTPAGE") return "Home page";
-    if (type === "SEARCH") return "Search";
-    if (type === "URL") return url || "URL";
-    const targets =
-      type === "COLLECTION"
-        ? linkTargets.collections
-        : type === "PAGE"
-          ? linkTargets.pages
-          : type === "PRODUCT"
-            ? linkTargets.products
-            : type === "BLOG"
-              ? linkTargets.blogs
-              : [];
-    const target = targets.find((item) => normalizeText(item.id) === id);
-    if (target) return target.title;
-    return url || "-";
-  }
-
-  function openCreateFor(parentKey: string | null) {
-    setCreateOpen(true);
-    setCreateParentKey(parentKey);
-    setCreateLabel("");
-    setCreateLinkType("COLLECTION");
-    setCreateLinkTargetId("");
-    setCreateLinkUrl("");
-  }
-
-  function renderInlineCreate(depth: number) {
-    const targetOptions = targetsForLinkType(createLinkType);
-    return (
-      <div className="tree-node create-node" style={{ marginLeft: `${Math.max(0, depth) * 24}px` }}>
-        <div className="menu-edit-grid">
-          <input
-            value={createLabel}
-            placeholder="Label"
-            onChange={(event) => setCreateLabel(event.target.value)}
-            disabled={menuBusy || busy}
-          />
-          <div className="menu-link-grid">
-            <select
-              value={createLinkType}
-              onChange={(event) => {
-                setCreateLinkType(event.target.value as MenuLinkType);
-                setCreateLinkTargetId("");
-                setCreateLinkUrl("");
-              }}
-              disabled={menuBusy || busy}
-            >
-              {linkTypeOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            {createLinkType === "URL" ? (
-              <input
-                value={createLinkUrl}
-                placeholder="https://..."
-                onChange={(event) => setCreateLinkUrl(event.target.value)}
-                disabled={menuBusy || busy}
-              />
-            ) : createLinkType === "COLLECTION" ||
-                createLinkType === "PAGE" ||
-                createLinkType === "PRODUCT" ||
-                createLinkType === "BLOG" ? (
-              <select
-                value={createLinkTargetId}
-                onChange={(event) => setCreateLinkTargetId(normalizeText(event.target.value))}
-                disabled={menuBusy || busy}
-              >
-                <option value="">Select target</option>
-                {targetOptions.map((target) => (
-                  <option key={target.id} value={target.id}>
-                    {target.title}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <span className="menu-link-static">No extra target needed</span>
-            )}
-          </div>
-        </div>
-        <div className="tree-node-actions always-visible">
-          <button className="action-icon action-save" type="button" onClick={() => void onCreateNode()} disabled={menuBusy || busy}>
-            {"\u2713"}
-          </button>
-          <button
-            className="action-icon"
-            type="button"
-            onClick={() => {
-              setCreateOpen(false);
-              setCreateParentKey(null);
-            }}
-            disabled={menuBusy || busy}
-          >
-            {"\u2715"}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  function renderTreeNodeCard(node: MenuNode): JSX.Element {
-    const children = childrenByParent.get(node.nodeKey) || [];
-    const hasChildren = children.length > 0;
-    const collapsed = collapsedKeys.has(node.nodeKey);
-    const dropClass = dropHint?.targetKey === node.nodeKey ? `drop-${dropHint.position}` : "";
-    const isEditing = editingNodeKey === node.nodeKey;
-    const showCreateUnder = createOpen && createParentKey === node.nodeKey;
-    const targetOptions = targetsForLinkType(editLinkType);
-
-    return (
-      <div key={node.nodeKey} className="tree-node-wrap">
-        <div
-          className={`tree-node shopify-node ${dropClass} ${isEditing ? "editing" : ""}`}
-          draggable={!isEditing}
-          onDragStart={(event) => {
-            setDragNodeKey(node.nodeKey);
-            event.dataTransfer.setData("text/plain", node.nodeKey);
-            event.dataTransfer.effectAllowed = "move";
-          }}
-          onDragEnd={() => {
-            setDragNodeKey("");
-            setDropHint(null);
-          }}
-          onDragOver={(event) => {
-            event.preventDefault();
-            if (!dragNodeKey || dragNodeKey === node.nodeKey) return;
-            const rect = (event.currentTarget as HTMLDivElement).getBoundingClientRect();
-            const offset = event.clientY - rect.top;
-            const third = rect.height / 3;
-            const position: DropPosition =
-              offset < third ? "before" : offset > third * 2 ? "after" : "inside";
-            setDropHint({ targetKey: node.nodeKey, position });
-          }}
-          onDrop={(event) => {
-            event.preventDefault();
-            const source = dragNodeKey || normalizeText(event.dataTransfer.getData("text/plain"));
-            if (!source || source === node.nodeKey || !dropHint || dropHint.targetKey !== node.nodeKey) return;
-            void onMoveNode(source, node.nodeKey, dropHint.position);
-            setDragNodeKey("");
-            setDropHint(null);
-          }}
-        >
-          <div className="tree-node-main" style={{ paddingLeft: `${Math.max(0, node.depth) * 24}px` }}>
-            <span className="drag-handle" title="Drag to reorder/reparent">::</span>
-            {hasChildren ? (
-              <button className="collapse-btn" onClick={() => toggleCollapse(node.nodeKey)} type="button">
-                {collapsed ? ">" : "v"}
-              </button>
-            ) : (
-              <span className="collapse-spacer" />
-            )}
-            {isEditing ? (
-              <div className="menu-edit-grid">
-                <input
-                  value={editLabel}
-                  placeholder="Label"
-                  onChange={(event) => setEditLabel(event.target.value)}
-                  disabled={menuBusy || busy}
-                />
-                <div className="menu-link-grid">
-                  <select
-                    value={editLinkType}
-                    onChange={(event) => {
-                      setEditLinkType(event.target.value as MenuLinkType);
-                      setEditLinkTargetId("");
-                      setEditLinkUrl("");
-                    }}
-                    disabled={menuBusy || busy}
-                  >
-                    {linkTypeOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  {editLinkType === "URL" ? (
-                    <input
-                      value={editLinkUrl}
-                      placeholder="https://..."
-                      onChange={(event) => setEditLinkUrl(event.target.value)}
-                      disabled={menuBusy || busy}
-                    />
-                  ) : editLinkType === "COLLECTION" ||
-                      editLinkType === "PAGE" ||
-                      editLinkType === "PRODUCT" ||
-                      editLinkType === "BLOG" ? (
-                    <select
-                      value={editLinkTargetId}
-                      onChange={(event) => setEditLinkTargetId(normalizeText(event.target.value))}
-                      disabled={menuBusy || busy}
-                    >
-                      <option value="">Select target</option>
-                      {targetOptions.map((target) => (
-                        <option key={target.id} value={target.id}>
-                          {target.title}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <span className="menu-link-static">No extra target needed</span>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="tree-node-copy">
-                <span className="tree-node-label">{node.label}</span>
-                <span className="tree-node-sub">{linkSummaryByNode(node) || "No link selected"}</span>
-              </div>
-            )}
-          </div>
-          {isEditing ? (
-            <div className="tree-node-actions always-visible">
-              <button className="action-icon action-save" type="button" onClick={() => void onSaveNodeEdit(node)} disabled={menuBusy || busy}>
-                {"\u2713"}
-              </button>
-              <button className="action-icon" type="button" onClick={() => setEditingNodeKey("")} disabled={menuBusy || busy}>
-                {"\u2715"}
-              </button>
-              <button className="action-icon action-danger" type="button" onClick={() => void onDeleteNode(node)} disabled={menuBusy || busy}>
-                {"\u{1F5D1}"}
-              </button>
-            </div>
-          ) : (
-            <div className="tree-node-actions hover-actions">
-              <button className="action-icon" type="button" onClick={() => startEditNode(node)} disabled={menuBusy || busy}>
-                {"\u270E"}
-              </button>
-              <button className="action-icon action-danger" type="button" onClick={() => void onDeleteNode(node)} disabled={menuBusy || busy}>
-                {"\u{1F5D1}"}
-              </button>
-            </div>
-          )}
-        </div>
-
-        {!collapsed && children.length ? (
-          <div className="tree-children">
-            {children.map((child) => renderTreeNodeCard(child))}
-          </div>
-        ) : null}
-
-        {showCreateUnder ? (
-          renderInlineCreate(node.depth + 1)
-        ) : (
-          <button
-            className="add-item-row"
-            type="button"
-            style={{ marginLeft: `${Math.max(0, node.depth + 1) * 24}px` }}
-            onClick={() => openCreateFor(node.nodeKey)}
-            disabled={menuBusy || busy}
-          >
-            + Add menu item to {node.label}
-          </button>
-        )}
-      </div>
-    );
   }
 
   return (
     <main className="page">
       <section className="card top-nav">
-        <Link href="/studio/shopify-mapping-inventory/workset" className="quick-chip">Workset</Link>
-        <Link href="/studio/shopify-mapping-inventory/sales" className="quick-chip">Sales</Link>
-        <Link href="/studio/shopify-mapping-inventory/inventory" className="quick-chip">Inventory</Link>
-        <Link href="/studio/shopify-mapping-inventory/carts-inventory" className="quick-chip">Carts Inventory</Link>
-        <Link href="/studio/shopify-collection-mapping" className="quick-chip active">Collection Mapping</Link>
+        <Link href="/studio/shopify-mapping-inventory/workset" className="quick-chip">
+          Workset
+        </Link>
+        <Link href="/studio/shopify-mapping-inventory/sales" className="quick-chip">
+          Sales
+        </Link>
+        <Link href="/studio/shopify-mapping-inventory/inventory" className="quick-chip">
+          Inventory
+        </Link>
+        <Link href="/studio/shopify-mapping-inventory/carts-inventory" className="quick-chip">
+          Carts Inventory
+        </Link>
+        <Link href="/studio/shopify-collection-mapping" className="quick-chip active">
+          Collection Mapping
+        </Link>
       </section>
 
       <section className="card">
         <div className="header-row">
           <div>
             <h1>Shopify Collection Mapping</h1>
-            <p>Shop: <strong>{shop || "(auto)"}</strong></p>
-            <p>
-              Menu: <strong>{menu?.title || "(main-menu)"}</strong>{" "}
-              <span className="muted">({menu?.handle || "main-menu"})</span>
+            <p className="muted">Dual-pane mapper focused on fast and accurate category assignment.</p>
+            <p className="muted">
+              Shop: <strong>{shop || "(auto)"}</strong> · Products: <strong>{total}</strong>
             </p>
           </div>
           <div className="header-actions">
-            <button className="btn-base btn-outline" onClick={onRefreshMenu} disabled={busy || menuBusy}>
-              Pull Menu
-            </button>
             <button
               className="btn-base btn-outline"
-              onClick={() => void loadData(page, pageSize, appliedFilters, logsOpen)}
-              disabled={busy || menuBusy}
+              onClick={() => void loadData(page, pageSize, appliedFilters)}
+              disabled={busy || bulkBusy}
             >
               Refresh
-            </button>
-            <button className="btn-base btn-outline" onClick={() => void onOpenLogs()} disabled={busy || menuBusy}>
-              Logs
             </button>
           </div>
         </div>
@@ -993,340 +324,244 @@ export default function ShopifyCollectionMapping() {
         {status ? <p className="status-msg">{status}</p> : null}
         {warning ? <p className="warn-msg">{warning}</p> : null}
         {error ? <p className="error-msg">{error}</p> : null}
-        {lastFailedToggle ? (
-          <p className="retry-wrap">
+      </section>
+
+      <section className="grid-two">
+        <aside className="card side-pane">
+          <h2>Menu Categories</h2>
+          <p className="muted">Choose a single node, then assign products in the right pane.</p>
+          <div className="tree-wrap">
+            {mappedNodes.length < 1 ? (
+              <p className="muted">No mapped categories available.</p>
+            ) : (
+              mappedNodes.map((node) => (
+                <button
+                  key={node.nodeKey}
+                  type="button"
+                  className={`node-item ${activeNodeKey === node.nodeKey ? "active" : ""}`}
+                  style={{ paddingLeft: `${12 + node.depth * 18}px` }}
+                  onClick={() => setActiveNodeKey(node.nodeKey)}
+                >
+                  <span>{node.label}</span>
+                  <span className="node-meta">{node.collectionHandle || "-"}</span>
+                </button>
+              ))
+            )}
+          </div>
+        </aside>
+
+        <section className="card main-pane">
+          <div className="section-head">
+            <h2>Products</h2>
+            <div className="node-pill">
+              Active Node:{" "}
+              <strong>{activeNode ? `${activeNode.label} (${activeNode.collectionHandle})` : "-"}</strong>
+            </div>
+          </div>
+
+          <div className="filters">
+            <input
+              value={filters.q}
+              placeholder="Search title / sku / upc / type"
+              onChange={(e) => setFilters((prev) => ({ ...prev, q: e.target.value }))}
+            />
+            <input
+              value={filters.title}
+              placeholder="Title"
+              onChange={(e) => setFilters((prev) => ({ ...prev, title: e.target.value }))}
+            />
+            <input
+              value={filters.sku}
+              placeholder="SKU"
+              onChange={(e) => setFilters((prev) => ({ ...prev, sku: e.target.value }))}
+            />
+            <input
+              value={filters.upc}
+              placeholder="UPC"
+              onChange={(e) => setFilters((prev) => ({ ...prev, upc: e.target.value }))}
+            />
+            <input
+              value={filters.itemType}
+              placeholder="Item type"
+              onChange={(e) => setFilters((prev) => ({ ...prev, itemType: e.target.value }))}
+            />
+          </div>
+
+          <div className="actions-row">
+            <select value={sortField} onChange={(e) => setSortField(e.target.value as SortField)}>
+              <option value="title">Title</option>
+              <option value="upc">UPC</option>
+              <option value="sku">SKU</option>
+              <option value="itemType">Item Type</option>
+              <option value="updatedAt">Updated</option>
+            </select>
+            <select value={sortDir} onChange={(e) => setSortDir(e.target.value as SortDir)}>
+              <option value="asc">A-Z / Old-New</option>
+              <option value="desc">Z-A / New-Old</option>
+            </select>
+            <select
+              value={String(pageSize)}
+              onChange={(e) => {
+                const nextSize = Number(e.target.value) || 30;
+                setPageSize(nextSize);
+                void loadData(1, nextSize, appliedFilters);
+              }}
+            >
+              {PAGE_SIZE_OPTIONS.map((size) => (
+                <option key={size} value={size}>
+                  {size} / page
+                </option>
+              ))}
+            </select>
+            <button
+              className="btn-base"
+              onClick={() => {
+                setAppliedFilters(filters);
+                void loadData(1, pageSize, filters);
+              }}
+              disabled={busy || bulkBusy}
+            >
+              Search
+            </button>
             <button
               className="btn-base btn-outline"
-              onClick={onRetryLastToggle}
-              disabled={busy || menuBusy || Boolean(toggleBusyKey)}
+              onClick={() => {
+                setFilters(DEFAULT_FILTERS);
+                setAppliedFilters(DEFAULT_FILTERS);
+                void loadData(1, pageSize, DEFAULT_FILTERS);
+              }}
+              disabled={busy || bulkBusy}
             >
-              Retry Last Toggle
+              Clear
             </button>
-          </p>
-        ) : null}
-      </section>
-
-      <section className="card mapping-workspace">
-        <div className="mapping-workspace-head">
-          <div>
-            <h2>Menu Tree + Live Product Mapping</h2>
-            <p className="muted">Shopify-like menu tree with live edit, delete, add, and drag hierarchy updates.</p>
-          </div>
-          <button className="btn-base btn-outline" onClick={onRefreshMenu} disabled={busy || menuBusy}>
-            Pull Menu
-          </button>
-        </div>
-
-        <div className="mapping-two-col">
-          <div className="tree-panel">
-            <div className="section-head">
-              <h3>Menu Node Mapping</h3>
-            </div>
-            <div className="mapping-health">
-              <span className="pill good">Mapped: {mappingSummary.mapped}</span>
-              <span className="pill">Unmapped: {mappingSummary.unmapped}</span>
-              <span className="pill">Disabled: {mappingSummary.disabled}</span>
-            </div>
-            <div className="tree-list">
-              {nodes.length < 1 ? (
-                <div className="muted">No menu nodes available.</div>
-              ) : (
-                rootNodes.map((node) => renderTreeNodeCard(node))
-              )}
-              {createOpen && !createParentKey ? (
-                renderInlineCreate(0)
-              ) : (
-                <button className="add-item-row" type="button" onClick={() => openCreateFor(null)} disabled={menuBusy || busy}>
-                  + Add menu item
-                </button>
-              )}
-            </div>
+            <button
+              className="btn-base"
+              disabled={busy || bulkBusy || !activeNode || selectedProductIds.length < 1}
+              onClick={() => void bulkAssign(true)}
+            >
+              Assign Selected
+            </button>
+            <button
+              className="btn-base btn-outline"
+              disabled={busy || bulkBusy || !activeNode || selectedProductIds.length < 1}
+              onClick={() => void bulkAssign(false)}
+            >
+              Unassign Selected
+            </button>
           </div>
 
-          <div className="products-panel">
-            <div className="section-head">
-              <h3>Product Grid (Category Chips + Edit)</h3>
-              <div className="muted">{total} item(s)</div>
-            </div>
-
-            <div className="filters">
-              <input
-                value={filters.q}
-                placeholder="Search (partial text)"
-                onChange={(event) => setFilters((prev) => ({ ...prev, q: event.target.value }))}
-              />
-              <input
-                value={filters.title}
-                placeholder="Title"
-                onChange={(event) => setFilters((prev) => ({ ...prev, title: event.target.value }))}
-              />
-              <input
-                value={filters.sku}
-                placeholder="SKU"
-                onChange={(event) => setFilters((prev) => ({ ...prev, sku: event.target.value }))}
-              />
-              <input
-                value={filters.upc}
-                placeholder="UPC"
-                onChange={(event) => setFilters((prev) => ({ ...prev, upc: event.target.value }))}
-              />
-              <input
-                value={filters.itemType}
-                placeholder="Item type"
-                onChange={(event) => setFilters((prev) => ({ ...prev, itemType: event.target.value }))}
-              />
-            </div>
-
-            <div className="filters actions-row">
-              <select value={sortField} onChange={(event) => setSortField(event.target.value as SortField)}>
-                <option value="title">Title</option>
-                <option value="upc">UPC</option>
-                <option value="sku">SKU</option>
-                <option value="itemType">Item Type</option>
-                <option value="updatedAt">Updated</option>
-              </select>
-              <select value={sortDir} onChange={(event) => setSortDir(event.target.value as SortDir)}>
-                <option value="asc">A-Z / Old-New</option>
-                <option value="desc">Z-A / New-Old</option>
-              </select>
-              <select value={uncheckPolicy} onChange={(event) => setUncheckPolicy(event.target.value as UncheckPolicy)}>
-                <option value="remove-descendants">Uncheck parent + descendants</option>
-                <option value="keep-descendants">Uncheck only selected node</option>
-              </select>
-              <select
-                value={String(pageSize)}
-                onChange={(event) => {
-                  const nextSize = Number(event.target.value) || 30;
-                  setPageSize(nextSize);
-                  void loadData(1, nextSize, appliedFilters, logsOpen);
-                }}
-              >
-                {PAGE_SIZE_OPTIONS.map((size) => (
-                  <option key={size} value={size}>
-                    {size} / page
-                  </option>
-                ))}
-              </select>
-              <button
-                className="btn-base"
-                onClick={() => {
-                  setAppliedFilters(filters);
-                  void loadData(1, pageSize, filters, logsOpen);
-                }}
-                disabled={busy}
-              >
-                Search
-              </button>
-              <button
-                className="btn-base btn-outline"
-                onClick={() => {
-                  setFilters(DEFAULT_FILTERS);
-                  setAppliedFilters(DEFAULT_FILTERS);
-                  void loadData(1, pageSize, DEFAULT_FILTERS, logsOpen);
-                }}
-                disabled={busy}
-              >
-                Clear
-              </button>
-            </div>
-
-            <div className="table-wrap">
-              <table className="products-table products-table-prototype">
-                <thead>
+          <div className="table-wrap">
+            <table className="products-table">
+              <thead>
+                <tr>
+                  <th className="center">
+                    <input
+                      type="checkbox"
+                      checked={allRowsSelected}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        const next: Record<string, boolean> = {};
+                        for (const row of rows) next[row.id] = checked;
+                        setSelectedRows(next);
+                      }}
+                    />
+                  </th>
+                  <th>Picture</th>
+                  <th>Title</th>
+                  <th>UPC</th>
+                  <th>SKU</th>
+                  <th>Item Type</th>
+                  <th>Updated</th>
+                  <th className="center">Assigned?</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.length < 1 ? (
                   <tr>
-                    <th>Picture</th>
-                    <th>Title</th>
-                    <th>UPC</th>
-                    <th>Assigned Categories</th>
-                    <th>Action</th>
+                    <td colSpan={8} className="muted">
+                      No products found.
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {rows.length < 1 ? (
-                    <tr>
-                      <td colSpan={5} className="muted">
-                        No products found.
-                      </td>
-                    </tr>
-                  ) : (
-                    rows.map((row) => {
-                      const assignedNodes = getAssignedNodesForProduct(row);
-                      return (
-                        <tr key={row.id}>
-                          <td className="center">
-                            {row.image ? (
-                              <button className="thumb-btn" onClick={() => setPreviewImage(row.image)} title="Open image preview">
-                                <img src={row.image} alt={row.title} className="thumb" />
-                              </button>
-                            ) : (
-                              <span className="muted">-</span>
-                            )}
-                          </td>
-                          <td>
-                            <div className="title-cell">{row.title || row.handle || row.id}</div>
-                          </td>
-                          <td>{row.upc || "-"}</td>
-                          <td>
-                            <div className="category-chip-list">
-                              {assignedNodes.length ? (
-                                assignedNodes.map((node) => (
-                                  <span className="mini-tag good-tag" key={`${row.id}-${node.nodeKey}`}>
-                                    {node.label}
-                                  </span>
-                                ))
-                              ) : (
-                                <span className="mini-tag muted-tag">Unassigned</span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="center">
+                ) : (
+                  rows.map((row) => {
+                    const checked = new Set(row.checkedNodeKeys || []);
+                    const assignedToActive = Boolean(activeNode && checked.has(activeNode.nodeKey));
+                    const cellBusy = toggleBusyKey === `${row.id}::${activeNode?.nodeKey || ""}`;
+                    return (
+                      <tr key={row.id}>
+                        <td className="center">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(selectedRows[row.id])}
+                            onChange={(e) =>
+                              setSelectedRows((prev) => ({ ...prev, [row.id]: e.target.checked }))
+                            }
+                          />
+                        </td>
+                        <td className="center">
+                          {row.image ? (
                             <button
-                              className="tiny-btn btn-outline"
-                              type="button"
-                              onClick={() => {
-                                setProductEditorId(row.id);
-                                setProductEditorQuery("");
-                              }}
+                              className="thumb-btn"
+                              onClick={() => setPreviewImage(row.image)}
+                              title="Open image preview"
                             >
-                              Edit
+                              <img src={row.image} alt={row.title} className="thumb" />
                             </button>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="pager actions-row">
-              <button
-                className="btn-base btn-outline"
-                disabled={busy || page <= 1}
-                onClick={() => void loadData(page - 1, pageSize, appliedFilters, logsOpen)}
-              >
-                Prev
-              </button>
-              <span>
-                Page {page} / {totalPages}
-              </span>
-              <button
-                className="btn-base btn-outline"
-                disabled={busy || page >= totalPages}
-                onClick={() => void loadData(page + 1, pageSize, appliedFilters, logsOpen)}
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {activeProduct ? (
-        <div className="preview-overlay" onClick={() => setProductEditorId("")}>
-          <div className="drawer-modal" onClick={(event) => event.stopPropagation()}>
-            <div className="logs-head">
-              <h3>Edit Product Categories</h3>
-              <button className="btn-base btn-outline" onClick={() => setProductEditorId("")}>
-                Close
-              </button>
-            </div>
-            <div className="muted">
-              {activeProduct.title} | UPC: {activeProduct.upc || "-"}
-            </div>
-            <input
-              value={productEditorQuery}
-              placeholder="Search category nodes"
-              onChange={(event) => setProductEditorQuery(event.target.value)}
-            />
-            <div className="drawer-list">
-              {filteredAssignableNodes.length ? (
-                filteredAssignableNodes.map((node) => {
-                  const key = `${activeProduct.id}::${node.nodeKey}`;
-                  const checked = (activeProduct.checkedNodeKeys || []).includes(node.nodeKey);
-                  const cellBusy = toggleBusyKey === key;
-                  return (
-                    <label key={node.nodeKey} className="drawer-checkbox">
-                      <span style={{ paddingLeft: `${Math.max(0, node.depth) * 14}px` }}>{node.label}</span>
-                      {cellBusy ? (
-                        <span className="cell-spinner">...</span>
-                      ) : (
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={(event) => void onToggleNode(activeProduct, node, event.target.checked)}
-                          disabled={busy || menuBusy}
-                        />
-                      )}
-                    </label>
-                  );
-                })
-              ) : (
-                <div className="muted">No mapped categories match this search.</div>
-              )}
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {logsOpen ? (
-        <div className="preview-overlay" onClick={() => setLogsOpen(false)}>
-          <div className="logs-modal" onClick={(event) => event.stopPropagation()}>
-            <div className="logs-head">
-              <h3>Live Mapping Logs (Auto-delete after 7 days)</h3>
-              <div className="actions-row">
-                <button className="btn-base btn-outline" onClick={() => void onOpenLogs()} disabled={logsBusy}>
-                  Refresh Logs
-                </button>
-                <button className="btn-base btn-outline" onClick={() => void onDownloadLogsCsv()} disabled={logsBusy}>
-                  Download CSV
-                </button>
-                <button className="btn-base btn-outline" onClick={() => setLogsOpen(false)}>
-                  Close
-                </button>
-              </div>
-            </div>
-            <div className="table-wrap logs-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Time</th>
-                    <th>Status</th>
-                    <th>Action</th>
-                    <th>Summary</th>
-                    <th>Error</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {logsBusy ? (
-                    <tr>
-                      <td colSpan={5} className="muted">Loading logs...</td>
-                    </tr>
-                  ) : logs.length < 1 ? (
-                    <tr>
-                      <td colSpan={5} className="muted">No logs yet.</td>
-                    </tr>
-                  ) : (
-                    logs.map((log) => (
-                      <tr key={log.id}>
-                        <td>{prettyDate(log.createdAt)}</td>
-                        <td>{log.status}</td>
-                        <td>{log.action}</td>
-                        <td>{log.summary}</td>
-                        <td>{log.errorMessage || "-"}</td>
+                          ) : (
+                            <span className="muted">-</span>
+                          )}
+                        </td>
+                        <td>
+                          <div className="title-cell">{row.title || row.handle || row.id}</div>
+                        </td>
+                        <td>{row.upc || "-"}</td>
+                        <td>{row.sku || "-"}</td>
+                        <td>{row.itemType || "-"}</td>
+                        <td>{prettyDate(row.updatedAt)}</td>
+                        <td className="center">
+                          <input
+                            type="checkbox"
+                            checked={assignedToActive}
+                            disabled={!activeNode || busy || bulkBusy || cellBusy}
+                            onChange={(e) => {
+                              if (!activeNode) return;
+                              void onToggleNode(row, activeNode.nodeKey, e.target.checked);
+                            }}
+                          />
+                        </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
-        </div>
-      ) : null}
+
+          <div className="pager actions-row">
+            <button
+              className="btn-base btn-outline"
+              disabled={busy || bulkBusy || page <= 1}
+              onClick={() => void loadData(page - 1, pageSize, appliedFilters)}
+            >
+              Prev
+            </button>
+            <span className="muted">
+              Page {page} / {totalPages} · Selected {selectedProductIds.length}
+            </span>
+            <button
+              className="btn-base btn-outline"
+              disabled={busy || bulkBusy || page >= totalPages}
+              onClick={() => void loadData(page + 1, pageSize, appliedFilters)}
+            >
+              Next
+            </button>
+          </div>
+        </section>
+      </section>
 
       {previewImage ? (
         <div className="preview-overlay" onClick={() => setPreviewImage(null)}>
-          <div className="preview-content" onClick={(event) => event.stopPropagation()}>
+          <div className="preview-content" onClick={(e) => e.stopPropagation()}>
             <img src={previewImage} alt="Preview" className="preview-img" />
             <button className="preview-close" onClick={() => setPreviewImage(null)}>
               x
@@ -1352,9 +587,12 @@ export default function ShopifyCollectionMapping() {
         }
         h1,
         h2,
-        h3,
         p {
           margin: 0;
+        }
+        .muted {
+          color: rgba(226, 232, 240, 0.72);
+          font-size: 0.84rem;
         }
         .top-nav {
           display: flex;
@@ -1389,291 +627,6 @@ export default function ShopifyCollectionMapping() {
         .header-actions {
           display: inline-flex;
           gap: 8px;
-          flex-wrap: wrap;
-        }
-        .retry-wrap {
-          margin-top: 10px;
-        }
-        .mapping-health {
-          margin-top: 10px;
-          display: flex;
-          flex-wrap: wrap;
-          gap: 8px;
-        }
-        .mapping-workspace {
-          display: grid;
-          gap: 12px;
-        }
-        .mapping-workspace-head {
-          display: flex;
-          align-items: flex-start;
-          justify-content: space-between;
-          gap: 10px;
-          flex-wrap: wrap;
-        }
-        .mapping-two-col {
-          display: grid;
-          grid-template-columns: minmax(0, 0.44fr) minmax(0, 0.56fr);
-          gap: 12px;
-        }
-        .tree-panel,
-        .products-panel {
-          border: 1px solid rgba(255, 255, 255, 0.12);
-          border-radius: 12px;
-          background: rgba(15, 23, 42, 0.42);
-          padding: 10px;
-          display: grid;
-          gap: 10px;
-          align-content: start;
-        }
-        .tree-list {
-          display: grid;
-          gap: 10px;
-        }
-        .tree-children {
-          display: grid;
-          gap: 8px;
-          margin: 8px 0 0;
-          border-left: 1px solid rgba(255, 255, 255, 0.12);
-        }
-        .tree-node-wrap {
-          display: grid;
-          gap: 6px;
-        }
-        .tree-node {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 12px;
-          border: 1px solid rgba(255, 255, 255, 0.18);
-          background: rgba(255, 255, 255, 0.05);
-          border-radius: 10px;
-          padding: 10px 12px;
-        }
-        .shopify-node.editing,
-        .create-node {
-          background: rgba(15, 23, 42, 0.72);
-        }
-        .tree-node.drop-before {
-          border-top: 2px solid rgba(56, 189, 248, 0.95);
-        }
-        .tree-node.drop-after {
-          border-bottom: 2px solid rgba(56, 189, 248, 0.95);
-        }
-        .tree-node.drop-inside {
-          background: rgba(56, 189, 248, 0.12);
-        }
-        .tree-node-main {
-          min-width: 0;
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          flex: 1;
-        }
-        .tree-node-copy {
-          min-width: 0;
-          display: grid;
-          gap: 2px;
-        }
-        .tree-node-label {
-          font-size: 0.95rem;
-          font-weight: 800;
-          color: #f8fafc;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        .tree-node-sub {
-          font-size: 0.72rem;
-          color: rgba(226, 232, 240, 0.72);
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        .tree-node-actions {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          flex-wrap: nowrap;
-        }
-        .hover-actions {
-          opacity: 0;
-          pointer-events: none;
-          transition: opacity 0.16s ease;
-        }
-        .tree-node:hover .hover-actions,
-        .tree-node:focus-within .hover-actions {
-          opacity: 1;
-          pointer-events: auto;
-        }
-        .always-visible {
-          opacity: 1;
-          pointer-events: auto;
-        }
-        .action-icon {
-          width: 30px;
-          height: 30px;
-          border-radius: 8px;
-          border: 1px solid rgba(255, 255, 255, 0.28);
-          background: rgba(255, 255, 255, 0.08);
-          color: #f8fafc;
-          font-size: 0.95rem;
-          font-weight: 700;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-        }
-        .action-icon.action-save {
-          border-color: rgba(34, 197, 94, 0.5);
-          background: rgba(34, 197, 94, 0.18);
-          color: #bbf7d0;
-        }
-        .action-icon.action-danger {
-          border-color: rgba(248, 113, 113, 0.42);
-          color: #fecaca;
-          background: rgba(248, 113, 113, 0.12);
-        }
-        .menu-edit-grid {
-          display: grid;
-          grid-template-columns: minmax(170px, 1fr) minmax(220px, 1.2fr);
-          gap: 8px;
-          width: 100%;
-        }
-        .menu-link-grid {
-          display: grid;
-          grid-template-columns: minmax(110px, 0.45fr) minmax(130px, 0.55fr);
-          gap: 8px;
-        }
-        .menu-link-static {
-          min-height: 38px;
-          border-radius: 10px;
-          border: 1px solid rgba(255, 255, 255, 0.18);
-          background: rgba(255, 255, 255, 0.06);
-          color: rgba(226, 232, 240, 0.82);
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 0.8rem;
-          font-weight: 700;
-          padding: 0 10px;
-        }
-        .create-node {
-          margin-top: 2px;
-        }
-        .add-item-row {
-          min-height: 38px;
-          border-radius: 10px;
-          border: 1px solid rgba(255, 255, 255, 0.22);
-          background: rgba(255, 255, 255, 0.07);
-          color: #dbeafe;
-          font-size: 0.9rem;
-          font-weight: 700;
-          text-align: left;
-          padding: 0 12px;
-          cursor: pointer;
-        }
-        .products-table-prototype {
-          min-width: 780px;
-        }
-        .products-table-prototype th,
-        .products-table-prototype td {
-          white-space: normal;
-        }
-        .category-chip-list {
-          display: flex;
-          align-items: center;
-          flex-wrap: wrap;
-          gap: 6px;
-        }
-        .pill {
-          border-radius: 999px;
-          padding: 5px 10px;
-          font-size: 0.72rem;
-          font-weight: 700;
-          border: 1px solid rgba(255, 255, 255, 0.24);
-          background: rgba(255, 255, 255, 0.08);
-          color: #e2e8f0;
-        }
-        .pill.good {
-          border-color: rgba(16, 185, 129, 0.45);
-          color: #a7f3d0;
-          background: rgba(16, 185, 129, 0.18);
-        }
-        .create-panel {
-          margin-top: 12px;
-          border: 1px solid rgba(255, 255, 255, 0.18);
-          border-radius: 10px;
-          padding: 10px;
-          background: rgba(15, 23, 42, 0.66);
-          display: grid;
-          gap: 8px;
-        }
-        .create-grid,
-        .filters {
-          margin-top: 10px;
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-          gap: 8px;
-        }
-        input,
-        select {
-          min-height: 38px;
-          border-radius: 10px;
-          border: 1px solid rgba(255, 255, 255, 0.24);
-          background: rgba(15, 23, 42, 0.74);
-          color: #f8fafc;
-          padding: 0 10px;
-        }
-        .inline-toggle {
-          min-height: 38px;
-          border-radius: 10px;
-          border: 1px solid rgba(255, 255, 255, 0.24);
-          background: rgba(15, 23, 42, 0.74);
-          color: #f8fafc;
-          padding: 0 10px;
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          font-size: 0.85rem;
-          font-weight: 600;
-        }
-        .inline-toggle input {
-          width: 16px;
-          height: 16px;
-          min-height: 16px;
-          margin: 0;
-        }
-        .btn-base {
-          min-height: 38px;
-          border: 1px solid rgba(34, 197, 94, 0.6);
-          background: linear-gradient(180deg, rgba(34, 197, 94, 0.32) 0%, rgba(22, 163, 74, 0.28) 100%);
-          color: #ecfdf5;
-          border-radius: 10px;
-          padding: 0 14px;
-          font-weight: 700;
-          cursor: pointer;
-        }
-        .btn-base:disabled {
-          opacity: 0.6;
-          cursor: wait;
-        }
-        .btn-outline {
-          background: rgba(255, 255, 255, 0.08);
-          border-color: rgba(255, 255, 255, 0.28);
-          color: #e2e8f0;
-        }
-        .tiny-btn {
-          min-height: 30px;
-          border: 1px solid rgba(34, 197, 94, 0.55);
-          background: rgba(34, 197, 94, 0.16);
-          color: #dcfce7;
-          border-radius: 8px;
-          padding: 0 10px;
-          font-size: 0.78rem;
-          font-weight: 700;
-          cursor: pointer;
-          white-space: nowrap;
         }
         .status-msg,
         .warn-msg,
@@ -1699,7 +652,99 @@ export default function ShopifyCollectionMapping() {
           background: rgba(220, 38, 38, 0.14);
           color: #fecaca;
         }
-        .map-table-wrap,
+        .grid-two {
+          display: grid;
+          grid-template-columns: 360px 1fr;
+          gap: 12px;
+        }
+        .side-pane,
+        .main-pane {
+          min-height: 62vh;
+        }
+        .tree-wrap {
+          margin-top: 10px;
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          border-radius: 10px;
+          overflow: auto;
+          max-height: 56vh;
+          background: rgba(15, 23, 42, 0.72);
+          padding: 6px;
+          display: grid;
+          gap: 6px;
+        }
+        .node-item {
+          min-height: 34px;
+          border-radius: 8px;
+          border: 1px solid transparent;
+          background: transparent;
+          color: #e2e8f0;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          text-align: left;
+          cursor: pointer;
+        }
+        .node-item:hover {
+          background: rgba(255, 255, 255, 0.06);
+        }
+        .node-item.active {
+          border-color: rgba(56, 189, 248, 0.55);
+          background: rgba(56, 189, 248, 0.18);
+          color: #e0f2fe;
+        }
+        .node-meta {
+          font-size: 0.72rem;
+          color: rgba(226, 232, 240, 0.7);
+        }
+        .node-pill {
+          display: inline-flex;
+          align-items: center;
+          min-height: 30px;
+          border-radius: 999px;
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          padding: 0 10px;
+          background: rgba(255, 255, 255, 0.06);
+          font-size: 0.8rem;
+        }
+        .filters {
+          margin-top: 10px;
+          display: grid;
+          grid-template-columns: repeat(5, minmax(140px, 1fr));
+          gap: 8px;
+        }
+        input,
+        select {
+          min-height: 38px;
+          border-radius: 10px;
+          border: 1px solid rgba(255, 255, 255, 0.24);
+          background: rgba(15, 23, 42, 0.74);
+          color: #f8fafc;
+          padding: 0 10px;
+        }
+        .btn-base {
+          min-height: 38px;
+          border: 1px solid rgba(34, 197, 94, 0.6);
+          background: linear-gradient(
+            180deg,
+            rgba(34, 197, 94, 0.32) 0%,
+            rgba(22, 163, 74, 0.28) 100%
+          );
+          color: #ecfdf5;
+          border-radius: 10px;
+          padding: 0 14px;
+          font-weight: 700;
+          cursor: pointer;
+        }
+        .btn-base:disabled {
+          opacity: 0.6;
+          cursor: wait;
+        }
+        .btn-outline {
+          background: rgba(255, 255, 255, 0.08);
+          border-color: rgba(255, 255, 255, 0.28);
+          color: #e2e8f0;
+        }
         .table-wrap {
           margin-top: 10px;
           overflow: auto;
@@ -1711,16 +756,12 @@ export default function ShopifyCollectionMapping() {
           border-collapse: collapse;
           min-width: 980px;
         }
-        .map-table {
-          min-width: 960px;
-        }
         th,
         td {
           border-bottom: 1px solid rgba(255, 255, 255, 0.1);
           padding: 8px 10px;
           white-space: nowrap;
           text-align: left;
-          vertical-align: middle;
         }
         th {
           font-size: 0.76rem;
@@ -1728,121 +769,8 @@ export default function ShopifyCollectionMapping() {
           letter-spacing: 0.03em;
           color: rgba(226, 232, 240, 0.86);
         }
-        .node-row.drop-before td {
-          border-top: 2px solid rgba(56, 189, 248, 0.9);
-        }
-        .node-row.drop-after td {
-          border-bottom: 2px solid rgba(56, 189, 248, 0.9);
-        }
-        .node-row.drop-inside td {
-          background: rgba(56, 189, 248, 0.15);
-        }
-        .enable-toggle {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          font-size: 0.76rem;
-          font-weight: 700;
-        }
-        .node-cell {
-          min-width: 320px;
-        }
-        .node-line {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-        }
-        .drag-handle {
-          display: inline-flex;
-          width: 14px;
-          justify-content: center;
-          color: rgba(148, 163, 184, 0.9);
-          cursor: grab;
-          font-size: 0.8rem;
-          font-weight: 800;
-        }
-        .collapse-btn,
-        .collapse-spacer {
-          width: 22px;
-          height: 22px;
-          border-radius: 6px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-        }
-        .collapse-btn {
-          border: 1px solid rgba(255, 255, 255, 0.2);
-          background: rgba(255, 255, 255, 0.08);
-          color: #e2e8f0;
-          cursor: pointer;
-          font-weight: 700;
-        }
-        .collapse-spacer {
-          border: 1px dashed rgba(255, 255, 255, 0.08);
-        }
-        .node-label {
-          font-weight: 700;
-          font-size: 0.84rem;
-        }
-        .collection-cell {
-          min-width: 300px;
-        }
-        .collection-chip {
-          min-height: 30px;
-          border: 1px solid rgba(148, 163, 184, 0.4);
-          background: rgba(148, 163, 184, 0.13);
-          color: #f8fafc;
-          border-radius: 999px;
-          padding: 0 12px;
-          font-size: 0.78rem;
-          font-weight: 700;
-          cursor: pointer;
-          max-width: 280px;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        .collection-editor {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-        }
-        .status-tags {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 4px;
-        }
-        .mini-tag {
-          border-radius: 999px;
-          padding: 2px 8px;
-          font-size: 0.68rem;
-          font-weight: 700;
-          border: 1px solid rgba(255, 255, 255, 0.24);
-        }
-        .good-tag {
-          border-color: rgba(16, 185, 129, 0.45);
-          color: #a7f3d0;
-          background: rgba(16, 185, 129, 0.2);
-        }
-        .warn-tag {
-          border-color: rgba(245, 158, 11, 0.45);
-          color: #fde68a;
-          background: rgba(245, 158, 11, 0.2);
-        }
-        .muted-tag {
-          border-color: rgba(226, 232, 240, 0.28);
-          color: rgba(226, 232, 240, 0.72);
-          background: rgba(148, 163, 184, 0.12);
-        }
         .center {
           text-align: center;
-        }
-        .cell-spinner {
-          display: inline-flex;
-          min-width: 20px;
-          justify-content: center;
-          color: #fde68a;
-          font-weight: 800;
         }
         .thumb-btn {
           border: 0;
@@ -1852,20 +780,17 @@ export default function ShopifyCollectionMapping() {
           line-height: 0;
         }
         .thumb {
-          width: 52px;
-          height: 52px;
+          width: 44px;
+          height: 44px;
           object-fit: cover;
           border-radius: 6px;
           border: 1px solid rgba(255, 255, 255, 0.2);
           background: rgba(255, 255, 255, 0.06);
         }
         .title-cell {
-          max-width: 320px;
+          max-width: 300px;
           overflow: hidden;
           text-overflow: ellipsis;
-        }
-        .muted {
-          color: rgba(226, 232, 240, 0.65);
         }
         .preview-overlay {
           position: fixed;
@@ -1902,118 +827,16 @@ export default function ShopifyCollectionMapping() {
           font-weight: 700;
           cursor: pointer;
         }
-        .logs-modal {
-          width: min(1200px, 96vw);
-          max-height: 90vh;
-          overflow: hidden;
-          border-radius: 14px;
-          border: 1px solid rgba(255, 255, 255, 0.2);
-          background: rgba(2, 6, 23, 0.95);
-          padding: 12px;
-          display: grid;
-          gap: 10px;
-        }
-        .logs-head {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 10px;
-          flex-wrap: wrap;
-        }
-        .logs-wrap {
-          max-height: 72vh;
-        }
-        .drawer-modal {
-          width: min(560px, 96vw);
-          max-height: 90vh;
-          overflow: hidden;
-          border-radius: 14px;
-          border: 1px solid rgba(255, 255, 255, 0.22);
-          background: rgba(2, 6, 23, 0.96);
-          padding: 12px;
-          display: grid;
-          gap: 10px;
-        }
-        .drawer-list {
-          display: grid;
-          gap: 6px;
-          overflow: auto;
-          max-height: 62vh;
-          padding-right: 4px;
-        }
-        .drawer-option {
-          min-height: 40px;
-          border: 1px solid rgba(255, 255, 255, 0.2);
-          border-radius: 10px;
-          background: rgba(255, 255, 255, 0.06);
-          color: #f8fafc;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 8px;
-          padding: 0 12px;
-          cursor: pointer;
-          font-weight: 700;
-          text-align: left;
-        }
-        .drawer-option.active {
-          border-color: rgba(16, 185, 129, 0.5);
-          background: rgba(16, 185, 129, 0.2);
-          color: #a7f3d0;
-        }
-        .drawer-checkbox {
-          min-height: 38px;
-          border: 1px solid rgba(255, 255, 255, 0.18);
-          border-radius: 10px;
-          background: rgba(255, 255, 255, 0.04);
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 8px;
-          padding: 0 10px;
-          font-size: 0.84rem;
-          font-weight: 700;
-          color: #f8fafc;
-        }
-        .drawer-checkbox input {
-          width: 16px;
-          height: 16px;
-          min-height: 16px;
-        }
-        @media (max-width: 1080px) {
-          .page {
-            padding-top: 126px;
-            padding-left: 8px;
-            padding-right: 8px;
-          }
-          .mapping-two-col {
+        @media (max-width: 1200px) {
+          .grid-two {
             grid-template-columns: 1fr;
           }
-          table {
-            min-width: 760px;
+          .side-pane,
+          .main-pane {
+            min-height: auto;
           }
-          .collection-cell {
-            min-width: 220px;
-          }
-        }
-        @media (max-width: 760px) {
-          .tree-node {
-            flex-direction: column;
-            align-items: stretch;
-          }
-          .hover-actions {
-            opacity: 1;
-            pointer-events: auto;
-          }
-          .tree-node-actions {
-            justify-content: space-between;
-          }
-          .menu-edit-grid,
-          .menu-link-grid {
-            grid-template-columns: 1fr;
-          }
-          .products-table-prototype {
-            min-width: 640px;
+          .filters {
+            grid-template-columns: repeat(2, minmax(140px, 1fr));
           }
         }
       `}</style>

@@ -218,3 +218,10 @@ If session resets, instruct the agent:
   - default uses V2 prompt flow
   - auto-retries same panel with legacy prompt flow if V2 request fails
 - UI note added under Gemini Generate section to indicate V2 active + legacy recovery available.
+
+## 2026-03-11 Collection Mapping Dual-Pane Takeover
+- Replaced `components/shopify-collection-mapping.tsx` with a full dual-pane layout.
+- Left pane: mapped menu category tree with single active node focus.
+- Right pane: product list with focused assignment checkbox for active node and bulk assign/unassign on selected products.
+- Kept existing live Shopify `toggle-node` flow and filter/sort/pagination controls.
+- Triggered Coolify deploy hook and verified route render in browser at `/studio/shopify-collection-mapping`.
