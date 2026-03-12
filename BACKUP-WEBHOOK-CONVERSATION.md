@@ -354,3 +354,4 @@ If session resets, instruct the agent:
 - Added backend label rule in `app/api/shopify/collection-mapping/route.ts` so page-linked items always display compact `name.html` labels instead of full URLs.
 - Implemented helpers to normalize from page handle/title/url and applied globally in `resolveNodeLinkedTargetMeta` for `PAGE` links and `HTTP` links that point to `/pages/...`.
 - This applies to existing menus immediately on next data load and is enforced for future menu entries.
+- Extended the normalization to prefer query-based view slugs (`?view=...`, `?page=...`, `?template=...`) so links like `/pages/about-us?view=women-dress-cuts` render as `women-dress-cuts.html`.

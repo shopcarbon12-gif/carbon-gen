@@ -1138,6 +1138,16 @@ function toPageFileNameFromPath(raw: string) {
   return `${base}.html`;
 }
 
+function toPageFileNameFromQuery(raw: string) {
+  const value = normalizeText(raw);
+  if (!value || !value.includes("?")) return "";
+  const queryText = value.split("?")[1] || "";
+  const params = new URLSearchParams(queryText);
+  const viewValue = normalizeText(params.get("view") || params.get("page") || params.get("template") || "");
+  if (!viewValue) return "";
+  return toPageFileNameFromTitle(viewValue) || toPageFileNameFromPath(viewValue);
+}
+
 function toPageFileNameFromTitle(raw: string) {
   const value = normalizeText(raw).toLowerCase();
   if (!value) return "";
@@ -1151,6 +1161,8 @@ function resolvePageDisplayLabel(params: {
   title?: string;
   url?: string;
 }) {
+  const fromQuery = toPageFileNameFromQuery(params.url || "");
+  if (fromQuery) return fromQuery;
   const fromHandle = toPageFileNameFromPath(params.handle || "");
   if (fromHandle) return fromHandle;
   const fromUrl = toPageFileNameFromPath(params.url || "");
