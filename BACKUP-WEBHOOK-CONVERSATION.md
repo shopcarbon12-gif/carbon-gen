@@ -349,3 +349,8 @@ If session resets, instruct the agent:
 - Updated `components/shopify-collection-mapping.tsx` tree rows to progressively shrink by depth using CSS custom properties (`--tree-row-min-height`, `--tree-label-size`, `--tree-target-size`, `--tree-action-size`, `--tree-drag-size`, `--tree-row-padding-x`).
 - Reworked Add/Edit modal link flow into strict Shopify asset picking with no manual link text entry: only `Collection`, `Product`, `Page` categories + click-to-select assets from a fetched list.
 - Added backend `fetch-link-assets` action in `app/api/shopify/collection-mapping/route.ts` to fetch live Shopify assets per selected category.
+
+## 2026-03-12 Page-linked menu label normalization
+- Added backend label rule in `app/api/shopify/collection-mapping/route.ts` so page-linked items always display compact `name.html` labels instead of full URLs.
+- Implemented helpers to normalize from page handle/title/url and applied globally in `resolveNodeLinkedTargetMeta` for `PAGE` links and `HTTP` links that point to `/pages/...`.
+- This applies to existing menus immediately on next data load and is enforced for future menu entries.

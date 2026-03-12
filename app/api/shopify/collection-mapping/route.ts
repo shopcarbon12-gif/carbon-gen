@@ -1120,6 +1120,46 @@ function buildLinkTargetIndexes(targets: MenuLinkTargets, collections: Collectio
   };
 }
 
+function toPageFileNameFromPath(raw: string) {
+  const value = normalizeText(raw);
+  if (!value) return "";
+  const normalizedPath = value
+    .replace(/^[a-z][a-z0-9+\-.]*:\/\/[^/]+/i, "")
+    .split(/[?#]/)[0]
+    .trim();
+  const segment = normalizedPath
+    .split("/")
+    .map((part) => normalizeText(part))
+    .filter(Boolean)
+    .pop();
+  if (!segment) return "";
+  const base = segment.replace(/\.html?$/i, "").trim().toLowerCase();
+  if (!base) return "";
+  return `${base}.html`;
+}
+
+function toPageFileNameFromTitle(raw: string) {
+  const value = normalizeText(raw).toLowerCase();
+  if (!value) return "";
+  const slug = value.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  if (!slug) return "";
+  return `${slug}.html`;
+}
+
+function resolvePageDisplayLabel(params: {
+  handle?: string;
+  title?: string;
+  url?: string;
+}) {
+  const fromHandle = toPageFileNameFromPath(params.handle || "");
+  if (fromHandle) return fromHandle;
+  const fromUrl = toPageFileNameFromPath(params.url || "");
+  if (fromUrl) return fromUrl;
+  const fromTitle = toPageFileNameFromTitle(params.title || "");
+  if (fromTitle) return fromTitle;
+  return "page.html";
+}
+
 function resolveNodeLinkedTargetMeta(
   link: MenuLinkRecord | undefined,
   targetIndexes: ReturnType<typeof buildLinkTargetIndexes>
@@ -1151,9 +1191,10 @@ function resolveNodeLinkedTargetMeta(
   if (type === "PAGE") {
     const page = resourceId ? targetIndexes.pagesById.get(resourceId) : undefined;
     const title = normalizeText(page?.title);
+    const handle = normalizeText(page?.handle);
     return {
       linkedTargetType: "PAGE",
-      linkedTargetLabel: title || url || "Page link",
+      linkedTargetLabel: resolvePageDisplayLabel({ handle, title, url }),
       linkedTargetResourceId: resourceId || null,
       linkedTargetUrl: url || null,
     };
@@ -1201,7 +1242,10 @@ function resolveNodeLinkedTargetMeta(
 
   return {
     linkedTargetType: type,
-    linkedTargetLabel: url || "Custom URL",
+    linkedTargetLabel:
+      type === "HTTP" && /(^|\/)pages(\/|$)/i.test(url)
+        ? resolvePageDisplayLabel({ url })
+        : url || "Custom URL",
     linkedTargetResourceId: resourceId || null,
     linkedTargetUrl: url || null,
   };
