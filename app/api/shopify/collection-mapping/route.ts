@@ -2003,6 +2003,7 @@ export async function GET(req: NextRequest) {
     const includeLogs = parseBool(searchParams.get("includeLogs"));
     const logLimit = parseLogLimit(searchParams.get("logLimit"));
     const refreshProducts = parseBool(searchParams.get("refreshProducts"));
+    const refreshCollections = parseBool(searchParams.get("refreshCollections"));
     const shop = await resolveShop(rawShop);
     if (!shop) {
       return NextResponse.json({ ok: false, error: "Missing Shopify shop." }, { status: 400 });
@@ -2030,7 +2031,9 @@ export async function GET(req: NextRequest) {
     }
 
     const [collectionsResult, productsResult] = await Promise.all([
-      fetchAllCollectionsCached(shop, tokenResult.token, apiVersion),
+      refreshCollections
+        ? fetchAllCollections(shop, tokenResult.token, apiVersion)
+        : fetchAllCollectionsCached(shop, tokenResult.token, apiVersion),
       refreshProducts
         ? fetchAllProducts(shop, tokenResult.token, apiVersion)
         : fetchAllProductsCached(shop, tokenResult.token, apiVersion),

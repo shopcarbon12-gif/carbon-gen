@@ -106,6 +106,8 @@ export default function ShopifyCollectionMapping() {
   const [error, setError] = useState("");
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [showAuditReport, setShowAuditReport] = useState(false);
+  const [auditOpening, setAuditOpening] = useState(false);
+  const [auditGeneratedAt, setAuditGeneratedAt] = useState("");
   const [dragSourceKey, setDragSourceKey] = useState("");
   const [dropTarget, setDropTarget] = useState<{ targetKey: string; position: DropPosition } | null>(null);
   const [dragStartX, setDragStartX] = useState(0);
@@ -255,7 +257,7 @@ export default function ShopifyCollectionMapping() {
     };
   }, [collections, nodes]);
 
-  async function loadData(options?: { refreshProducts?: boolean }) {
+  async function loadData(options?: { refreshProducts?: boolean; refreshCollections?: boolean }) {
     setLoading(true);
     setError("");
     setWarning("");
@@ -273,6 +275,9 @@ export default function ShopifyCollectionMapping() {
       }
       if (options?.refreshProducts) {
         params.set("refreshProducts", "true");
+      }
+      if (options?.refreshCollections) {
+        params.set("refreshCollections", "true");
       }
       const resp = await fetch(`/api/shopify/collection-mapping?${params.toString()}`, {
         cache: "no-store",
@@ -317,9 +322,11 @@ export default function ShopifyCollectionMapping() {
         }
         return out;
       });
+      return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to load collection mapping.";
       setError(message);
+      return false;
     } finally {
       setLoading(false);
     }
@@ -725,6 +732,22 @@ export default function ShopifyCollectionMapping() {
     await loadData({ refreshProducts: true });
   }
 
+  async function openAuditReport() {
+    setAuditOpening(true);
+    const ok = await loadData({ refreshCollections: true });
+    if (ok) {
+      setAuditGeneratedAt(new Date().toISOString());
+      setShowAuditReport(true);
+    }
+    setAuditOpening(false);
+  }
+
+  function closeAuditReport() {
+    setShowAuditReport(false);
+    // Keep audit modal data fully ephemeral per user request.
+    setAuditGeneratedAt("");
+  }
+
   async function refreshMenuTreeSection() {
     setSaving(true);
     setError("");
@@ -770,8 +793,8 @@ export default function ShopifyCollectionMapping() {
         <div className="topbar" style={{ marginTop: 10 }}>
           <span className="pill">Auto-parent logic ON</span>
           <span className="pill">Live Shopify sync ON</span>
-          <button type="button" onClick={() => setShowAuditReport(true)}>
-            Collection Audit Log
+          <button type="button" onClick={() => void openAuditReport()} disabled={auditOpening || saving || loading}>
+            {auditOpening ? "Refreshing Audit..." : "Collection Audit Log"}
           </button>
         </div>
         <div className="kpi" style={{ marginTop: 10 }}>
@@ -1190,14 +1213,14 @@ export default function ShopifyCollectionMapping() {
       ) : null}
 
       {showAuditReport ? (
-        <div className="previewOverlay" onClick={() => setShowAuditReport(false)} role="dialog" aria-label="Collection audit report">
+        <div className="previewOverlay" onClick={closeAuditReport} role="dialog" aria-label="Collection audit report">
           <div className="reportModal" onClick={(event) => event.stopPropagation()}>
-            <button type="button" className="previewClose" onClick={() => setShowAuditReport(false)} aria-label="Close report">
+            <button type="button" className="reportClose" onClick={closeAuditReport} aria-label="Close report">
               X
             </button>
             <h3>Collection Audit Report</h3>
             <p className="muted" style={{ marginTop: 4 }}>
-              Generated: {new Date(collectionAudit.generatedAt).toLocaleString()}
+              Generated: {new Date(auditGeneratedAt || collectionAudit.generatedAt).toLocaleString()}
             </p>
             <div className="kpi" style={{ marginTop: 10 }}>
               <div className="k">
@@ -1888,6 +1911,28 @@ export default function ShopifyCollectionMapping() {
           background: #0a1324;
           padding: 14px;
           box-shadow: 0 14px 42px rgba(0, 0, 0, 0.6);
+        }
+        .reportClose {
+          position: absolute;
+          top: 10px;
+          right: 10px;
+          width: 30px;
+          height: 30px;
+          min-height: 30px;
+          border-radius: 999px;
+          border: 1px solid #3b4b63;
+          background: #0f1a2f;
+          color: #e5e7eb;
+          font-size: 16px;
+          line-height: 1;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0;
+        }
+        .reportClose:hover {
+          background: #15233a;
+          border-color: #5f7ba1;
         }
         .reportSection {
           margin-top: 12px;
