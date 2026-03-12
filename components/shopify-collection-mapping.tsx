@@ -1755,6 +1755,15 @@ export default function ShopifyCollectionMapping() {
           font-size: 12px;
           color: #cbd5e1;
         }
+        .editorModal select {
+          color: #e5e7eb;
+          background: #0a1324;
+          border-color: #334155;
+        }
+        .editorModal select option {
+          color: #e5e7eb;
+          background: #0a1324;
+        }
         .editorLinkSection {
           border: 1px solid #243042;
           border-radius: 10px;
