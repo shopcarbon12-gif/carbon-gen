@@ -517,6 +517,8 @@ type NodeLinkedTargetMeta = {
   linkedTargetLabel: string;
 };
 
+type ResolvableLinkType = "COLLECTION" | "PAGE" | "PRODUCT" | "BLOG";
+
 type MenuLinkTargetsQueryData = {
   pages?: {
     nodes?: Array<{ id?: string; title?: string; handle?: string }>;
@@ -1187,6 +1189,7 @@ function applyMenuNodeLink(
   const linkType = normalizeText(linkTypeRaw).toUpperCase() || "HTTP";
   const targetId = normalizeText(linkTargetIdRaw);
   const linkUrl = normalizeHttpLink(linkUrlRaw);
+  item.tags = [];
 
   if (linkType === "COLLECTION") {
     const collection = collections.find((row) => normalizeText(row.id) === targetId) || null;
@@ -1230,6 +1233,89 @@ function applyMenuNodeLink(
   }
 
   return { ok: false, error: `Unsupported link type "${linkType || "unknown"}".` };
+}
+
+function normalizeMenuLinkTypeInput(value: unknown) {
+  const normalized = normalizeText(value).toUpperCase();
+  if (normalized === "COLLECTION") return "COLLECTION";
+  if (normalized === "PRODUCT") return "PRODUCT";
+  if (normalized === "PAGE") return "PAGE";
+  if (normalized === "BLOG") return "BLOG";
+  if (normalized === "FRONTPAGE") return "FRONTPAGE";
+  if (normalized === "HTTP" || normalized === "URL" || normalized === "WEB URL" || normalized === "WEB_URL") {
+    return "HTTP";
+  }
+  return "HTTP";
+}
+
+function normalizeUrlPathForLookup(value: string) {
+  const raw = normalizeText(value);
+  if (!raw) return "";
+  if (raw.startsWith("/")) return raw.toLowerCase();
+  if (/^[a-z][a-z0-9+\-.]*:/i.test(raw)) {
+    try {
+      const parsed = new URL(raw);
+      return normalizeText(parsed.pathname).toLowerCase();
+    } catch {
+      return "";
+    }
+  }
+  return `/${raw.replace(/^\/+/, "").toLowerCase()}`;
+}
+
+function toResourceGid(raw: string, entity: ResolvableLinkType) {
+  const value = normalizeText(raw);
+  if (!value) return "";
+  if (value.startsWith("gid://")) return value;
+  if (!/^\d+$/.test(value)) return "";
+  if (entity === "COLLECTION") return `gid://shopify/Collection/${value}`;
+  if (entity === "PAGE") return `gid://shopify/OnlineStorePage/${value}`;
+  if (entity === "PRODUCT") return `gid://shopify/Product/${value}`;
+  return `gid://shopify/Blog/${value}`;
+}
+
+function resolveTargetIdFromValue(
+  candidates: LinkTargetOption[],
+  valueRaw: unknown,
+  entity: ResolvableLinkType
+) {
+  const value = normalizeText(valueRaw);
+  if (!value) return "";
+  const lowerValue = value.toLowerCase();
+  const pathValue = normalizeUrlPathForLookup(value);
+  const slugCandidate = (
+    lowerValue
+      .replace(/^[a-z][a-z0-9+\-.]*:\/\/[^/]+/i, "")
+      .split(/[?#]/)[0]
+      .split("/")
+      .filter(Boolean)
+      .pop() || lowerValue
+  ).trim();
+
+  const asGid = toResourceGid(value, entity);
+  if (asGid) {
+    const byGid = candidates.find((row) => normalizeText(row.id) === asGid);
+    if (byGid) return byGid.id;
+  }
+
+  const byId = candidates.find((row) => normalizeText(row.id).toLowerCase() === lowerValue);
+  if (byId) return byId.id;
+
+  const byHandle = candidates.find((row) => normalizeText(row.handle).toLowerCase() === lowerValue);
+  if (byHandle) return byHandle.id;
+
+  const bySlugHandle = candidates.find((row) => normalizeText(row.handle).toLowerCase() === slugCandidate);
+  if (bySlugHandle) return bySlugHandle.id;
+
+  if (pathValue) {
+    const byUrl = candidates.find((row) => normalizeText(row.url).toLowerCase() === pathValue);
+    if (byUrl) return byUrl.id;
+  }
+
+  const byTitle = candidates.find((row) => normalizeText(row.title).toLowerCase() === lowerValue);
+  if (byTitle) return byTitle.id;
+
+  return "";
 }
 
 function resolvePreferredMenu(
@@ -2316,8 +2402,9 @@ export async function POST(req: NextRequest) {
       const label = normalizeText(body.label || "");
       const parentKey = normalizeText(body.parentKey || "") || null;
       const legacyCollectionId = normalizeText(body.collectionId || "");
-      const linkType = normalizeText(body.linkType || (legacyCollectionId ? "COLLECTION" : "HTTP")).toUpperCase() || "HTTP";
-      const linkTargetId = normalizeText(body.linkTargetId || legacyCollectionId) || null;
+      const linkType = normalizeMenuLinkTypeInput(body.linkType || (legacyCollectionId ? "COLLECTION" : "HTTP"));
+      const linkValue = normalizeText(body.linkValue || "");
+      const linkTargetIdInput = normalizeText(body.linkTargetId || legacyCollectionId);
       const linkUrl = normalizeText(body.linkUrl || "");
       if (!label) {
         return NextResponse.json({ ok: false, error: "label is required." }, { status: 400 });
@@ -2371,11 +2458,22 @@ export async function POST(req: NextRequest) {
         tags: [],
         items: [],
       };
+      const resolvedLinkTargetId =
+        linkTargetIdInput ||
+        (linkType === "COLLECTION"
+          ? resolveTargetIdFromValue(linkTargetsResult.targets.collections, linkValue, "COLLECTION")
+          : linkType === "PAGE"
+            ? resolveTargetIdFromValue(linkTargetsResult.targets.pages, linkValue, "PAGE")
+            : linkType === "PRODUCT"
+              ? resolveTargetIdFromValue(linkTargetsResult.targets.products, linkValue, "PRODUCT")
+              : linkType === "BLOG"
+                ? resolveTargetIdFromValue(linkTargetsResult.targets.blogs, linkValue, "BLOG")
+                : "");
       const linkApplyResult = applyMenuNodeLink(
         newItem,
         linkType,
-        linkTargetId,
-        linkUrl,
+        resolvedLinkTargetId,
+        linkType === "HTTP" ? linkValue || linkUrl : linkUrl,
         collectionsResult.collections,
         linkTargetsResult.targets
       );
@@ -2418,7 +2516,7 @@ export async function POST(req: NextRequest) {
           summary: `Failed to create menu node "${label}"`,
           status: "error",
           errorMessage: updateResult.error,
-          details: { label, parentKey, linkType, linkTargetId, linkUrl },
+          details: { label, parentKey, linkType, linkValue, linkTargetId: resolvedLinkTargetId, linkUrl },
         });
         return NextResponse.json({ ok: false, error: updateResult.error }, { status: 500 });
       }
@@ -2442,7 +2540,14 @@ export async function POST(req: NextRequest) {
         action,
         summary: `Created menu node "${label}"`,
         status: "ok",
-        details: { parentKey, linkType, linkTargetId, linkUrl, nodeKey: createdNode?.nodeKey || null },
+        details: {
+          parentKey,
+          linkType,
+          linkValue,
+          linkTargetId: resolvedLinkTargetId,
+          linkUrl,
+          nodeKey: createdNode?.nodeKey || null,
+        },
       });
 
       return NextResponse.json({
@@ -2537,8 +2642,9 @@ export async function POST(req: NextRequest) {
     if (action === "edit-menu-node") {
       const nodeKey = normalizeText(body.nodeKey || "");
       const label = normalizeText(body.label || "");
-      const linkTypeRaw = normalizeText(body.linkType || "").toUpperCase();
-      const linkTargetId = normalizeText(body.linkTargetId || "") || null;
+      const linkTypeRaw = normalizeMenuLinkTypeInput(body.linkType || "");
+      const linkValue = normalizeText(body.linkValue || "");
+      const linkTargetIdInput = normalizeText(body.linkTargetId || "");
       const linkUrl = normalizeText(body.linkUrl || "");
 
       if (!nodeKey) {
@@ -2567,7 +2673,7 @@ export async function POST(req: NextRequest) {
           summary: `Failed to edit menu node "${nodeKey}"`,
           status: "error",
           errorMessage: menuSync.error,
-          details: { nodeKey, label, linkType: linkTypeRaw, linkTargetId, linkUrl, menuHandle },
+          details: { nodeKey, label, linkType: linkTypeRaw, linkValue, linkTargetId: linkTargetIdInput, linkUrl, menuHandle },
         });
         return NextResponse.json({ ok: false, error: menuSync.error }, { status });
       }
@@ -2580,8 +2686,19 @@ export async function POST(req: NextRequest) {
       }
 
       const linkType = linkTypeRaw || normalizeText(target.node.type || "HTTP").toUpperCase() || "HTTP";
-      const effectiveTargetId = linkTargetId || normalizeText(target.node.resourceId || "") || null;
-      const effectiveLinkUrl = linkUrl || normalizeText(target.node.url || "");
+      const resolvedLinkTargetId =
+        linkTargetIdInput ||
+        (linkType === "COLLECTION"
+          ? resolveTargetIdFromValue(linkTargetsResult.targets.collections, linkValue, "COLLECTION")
+          : linkType === "PAGE"
+            ? resolveTargetIdFromValue(linkTargetsResult.targets.pages, linkValue, "PAGE")
+            : linkType === "PRODUCT"
+              ? resolveTargetIdFromValue(linkTargetsResult.targets.products, linkValue, "PRODUCT")
+              : linkType === "BLOG"
+                ? resolveTargetIdFromValue(linkTargetsResult.targets.blogs, linkValue, "BLOG")
+                : "");
+      const effectiveTargetId = resolvedLinkTargetId || normalizeText(target.node.resourceId || "") || null;
+      const effectiveLinkUrl = linkType === "HTTP" ? linkValue || linkUrl || normalizeText(target.node.url || "") : linkUrl || normalizeText(target.node.url || "");
 
       target.node.title = label;
       const linkApplyResult = applyMenuNodeLink(
@@ -2612,7 +2729,7 @@ export async function POST(req: NextRequest) {
           summary: `Failed to edit menu node "${nodeKey}"`,
           status: "error",
           errorMessage: updateResult.error,
-          details: { nodeKey, label, linkType, linkTargetId, linkUrl },
+          details: { nodeKey, label, linkType, linkValue, linkTargetId: effectiveTargetId, linkUrl },
         });
         return NextResponse.json({ ok: false, error: updateResult.error }, { status: 500 });
       }
@@ -2623,7 +2740,7 @@ export async function POST(req: NextRequest) {
         action,
         summary: `Edited menu node "${label}"`,
         status: "ok",
-        details: { nodeKey, linkType, linkTargetId, linkUrl },
+        details: { nodeKey, linkType, linkValue, linkTargetId: effectiveTargetId, linkUrl },
       });
 
       return NextResponse.json({

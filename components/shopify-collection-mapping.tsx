@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type MenuNode = {
   nodeKey: string;
@@ -57,8 +57,31 @@ type SortValue = "title-asc" | "title-desc" | "upc-asc" | "upc-desc";
 
 type DropPosition = "before" | "after" | "inside";
 type MenuEditorMode = "add" | "edit";
+type MenuLinkType = "COLLECTION" | "PRODUCT" | "PAGE" | "BLOG" | "FRONTPAGE" | "HTTP";
 const TREE_PANEL_MIN_WIDTH = 260;
 const TREE_PANEL_MAX_WIDTH = 620;
+const MENU_LINK_TYPE_OPTIONS: Array<{ value: MenuLinkType; label: string }> = [
+  { value: "COLLECTION", label: "Collection" },
+  { value: "PRODUCT", label: "Product" },
+  { value: "PAGE", label: "Page" },
+  { value: "BLOG", label: "Blog" },
+  { value: "FRONTPAGE", label: "Frontpage" },
+  { value: "HTTP", label: "Web URL" },
+];
+
+function normalizeMenuEditorLinkType(value: string): MenuLinkType {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (normalized === "COLLECTION") return "COLLECTION";
+  if (normalized === "PRODUCT") return "PRODUCT";
+  if (normalized === "PAGE") return "PAGE";
+  if (normalized === "BLOG") return "BLOG";
+  if (normalized === "FRONTPAGE") return "FRONTPAGE";
+  return "HTTP";
+}
+
+function isMenuEditorLinkValueRequired(linkType: MenuLinkType) {
+  return linkType !== "FRONTPAGE";
+}
 
 export default function ShopifyCollectionMapping() {
   const [nodes, setNodes] = useState<MenuNode[]>([]);
@@ -86,10 +109,11 @@ export default function ShopifyCollectionMapping() {
   const [dragSourceKey, setDragSourceKey] = useState("");
   const [dropTarget, setDropTarget] = useState<{ targetKey: string; position: DropPosition } | null>(null);
   const [dragStartX, setDragStartX] = useState(0);
-  const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
   const [showMenuEditor, setShowMenuEditor] = useState(false);
   const [menuEditorMode, setMenuEditorMode] = useState<MenuEditorMode>("add");
   const [menuEditorLabel, setMenuEditorLabel] = useState("");
+  const [menuEditorLinkType, setMenuEditorLinkType] = useState<MenuLinkType>("COLLECTION");
+  const [menuEditorLinkValue, setMenuEditorLinkValue] = useState("");
   const [menuEditorParentKey, setMenuEditorParentKey] = useState<string | null>(null);
   const [menuEditorNodeKey, setMenuEditorNodeKey] = useState("");
   const [treePanelWidth, setTreePanelWidth] = useState(320);
@@ -193,29 +217,6 @@ export default function ShopifyCollectionMapping() {
     }
     return map;
   }, [nodes]);
-
-  const visibleTreeNodes = useMemo(() => {
-    if (treeSearch.trim()) return treeNodes;
-    const expandedSet = new Set(
-      Object.keys(expandedNodes).filter((key) => Boolean(expandedNodes[key]))
-    );
-    const out: MenuNode[] = [];
-    for (const node of treeNodes) {
-      let visible = true;
-      let current = node.parentKey || null;
-      const seen = new Set<string>();
-      while (current && !seen.has(current)) {
-        if (!expandedSet.has(current)) {
-          visible = false;
-          break;
-        }
-        seen.add(current);
-        current = parentMap.get(current) || null;
-      }
-      if (visible) out.push(node);
-    }
-    return out;
-  }, [treeNodes, expandedNodes, parentMap, treeSearch]);
 
   const collectionAudit = useMemo(() => {
     const titleById = new Map(collections.map((row) => [row.id, row.title]));
@@ -366,18 +367,6 @@ export default function ShopifyCollectionMapping() {
   useEffect(() => {
     setSelectedProducts({});
   }, [search, selectedTypes, treeSearch, sort]);
-
-  useEffect(() => {
-    setExpandedNodes((prev) => {
-      const out: Record<string, boolean> = {};
-      for (const node of nodes) {
-        if ((childrenByParent.get(node.nodeKey) || []).length > 0) {
-          out[node.nodeKey] = prev[node.nodeKey] !== false;
-        }
-      }
-      return out;
-    });
-  }, [nodes, childrenByParent]);
 
   function getHeaderArrow(field: "title" | "upc") {
     const [activeField, dir] = sort.split("-") as ["title" | "upc", "asc" | "desc"];
@@ -541,6 +530,8 @@ export default function ShopifyCollectionMapping() {
   function openAddEditor(parentKey: string | null) {
     setMenuEditorMode("add");
     setMenuEditorLabel("");
+    setMenuEditorLinkType("COLLECTION");
+    setMenuEditorLinkValue("");
     setMenuEditorParentKey(parentKey);
     setMenuEditorNodeKey("");
     setShowMenuEditor(true);
@@ -549,6 +540,12 @@ export default function ShopifyCollectionMapping() {
   function openEditEditor(node: MenuNode) {
     setMenuEditorMode("edit");
     setMenuEditorLabel(node.label);
+    setMenuEditorLinkType(normalizeMenuEditorLinkType(node.linkedTargetType || ""));
+    setMenuEditorLinkValue(
+      node.linkedTargetType === "FRONTPAGE" || node.linkedTargetLabel === "No target linked"
+        ? ""
+        : node.linkedTargetLabel || ""
+    );
     setMenuEditorParentKey(node.parentKey || null);
     setMenuEditorNodeKey(node.nodeKey);
     setShowMenuEditor(true);
@@ -556,7 +553,9 @@ export default function ShopifyCollectionMapping() {
 
   async function saveMenuEditor() {
     const label = menuEditorLabel.trim();
-    if (!label) return;
+    const linkValue = menuEditorLinkValue.trim();
+    const linkValueRequired = isMenuEditorLinkValueRequired(menuEditorLinkType);
+    if (!label || (linkValueRequired && !linkValue)) return;
     setSaving(true);
     setError("");
     try {
@@ -566,11 +565,15 @@ export default function ShopifyCollectionMapping() {
               action: "add-menu-node",
               parentKey: menuEditorParentKey,
               label,
+              linkType: menuEditorLinkType,
+              linkValue,
             }
           : {
               action: "edit-menu-node",
               nodeKey: menuEditorNodeKey,
               label,
+              linkType: menuEditorLinkType,
+              linkValue,
             };
       const resp = await fetch("/api/shopify/collection-mapping", {
         method: "POST",
@@ -792,12 +795,9 @@ export default function ShopifyCollectionMapping() {
       <section className="card">
         <div className="grid2" style={{ gridTemplateColumns: `${treePanelWidth}px 12px minmax(0, 1fr)` }}>
           <aside className="card panel">
-            <h3>Menu Tree</h3>
-            <p className="muted small" style={{ marginTop: 4 }}>
-              Multi-select collections. Parent categories are auto-selected when selecting deep children.
-            </p>
-            <div className="topbar" style={{ marginTop: 8 }}>
+            <div className="treeSearchBar">
               <input
+                className="treeSearchInput"
                 value={treeSearch}
                 onChange={(event) => setTreeSearch(event.target.value)}
                 placeholder="Search menu collections..."
@@ -814,139 +814,111 @@ export default function ShopifyCollectionMapping() {
               </button>
             </div>
             <div className="tree" style={{ marginTop: 8 }}>
-              {visibleTreeNodes.map((node) => {
+              {treeNodes.map((node) => {
                 const checked = Boolean(selectedNodes[node.nodeKey]);
                 const dragging = dragSourceKey === node.nodeKey;
                 const dropState =
                   dropTarget?.targetKey === node.nodeKey ? `drop-${dropTarget.position}` : "";
-                const hasChildren = (childrenByParent.get(node.nodeKey) || []).length > 0;
-                const isExpanded = Boolean(expandedNodes[node.nodeKey]);
                 const siblingKeys = node.parentKey ? childrenByParent.get(node.parentKey) || [] : [];
                 const isLastSibling =
                   siblingKeys.length > 0 && siblingKeys[siblingKeys.length - 1] === node.nodeKey;
+                const indent = 10 + node.depth * 32;
                 return (
-                  <Fragment key={node.nodeKey}>
-                    <div
-                      className={`treeRow ${checked ? "active" : ""} ${node.parentKey ? "has-parent" : ""} ${isLastSibling ? "is-last" : ""} ${dragging ? "dragging" : ""} ${dropState}`}
-                      style={{ paddingLeft: 10 + node.depth * 32 }}
-                      draggable
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => applyNodeSelection(node.nodeKey, !checked)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          applyNodeSelection(node.nodeKey, !checked);
-                        }
-                      }}
-                      onDragStart={(event) => {
-                        setDragSourceKey(node.nodeKey);
-                        setDragStartX(event.clientX);
-                        setDropTarget(null);
-                      }}
-                      onDragEnd={() => {
-                        setDragSourceKey("");
-                        setDropTarget(null);
-                      }}
-                      onDragOver={(event) => {
+                  <div
+                    key={node.nodeKey}
+                    className={`treeRow ${checked ? "active" : ""} ${node.parentKey ? "has-parent" : ""} ${isLastSibling ? "is-last" : ""} ${dragging ? "dragging" : ""} ${dropState}`}
+                    style={{
+                      paddingLeft: indent,
+                      ["--tree-indent" as "--tree-indent"]: `${indent}px`,
+                    }}
+                    draggable
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => applyNodeSelection(node.nodeKey, !checked)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
                         event.preventDefault();
-                        if (!dragSourceKey || dragSourceKey === node.nodeKey) return;
-                        const rect = (event.currentTarget as HTMLDivElement).getBoundingClientRect();
-                        const y = event.clientY - rect.top;
-                        const third = rect.height / 3;
-                        const deltaX = event.clientX - dragStartX;
-                        let position: DropPosition;
-                        let targetKey = node.nodeKey;
-                        if (deltaX > 28) {
-                          position = "inside";
-                        } else if (deltaX < -28) {
-                          // Left drag attempts outdent by targeting the hovered node's parent level.
-                          const parentKey = node.parentKey;
-                          if (parentKey) {
-                            targetKey = parentKey;
-                            position = "after";
-                          } else {
-                            position = "before";
-                          }
+                        applyNodeSelection(node.nodeKey, !checked);
+                      }
+                    }}
+                    onDragStart={(event) => {
+                      setDragSourceKey(node.nodeKey);
+                      setDragStartX(event.clientX);
+                      setDropTarget(null);
+                    }}
+                    onDragEnd={() => {
+                      setDragSourceKey("");
+                      setDropTarget(null);
+                    }}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      if (!dragSourceKey || dragSourceKey === node.nodeKey) return;
+                      const rect = (event.currentTarget as HTMLDivElement).getBoundingClientRect();
+                      const y = event.clientY - rect.top;
+                      const third = rect.height / 3;
+                      const deltaX = event.clientX - dragStartX;
+                      let position: DropPosition;
+                      let targetKey = node.nodeKey;
+                      if (deltaX > 28) {
+                        position = "inside";
+                      } else if (deltaX < -28) {
+                        // Left drag attempts outdent by targeting the hovered node's parent level.
+                        const parentKey = node.parentKey;
+                        if (parentKey) {
+                          targetKey = parentKey;
+                          position = "after";
                         } else {
-                          position = y < third ? "before" : y > third * 2 ? "after" : "inside";
+                          position = "before";
                         }
-                        setDropTarget({ targetKey, position });
-                      }}
-                      onDrop={(event) => {
-                        event.preventDefault();
-                        if (!dragSourceKey) return;
-                        if (!dropTarget) return;
-                        void moveMenuNode();
-                      }}
-                    >
-                      {node.parentKey ? (
-                        <>
-                          <span
-                            className={isLastSibling ? "treeConnectorV isLast" : "treeConnectorV"}
-                            style={{ left: 10 + node.depth * 32 - 16 }}
-                          />
-                          <span
-                            className="treeConnectorH"
-                            style={{ left: 10 + node.depth * 32 - 16 }}
-                          />
-                        </>
-                      ) : null}
-                      <span className={dragging ? "dragHandle grabbing" : "dragHandle"} aria-hidden="true">
-                        <svg viewBox="0 0 10 14" width="10" height="14">
-                          <circle cx="2" cy="2" r="1.1" />
-                          <circle cx="8" cy="2" r="1.1" />
-                          <circle cx="2" cy="7" r="1.1" />
-                          <circle cx="8" cy="7" r="1.1" />
-                          <circle cx="2" cy="12" r="1.1" />
-                          <circle cx="8" cy="12" r="1.1" />
-                        </svg>
-                      </span>
-                      {hasChildren ? (
-                        <button
-                          type="button"
-                          className={isExpanded ? "treeChevron open" : "treeChevron"}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setExpandedNodes((prev) => ({ ...prev, [node.nodeKey]: !prev[node.nodeKey] }));
-                          }}
-                          aria-label={isExpanded ? "Collapse collection" : "Expand collection"}
-                        >
-                          <svg viewBox="0 0 12 12" width="12" height="12">
-                            <path d="M4 2L8 6L4 10" />
-                          </svg>
-                        </button>
-                      ) : (
-                        <span className="treeChevronSpacer" />
-                      )}
-                      <div className="treeText">
-                        <span className="treeLabel">{node.label}</span>
-                        <span className="treeTargetLabel">{node.linkedTargetLabel || "No target linked"}</span>
-                      </div>
-                      <div className="treeRowActions" onClick={(event) => event.stopPropagation()}>
-                        <button
-                          type="button"
-                          className="iconBtn"
-                          onClick={() => openEditEditor(node)}
-                          aria-label="Edit menu item"
-                        >
-                          <svg viewBox="0 0 16 16" width="14" height="14">
-                            <path d="M11.7 2.3a1 1 0 0 1 1.4 0l.6.6a1 1 0 0 1 0 1.4L6.1 12H3v-3.1l8.7-6.6zM2 13h12v1H2z" />
-                          </svg>
-                        </button>
-                        <button
-                          type="button"
-                          className="iconBtn danger"
-                          onClick={() => void deleteMenuNode(node.nodeKey)}
-                          aria-label="Delete menu collection"
-                        >
-                          <svg viewBox="0 0 16 16" width="14" height="14">
-                            <path d="M6 2h4l1 1h3v1H2V3h3l1-1zm-2 3h8l-.6 8.2A1 1 0 0 1 10.4 14H5.6a1 1 0 0 1-1-.8L4 5z" />
-                          </svg>
-                        </button>
-                      </div>
+                      } else {
+                        position = y < third ? "before" : y > third * 2 ? "after" : "inside";
+                      }
+                      setDropTarget({ targetKey, position });
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      if (!dragSourceKey) return;
+                      if (!dropTarget) return;
+                      void moveMenuNode();
+                    }}
+                  >
+                    <span className={dragging ? "dragHandle grabbing" : "dragHandle"} aria-hidden="true">
+                      <svg viewBox="0 0 10 14" width="10" height="14">
+                        <circle cx="2" cy="2" r="1.1" />
+                        <circle cx="8" cy="2" r="1.1" />
+                        <circle cx="2" cy="7" r="1.1" />
+                        <circle cx="8" cy="7" r="1.1" />
+                        <circle cx="2" cy="12" r="1.1" />
+                        <circle cx="8" cy="12" r="1.1" />
+                      </svg>
+                    </span>
+                    <div className="treeText">
+                      <span className="treeLabel">{node.label}</span>
+                      <span className="treeTargetLabel">{node.linkedTargetLabel || "No target linked"}</span>
                     </div>
-                  </Fragment>
+                    <div className="treeRowActions" onClick={(event) => event.stopPropagation()}>
+                      <button
+                        type="button"
+                        className="iconBtn"
+                        onClick={() => openEditEditor(node)}
+                        aria-label="Edit menu item"
+                      >
+                        <svg viewBox="0 0 16 16" width="14" height="14">
+                          <path d="M11.7 2.3a1 1 0 0 1 1.4 0l.6.6a1 1 0 0 1 0 1.4L6.1 12H3v-3.1l8.7-6.6zM2 13h12v1H2z" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        className="iconBtn danger"
+                        onClick={() => void deleteMenuNode(node.nodeKey)}
+                        aria-label="Delete menu collection"
+                      >
+                        <svg viewBox="0 0 16 16" width="14" height="14">
+                          <path d="M6 2h4l1 1h3v1H2V3h3l1-1zm-2 3h8l-.6 8.2A1 1 0 0 1 10.4 14H5.6a1 1 0 0 1-1-.8L4 5z" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
                 );
               })}
               <div className="treeAddRoot">
@@ -1290,20 +1262,68 @@ export default function ShopifyCollectionMapping() {
           <div className="editorModal" onClick={(event) => event.stopPropagation()}>
             <h3>{menuEditorMode === "add" ? "Add Menu Item" : "Edit Menu Item"}</h3>
             <div className="editorField">
-              <label htmlFor="menu-item-label">Label</label>
+              <label htmlFor="menu-item-label">Name</label>
               <input
                 id="menu-item-label"
                 value={menuEditorLabel}
                 onChange={(event) => setMenuEditorLabel(event.target.value)}
-                placeholder="Menu label"
+                placeholder="Menu item name"
                 autoFocus
               />
+            </div>
+            <div className="editorLinkSection">
+              <p className="editorLinkHeading">Link</p>
+              <div className="editorField">
+                <label htmlFor="menu-item-link-type">Link type</label>
+                <select
+                  id="menu-item-link-type"
+                  value={menuEditorLinkType}
+                  onChange={(event) => setMenuEditorLinkType(normalizeMenuEditorLinkType(event.target.value))}
+                >
+                  {MENU_LINK_TYPE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="editorField">
+                <label htmlFor="menu-item-link-value">
+                  {menuEditorLinkType === "HTTP"
+                    ? "URL"
+                    : menuEditorLinkType === "FRONTPAGE"
+                      ? "Destination"
+                      : "Handle or ID"}
+                </label>
+                <input
+                  id="menu-item-link-value"
+                  value={menuEditorLinkValue}
+                  onChange={(event) => setMenuEditorLinkValue(event.target.value)}
+                  placeholder={
+                    menuEditorLinkType === "HTTP"
+                      ? "/collections/sale or https://example.com"
+                      : menuEditorLinkType === "FRONTPAGE"
+                        ? "Homepage link does not need a value"
+                        : "collection-handle, gid://..., or numeric ID"
+                  }
+                  disabled={menuEditorLinkType === "FRONTPAGE"}
+                />
+              </div>
             </div>
             <div className="topbar" style={{ justifyContent: "flex-end" }}>
               <button type="button" onClick={() => setShowMenuEditor(false)}>
                 Cancel
               </button>
-              <button type="button" className="primary" onClick={() => void saveMenuEditor()} disabled={saving || !menuEditorLabel.trim()}>
+              <button
+                type="button"
+                className="primary"
+                onClick={() => void saveMenuEditor()}
+                disabled={
+                  saving ||
+                  !menuEditorLabel.trim() ||
+                  (isMenuEditorLinkValueRequired(menuEditorLinkType) && !menuEditorLinkValue.trim())
+                }
+              >
                 {menuEditorMode === "add" ? "Add Item" : "Save"}
               </button>
             </div>
@@ -1468,6 +1488,17 @@ export default function ShopifyCollectionMapping() {
           font-size: 18px;
           line-height: 1;
         }
+        .treeSearchBar {
+          margin-top: 8px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: nowrap;
+        }
+        .treeSearchInput {
+          flex: 1 1 auto;
+          min-width: 0;
+        }
         .typesDropdownMenu {
           position: absolute;
           top: calc(100% + 6px);
@@ -1522,11 +1553,12 @@ export default function ShopifyCollectionMapping() {
           font-size: 12px;
         }
         .tree {
+          --tree-row-gap: 6px;
           max-height: 65vh;
           overflow: auto;
           border: 1px solid #2a3547;
           border-radius: 10px;
-          padding: 0;
+          padding: 8px;
           background: #0a1324;
           display: grid;
           gap: 0;
@@ -1534,19 +1566,20 @@ export default function ShopifyCollectionMapping() {
         .treeRow {
           position: relative;
           min-height: 44px;
-          border-bottom: 1px solid #1f2937;
+          border: 1px solid #2a3547;
+          border-radius: 6px;
+          margin-bottom: var(--tree-row-gap);
+          background: #101a2d;
           display: flex;
           align-items: center;
           gap: 10px;
           font-size: 14px;
           line-height: 1.2;
-          transition: background-color 120ms ease;
-        }
-        .treeRow:last-child {
-          border-bottom: 0;
+          transition: background-color 120ms ease, border-color 120ms ease;
         }
         .treeRow:hover {
-          background: #122033;
+          background: #15233a;
+          border-color: #3b4b63;
         }
         .treeRow:focus-visible {
           outline: 2px solid #60a5fa;
@@ -1554,24 +1587,29 @@ export default function ShopifyCollectionMapping() {
         }
         .treeRow.active {
           background: #0b5fff;
+          border-color: #2d6df6;
         }
         .treeRow.active:hover {
           background: #0061f2;
         }
-        .treeConnectorV {
+        .treeRow.has-parent::before {
           position: absolute;
-          top: 0;
-          bottom: 0;
+          content: "";
+          top: calc(-1 * var(--tree-row-gap));
+          bottom: calc(-1 * var(--tree-row-gap));
+          left: calc(var(--tree-indent, 10px) - 16px);
           border-left: 1px solid rgba(229, 231, 235, 0.42);
           pointer-events: none;
         }
-        .treeConnectorV.isLast {
+        .treeRow.has-parent.is-last::before {
           bottom: 50%;
         }
-        .treeConnectorH {
+        .treeRow.has-parent::after {
           position: absolute;
           top: 50%;
+          left: calc(var(--tree-indent, 10px) - 16px);
           width: 14px;
+          content: "";
           border-top: 1px solid rgba(229, 231, 235, 0.42);
           pointer-events: none;
         }
@@ -1590,39 +1628,6 @@ export default function ShopifyCollectionMapping() {
         }
         .dragHandle svg circle {
           fill: currentColor;
-        }
-        .treeChevron {
-          width: 20px;
-          height: 20px;
-          min-height: 20px;
-          padding: 0;
-          border: 0;
-          border-radius: 6px;
-          background: transparent;
-          color: #94a3b8;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          transition: transform 140ms ease, background-color 120ms ease;
-          flex: 0 0 auto;
-        }
-        .treeChevron:hover {
-          background: #1e293b;
-        }
-        .treeChevron.open {
-          transform: rotate(90deg);
-        }
-        .treeChevron svg path {
-          fill: none;
-          stroke: currentColor;
-          stroke-width: 1.8;
-          stroke-linecap: round;
-          stroke-linejoin: round;
-        }
-        .treeChevronSpacer {
-          width: 20px;
-          height: 20px;
-          flex: 0 0 auto;
         }
         .treeText {
           min-width: 0;
@@ -1645,13 +1650,11 @@ export default function ShopifyCollectionMapping() {
         }
         .treeRow.active .treeLabel,
         .treeRow.active .treeTargetLabel,
-        .treeRow.active .dragHandle,
-        .treeRow.active .treeChevron,
-        .treeRow.active .treeChevronSpacer {
+        .treeRow.active .dragHandle {
           color: #ffffff;
         }
-        .treeRow.active .treeConnectorV,
-        .treeRow.active .treeConnectorH {
+        .treeRow.active.has-parent::before,
+        .treeRow.active.has-parent::after {
           opacity: 0.45;
         }
         .treeRowActions {
@@ -1726,6 +1729,20 @@ export default function ShopifyCollectionMapping() {
         .editorField label {
           font-size: 12px;
           color: #cbd5e1;
+        }
+        .editorLinkSection {
+          border: 1px solid #243042;
+          border-radius: 10px;
+          padding: 10px;
+          display: grid;
+          gap: 10px;
+          background: #0a1220;
+        }
+        .editorLinkHeading {
+          margin: 0;
+          font-size: 12px;
+          color: #e2e8f0;
+          font-weight: 600;
         }
         .treeRow.dragging {
           opacity: 0.45;
