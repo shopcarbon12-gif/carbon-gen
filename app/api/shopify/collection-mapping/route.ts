@@ -2433,7 +2433,7 @@ export async function POST(req: NextRequest) {
           summary: `Failed to create menu node "${label}"`,
           status: "error",
           errorMessage: menuSync.error,
-          details: { label, parentKey, linkType, linkTargetId, linkUrl, menuHandle },
+          details: { label, parentKey, linkType, linkValue, linkTargetId: linkTargetIdInput, linkUrl, menuHandle },
         });
         return NextResponse.json({ ok: false, error: menuSync.error }, { status });
       }

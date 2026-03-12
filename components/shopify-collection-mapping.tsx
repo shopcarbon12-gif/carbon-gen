@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 
 type MenuNode = {
   nodeKey: string;
@@ -850,10 +850,12 @@ export default function ShopifyCollectionMapping() {
                   <div
                     key={node.nodeKey}
                     className={`treeRow ${checked ? "active" : ""} ${node.parentKey ? "has-parent" : ""} ${isLastSibling ? "is-last" : ""} ${dragging ? "dragging" : ""} ${dropState}`}
-                    style={{
-                      paddingLeft: indent,
-                      ["--tree-indent" as "--tree-indent"]: `${indent}px`,
-                    }}
+                    style={
+                      {
+                        paddingLeft: indent,
+                        ["--tree-indent"]: `${indent}px`,
+                      } as CSSProperties
+                    }
                     draggable
                     role="button"
                     tabIndex={0}
