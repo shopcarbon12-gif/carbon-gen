@@ -130,14 +130,18 @@ export default function ShopifyCollectionMapping() {
   const [menuEditorLabel, setMenuEditorLabel] = useState("");
   const [menuEditorLinkType, setMenuEditorLinkType] = useState<MenuLinkType>("COLLECTION");
   const [menuEditorLinkTargetId, setMenuEditorLinkTargetId] = useState("");
+  const [menuEditorLinkQuery, setMenuEditorLinkQuery] = useState("");
+  const [menuEditorComboboxOpen, setMenuEditorComboboxOpen] = useState(false);
   const [menuEditorAssetsLoading, setMenuEditorAssetsLoading] = useState(false);
   const [menuEditorParentKey, setMenuEditorParentKey] = useState<string | null>(null);
   const [menuEditorNodeKey, setMenuEditorNodeKey] = useState("");
   const [menuLinkTargets, setMenuLinkTargets] = useState<MenuLinkTargets>(EMPTY_LINK_TARGETS);
+  const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
   const [treePanelWidth, setTreePanelWidth] = useState(320);
   const [resizingPanes, setResizingPanes] = useState(false);
   const paneResizeStart = useRef<{ x: number; width: number } | null>(null);
   const typesDropdownRef = useRef<HTMLDivElement | null>(null);
+  const menuEditorComboboxRef = useRef<HTMLDivElement | null>(null);
 
   const nodeLabelByKey = useMemo(() => {
     const map = new Map<string, string>();
@@ -279,6 +283,32 @@ export default function ShopifyCollectionMapping() {
     if (menuEditorLinkType === "PAGE") return menuLinkTargets.pages;
     return [];
   }, [menuEditorLinkType, menuLinkTargets]);
+
+  const filteredMenuEditorAssetOptions = useMemo(() => {
+    const query = menuEditorLinkQuery.trim().toLowerCase();
+    if (!query) return menuEditorAssetOptions;
+    const tokens = query.split(/\s+/).filter(Boolean);
+    if (tokens.length < 1) return menuEditorAssetOptions;
+    return menuEditorAssetOptions.filter((option) => {
+      const haystack = `${option.title || ""} ${option.handle || ""} ${option.url || ""} ${option.id}`.toLowerCase();
+      return tokens.every((token) => haystack.includes(token));
+    });
+  }, [menuEditorAssetOptions, menuEditorLinkQuery]);
+
+  const visibleTreeNodes = useMemo(() => {
+    const hasSearch = treeSearch.trim().length > 0;
+    if (hasSearch) return treeNodes;
+    return treeNodes.filter((node) => {
+      let current = node.parentKey || null;
+      const seen = new Set<string>();
+      while (current && !seen.has(current)) {
+        if (expandedNodes[current] === false) return false;
+        seen.add(current);
+        current = parentMap.get(current) || null;
+      }
+      return true;
+    });
+  }, [treeNodes, treeSearch, expandedNodes, parentMap]);
 
   async function loadData(options?: { refreshProducts?: boolean; refreshCollections?: boolean }) {
     setLoading(true);
@@ -442,6 +472,36 @@ export default function ShopifyCollectionMapping() {
     setSelectedProducts({});
   }, [search, selectedTypes, treeSearch, sort]);
 
+  useEffect(() => {
+    setExpandedNodes((prev) => {
+      const parentKeys = new Set<string>();
+      for (const [parentKey, childKeys] of childrenByParent.entries()) {
+        if (parentKey && childKeys.length > 0) parentKeys.add(parentKey);
+      }
+      const next: Record<string, boolean> = {};
+      for (const key of parentKeys) {
+        next[key] = key in prev ? prev[key] : true;
+      }
+      const prevKeys = Object.keys(prev);
+      const nextKeys = Object.keys(next);
+      if (
+        prevKeys.length === nextKeys.length &&
+        prevKeys.every((key) => next[key] === prev[key])
+      ) {
+        return prev;
+      }
+      return next;
+    });
+  }, [childrenByParent]);
+
+  useEffect(() => {
+    if (!showMenuEditor) return;
+    const selected = menuEditorAssetOptions.find((option) => option.id === menuEditorLinkTargetId);
+    if (!selected) return;
+    const nextLabel = selected.title || selected.handle || selected.id;
+    setMenuEditorLinkQuery((prev) => (prev.trim() ? prev : nextLabel));
+  }, [showMenuEditor, menuEditorAssetOptions, menuEditorLinkTargetId]);
+
   function getHeaderArrow(field: "title" | "upc") {
     const [activeField, dir] = sort.split("-") as ["title" | "upc", "asc" | "desc"];
     if (activeField !== field) return "↕";
@@ -519,6 +579,25 @@ export default function ShopifyCollectionMapping() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [showTypesDropdown]);
+
+  useEffect(() => {
+    if (!showMenuEditor || !menuEditorComboboxOpen) return;
+    const onMouseDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (menuEditorComboboxRef.current?.contains(target)) return;
+      setMenuEditorComboboxOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenuEditorComboboxOpen(false);
+    };
+    window.addEventListener("mousedown", onMouseDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [showMenuEditor, menuEditorComboboxOpen]);
 
   useEffect(() => {
     if (!resizingPanes) return;
@@ -606,6 +685,8 @@ export default function ShopifyCollectionMapping() {
     setMenuEditorLabel("");
     setMenuEditorLinkType("COLLECTION");
     setMenuEditorLinkTargetId("");
+    setMenuEditorLinkQuery("");
+    setMenuEditorComboboxOpen(true);
     setMenuEditorParentKey(parentKey);
     setMenuEditorNodeKey("");
     setShowMenuEditor(true);
@@ -618,10 +699,19 @@ export default function ShopifyCollectionMapping() {
     setMenuEditorLabel(node.label);
     setMenuEditorLinkType(nextLinkType);
     setMenuEditorLinkTargetId(String(node.linkedTargetResourceId || "").trim());
+    setMenuEditorLinkQuery(node.linkedTargetLabel || node.label);
+    setMenuEditorComboboxOpen(true);
     setMenuEditorParentKey(node.parentKey || null);
     setMenuEditorNodeKey(node.nodeKey);
     setShowMenuEditor(true);
     void loadMenuEditorAssets(nextLinkType, { force: true });
+  }
+
+  function toggleNodeExpansion(nodeKey: string) {
+    setExpandedNodes((prev) => ({
+      ...prev,
+      [nodeKey]: prev[nodeKey] === false ? true : false,
+    }));
   }
 
   async function saveMenuEditor() {
@@ -904,7 +994,7 @@ export default function ShopifyCollectionMapping() {
               </button>
             </div>
             <div className="tree" style={{ marginTop: 8 }}>
-              {treeNodes.map((node) => {
+              {visibleTreeNodes.map((node) => {
                 const checked = Boolean(selectedNodes[node.nodeKey]);
                 const dragging = dragSourceKey === node.nodeKey;
                 const dropState =
@@ -912,6 +1002,9 @@ export default function ShopifyCollectionMapping() {
                 const siblingKeys = node.parentKey ? childrenByParent.get(node.parentKey) || [] : [];
                 const isLastSibling =
                   siblingKeys.length > 0 && siblingKeys[siblingKeys.length - 1] === node.nodeKey;
+                const childKeys = childrenByParent.get(node.nodeKey) || [];
+                const hasChildren = childKeys.length > 0;
+                const isExpanded = expandedNodes[node.nodeKey] !== false;
                 const depth = Math.max(0, Number(node.depth || 0));
                 const visualDepth = Math.min(depth, 4);
                 const rowMinHeight = Math.max(34, 44 - visualDepth * 4);
@@ -920,6 +1013,10 @@ export default function ShopifyCollectionMapping() {
                 const actionSize = Math.max(18, 24 - visualDepth * 2);
                 const dragSize = Math.max(12, 18 - visualDepth * 1.4);
                 const rowPaddingX = Math.max(6, 10 - visualDepth);
+                const treeIndent = 24;
+                const toggleSize = Math.max(12, 16 - visualDepth);
+                const rowGap = 6;
+                const dragCenterX = rowPaddingX + (hasChildren ? toggleSize + 8 : 0) + dragSize / 2;
                 return (
                   <div
                     key={node.nodeKey}
@@ -927,12 +1024,17 @@ export default function ShopifyCollectionMapping() {
                     style={
                       {
                         ["--tree-depth"]: `${depth}`,
+                        ["--tree-indent-step"]: `${treeIndent}px`,
+                        ["--tree-row-gap"]: `${rowGap}px`,
                         ["--tree-row-min-height"]: `${rowMinHeight}px`,
                         ["--tree-label-size"]: `${labelFontSize}px`,
                         ["--tree-target-size"]: `${targetFontSize}px`,
                         ["--tree-action-size"]: `${actionSize}px`,
                         ["--tree-drag-size"]: `${dragSize}px`,
+                        ["--tree-toggle-size"]: `${toggleSize}px`,
                         ["--tree-row-padding-x"]: `${rowPaddingX}px`,
+                        ["--tree-connector-x"]: `${Math.round(treeIndent / -2)}px`,
+                        ["--tree-drag-center-x"]: `${dragCenterX}px`,
                       } as CSSProperties
                     }
                     draggable
@@ -986,6 +1088,22 @@ export default function ShopifyCollectionMapping() {
                       void moveMenuNode();
                     }}
                   >
+                    {hasChildren ? (
+                      <button
+                        type="button"
+                        className="treeToggle"
+                        aria-label={isExpanded ? "Collapse menu item" : "Expand menu item"}
+                        aria-expanded={isExpanded}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          toggleNodeExpansion(node.nodeKey);
+                        }}
+                      >
+                        <svg viewBox="0 0 12 12" width="12" height="12">
+                          {isExpanded ? <path d="M2 4l4 4 4-4H2z" /> : <path d="M4 2l4 4-4 4V2z" />}
+                        </svg>
+                      </button>
+                    ) : null}
                     <span className={dragging ? "dragHandle grabbing" : "dragHandle"} aria-hidden="true">
                       <svg viewBox="0 0 10 14" width="10" height="14">
                         <circle cx="2" cy="2" r="1.1" />
@@ -1362,7 +1480,15 @@ export default function ShopifyCollectionMapping() {
       ) : null}
 
       {showMenuEditor ? (
-        <div className="previewOverlay" onClick={() => setShowMenuEditor(false)} role="dialog" aria-label="Menu item editor">
+        <div
+          className="previewOverlay"
+          onClick={() => {
+            setShowMenuEditor(false);
+            setMenuEditorComboboxOpen(false);
+          }}
+          role="dialog"
+          aria-label="Menu item editor"
+        >
           <div className="editorModal" onClick={(event) => event.stopPropagation()}>
             <h3>{menuEditorMode === "add" ? "Add Menu Item" : "Edit Menu Item"}</h3>
             <div className="editorField">
@@ -1386,6 +1512,8 @@ export default function ShopifyCollectionMapping() {
                     const nextType = normalizeMenuEditorLinkType(event.target.value);
                     setMenuEditorLinkType(nextType);
                     setMenuEditorLinkTargetId("");
+                    setMenuEditorLinkQuery("");
+                    setMenuEditorComboboxOpen(true);
                     void loadMenuEditorAssets(nextType, { force: true });
                   }}
                 >
@@ -1397,35 +1525,63 @@ export default function ShopifyCollectionMapping() {
                 </select>
               </div>
               <div className="editorField">
-                <label>Select asset</label>
-                <div className="editorAssetList" role="listbox" aria-label="Shopify asset results">
-                  {menuEditorAssetsLoading ? (
-                    <div className="editorAssetEmpty">Loading Shopify assets...</div>
-                  ) : menuEditorAssetOptions.length < 1 ? (
-                    <div className="editorAssetEmpty">No assets found in this category.</div>
-                  ) : (
-                    menuEditorAssetOptions.map((option) => {
-                      const active = menuEditorLinkTargetId === option.id;
-                      return (
-                        <button
-                          key={option.id}
-                          type="button"
-                          className={active ? "editorAssetOption active" : "editorAssetOption"}
-                          onClick={() => setMenuEditorLinkTargetId(option.id)}
-                          role="option"
-                          aria-selected={active}
-                        >
-                          <span className="editorAssetTitle">{option.title || option.handle || option.id}</span>
-                          <span className="editorAssetMeta">{option.handle || option.url || option.id}</span>
-                        </button>
-                      );
-                    })
-                  )}
+                <label htmlFor="menu-item-link-search">Link</label>
+                <div className="editorCombobox" ref={menuEditorComboboxRef}>
+                  <input
+                    id="menu-item-link-search"
+                    value={menuEditorLinkQuery}
+                    onFocus={() => setMenuEditorComboboxOpen(true)}
+                    onChange={(event) => {
+                      setMenuEditorLinkQuery(event.target.value);
+                      setMenuEditorLinkTargetId("");
+                      setMenuEditorComboboxOpen(true);
+                    }}
+                    placeholder="Search Shopify assets..."
+                    autoComplete="off"
+                  />
+                  {menuEditorComboboxOpen ? (
+                    <div className="editorAssetList" role="listbox" aria-label="Shopify asset results">
+                      {menuEditorAssetsLoading ? (
+                        <div className="editorAssetEmpty">Loading Shopify assets...</div>
+                      ) : menuEditorAssetOptions.length < 1 ? (
+                        <div className="editorAssetEmpty">No assets found in this category.</div>
+                      ) : filteredMenuEditorAssetOptions.length < 1 ? (
+                        <div className="editorAssetEmpty">No matching assets for this search.</div>
+                      ) : (
+                        filteredMenuEditorAssetOptions.map((option) => {
+                          const active = menuEditorLinkTargetId === option.id;
+                          return (
+                            <button
+                              key={option.id}
+                              type="button"
+                              className={active ? "editorAssetOption active" : "editorAssetOption"}
+                              onClick={() => {
+                                setMenuEditorLinkTargetId(option.id);
+                                setMenuEditorLinkQuery(option.title || option.handle || option.id);
+                                setMenuEditorComboboxOpen(false);
+                              }}
+                              role="option"
+                              aria-selected={active}
+                            >
+                              <span className="editorAssetTitle">{option.title || option.handle || option.id}</span>
+                              <span className="editorAssetMeta">{option.handle || option.url || option.id}</span>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </div>
             <div className="topbar" style={{ justifyContent: "flex-end" }}>
-              <button type="button" onClick={() => setShowMenuEditor(false)}>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMenuEditor(false);
+                  setMenuEditorComboboxOpen(false);
+                }}
+              >
                 Cancel
               </button>
               <button
@@ -1668,6 +1824,7 @@ export default function ShopifyCollectionMapping() {
         }
         .tree {
           --tree-row-gap: 6px;
+          --tree-indent-step: 24px;
           max-height: 65vh;
           overflow: auto;
           border: 1px solid #2a3547;
@@ -1683,7 +1840,7 @@ export default function ShopifyCollectionMapping() {
           border: 1px solid #2a3547;
           border-radius: 6px;
           margin-bottom: var(--tree-row-gap);
-          margin-left: calc(var(--tree-depth, 0) * 22px);
+          margin-left: calc(var(--tree-depth, 0) * var(--tree-indent-step));
           margin-right: calc(var(--tree-depth, 0) * 8px);
           padding: 0 var(--tree-row-padding-x, 10px);
           background: #101a2d;
@@ -1714,7 +1871,7 @@ export default function ShopifyCollectionMapping() {
           content: "";
           top: calc(-1 * var(--tree-row-gap));
           bottom: calc(-1 * var(--tree-row-gap));
-          left: -14px;
+          left: var(--tree-connector-x, -12px);
           border-left: 1px solid rgba(229, 231, 235, 0.42);
           pointer-events: none;
         }
@@ -1724,11 +1881,32 @@ export default function ShopifyCollectionMapping() {
         .treeRow.has-parent::after {
           position: absolute;
           top: 50%;
-          left: -14px;
-          width: 14px;
+          left: var(--tree-connector-x, -12px);
+          width: calc(var(--tree-drag-center-x, 16px) - var(--tree-connector-x, -12px));
           content: "";
           border-top: 1px solid rgba(229, 231, 235, 0.42);
           pointer-events: none;
+        }
+        .treeToggle {
+          width: var(--tree-toggle-size, 16px);
+          height: var(--tree-toggle-size, 16px);
+          min-height: var(--tree-toggle-size, 16px);
+          border: 0;
+          border-radius: 4px;
+          background: transparent;
+          color: #9fb3cc;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0;
+          flex: 0 0 auto;
+        }
+        .treeToggle:hover {
+          background: rgba(59, 130, 246, 0.18);
+          color: #dbeafe;
+        }
+        .treeToggle svg path {
+          fill: currentColor;
         }
         .dragHandle {
           width: var(--tree-drag-size, 18px);
@@ -1868,6 +2046,11 @@ export default function ShopifyCollectionMapping() {
           gap: 10px;
           background: #0a1220;
         }
+        .editorCombobox {
+          position: relative;
+          display: grid;
+          gap: 6px;
+        }
         .editorAssetList {
           max-height: 220px;
           overflow: auto;
@@ -1877,6 +2060,12 @@ export default function ShopifyCollectionMapping() {
           border-radius: 8px;
           padding: 6px;
           background: #0b1322;
+          position: absolute;
+          top: calc(100% + 6px);
+          left: 0;
+          right: 0;
+          z-index: 20;
+          box-shadow: 0 16px 32px rgba(2, 6, 23, 0.45);
         }
         .editorAssetOption {
           width: 100%;

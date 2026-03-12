@@ -355,3 +355,11 @@ If session resets, instruct the agent:
 - Implemented helpers to normalize from page handle/title/url and applied globally in `resolveNodeLinkedTargetMeta` for `PAGE` links and `HTTP` links that point to `/pages/...`.
 - This applies to existing menus immediately on next data load and is enforced for future menu entries.
 - Extended the normalization to prefer query-based view slugs (`?view=...`, `?page=...`, `?template=...`) so links like `/pages/about-us?view=women-dress-cuts` render as `women-dress-cuts.html`.
+
+## 2026-03-12 Collection Mapping Phases 1-3 UI pass
+- Updated `components/shopify-collection-mapping.tsx` menu editor Link field to a searchable combobox flow over live Shopify asset lists (`Collection`, `Product`, `Page`) with click-to-select IDs only (no manual URL typing).
+- Added combobox filtering state and tokenized search matching against asset title/handle/url/id, plus outside-click/Escape close behavior.
+- Restored dynamic tree expand/collapse controls for parent nodes only; leaf nodes render without arrow spacing.
+- Added `expandedNodes` visibility logic so nested rows hide/show correctly while preserving search behavior.
+- Refined connector line geometry so parent vertical branches and child horizontal branches align to each row's drag-handle center using computed CSS variables.
+- Verified project compiles successfully with `npm run build` after the changes.
