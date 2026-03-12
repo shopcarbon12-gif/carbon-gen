@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Prototype 3 - Searchable Combobox Table</title>
+  <style>
+    :root {
+      --bg: #f4f7f7;
+      --panel: #ffffff;
+      --line: #d4dee2;
+      --text: #20303a;
+      --muted: #617282;
+      --blue: #1d4ed8;
+      --green: #0f766e;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Tahoma", "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at 0% 0%, #eaf1ff 0%, transparent 34%),
+        radial-gradient(circle at 100% 120%, #dff8ef 0%, transparent 36%),
+        var(--bg);
+      color: var(--text);
+    }
+    .wrap {
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 18px;
+      display: grid;
+      gap: 14px;
+    }
+    .head {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 14px;
+      padding: 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .head h1 { margin: 0; font-size: 1.18rem; }
+    .head p { margin: 2px 0 0; color: var(--muted); font-size: 0.88rem; }
+    .controls {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 12px;
+      padding: 10px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .chip-btn {
+      border: 1px solid #adbbcf;
+      background: #f6f8fc;
+      color: #31445e;
+      border-radius: 999px;
+      padding: 7px 11px;
+      font-weight: 700;
+      font-size: 0.78rem;
+    }
+    .chip-btn.active {
+      border-color: #8fd2be;
+      background: #ecfbf6;
+      color: #0f5a4d;
+    }
+    .table-wrap {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      overflow: hidden;
+      background: var(--panel);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 980px;
+    }
+    th, td {
+      border-bottom: 1px solid var(--line);
+      padding: 10px;
+      text-align: left;
+      vertical-align: top;
+      font-size: 0.84rem;
+    }
+    th {
+      font-size: 0.74rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      background: #f8fafc;
+    }
+    .status {
+      display: inline-flex;
+      border-radius: 999px;
+      border: 1px solid #9ed5c1;
+      background: #ebfbf4;
+      color: #0f5a4f;
+      font-size: 0.72rem;
+      padding: 4px 8px;
+      font-weight: 700;
+    }
+    .status.warn {
+      border-color: #f3c287;
+      background: #fff7e7;
+      color: #8c5e10;
+    }
+    .combo {
+      position: relative;
+      width: 100%;
+      max-width: 360px;
+    }
+    .combo input {
+      width: 100%;
+      min-height: 38px;
+      border: 1px solid #b7c4d7;
+      border-radius: 9px;
+      padding: 0 10px;
+      font-size: 0.84rem;
+    }
+    .dropdown {
+      margin-top: 6px;
+      border: 1px solid #c3cfdf;
+      border-radius: 9px;
+      background: #fff;
+      max-height: 190px;
+      overflow: auto;
+      box-shadow: 0 8px 18px rgba(31, 41, 55, 0.12);
+      display: none;
+    }
+    .combo.open .dropdown { display: block; }
+    .opt {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px 9px;
+      border-bottom: 1px solid #edf2fb;
+      font-size: 0.79rem;
+      cursor: pointer;
+    }
+    .opt:hover { background: #f7fbff; }
+    .opt .h { color: var(--muted); font-family: Consolas, monospace; font-size: 0.72rem; }
+    .tag {
+      border: 1px solid #b2c5df;
+      background: #f4f8ff;
+      border-radius: 999px;
+      padding: 2px 7px;
+      font-size: 0.7rem;
+      color: #324b70;
+    }
+    .hint {
+      padding: 10px;
+      color: var(--muted);
+      font-size: 0.8rem;
+    }
+    @media (max-width: 980px) {
+      .wrap { padding: 10px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header class="head">
+      <div>
+        <h1>Prototype 3: Searchable Combobox Table</h1>
+        <p>Fast upgrade path: same table, no giant dropdowns.</p>
+      </div>
+      <span class="status">Low migration risk</span>
+    </header>
+
+    <section class="controls">
+      <button class="chip-btn active">All Nodes</button>
+      <button class="chip-btn">Unmapped</button>
+      <button class="chip-btn">Duplicates</button>
+      <button class="chip-btn">Missing Collection</button>
+      <button class="chip-btn">Disabled</button>
+    </section>
+
+    <section class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Enabled</th>
+            <th>Menu Node</th>
+            <th>Mapping (Type to Search)</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><input type="checkbox" checked /></td>
+            <td><strong>WOMEN / CLOTHING / LEGGINGS</strong></td>
+            <td>
+              <div class="combo" data-combo>
+                <input value="women-clothing-leggings" />
+                <div class="dropdown">
+                  <div class="opt"><span>LEGGINGS (women)</span><span class="h">women-clothing-leggings</span></div>
+                  <div class="opt"><span>PANTS & LEGGINGS (Women)</span><span class="h">pants-women</span></div>
+                  <div class="opt"><span>CLOTHING (WOMEN)</span><span class="h">clothing-1</span></div>
+                </div>
+              </div>
+            </td>
+            <td><span class="status">Mapped</span></td>
+          </tr>
+          <tr>
+            <td><input type="checkbox" checked /></td>
+            <td><strong>MEN / ACCESSORIES / BELTS</strong></td>
+            <td>
+              <div class="combo" data-combo>
+                <input value="" placeholder="Type title, handle, or id..." />
+                <div class="dropdown">
+                  <div class="opt"><span>BELTS (men)</span><span class="h">belts</span></div>
+                  <div class="opt"><span>ACCESSORIES & SHOES (MEN)</span><span class="h">men-accessories-shoes</span></div>
+                </div>
+              </div>
+            </td>
+            <td><span class="status warn">Unmapped</span></td>
+          </tr>
+          <tr>
+            <td><input type="checkbox" checked /></td>
+            <td><strong>JEANS / WOMEN / FLARE & WIDE LEG</strong></td>
+            <td>
+              <div class="combo" data-combo>
+                <input value="jeans-women" />
+                <div class="dropdown">
+                  <div class="opt"><span>FLARE & WIDE LEG (women)</span><span class="h">jeans-women</span></div>
+                  <div class="opt"><span>WOMEN JEANS</span><span class="h">clothing-jeans</span></div>
+                  <div class="opt"><span>RELAXED (WOMEN)</span><span class="h">relaxed-women</span></div>
+                </div>
+              </div>
+            </td>
+            <td><span class="status warn">Duplicate</span> <span class="tag">shared handle</span></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="hint">Optional: combine with server-side virtualized collection search endpoint so 87+ options stay smooth.</div>
+    </section>
+  </main>
+
+  <script>
+    document.querySelectorAll("[data-combo]").forEach((combo) => {
+      const input = combo.querySelector("input");
+      input.addEventListener("focus", () => combo.classList.add("open"));
+      input.addEventListener("blur", () => {
+        setTimeout(() => combo.classList.remove("open"), 100);
+      });
+    });
+  </script>
+</body>
+</html>

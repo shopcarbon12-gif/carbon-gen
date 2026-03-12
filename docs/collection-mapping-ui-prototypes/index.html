@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Collection Mapping UI Prototypes</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --text: #1c2534;
+      --muted: #5d6b82;
+      --line: #d8dfec;
+      --accent: #0d7a5f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      background: radial-gradient(circle at 10% 0%, #fdf7ef 0%, var(--bg) 40%, #eef3ff 100%);
+      color: var(--text);
+    }
+    .wrap {
+      max-width: 1080px;
+      margin: 24px auto;
+      padding: 0 16px 28px;
+      display: grid;
+      gap: 16px;
+    }
+    .hero {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 20px;
+    }
+    .hero h1 { margin: 0 0 8px; font-size: 1.4rem; }
+    .hero p { margin: 0; color: var(--muted); }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 14px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+      display: grid;
+      gap: 10px;
+    }
+    .card h2 {
+      margin: 0;
+      font-size: 1.05rem;
+      line-height: 1.2;
+    }
+    .card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.94rem;
+      line-height: 1.45;
+    }
+    .btn {
+      display: inline-flex;
+      width: fit-content;
+      text-decoration: none;
+      background: linear-gradient(180deg, #0d7a5f 0%, #086449 100%);
+      color: #fff;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-weight: 700;
+      border: 1px solid #075c43;
+    }
+    .path {
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 0.8rem;
+      color: #3a4760;
+      background: #eef2fa;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <h1>Shopify Collection Mapping UI Prototypes</h1>
+      <p>Open each sample and tell me which interaction model you want to ship.</p>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h2>Prototype 1: Tree + Search Drawer</h2>
+        <p>No giant dropdowns. Row-level Assign button opens a searchable side drawer.</p>
+        <a class="btn" href="./01-tree-drawer.html">Open Prototype 1</a>
+      </article>
+
+      <article class="card">
+        <h2>Prototype 2: Unmapped-Only Queue</h2>
+        <p>Focuses only on unresolved mappings with quick suggestions and step-by-step resolve flow.</p>
+        <a class="btn" href="./02-unmapped-workflow.html">Open Prototype 2</a>
+      </article>
+
+      <article class="card">
+        <h2>Prototype 3: Searchable Combobox Table</h2>
+        <p>Keeps table layout, replaces static select with typeahead combobox and quick filters.</p>
+        <a class="btn" href="./03-combobox-table.html">Open Prototype 3</a>
+      </article>
+    </section>
+
+    <div class="path">d:\Projects\My project\carbon-gen\docs\collection-mapping-ui-prototypes\</div>
+  </main>
+</body>
+</html>

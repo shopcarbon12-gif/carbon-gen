@@ -95,6 +95,41 @@ body {
   min-height: 100vh;
 }
 
+/* Route-level first-paint guards:
+   hide the global template layers before hydration to prevent flash/reflection. */
+body:has(.collection-mapping-route),
+body:has(.collection-mapping-loading),
+body:has(.seo-route),
+body:has(.seo-loading) {
+  background: #0b1020;
+}
+
+body:has(.collection-mapping-route) .app-root-content,
+body:has(.collection-mapping-loading) .app-root-content,
+body:has(.seo-route) .app-root-content,
+body:has(.seo-loading) .app-root-content {
+  background: #0b1020;
+}
+
+body:has(.collection-mapping-route) .app-bg-photo,
+body:has(.collection-mapping-route) .app-bg-fade,
+body:has(.collection-mapping-route) .app-bg-top-photo,
+body:has(.collection-mapping-route) .app-bg-top-fade,
+body:has(.collection-mapping-loading) .app-bg-photo,
+body:has(.collection-mapping-loading) .app-bg-fade,
+body:has(.collection-mapping-loading) .app-bg-top-photo,
+body:has(.collection-mapping-loading) .app-bg-top-fade,
+body:has(.seo-route) .app-bg-photo,
+body:has(.seo-route) .app-bg-fade,
+body:has(.seo-route) .app-bg-top-photo,
+body:has(.seo-route) .app-bg-top-fade,
+body:has(.seo-loading) .app-bg-photo,
+body:has(.seo-loading) .app-bg-fade,
+body:has(.seo-loading) .app-bg-top-photo,
+body:has(.seo-loading) .app-bg-top-fade {
+  display: none !important;
+}
+
 /* FOUC guard: keep header logo bounded even if route-scoped styles are delayed briefly. */
 .shell .topbar-brand-lock {
   display: inline-flex;

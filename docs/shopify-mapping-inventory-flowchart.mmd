@@ -1,0 +1,45 @@
+flowchart TD
+    A[Lightspeed Catalog/Sales Changes] --> B[Fetch Layer]
+    B --> B1["inventory-matrix API<br/>app/api/shopify/inventory-matrix/route.ts"]
+    B --> B2["delta fetch<br/>lib/cartInventoryDeltaSync.ts"]
+    B --> B3["sales-trigger fetch<br/>app/api/cron/sales-sync/route.ts<br/>app/api/lightspeed/webhooks/sale-update/route.ts"]
+
+    B1 --> C[Normalize + Group]
+    B2 --> C
+    B3 --> C
+
+    C --> C1["Parent key:<br/>matrix:&lt;itemMatrixID&gt; OR sku:&lt;custom/system sku&gt;"]
+    C1 --> D[Staging Store]
+    D --> D1["shopify_cart_inventory_staging<br/>via lib/shopifyCartStaging.ts"]
+    D --> D2["Status per parent/variant:<br/>PENDING / PROCESSED / ERROR"]
+
+    D1 --> E[Operator UI]
+    E --> E1["shopify-mapping-inventory.tsx"]
+    E --> E2["shopify-mapping-carts-inventory.tsx"]
+    E --> E3["shopify-mapping-cart-configurations.tsx"]
+
+    E --> F{Action}
+    F -->|Manual Push| G["runCartPushAll()<br/>lib/cartInventoryPush.ts"]
+    F -->|Auto Delta Sync| H["runDeltaSync()<br/>lib/cartInventoryDeltaSync.ts"]
+    F -->|Reconcile/Verify| I["compare/verify/reconcile APIs"]
+
+    H --> G
+    G --> G1["Match/relink variants by SKU/barcode/options"]
+    G --> G2["Create/Update Shopify products/variants"]
+    G --> G3["Set inventory quantities"]
+    G --> G4["Publish to channels/catalogs"]
+
+    G1 --> J[Shopify Admin GraphQL]
+    G2 --> J
+    G3 --> J
+    G4 --> J
+
+    J --> K[Push Result + Sync Logs]
+    K --> K1["update staging status"]
+    K --> K2["sync-log / undo session / notifications"]
+
+    H --> L["Update sync watermarks/config<br/>lastDeltaSyncAt, lastFullCheckAt, lastSaleSyncAt"]
+    L --> D1
+    K1 --> D1
+
+    D1 --> M[Next cycle uses updated state]

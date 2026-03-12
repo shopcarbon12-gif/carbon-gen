@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Prototype 2 - Unmapped Queue</title>
+  <style>
+    :root {
+      --bg: #fbfaf5;
+      --panel: #ffffff;
+      --line: #ded9cc;
+      --text: #222a34;
+      --muted: #687587;
+      --accent: #b45309;
+      --ok: #0f766e;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Verdana", "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 4% -12%, #ffeac9 0%, transparent 34%),
+        radial-gradient(circle at 100% 120%, #dbefff 0%, transparent 40%),
+        var(--bg);
+    }
+    .layout {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 18px;
+      display: grid;
+      gap: 14px;
+    }
+    .top {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+    }
+    .title-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    h1 { margin: 0; font-size: 1.2rem; }
+    .muted { color: var(--muted); font-size: 0.88rem; }
+    .meter {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: #f4f0e7;
+      border-radius: 999px;
+      height: 14px;
+      overflow: hidden;
+    }
+    .fill {
+      width: 26%;
+      height: 100%;
+      background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%);
+    }
+    .canvas {
+      display: grid;
+      grid-template-columns: 1.35fr 0.95fr;
+      gap: 14px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px;
+      min-height: 500px;
+    }
+    .head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .head h2 { margin: 0; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+    .queue {
+      display: grid;
+      gap: 10px;
+      max-height: 650px;
+      overflow: auto;
+      padding-right: 2px;
+    }
+    .item {
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      padding: 10px;
+      display: grid;
+      gap: 8px;
+      background: linear-gradient(180deg, #fff 0%, #fffef7 100%);
+    }
+    .item .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .state {
+      font-size: 0.74rem;
+      border-radius: 999px;
+      padding: 4px 8px;
+      font-weight: 700;
+      border: 1px solid #f9c879;
+      background: #fff6df;
+      color: #8b5e08;
+    }
+    .sugs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .sug {
+      border: 1px solid #afd9d2;
+      background: #ecfbf8;
+      color: #0f534f;
+      border-radius: 999px;
+      padding: 5px 10px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .sug.more {
+      border-color: #b5c2d5;
+      background: #f3f7ff;
+      color: #31496f;
+    }
+    .btn {
+      border: 1px solid #96a6bf;
+      background: #f6f9ff;
+      color: #243857;
+      border-radius: 9px;
+      padding: 7px 10px;
+      font-size: 0.76rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .btn.primary {
+      border-color: #9fd2b6;
+      background: #edfdf3;
+      color: #0f5132;
+    }
+    .steps {
+      display: grid;
+      gap: 10px;
+    }
+    .step {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      background: #fbfcfe;
+    }
+    .step.done {
+      border-color: #9fd2b6;
+      background: #ecfbf3;
+    }
+    .step .label { font-size: 0.78rem; color: var(--muted); text-transform: uppercase; font-weight: 700; }
+    .step .name { margin-top: 5px; font-weight: 700; }
+    .searchbox {
+      margin-top: 8px;
+      display: grid;
+      gap: 6px;
+    }
+    .searchbox input {
+      border: 1px solid #c3ccdc;
+      border-radius: 9px;
+      min-height: 38px;
+      padding: 0 10px;
+    }
+    .hint {
+      font-size: 0.8rem;
+      color: var(--muted);
+      border-top: 1px dashed var(--line);
+      padding-top: 10px;
+      margin-top: 10px;
+    }
+    @media (max-width: 980px) {
+      .canvas { grid-template-columns: 1fr; }
+      .card { min-height: 340px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="layout">
+    <section class="top">
+      <div class="title-row">
+        <h1>Prototype 2: Unmapped-Only Workflow</h1>
+        <span class="muted">Resolve queue: 23 / 87 completed</span>
+      </div>
+      <div class="meter"><div class="fill"></div></div>
+      <div class="muted">You only see broken mappings. Fixed rows disappear from queue.</div>
+    </section>
+
+    <section class="canvas">
+      <article class="card">
+        <div class="head">
+          <h2>Unresolved Nodes</h2>
+          <button class="btn">Filter: Missing + Duplicate</button>
+        </div>
+
+        <div class="queue">
+          <div class="item">
+            <div class="row">
+              <strong>WOMEN / CLOTHING / LEGGINGS</strong>
+              <span class="state">Unmapped</span>
+            </div>
+            <div class="sugs">
+              <button class="sug">women-clothing-leggings</button>
+              <button class="sug">pants-women</button>
+              <button class="sug">clothing-1</button>
+              <button class="sug more">More Search...</button>
+            </div>
+            <div class="row">
+              <span class="muted">System confidence: 88%</span>
+              <button class="btn primary">Mark Resolved</button>
+            </div>
+          </div>
+
+          <div class="item">
+            <div class="row">
+              <strong>JEANS / WOMEN / FLARE & WIDE LEG</strong>
+              <span class="state">Duplicate Candidate</span>
+            </div>
+            <div class="sugs">
+              <button class="sug">jeans-women</button>
+              <button class="sug">clothing-jeans</button>
+              <button class="sug">relaxed-women</button>
+              <button class="sug more">More Search...</button>
+            </div>
+            <div class="row">
+              <span class="muted">2 nodes currently point to same collection</span>
+              <button class="btn primary">Resolve Conflict</button>
+            </div>
+          </div>
+
+          <div class="item">
+            <div class="row">
+              <strong>MEN / ACCESSORIES / BELTS</strong>
+              <span class="state">Missing Collection</span>
+            </div>
+            <div class="sugs">
+              <button class="sug">belts</button>
+              <button class="sug">men-accessories-shoes</button>
+              <button class="sug more">More Search...</button>
+            </div>
+            <div class="row">
+              <span class="muted">Original mapping no longer exists in Shopify.</span>
+              <button class="btn primary">Save Replacement</button>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <aside class="card">
+        <div class="head">
+          <h2>Resolver Panel</h2>
+          <button class="btn">Skip Node</button>
+        </div>
+        <div class="steps">
+          <div class="step done">
+            <div class="label">Step 1</div>
+            <div class="name">Pick node from queue</div>
+            <div class="muted">Current: WOMEN / CLOTHING / LEGGINGS</div>
+          </div>
+          <div class="step done">
+            <div class="label">Step 2</div>
+            <div class="name">Choose target collection</div>
+            <div class="muted">Selected: women-clothing-leggings</div>
+          </div>
+          <div class="step">
+            <div class="label">Step 3</div>
+            <div class="name">Run duplicate/orphan check</div>
+            <div class="muted">Validation pending...</div>
+          </div>
+          <div class="step">
+            <div class="label">Step 4</div>
+            <div class="name">Confirm + apply</div>
+            <button class="btn primary" style="margin-top:8px;">Apply and Next</button>
+          </div>
+        </div>
+        <div class="searchbox">
+          <label class="muted">Manual collection lookup</label>
+          <input placeholder="Search handle/title for all 87 collections" />
+          <button class="btn">Open full collection browser</button>
+        </div>
+        <p class="hint">This pattern is optimized for cleanup speed, not full-table editing.</p>
+      </aside>
+    </section>
+  </main>
+</body>
+</html>

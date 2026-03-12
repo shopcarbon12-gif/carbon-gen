@@ -515,6 +515,8 @@ type MenuLinkRecord = {
 type NodeLinkedTargetMeta = {
   linkedTargetType: string;
   linkedTargetLabel: string;
+  linkedTargetResourceId: string | null;
+  linkedTargetUrl: string | null;
 };
 
 type ResolvableLinkType = "COLLECTION" | "PAGE" | "PRODUCT" | "BLOG";
@@ -1122,7 +1124,14 @@ function resolveNodeLinkedTargetMeta(
   link: MenuLinkRecord | undefined,
   targetIndexes: ReturnType<typeof buildLinkTargetIndexes>
 ): NodeLinkedTargetMeta {
-  if (!link) return { linkedTargetType: "UNLINKED", linkedTargetLabel: "No target linked" };
+  if (!link) {
+    return {
+      linkedTargetType: "UNLINKED",
+      linkedTargetLabel: "No target linked",
+      linkedTargetResourceId: null,
+      linkedTargetUrl: null,
+    };
+  }
 
   const type = normalizeText(link.type).toUpperCase() || "UNLINKED";
   const resourceId = normalizeText(link.resourceId);
@@ -1134,6 +1143,8 @@ function resolveNodeLinkedTargetMeta(
     return {
       linkedTargetType: "COLLECTION",
       linkedTargetLabel: title || url || "Collection link",
+      linkedTargetResourceId: resourceId || null,
+      linkedTargetUrl: url || null,
     };
   }
 
@@ -1143,6 +1154,8 @@ function resolveNodeLinkedTargetMeta(
     return {
       linkedTargetType: "PAGE",
       linkedTargetLabel: title || url || "Page link",
+      linkedTargetResourceId: resourceId || null,
+      linkedTargetUrl: url || null,
     };
   }
 
@@ -1152,6 +1165,8 @@ function resolveNodeLinkedTargetMeta(
     return {
       linkedTargetType: "PRODUCT",
       linkedTargetLabel: title || url || "Product link",
+      linkedTargetResourceId: resourceId || null,
+      linkedTargetUrl: url || null,
     };
   }
 
@@ -1161,20 +1176,34 @@ function resolveNodeLinkedTargetMeta(
     return {
       linkedTargetType: "BLOG",
       linkedTargetLabel: title || url || "Blog link",
+      linkedTargetResourceId: resourceId || null,
+      linkedTargetUrl: url || null,
     };
   }
 
   if (type === "FRONTPAGE") {
-    return { linkedTargetType: "FRONTPAGE", linkedTargetLabel: "Homepage" };
+    return {
+      linkedTargetType: "FRONTPAGE",
+      linkedTargetLabel: "Homepage",
+      linkedTargetResourceId: resourceId || null,
+      linkedTargetUrl: url || "/",
+    };
   }
 
   if (type === "SEARCH") {
-    return { linkedTargetType: "SEARCH", linkedTargetLabel: "Search page" };
+    return {
+      linkedTargetType: "SEARCH",
+      linkedTargetLabel: "Search page",
+      linkedTargetResourceId: resourceId || null,
+      linkedTargetUrl: url || "/search",
+    };
   }
 
   return {
     linkedTargetType: type,
     linkedTargetLabel: url || "Custom URL",
+    linkedTargetResourceId: resourceId || null,
+    linkedTargetUrl: url || null,
   };
 }
 
@@ -2171,6 +2200,36 @@ export async function POST(req: NextRequest) {
     const tokenResult = await resolveWorkingToken(shop, apiVersion);
     if (!tokenResult.ok) {
       return NextResponse.json({ ok: false, error: tokenResult.error }, { status: 401 });
+    }
+
+    if (action === "fetch-link-assets") {
+      const requestedType = normalizeMenuLinkTypeInput(body.linkType || "COLLECTION");
+      if (requestedType !== "COLLECTION" && requestedType !== "PRODUCT" && requestedType !== "PAGE") {
+        return NextResponse.json({ ok: false, error: "Only COLLECTION, PRODUCT, and PAGE are supported." }, { status: 400 });
+      }
+      const collectionsResult = await fetchAllCollectionsCached(shop, tokenResult.token, apiVersion);
+      if ("error" in collectionsResult) {
+        return NextResponse.json({ ok: false, error: collectionsResult.error }, { status: 500 });
+      }
+      const linkTargetsResult = await fetchMenuLinkTargets(
+        shop,
+        tokenResult.token,
+        apiVersion,
+        collectionsResult.collections
+      );
+      return NextResponse.json({
+        ok: true,
+        shop,
+        linkType: requestedType,
+        warning: linkTargetsResult.warning,
+        linkTargets: linkTargetsResult.targets,
+        assets:
+          requestedType === "COLLECTION"
+            ? linkTargetsResult.targets.collections
+            : requestedType === "PRODUCT"
+              ? linkTargetsResult.targets.products
+              : linkTargetsResult.targets.pages,
+      });
     }
 
     if (action === "get-logs") {

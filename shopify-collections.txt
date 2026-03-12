@@ -1,0 +1,87 @@
+Shopify Collections (actual store collections)
+Storefront source: https://shopcarbon.com/collections.json
+Generated: 2026-03-10
+Total collections: 82
+
+1. ACCESSORIES & SHOES (MEN) | handle=men-accessories-shoes | id=433460707580 | products=29
+2. ACCESSORIES & SHOES (WOMEN) | handle=accessories-shoes-women | id=433460314364 | products=46
+3. ALL ACCESSORIES (Men) | handle=all-accessories | id=433107927292 | products=29
+4. ALL ACCESSORIES (Women) | handle=all-accessories-women | id=433341038844 | products=31
+5. All Products (ChatGPT-AI Product Description) | handle=all-products-chatgpt-ai-product-description | id=442138657020 | products=757
+6. BAGGY (MEN) | handle=baggy-men | id=437269528828 | products=7
+7. BELTS (men) | handle=belts | id=433108418812 | products=0
+8. BELTS (Women) | handle=women-belts | id=433460347132 | products=5
+9. BODYSUITS (women) | handle=bodysuits | id=433106878716 | products=3
+10. CLOTHING  (WOMEN) | handle=clothing-1 | id=433459855612 | products=264
+11. CLOTHING (MEN) | handle=men-clothing | id=433443373308 | products=300
+12. DENIM SHIRTS (men) | handle=denim-shirts | id=433108091132 | products=5
+13. DRESS SHIRT (men) | handle=dress-shirt | id=433108025596 | products=17
+14. DRESSES (women) | handle=dresses | id=433106780412 | products=57
+15. FLARE & WIDE LEG (women) | handle=jeans-women | id=433108615420 | products=0
+16. FRAGRANCE & BEAUTY (Men) | handle=fragrance-beauty | id=433107894524 | products=0
+17. FRAGRANCE & BEAUTY (Women) | handle=fragrance-beauty-women | id=433368957180 | products=2
+18. GRAPHIC T-SHIRTS (SUMMER men) | handle=short-sleeve-shirts | id=433107992828 | products=31
+19. GRAPHIC T-SHIRTS (WINTER men) | handle=graphic-t-shirts-winter | id=460657590524 | products=16
+20. HATS (Men) | handle=hats-men | id=433368924412 | products=3
+21. HATS (Women) | handle=hats | id=433108451580 | products=3
+22. JACKETS & COATS (Men) | handle=jackets-coats | id=433106845948 | products=21
+23. JACKETS & COATS (Women) | handle=jackets-coats-2 | id=433107501308 | products=16
+24. JEWELRY (Men) | handle=jewelry | id=433107763452 | products=11
+25. JEWELRY (Women) | handle=jewelry-women | id=433365844220 | products=22
+26. JUMPSUITS & ROMPERS (women) | handle=jumpsuits-rompers | id=433106813180 | products=8
+27. LEGGINGS (women) | handle=women-clothing-leggings | id=433460019452 | products=3
+28. LIMITED EDITION (women) | handle=limited-edition | id=433106616572 | products=0
+29. LINEN SHIRTS (men) | handle=linen-shirts | id=433108058364 | products=0
+30. MATCHING SETS (women) | handle=matching-sets-1 | id=433108222204 | products=11
+31. Maxi dresses (women) | handle=maxi-dresses-women | id=460937560316 | products=1
+32. Men | handle=men | id=432962175228 | products=377
+33. MEN JEANS | handle=jeans-men | id=437232009468 | products=75
+34. Midi dresses (women) | handle=midi-dresses-women | id=460937625852 | products=3
+35. Mini dresses (women) | handle=mini-dresses | id=460936610044 | products=11
+36. NEW & NOW Men | handle=men-new-now | id=433443209468 | products=0
+37. NEW & NOW Women | handle=women-new-now | id=433459790076 | products=0
+38. NEW ARRIVALS (Men) | handle=new-arrivals | id=432960962812 | products=0
+39. NEW ARRIVALS (Women) | handle=new-arrivals-women | id=433419190524 | products=0
+40. NIGHT DRESSES | handle=night-dresses | id=438250635516 | products=53
+41. OVERALLS (MEN) | handle=overalls | id=433107108092 | products=2
+42. PANTS & LEGGINGS (Women) | handle=pants-women | id=433340514556 | products=21
+43. PANTS (Men) | handle=pants | id=433107042556 | products=34
+44. POLOS (men) | handle=polos | id=433107140860 | products=1
+45. RELAXED (WOMEN) | handle=relaxed-women | id=437269561596 | products=0
+46. SHIRT SHOP (men) | handle=men-shirt-shop | id=433460838652 | products=75
+47. SHIRTS (Men) | handle=shirts | id=433107435772 | products=45
+48. SHOES (Men) | handle=shoes | id=433107632380 | products=13
+49. SHOES (Women) | handle=shoes-women | id=433366073596 | products=15
+50. SHORTS (Men) | handle=shorts-1 | id=433108353276 | products=38
+51. SHORTS (Women) | handle=shorts | id=433107239164 | products=15
+52. SKINNY JEANS (MEN) | handle=skinny-jeans | id=433108648188 | products=5
+53. SKINNY JEANS (WOMEN) | handle=skinny-jeans-women | id=436771553532 | products=1
+54. SKIRTS (women) | handle=skirts | id=433108320508 | products=12
+55. SLIM JEANS (MEN) | handle=slim-jeans-men | id=437269496060 | products=6
+56. SOCKS & UNDERWEAR (men) | handle=socks-underwear | id=433107697916 | products=0
+57. SUMMER SETS MEN | handle=summer-sets-men | id=437182333180 | products=3
+58. SUMMER SETS WOMEN | handle=summer-sets | id=433108156668 | products=8
+59. SUNGLASSES (Men) | handle=sunglasses | id=433107796220 | products=0
+60. SUNGLASSES (Women) | handle=sunglasses-women | id=433350476028 | products=0
+61. SUPER SKINNY JEANS (MEN) | handle=super-skinny-jeans-men | id=437269397756 | products=42
+62. SWEATERS (Men) | handle=sweaters-men | id=433399955708 | products=5
+63. SWEATERS (Women) | handle=sweaters-women | id=460656247036 | products=5
+64. SWEATPANTS (Men) | handle=sweatpants-men | id=433371709692 | products=12
+65. SWEATPANTS (Women) | handle=sweatpants | id=433108254972 | products=7
+66. SWEATSHIRTS & HOODIES (Men) | handle=matching-sets | id=433106944252 | products=28
+67. SWEATSHIRTS & HOODIES (Women) | handle=sweatshirts-hoodies-women | id=433341169916 | products=23
+68. SWIMWEAR (Men) | handle=swimwear-1 | id=433108386044 | products=12
+69. SWIMWEAR (Women) | handle=swimsuit-women | id=433350869244 | products=5
+70. T-SHIRTS (Men) | handle=t-shirts | id=433107173628 | products=49
+71. T-SHIRTS (Women) | handle=t-shirts-women | id=433340645628 | products=16
+72. Tank Tops (Men) | handle=tank-tops-men | id=433420730620 | products=6
+73. TANK TOPS (Women) | handle=tank-tops | id=433107206396 | products=51
+74. TIES (men) | handle=ties | id=433107730684 | products=0
+75. TOPS (Men) | handle=tops-men | id=433401823484 | products=111
+76. TOPS (Women) | handle=tops | id=433106747644 | products=98
+77. TRACKSUITS (Men) | handle=tracksuits-1 | id=433107009788 | products=2
+78. TRACKSUITS (Women) | handle=tracksuits | id=433106911484 | products=4
+79. WINTER SETS (women) | handle=winter-sets-women | id=437182562556 | products=4
+80. WINTER SETS MEN | handle=winter-sets | id=437171716348 | products=4
+81. Women | handle=women | id=432960241916 | products=317
+82. WOMEN JEANS | handle=clothing-jeans | id=433459921148 | products=17

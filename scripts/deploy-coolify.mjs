@@ -2,12 +2,17 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { execSync } from "node:child_process";
 
 const DEFAULT_HOOK_URL =
   "http://178.156.136.112:8000/api/v1/deploy?uuid=aw4800s4wsgok0wck480goco&force=false";
 const LOCAL_CONFIG_PATH = path.resolve(process.cwd(), ".coolify-deploy.local.json");
+const DEPLOY_STATE_PATH = path.resolve(process.cwd(), ".bridge/runtime/coolify-deploy-state.json");
 const DEPLOY_GUARD =
   String(process.env.ALLOW_COOLIFY_DEPLOY || "").trim().toLowerCase() === "true";
+const ALLOW_DUPLICATE_DEPLOY =
+  String(process.env.ALLOW_DUPLICATE_COOLIFY_DEPLOY || "").trim().toLowerCase() === "true";
+const DUPLICATE_WINDOW_MS = 15 * 60 * 1000;
 
 if (!DEPLOY_GUARD) {
   console.error("Coolify deploy is blocked by local-only safety guard.");
@@ -22,6 +27,32 @@ function readLocalConfig() {
     return JSON.parse(fs.readFileSync(LOCAL_CONFIG_PATH, "utf8"));
   } catch {
     return {};
+  }
+}
+
+function getHeadSha() {
+  try {
+    return execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
+  } catch {
+    return "";
+  }
+}
+
+function readDeployState() {
+  if (!fs.existsSync(DEPLOY_STATE_PATH)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(DEPLOY_STATE_PATH, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function writeDeployState(state) {
+  try {
+    fs.mkdirSync(path.dirname(DEPLOY_STATE_PATH), { recursive: true });
+    fs.writeFileSync(DEPLOY_STATE_PATH, JSON.stringify(state, null, 2), "utf8");
+  } catch {
+    // Best-effort state persistence.
   }
 }
 
@@ -50,6 +81,25 @@ try {
 }
 
 async function main() {
+  const headSha = getHeadSha();
+  const last = readDeployState();
+  const now = Date.now();
+  if (
+    !ALLOW_DUPLICATE_DEPLOY &&
+    headSha &&
+    last?.headSha === headSha &&
+    Number.isFinite(last?.triggeredAtMs) &&
+    now - Number(last.triggeredAtMs) < DUPLICATE_WINDOW_MS
+  ) {
+    console.log(
+      `Skipping duplicate Coolify deploy for commit ${headSha.slice(0, 7)} (triggered recently).`
+    );
+    console.log(
+      "Use ALLOW_DUPLICATE_COOLIFY_DEPLOY=true to force another trigger for the same commit."
+    );
+    return;
+  }
+
   console.log("Triggering Coolify deployment...");
   const response = await fetch(hookUrl, {
     method: "GET",
@@ -81,6 +131,12 @@ async function main() {
 
   console.log(`Coolify deploy hook accepted (${response.status}).`);
   if (bodyText) console.log(bodyText);
+  writeDeployState({
+    headSha,
+    triggeredAtMs: now,
+    hookUrl,
+    status: response.status,
+  });
 }
 
 main().catch((error) => {

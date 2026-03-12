@@ -8,5 +8,9 @@ export default function ShopifyCollectionMappingPage() {
     notFound();
   }
 
-  return <ShopifyCollectionMapping />;
+  return (
+    <div className="collection-mapping-route">
+      <ShopifyCollectionMapping />
+    </div>
+  );
 }

@@ -334,3 +334,18 @@ If session resets, instruct the agent:
 ## 2026-03-11 Hotfix: Shopify menuUpdate argument contract
 - Fixed Shopify GraphQL menu mutation variable/argument mismatch in `app/api/shopify/collection-mapping/route.ts`.
 - Updated mutation from `menuUpdate(menu: $menu)` to `menuUpdate(menuUpdate: $menuUpdate)` and aligned variables payload key to `menuUpdate`.
+
+## 2026-03-12 Collection Mapping UI Parity Pass
+- Updated `components/shopify-collection-mapping.tsx` tree rows to card-style nodes (per-row border, radius, spacing) and moved connector rendering to `::before` / `::after` so lines bridge row gaps cleanly.
+- Removed tree expand/collapse behavior entirely (state, chevrons, spacer). Tree now renders permanently expanded with text aligned directly after drag handle.
+- Kept only the global root `+ Add menu item` action at bottom of tree.
+- Upgraded Add/Edit modal to Shopify-like fields: `Name`, `Link type` (`Collection`, `Product`, `Page`, `Blog`, `Frontpage`, `Web URL`), and contextual link value input.
+- Updated API in `app/api/shopify/collection-mapping/route.ts` to accept free-text `linkValue` and resolve targets by ID, handle, URL path, or title before applying `resourceId` / `url`; clears tags when setting link targets.
+
+## 2026-03-12 FOUC + Nested Depth + Strict Asset Picker Pass
+- Added route-level first paint guards in `app/globals.css` for collection mapping and SEO routes/loading states to prevent the global template background/reflection flash before hydration.
+- Added route-scoped loading skeletons in `app/studio/shopify-collection-mapping/loading.tsx` and `app/studio/seo/loading.tsx` to reduce refresh layout shifts.
+- Wrapped SEO route content with `.seo-route` in `app/studio/seo/page.tsx` (collection mapping wrapper already present) so SSR CSS can suppress background layers immediately.
+- Updated `components/shopify-collection-mapping.tsx` tree rows to progressively shrink by depth using CSS custom properties (`--tree-row-min-height`, `--tree-label-size`, `--tree-target-size`, `--tree-action-size`, `--tree-drag-size`, `--tree-row-padding-x`).
+- Reworked Add/Edit modal link flow into strict Shopify asset picking with no manual link text entry: only `Collection`, `Product`, `Page` categories + click-to-select assets from a fetched list.
+- Added backend `fetch-link-assets` action in `app/api/shopify/collection-mapping/route.ts` to fetch live Shopify assets per selected category.
