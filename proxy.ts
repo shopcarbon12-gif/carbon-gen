@@ -4,6 +4,9 @@ import type { NextRequest } from "next/server";
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const loginPreview = req.nextUrl.searchParams.get("preview") === "1";
+  const publicStudioPath = "/studio/shopify-collection-mapping";
+  const isPublicStudioPath =
+    pathname === publicStudioPath || pathname.startsWith(`${publicStudioPath}/`);
   const isProd = process.env.NODE_ENV === "production";
   const authBypass =
     !isProd && (process.env.AUTH_BYPASS || "false").trim().toLowerCase() === "true";
@@ -64,7 +67,7 @@ export function proxy(req: NextRequest) {
   ];
   const isProtected = protectedRoutes.some((route) => pathname.startsWith(route));
 
-  if (isProtected && !isAuthed) {
+  if (isProtected && !isAuthed && !isPublicStudioPath) {
     const loginUrl = req.nextUrl.clone();
     loginUrl.pathname = "/login";
     return NextResponse.redirect(loginUrl);
