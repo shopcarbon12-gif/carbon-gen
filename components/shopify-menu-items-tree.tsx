@@ -1,6 +1,6 @@
 "use client";
 
-import { type CSSProperties, useRef } from "react";
+import { type CSSProperties, type ReactElement, useRef } from "react";
 
 type DropPosition = "before" | "after" | "inside";
 
@@ -8,9 +8,9 @@ type MenuNode = {
   nodeKey: string;
   label: string;
   parentKey: string | null;
-  depth?: number;
-  enabled?: boolean;
-  collectionId?: string | null;
+  depth: number;
+  enabled: boolean;
+  collectionId: string | null;
   linkedTargetType?: string;
   linkedTargetLabel?: string;
   linkedTargetResourceId?: string | null;
@@ -65,7 +65,7 @@ export default function ShopifyMenuItemsTree({
   const hasTreeSearch = treeSearch.trim().length > 0;
   const dragStartXRef = useRef(0);
 
-  const renderBranch = (parentKey: string | null, depth: number): JSX.Element[] => {
+  const renderBranch = (parentKey: string | null, depth: number): ReactElement[] => {
     const branchKeys = (
       parentKey
         ? childrenByParent.get(parentKey) || []
@@ -211,7 +211,7 @@ export default function ShopifyMenuItemsTree({
           </div>
         );
       })
-      .filter((value): value is JSX.Element => Boolean(value));
+      .filter((value): value is ReactElement => Boolean(value));
   };
 
   return (
