@@ -29,12 +29,16 @@
     "test:e2e:report": "playwright show-report",
     "deploy:coolify": "node scripts/deploy-coolify.mjs",
     "deploy:coolify:setup": "node scripts/setup-coolify-deploy.mjs",
+    "notify:test": "node scripts/notify-test.mjs",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.992.0",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@google/genai": "^1.42.0",
     "@opennextjs/cloudflare": "^1.16.4",
     "@upstash/ratelimit": "^2.0.8",

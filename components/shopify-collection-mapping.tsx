@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import ShopifyMenuItemsTree from "@/components/shopify-menu-items-tree";
 
 type MenuNode = {
   nodeKey: string;
@@ -37,6 +38,7 @@ type MappingResponse = {
   rows?: ProductRow[];
   types?: string[];
   linkTargets?: MenuLinkTargets;
+  menu?: { id?: string; handle?: string; title?: string };
   summary?: {
     totalProducts?: number;
   };
@@ -77,6 +79,7 @@ type MenuEditorMode = "add" | "edit";
 type MenuLinkType = "COLLECTION" | "PRODUCT" | "PAGE";
 const TREE_PANEL_MIN_WIDTH = 260;
 const TREE_PANEL_MAX_WIDTH = 620;
+type MoveDropTarget = { targetKey: string; position: DropPosition } | null;
 const MENU_LINK_TYPE_OPTIONS: Array<{ value: MenuLinkType; label: string }> = [
   { value: "COLLECTION", label: "Collection" },
   { value: "PRODUCT", label: "Product" },
@@ -122,8 +125,10 @@ export default function ShopifyCollectionMapping() {
   const [showAuditReport, setShowAuditReport] = useState(false);
   const [auditOpening, setAuditOpening] = useState(false);
   const [auditGeneratedAt, setAuditGeneratedAt] = useState("");
-  const [dragSourceKey, setDragSourceKey] = useState("");
-  const [dropTarget, setDropTarget] = useState<{ targetKey: string; position: DropPosition } | null>(null);
+  const [menuMeta, setMenuMeta] = useState<{ title: string; handle: string }>({
+    title: "Main menu",
+    handle: "main-menu",
+  });
   const [showMenuEditor, setShowMenuEditor] = useState(false);
   const [menuEditorMode, setMenuEditorMode] = useState<MenuEditorMode>("add");
   const [menuEditorLabel, setMenuEditorLabel] = useState("");
@@ -376,6 +381,10 @@ export default function ShopifyCollectionMapping() {
         products: Array.isArray(json.linkTargets?.products) ? json.linkTargets.products : [],
         pages: Array.isArray(json.linkTargets?.pages) ? json.linkTargets.pages : [],
         blogs: Array.isArray(json.linkTargets?.blogs) ? json.linkTargets.blogs : [],
+      });
+      setMenuMeta({
+        title: String(json.menu?.title || "Main menu").trim() || "Main menu",
+        handle: String(json.menu?.handle || "main-menu").trim() || "main-menu",
       });
       setSelectedTypes((prev) => {
         if (prev.length < 1) return prev;
@@ -636,8 +645,8 @@ export default function ShopifyCollectionMapping() {
     };
   }, [resizingPanes]);
 
-  async function moveMenuNode() {
-    if (!dragSourceKey || !dropTarget) return;
+  async function moveMenuNode(nodeKey: string, nextDropTarget: MoveDropTarget) {
+    if (!nodeKey || !nextDropTarget) return;
     setSaving(true);
     setError("");
     try {
@@ -646,9 +655,9 @@ export default function ShopifyCollectionMapping() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "move-menu-node",
-          nodeKey: dragSourceKey,
-          targetKey: dropTarget.targetKey,
-          position: dropTarget.position,
+          nodeKey,
+          targetKey: nextDropTarget.targetKey,
+          position: nextDropTarget.position,
         }),
       });
       const json = (await resp.json()) as MappingResponse;
@@ -670,8 +679,31 @@ export default function ShopifyCollectionMapping() {
       setError(message);
     } finally {
       setSaving(false);
-      setDragSourceKey("");
-      setDropTarget(null);
+    }
+  }
+
+  async function saveMenuTreeSection() {
+    setSaving(true);
+    setError("");
+    try {
+      const resp = await fetch("/api/shopify/collection-mapping", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "save-menu-tree", menuHandle: menuMeta.handle || "main-menu" }),
+      });
+      const json = (await resp.json()) as MappingResponse;
+      if (!resp.ok || !json.ok) {
+        throw new Error(json.error || "Save menu failed.");
+      }
+      if (Array.isArray(json.nodes)) {
+        applyMenuNodesFromResponse(json);
+      }
+      setWarning(String(json.warning || "Menu saved to Shopify.").trim());
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Save menu failed.";
+      setError(message);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -994,7 +1026,7 @@ export default function ShopifyCollectionMapping() {
               {activeDynamicLink}
             </a>
           ) : (
-            <span className="muted" style={{ fontStyle: "italic", opacity: 0.7 }}>Tree panel is hidden in this view.</span>
+            <span className="muted" style={{ fontStyle: "italic", opacity: 0.7 }}>Select a mapped collection in the tree to see its dynamic link.</span>
           )}
         </div>
 
@@ -1005,9 +1037,26 @@ export default function ShopifyCollectionMapping() {
       <section className="card">
         <div className="grid2" style={{ gridTemplateColumns: `${treePanelWidth}px 12px minmax(0, 1fr)` }}>
           <aside className="card panel">
-            <div className="empty" style={{ marginTop: 8 }}>
-              Tree menu removed from this section.
-            </div>
+            <ShopifyMenuItemsTree
+              menuTitle={menuMeta.title}
+              menuHandle={menuMeta.handle}
+              treeSearch={treeSearch}
+              onTreeSearchChange={setTreeSearch}
+              onRefreshTree={() => void refreshMenuTreeSection()}
+              onSaveTree={saveMenuTreeSection}
+              saving={saving}
+              nodes={nodes}
+              nodeByKey={nodeByKey}
+              childrenByParent={childrenByParent}
+              visibleTreeNodeIdSet={visibleTreeNodeIdSet}
+              expandedNodes={expandedNodes}
+              selectedNodes={selectedNodes}
+              onMoveNode={moveMenuNode}
+              onApplyNodeSelection={applyNodeSelection}
+              onToggleNodeExpansion={toggleNodeExpansion}
+              onOpenEditEditor={openEditEditor}
+              onOpenAddEditor={openAddEditor}
+            />
           </aside>
 
           <div

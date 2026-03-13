@@ -2372,6 +2372,63 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    if (action === "save-menu-tree") {
+      const collectionsResult = await fetchAllCollectionsCached(shop, tokenResult.token, apiVersion);
+      if ("error" in collectionsResult) {
+        return NextResponse.json({ ok: false, error: collectionsResult.error }, { status: 500 });
+      }
+      const linkTargetsResult = await fetchMenuLinkTargets(
+        shop,
+        tokenResult.token,
+        apiVersion,
+        collectionsResult.collections
+      );
+      const menuSync = await fetchMenuTree(shop, tokenResult.token, apiVersion, menuHandle);
+      if (!menuSync.ok) {
+        const status = isMenuScopeErrorMessage(menuSync.error) ? 403 : 500;
+        return NextResponse.json({ ok: false, error: menuSync.error }, { status });
+      }
+
+      const updateResult = await updateMenuTree(
+        shop,
+        tokenResult.token,
+        apiVersion,
+        menuSync.menuId,
+        menuSync.menuTitle,
+        menuSync.menuHandle,
+        menuSync.items
+      );
+      if (!updateResult.ok) {
+        return NextResponse.json({ ok: false, error: updateResult.error }, { status: 500 });
+      }
+
+      const synced = await syncLiveMenuNodes(shop, updateResult.liveNodes, collectionsResult.collections);
+      await logMappingAudit({
+        shop,
+        action,
+        summary: `Menu saved (${updateResult.menuHandle})`,
+        status: "ok",
+        details: { menuHandle: updateResult.menuHandle, nodes: synced.nodes.length },
+      });
+
+      return NextResponse.json({
+        ok: true,
+        shop,
+        backend: synced.backend,
+        warning: joinWarnings(synced.warning, linkTargetsResult.warning),
+        menu: {
+          id: updateResult.menuId,
+          handle: updateResult.menuHandle,
+          title: updateResult.menuTitle,
+        },
+        menuLinks: flattenMenuLinks(updateResult.items),
+        linkTargets: linkTargetsResult.targets,
+        collections: collectionsResult.collections,
+        nodes: synced.nodes,
+        mappedNodes: synced.nodes.filter((node) => node.enabled && Boolean(node.collectionId)),
+      });
+    }
+
     if (action === "save-mappings") {
       const collectionsResult = await fetchAllCollectionsCached(shop, tokenResult.token, apiVersion);
       if ("error" in collectionsResult) {
