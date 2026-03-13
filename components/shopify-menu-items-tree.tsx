@@ -53,6 +53,7 @@ type ShopifyMenuItemsTreeProps = {
   onToggleNodeExpansion: (nodeKey: string) => void;
   onOpenEditEditor: (node: MenuNode) => void;
   onOpenAddEditor: (parentKey: string | null) => void;
+  onDeleteNode: (nodeKey: string) => void;
 };
 
 type RowProps = {
@@ -69,6 +70,7 @@ type RowProps = {
   onRowClick: () => void;
   onToggle: () => void;
   onEdit: () => void;
+  onDelete: () => void;
 };
 
 function SortableTreeRow({
@@ -85,6 +87,7 @@ function SortableTreeRow({
   onRowClick,
   onToggle,
   onEdit,
+  onDelete,
 }: RowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
   const style = {
@@ -146,6 +149,11 @@ function SortableTreeRow({
             <path d="M11.7 2.3a1 1 0 0 1 1.4 0l.6.6a1 1 0 0 1 0 1.4L6.1 12H3v-3.1l8.7-6.6zM2 13h12v1H2z" />
           </svg>
         </button>
+        <button type="button" className="iconBtn danger" onClick={onDelete} aria-label="Delete menu item">
+          <svg viewBox="0 0 16 16" width="14" height="14">
+            <path d="M6 2.5h4l.5 1.5H13v1H3v-1h2.5L6 2.5zm-1 3h6l-.5 7H5.5L5 5.5z" />
+          </svg>
+        </button>
       </div>
     </div>
   );
@@ -170,6 +178,7 @@ export default function ShopifyMenuItemsTree({
   onToggleNodeExpansion,
   onOpenEditEditor,
   onOpenAddEditor,
+  onDeleteNode,
 }: ShopifyMenuItemsTreeProps) {
   const hasTreeSearch = treeSearch.trim().length > 0;
   const [dragSourceKey, setDragSourceKey] = useState("");
@@ -241,20 +250,22 @@ export default function ShopifyMenuItemsTree({
         : nodes.filter((node) => !node.parentKey).map((node) => node.nodeKey)
     ).filter((nodeKey) => visibleTreeNodeIdSet.has(nodeKey));
 
-    return branchKeys
+    const renderedNodes = branchKeys
       .map((nodeKey, index) => {
         const node = nodeByKey.get(nodeKey);
         if (!node) return null;
         const checked = Boolean(selectedNodes[node.nodeKey]);
         const dragging = dragSourceKey === node.nodeKey;
         const dropState = dropTarget?.targetKey === node.nodeKey ? `drop-${dropTarget.position}` : "";
-        const visibleChildKeys = (childrenByParent.get(node.nodeKey) || []).filter((childKey) =>
+        const allChildKeys = childrenByParent.get(node.nodeKey) || [];
+        const visibleChildKeys = allChildKeys.filter((childKey) =>
           visibleTreeNodeIdSet.has(childKey)
         );
-        const hasChildren = visibleChildKeys.length > 0;
+        const hasChildren = allChildKeys.length > 0;
         const isExpanded = expandedNodes[node.nodeKey] !== false;
-        const shouldShowChildren = hasTreeSearch || isExpanded;
-        const isLastSibling = index === branchKeys.length - 1;
+        const shouldShowChildren = visibleChildKeys.length > 0 && (hasTreeSearch || isExpanded);
+        const branchHasAddRow = Boolean(parentKey);
+        const isLastSibling = !branchHasAddRow && index === branchKeys.length - 1;
         const targetLabel = String(node.linkedTargetLabel || "").trim();
         const showTargetLabel =
           targetLabel.length > 0 && targetLabel.toLowerCase() !== String(node.label || "").trim().toLowerCase();
@@ -278,42 +289,43 @@ export default function ShopifyMenuItemsTree({
               onRowClick={() => onApplyNodeSelection(node.nodeKey)}
               onToggle={() => onToggleNodeExpansion(node.nodeKey)}
               onEdit={() => onOpenEditEditor(node)}
+              onDelete={() => onDeleteNode(node.nodeKey)}
             />
 
-            {hasChildren && shouldShowChildren ? (
-              <>
-                <div className={isExpanded || hasTreeSearch ? "treeChildren" : "treeChildren collapsed"}>
-                  {renderBranch(node.nodeKey, depth + 1)}
-                </div>
-                <div className="treeItem ignoreDrag treeAddChild">
-                  <button type="button" className="treeAddChildBtn treeCard" onClick={() => onOpenAddEditor(node.nodeKey)}>
-                    <span className="treeAddIcon" aria-hidden="true">
-                      ⊕
-                    </span>
-                    <span>Add menu item to {node.label}</span>
-                  </button>
-                </div>
-              </>
+            {shouldShowChildren ? (
+              <div className={isExpanded || hasTreeSearch ? "nestedList treeChildren" : "nestedList treeChildren collapsed"}>
+                {renderBranch(node.nodeKey, depth + 1)}
+              </div>
             ) : null}
           </div>
         );
       })
       .filter((value): value is ReactElement => Boolean(value));
+
+    if (parentKey) {
+      const parent = nodeByKey.get(parentKey);
+      const parentLabel = parent?.label || "parent";
+      renderedNodes.push(
+        <div key={`add-${parentKey}`} className="treeNode has-parent is-last treeNodeAdd">
+          <div className="treeAddChild">
+            <button type="button" className="treeAddChildBtn treeCard" onClick={() => onOpenAddEditor(parentKey)}>
+              <span className="treeAddIcon" aria-hidden="true">
+                <svg viewBox="0 0 20 20" width="18" height="18">
+                  <path d="M10 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zm1-11a1 1 0 1 0-2 0v2H7a1 1 0 1 0 0 2h2v2a1 1 0 1 0 2 0v-2h2a1 1 0 1 0 0-2h-2V7z" />
+                </svg>
+              </span>
+              <span>Add menu item to {parentLabel}</span>
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return renderedNodes;
   };
 
   return (
     <aside className="card panel gemTreePanel">
-      <div className="gemTreeHeader">
-        <div>
-          <h3>{menuTitle || "Main menu"}</h3>
-          <p>
-            Handle: <code>{menuHandle || "main-menu"}</code>
-          </p>
-        </div>
-        <button type="button" className="gemSaveBtn" onClick={() => void onSaveTree()} disabled={saving}>
-          {saving ? "Saving..." : "Save menu"}
-        </button>
-      </div>
       <div className="treeSearchBar">
         <input
           className="treeSearchInput"
@@ -331,18 +343,25 @@ export default function ShopifyMenuItemsTree({
         >
           ⟳
         </button>
+        <button type="button" className="treeSaveBtn" onClick={() => void onSaveTree()} disabled={saving}>
+          {saving ? "Saving..." : "Save"}
+        </button>
       </div>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragMove={onDragMove} onDragEnd={onDragEnd}>
         <SortableContext items={visibleNodeKeys} strategy={verticalListSortingStrategy}>
-          <div className="tree shopifyMenuTree nestedList rootList" style={{ marginTop: 8 }}>
+          <div className="treeCanvas">
+            <div className="tree shopifyMenuTree nestedList rootList">
             {renderBranch(null, 0)}
+            </div>
           </div>
         </SortableContext>
       </DndContext>
       <div className="treeAddRoot">
         <button type="button" className="treeAddBtn treeCard" onClick={() => onOpenAddEditor(null)}>
           <span className="treeAddIcon" aria-hidden="true">
-            ⊕
+            <svg viewBox="0 0 20 20" width="18" height="18">
+              <path d="M10 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zm1-11a1 1 0 1 0-2 0v2H7a1 1 0 1 0 0 2h2v2a1 1 0 1 0 2 0v-2h2a1 1 0 1 0 0-2h-2V7z" />
+            </svg>
           </span>
           <span>Add menu item</span>
         </button>
@@ -351,39 +370,53 @@ export default function ShopifyMenuItemsTree({
         .gemTreePanel {
           padding: 12px;
         }
-        .gemTreeHeader {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 12px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.14);
-          padding-bottom: 10px;
+        .treeSearchBar {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 36px auto;
+          gap: 8px;
           margin-bottom: 10px;
+          align-items: center;
         }
-        .gemTreeHeader h3 {
-          margin: 0;
-          font-size: 18px;
-          color: #f8fafc;
+        .treeSearchInput {
+          min-width: 0;
         }
-        .gemTreeHeader p {
-          margin: 2px 0 0;
-          color: #9fb3cc;
-          font-size: 12px;
+        .treeRefreshBtn {
+          width: 36px;
+          min-width: 36px;
+          min-height: 36px;
+          padding: 0;
+          border: 1px solid #44556f;
+          border-radius: 8px;
+          background: #0f1a2e;
+          color: #c7d3e4;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 16px;
+          line-height: 1;
         }
-        .gemTreeHeader code {
-          background: rgba(255, 255, 255, 0.08);
-          border-radius: 6px;
-          padding: 1px 6px;
-          color: #dbeafe;
+        .treeRefreshBtn:hover {
+          background: #13233d;
+          border-color: #5f789c;
         }
-        .gemSaveBtn {
+        .treeSaveBtn {
           min-height: 36px;
           border-radius: 8px;
           border: 1px solid #168e69;
           background: #0f8a64;
           color: #f8fffc;
-          padding: 0 14px;
+          padding: 0 12px;
           font-weight: 600;
+        }
+        .treeCanvas {
+          border: 1px solid #2a3547;
+          border-radius: 10px;
+          background: #0a1324;
+          padding: 10px 12px 8px 14px;
+        }
+        .tree {
+          max-height: 65vh;
+          overflow: auto;
         }
         .nestedList {
           margin-left: 36px;
@@ -434,6 +467,7 @@ export default function ShopifyMenuItemsTree({
           display: flex;
           align-items: center;
           gap: 10px;
+          box-shadow: 0 1px 0 rgba(15, 23, 42, 0.24), 0 6px 16px rgba(2, 6, 23, 0.28);
         }
         :global(.treeRow:hover) {
           background: #13233d;
@@ -442,6 +476,21 @@ export default function ShopifyMenuItemsTree({
         :global(.treeRow.active) {
           border-color: #87a8da;
           box-shadow: inset 0 0 0 1px rgba(120, 153, 210, 0.38);
+        }
+        :global(.treeRow.dragging) {
+          opacity: 0.45;
+        }
+        :global(.treeRow.drop-before) {
+          border-top-color: #38bdf8;
+          box-shadow: inset 0 2px 0 #38bdf8;
+        }
+        :global(.treeRow.drop-after) {
+          border-bottom-color: #38bdf8;
+          box-shadow: inset 0 -2px 0 #38bdf8;
+        }
+        :global(.treeRow.drop-inside) {
+          background: rgba(56, 189, 248, 0.08);
+          box-shadow: inset 0 0 0 1px #38bdf8;
         }
         :global(.treeChildren.collapsed) {
           display: none;
@@ -452,15 +501,74 @@ export default function ShopifyMenuItemsTree({
         :global(.treeToggle svg) {
           transition: transform 0.2s ease;
         }
+        :global(.treeToggle) {
+          width: 18px;
+          height: 18px;
+          min-height: 18px;
+          border: 0;
+          padding: 0;
+          background: transparent;
+          color: #9fb3cc;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+        :global(.treeToggle svg path) {
+          fill: currentColor;
+        }
+        :global(.treeToggleSpacer) {
+          width: 18px;
+          height: 18px;
+          flex: 0 0 auto;
+        }
+        :global(.dragHandle) {
+          color: #7a889f;
+          cursor: grab;
+        }
+        :global(.dragHandle svg circle) {
+          fill: currentColor;
+        }
+        :global(.treeRowActions) {
+          margin-left: auto;
+          display: inline-flex;
+          gap: 8px;
+          opacity: 1;
+        }
+        :global(.iconBtn) {
+          width: 24px;
+          height: 24px;
+          min-height: 24px;
+          padding: 0;
+          border: 1px solid #44556f;
+          border-radius: 8px;
+          background: #0f1a2e;
+          color: #c7d3e4;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+        :global(.iconBtn svg path) {
+          fill: currentColor;
+        }
+        :global(.iconBtn:hover) {
+          border-color: #5f789c;
+          background: #13233d;
+        }
+        :global(.iconBtn.danger:hover) {
+          border-color: #8b2d2d;
+          color: #ffb4b4;
+          background: #2a1518;
+        }
         :global(.treeAddRoot) {
           margin-top: 8px;
           border-top: 1px solid rgba(255, 255, 255, 0.12);
           padding-top: 10px;
           padding-left: 0;
+          padding-right: 0;
         }
         :global(.treeAddChild) {
-          padding: 2px 0 10px 0;
-          margin-left: 36px;
+          padding: 0;
+          margin-left: 0;
         }
         :global(.treeCard) {
           width: 100%;
@@ -470,7 +578,7 @@ export default function ShopifyMenuItemsTree({
         :global(.treeAddBtn),
         :global(.treeAddChildBtn) {
           width: 100%;
-          min-height: 36px;
+          min-height: 42px;
           border-radius: 8px;
           border: 1px solid #44556f;
           background: #0f1a2e;
@@ -481,6 +589,7 @@ export default function ShopifyMenuItemsTree({
           justify-content: flex-start;
           padding: 0 10px;
           font-size: 13px;
+          box-shadow: 0 1px 0 rgba(15, 23, 42, 0.24), 0 6px 16px rgba(2, 6, 23, 0.28);
         }
         :global(.treeAddBtn:hover),
         :global(.treeAddChildBtn:hover) {
@@ -488,15 +597,30 @@ export default function ShopifyMenuItemsTree({
           border-color: #5f789c;
         }
         :global(.treeAddIcon) {
-          width: 18px;
-          height: 18px;
+          width: 20px;
+          height: 20px;
           display: inline-flex;
           align-items: center;
           justify-content: center;
           color: #7fb2ff;
-          font-size: 14px;
-          font-weight: 700;
           line-height: 1;
+        }
+        :global(.treeAddIcon svg) {
+          fill: currentColor;
+        }
+        :global(.treeAddBtn span:last-child),
+        :global(.treeAddChildBtn span:last-child) {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        @media (max-width: 980px) {
+          .treeSearchBar {
+            grid-template-columns: minmax(0, 1fr) 36px;
+          }
+          .treeSaveBtn {
+            grid-column: 1 / -1;
+          }
         }
       `}</style>
     </aside>

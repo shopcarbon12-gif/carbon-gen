@@ -1036,56 +1036,42 @@ export default function ShopifyCollectionMapping() {
 
       <section className="card">
         <div className="grid2" style={{ gridTemplateColumns: `${treePanelWidth}px 12px minmax(0, 1fr)` }}>
-          <aside className="card panel">
-            <ShopifyMenuItemsTree
-              menuTitle={menuMeta.title}
-              menuHandle={menuMeta.handle}
-              treeSearch={treeSearch}
-              onTreeSearchChange={setTreeSearch}
-              onRefreshTree={() => void refreshMenuTreeSection()}
-              onSaveTree={saveMenuTreeSection}
-              saving={saving}
-              nodes={nodes}
-              nodeByKey={nodeByKey}
-              childrenByParent={childrenByParent}
-              visibleTreeNodeIdSet={visibleTreeNodeIdSet}
-              expandedNodes={expandedNodes}
-              selectedNodes={selectedNodes}
-              onMoveNode={moveMenuNode}
-              onApplyNodeSelection={applyNodeSelection}
-              onToggleNodeExpansion={toggleNodeExpansion}
-              onOpenEditEditor={openEditEditor}
-              onOpenAddEditor={openAddEditor}
-            />
-          </aside>
-
-          <div
-            className={resizingPanes ? "paneDivider resizing" : "paneDivider"}
-            role="separator"
-            aria-label="Resize left section and product sections"
-            aria-orientation="vertical"
-            aria-valuemin={TREE_PANEL_MIN_WIDTH}
-            aria-valuemax={TREE_PANEL_MAX_WIDTH}
-            aria-valuenow={treePanelWidth}
-            tabIndex={0}
-            onMouseDown={(event) => {
-              event.preventDefault();
-              paneResizeStart.current = { x: event.clientX, width: treePanelWidth };
-              setResizingPanes(true);
+          <ShopifyMenuItemsTree
+            menuTitle={menuMeta.title}
+            menuHandle={menuMeta.handle}
+            treeSearch={treeSearch}
+            onTreeSearchChange={setTreeSearch}
+            onRefreshTree={() => void refreshMenuTreeSection()}
+            onSaveTree={saveMenuTreeSection}
+            saving={saving}
+            nodes={nodes}
+            nodeByKey={nodeByKey}
+            childrenByParent={childrenByParent}
+            visibleTreeNodeIdSet={visibleTreeNodeIdSet}
+            expandedNodes={expandedNodes}
+            selectedNodes={selectedNodes}
+            onMoveNode={moveMenuNode}
+            onApplyNodeSelection={applyNodeSelection}
+            onToggleNodeExpansion={toggleNodeExpansion}
+            onOpenEditEditor={openEditEditor}
+            onOpenAddEditor={openAddEditor}
+            onDeleteNode={(nodeKey) => {
+              const ok = window.confirm("Delete this menu item and all nested children?");
+              if (!ok) return;
+              void deleteMenuNode(nodeKey);
             }}
-            onKeyDown={(event) => {
-              if (event.key === "ArrowLeft") {
-                event.preventDefault();
-                setTreePanelWidth((prev) => Math.max(TREE_PANEL_MIN_WIDTH, prev - 16));
-              } else if (event.key === "ArrowRight") {
-                event.preventDefault();
-                setTreePanelWidth((prev) => Math.min(TREE_PANEL_MAX_WIDTH, prev + 16));
-              }
+          />
+          <button
+            type="button"
+            className={`paneDivider ${resizingPanes ? "resizing" : ""}`}
+            aria-label="Resize menu tree panel"
+            onMouseDown={(event) => {
+              setResizingPanes(true);
+              paneResizeStart.current = { x: event.clientX, width: treePanelWidth };
             }}
           >
-            <span className="paneDividerGrip" aria-hidden="true" />
-          </div>
-
+            <span className="paneDividerGrip" />
+          </button>
           <main className="card panel">
             <div className="productControls">
               <input
@@ -1734,279 +1720,7 @@ export default function ShopifyCollectionMapping() {
           color: #94a3b8;
           font-size: 12px;
         }
-        .tree {
-          --tree-row-gap: 8px;
-          --tree-indent-step: 24px;
-          max-height: 65vh;
-          overflow: auto;
-          border: 1px solid #2a3547;
-          border-radius: 10px;
-          padding: 8px;
-          background: #0a1324;
-        }
-        .shopifyMenuTree {
-          border-color: #d9dee8;
-          background: #f6f8fb;
-          box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.9),
-            0 14px 30px rgba(2, 6, 23, 0.16);
-          padding: 12px;
-        }
-        .shopifyMenuTree .treeNode.has-parent::before,
-        .shopifyMenuTree .treeNode.has-parent > .treeRow::before {
-          border-color: #cfd6e3;
-        }
-        .treeChildren {
-          margin-top: var(--tree-row-gap);
-        }
-        .treeNode {
-          --tree-depth: 0;
-          position: relative;
-          margin-left: calc(var(--tree-depth) * var(--tree-indent-step));
-          margin-bottom: var(--tree-row-gap);
-        }
-        .treeNode.has-parent::before {
-          position: absolute;
-          content: "";
-          left: calc(var(--tree-indent-step) / -2);
-          top: calc(-1 * var(--tree-row-gap));
-          bottom: calc(-1 * var(--tree-row-gap));
-          border-left: 1px solid rgba(229, 231, 235, 0.42);
-          pointer-events: none;
-        }
-        .treeNode.has-parent.is-last::before {
-          bottom: calc(100% - 22px);
-        }
-        .treeRow {
-          position: relative;
-          min-height: 44px;
-          border: 1px solid #2a3547;
-          border-radius: 8px;
-          padding: 0 10px;
-          background: #101a2d;
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          font-size: 14px;
-          line-height: 1.2;
-          transition: background-color 120ms ease, border-color 120ms ease;
-        }
-        .shopifyMenuTree .treeRow {
-          border-color: #d9dee8;
-          background: #ffffff;
-          font-family: "Inter", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-          border-radius: 10px;
-          min-height: 42px;
-          box-shadow:
-            0 1px 0 rgba(15, 23, 42, 0.04),
-            0 6px 16px rgba(15, 23, 42, 0.08);
-        }
-        .treeRow:hover {
-          background: #15233a;
-          border-color: #3b4b63;
-        }
-        .shopifyMenuTree .treeRow:hover {
-          background: #f8fafc;
-          border-color: #c8d0df;
-        }
-        .treeRow:focus-visible {
-          outline: 2px solid #60a5fa;
-          outline-offset: -2px;
-        }
-        .treeRow.active {
-          background: #0b5fff;
-          border-color: #2d6df6;
-        }
-        .treeRow.active:hover {
-          background: #0061f2;
-        }
-        .shopifyMenuTree .treeRow.active,
-        .shopifyMenuTree .treeRow.active:hover {
-          background: #edf3ff;
-          border-color: #9db7ef;
-          box-shadow:
-            0 0 0 1px rgba(59, 130, 246, 0.28),
-            0 6px 16px rgba(15, 23, 42, 0.12);
-        }
-        .treeNode.has-parent > .treeRow::before {
-          position: absolute;
-          content: "";
-          top: 50%;
-          left: calc(var(--tree-indent-step) / -2);
-          width: calc((var(--tree-indent-step) / 2) + 10px);
-          border-top: 1px solid rgba(229, 231, 235, 0.42);
-          pointer-events: none;
-        }
-        .treeToggle {
-          width: 16px;
-          height: 16px;
-          min-height: 16px;
-          border: 0;
-          border-radius: 4px;
-          background: transparent;
-          color: #9fb3cc;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          padding: 0;
-          flex: 0 0 auto;
-        }
-        .treeToggle:hover {
-          background: rgba(59, 130, 246, 0.18);
-          color: #dbeafe;
-        }
-        .treeToggle svg path {
-          fill: currentColor;
-        }
-        .treeToggleSpacer {
-          width: 16px;
-          height: 16px;
-          flex: 0 0 auto;
-        }
-        .dragHandle {
-          width: 18px;
-          height: 18px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          color: #7a889f;
-          cursor: grab;
-          flex: 0 0 auto;
-        }
-        .dragHandle.grabbing {
-          cursor: grabbing;
-        }
-        .dragHandle svg circle {
-          fill: currentColor;
-        }
-        .treeText {
-          min-width: 0;
-          display: grid;
-          gap: 2px;
-          align-items: center;
-        }
-        .treeLabel {
-          color: #1f2937;
-          font-size: 13px;
-          font-weight: 600;
-        }
-        .treeTargetLabel {
-          color: #6b7280;
-          font-size: 11px;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-          max-width: 100%;
-        }
-        .treeRow.active .treeLabel,
-        .treeRow.active .treeTargetLabel,
-        .treeRow.active .dragHandle {
-          color: #1f2937;
-        }
-        .treeRow.active + .treeChildren > .treeNode.has-parent::before,
-        .treeRow.active::before {
-          opacity: 0.45;
-        }
-        .treeRowActions {
-          margin-left: auto;
-          display: inline-flex;
-          gap: 6px;
-          opacity: 0;
-          transition: opacity 120ms ease;
-        }
-        .treeRow:hover .treeRowActions {
-          opacity: 1;
-        }
-        .shopifyMenuTree .treeRowActions {
-          opacity: 1;
-        }
-        .shopifyMenuTree .treeRow:hover .treeRowActions,
-        .shopifyMenuTree .treeRow.active .treeRowActions {
-          opacity: 1;
-        }
-        .iconBtn {
-          width: 24px;
-          height: 24px;
-          min-height: 24px;
-          padding: 0;
-          border: 1px solid #d2d9e6;
-          border-radius: 8px;
-          background: #ffffff;
-          color: #4b5563;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          opacity: 1;
-        }
-        .iconBtn svg {
-          width: 14px;
-          height: 14px;
-        }
-        .iconBtn:hover {
-          background: #f3f6fb;
-          opacity: 1;
-        }
-        .iconBtn:active {
-          background: #eaf2ff;
-          border-color: #9db7ef;
-          color: #1d4ed8;
-          opacity: 1;
-        }
-        .iconBtn svg path {
-          fill: currentColor;
-        }
-        .iconBtn.danger {
-          color: #fecaca;
-          border-color: #7f1d1d;
-          background: #1f0f14;
-        }
-        .treeAddRoot {
-          padding: 10px 10px 12px 58px;
-          border-top: 1px dashed #2a3547;
-        }
-        .treeAddBtn {
-          min-height: 28px;
-          height: 28px;
-          padding: 0 6px;
-          border-radius: 999px;
-          border: 0;
-          background: transparent;
-          color: #2563eb;
-          font-size: 12px;
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-        }
-        .treeAddChild {
-          padding: 2px 10px 10px 58px;
-        }
-        .treeAddChildBtn {
-          min-height: 26px;
-          height: 26px;
-          padding: 0 6px;
-          border-radius: 999px;
-          border: 0;
-          background: transparent;
-          color: #2563eb;
-          font-size: 11px;
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-        }
-        .treeAddIcon {
-          width: 18px;
-          height: 18px;
-          border-radius: 999px;
-          border: 1px solid #93c5fd;
-          background: #eff6ff;
-          color: #1d4ed8;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 13px;
-          line-height: 1;
-          font-weight: 700;
-        }
+        /* Tree-specific visuals are owned by components/shopify-menu-items-tree.tsx to avoid style collisions. */
         .editorModal {
           width: min(460px, 92vw);
           border-radius: 12px;
@@ -2109,21 +1823,6 @@ export default function ShopifyCollectionMapping() {
           font-size: 12px;
           color: #e2e8f0;
           font-weight: 600;
-        }
-        .treeRow.dragging {
-          opacity: 0.45;
-        }
-        .treeRow.drop-before {
-          border-top-color: #38bdf8;
-          box-shadow: inset 0 2px 0 #38bdf8;
-        }
-        .treeRow.drop-after {
-          border-bottom-color: #38bdf8;
-          box-shadow: inset 0 -2px 0 #38bdf8;
-        }
-        .treeRow.drop-inside {
-          background: rgba(56, 189, 248, 0.08);
-          box-shadow: inset 0 0 0 1px #38bdf8;
         }
         .tableWrap {
           overflow: auto;
