@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import ShopifyMenuItemsTree from "@/components/shopify-menu-items-tree";
 
 type MenuNode = {
   nodeKey: string;
@@ -995,7 +994,7 @@ export default function ShopifyCollectionMapping() {
               {activeDynamicLink}
             </a>
           ) : (
-            <span className="muted" style={{ fontStyle: "italic", opacity: 0.7 }}>Select a mapped collection in the tree to see its dynamic link.</span>
+            <span className="muted" style={{ fontStyle: "italic", opacity: 0.7 }}>Tree panel is hidden in this view.</span>
           )}
         </div>
 
@@ -1004,56 +1003,7 @@ export default function ShopifyCollectionMapping() {
       </section>
 
       <section className="card">
-        <div className="grid2" style={{ gridTemplateColumns: `${treePanelWidth}px 12px minmax(0, 1fr)` }}>
-          <ShopifyMenuItemsTree
-            treeSearch={treeSearch}
-            onTreeSearchChange={setTreeSearch}
-            onRefreshTree={() => void refreshMenuTreeSection()}
-            saving={saving}
-            nodes={nodes}
-            nodeByKey={nodeByKey}
-            childrenByParent={childrenByParent}
-            visibleTreeNodeIdSet={visibleTreeNodeIdSet}
-            expandedNodes={expandedNodes}
-            selectedNodes={selectedNodes}
-            dragSourceKey={dragSourceKey}
-            dropTarget={dropTarget}
-            onSetDragSourceKey={setDragSourceKey}
-            onSetDropTarget={setDropTarget}
-            onMoveMenuNode={() => void moveMenuNode()}
-            onApplyNodeSelection={applyNodeSelection}
-            onToggleNodeExpansion={toggleNodeExpansion}
-            onOpenEditEditor={openEditEditor}
-            onOpenAddEditor={openAddEditor}
-          />
-
-          <div
-            className={resizingPanes ? "paneDivider resizing" : "paneDivider"}
-            role="separator"
-            aria-label="Resize tree and product sections"
-            aria-orientation="vertical"
-            aria-valuemin={TREE_PANEL_MIN_WIDTH}
-            aria-valuemax={TREE_PANEL_MAX_WIDTH}
-            aria-valuenow={treePanelWidth}
-            tabIndex={0}
-            onMouseDown={(event) => {
-              event.preventDefault();
-              paneResizeStart.current = { x: event.clientX, width: treePanelWidth };
-              setResizingPanes(true);
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "ArrowLeft") {
-                event.preventDefault();
-                setTreePanelWidth((prev) => Math.max(TREE_PANEL_MIN_WIDTH, prev - 16));
-              } else if (event.key === "ArrowRight") {
-                event.preventDefault();
-                setTreePanelWidth((prev) => Math.min(TREE_PANEL_MAX_WIDTH, prev + 16));
-              }
-            }}
-          >
-            <span className="paneDividerGrip" aria-hidden="true" />
-          </div>
-
+        <div className="grid2" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
           <main className="card panel">
             <div className="productControls">
               <input
