@@ -1003,7 +1003,40 @@ export default function ShopifyCollectionMapping() {
       </section>
 
       <section className="card">
-        <div className="grid2" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
+        <div className="grid2" style={{ gridTemplateColumns: `${treePanelWidth}px 12px minmax(0, 1fr)` }}>
+          <aside className="card panel">
+            <div className="empty" style={{ marginTop: 8 }}>
+              Tree menu removed from this section.
+            </div>
+          </aside>
+
+          <div
+            className={resizingPanes ? "paneDivider resizing" : "paneDivider"}
+            role="separator"
+            aria-label="Resize left section and product sections"
+            aria-orientation="vertical"
+            aria-valuemin={TREE_PANEL_MIN_WIDTH}
+            aria-valuemax={TREE_PANEL_MAX_WIDTH}
+            aria-valuenow={treePanelWidth}
+            tabIndex={0}
+            onMouseDown={(event) => {
+              event.preventDefault();
+              paneResizeStart.current = { x: event.clientX, width: treePanelWidth };
+              setResizingPanes(true);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowLeft") {
+                event.preventDefault();
+                setTreePanelWidth((prev) => Math.max(TREE_PANEL_MIN_WIDTH, prev - 16));
+              } else if (event.key === "ArrowRight") {
+                event.preventDefault();
+                setTreePanelWidth((prev) => Math.min(TREE_PANEL_MAX_WIDTH, prev + 16));
+              }
+            }}
+          >
+            <span className="paneDividerGrip" aria-hidden="true" />
+          </div>
+
           <main className="card panel">
             <div className="productControls">
               <input
