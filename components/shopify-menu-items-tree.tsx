@@ -99,7 +99,7 @@ function SortableTreeRow({
   return (
     <div
       ref={setNodeRef}
-      className={`treeRow ${checked ? "active" : ""} ${dragging || isDragging ? "dragging" : ""} ${dropState}`}
+      className={`treeRow tree-card ${checked ? "active" : ""} ${dragging || isDragging ? "dragging" : ""} ${dropState}`}
       style={style}
       role="button"
       tabIndex={0}
@@ -272,7 +272,7 @@ export default function ShopifyMenuItemsTree({
         return (
           <div
             key={node.nodeKey}
-            className={`treeNode ${node.parentKey ? "has-parent" : ""} ${isLastSibling ? "is-last" : ""}`}
+            className={`treeNode tree-item ${depth > 0 ? "has-parent" : ""} ${isLastSibling ? "is-last" : ""}`}
           >
             <SortableTreeRow
               id={node.nodeKey}
@@ -292,7 +292,7 @@ export default function ShopifyMenuItemsTree({
             />
 
             {shouldShowChildren ? (
-              <div className={isExpanded || hasTreeSearch ? "nestedList treeChildren" : "nestedList treeChildren collapsed"}>
+              <div className={isExpanded || hasTreeSearch ? "nestedList nested-list treeChildren" : "nestedList nested-list treeChildren collapsed"}>
                 {renderBranch(node.nodeKey, depth + 1)}
               </div>
             ) : null}
@@ -305,9 +305,9 @@ export default function ShopifyMenuItemsTree({
       const parent = nodeByKey.get(parentKey);
       const parentLabel = parent?.label || "parent";
       renderedNodes.push(
-        <div key={`add-${parentKey}`} className="treeNode has-parent is-last treeNodeAdd">
+        <div key={`add-${parentKey}`} className="treeNode tree-item has-parent is-last treeNodeAdd">
           <div className="treeAddChild">
-            <button type="button" className="treeAddChildBtn treeCard" onClick={() => onOpenAddEditor(parentKey)}>
+            <button type="button" className="treeAddChildBtn treeCard tree-card" onClick={() => onOpenAddEditor(parentKey)}>
               <span className="treeAddIcon" aria-hidden="true">
                 <svg viewBox="0 0 20 20" width="18" height="18">
                   <path d="M10 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zm1-11a1 1 0 1 0-2 0v2H7a1 1 0 1 0 0 2h2v2a1 1 0 1 0 2 0v-2h2a1 1 0 1 0 0-2h-2V7z" />
@@ -349,14 +349,14 @@ export default function ShopifyMenuItemsTree({
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragMove={onDragMove} onDragEnd={onDragEnd}>
         <SortableContext items={visibleNodeKeys} strategy={verticalListSortingStrategy}>
           <div className="treeCanvas">
-            <div className="tree shopifyMenuTree nestedList rootList">
+            <div id="root-menu" className="tree shopifyMenuTree nestedList nested-list rootList">
             {renderBranch(null, 0)}
             </div>
           </div>
         </SortableContext>
       </DndContext>
       <div className="treeAddRoot">
-        <button type="button" className="treeAddBtn treeCard" onClick={() => onOpenAddEditor(null)}>
+        <button type="button" className="treeAddBtn treeCard tree-card" onClick={() => onOpenAddEditor(null)}>
           <span className="treeAddIcon" aria-hidden="true">
             <svg viewBox="0 0 20 20" width="18" height="18">
               <path d="M10 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zm1-11a1 1 0 1 0-2 0v2H7a1 1 0 1 0 0 2h2v2a1 1 0 1 0 2 0v-2h2a1 1 0 1 0 0-2h-2V7z" />
@@ -417,13 +417,15 @@ export default function ShopifyMenuItemsTree({
           max-height: 65vh;
           overflow: auto;
         }
-        .nestedList {
+        .nestedList,
+        .nested-list {
           margin-left: 36px;
           padding-top: 4px;
           min-height: 10px;
           display: block;
         }
-        .nestedList.rootList {
+        .nestedList.rootList,
+        .nested-list.root-list {
           margin-left: 0;
           padding-top: 0;
         }
@@ -432,7 +434,7 @@ export default function ShopifyMenuItemsTree({
           padding-bottom: 8px;
           margin-left: 0 !important;
         }
-        :global(.treeNode.has-parent)::before {
+        :global(.nested-list > .tree-item.has-parent)::before {
           content: "";
           position: absolute;
           left: -22px;
@@ -443,7 +445,7 @@ export default function ShopifyMenuItemsTree({
           border-bottom: 1px solid #5d6f88;
           z-index: 0;
         }
-        :global(.treeNode.has-parent:not(.is-last))::after {
+        :global(.nested-list > .tree-item.has-parent:not(.is-last))::after {
           content: "";
           position: absolute;
           left: -22px;
@@ -451,6 +453,10 @@ export default function ShopifyMenuItemsTree({
           bottom: -8px;
           border-left: 1px solid #5d6f88;
           z-index: 0;
+        }
+        :global(#root-menu > .tree-item::before),
+        :global(#root-menu > .tree-item::after) {
+          display: none;
         }
         :global(.treeRow) {
           position: relative;
