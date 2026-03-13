@@ -267,8 +267,7 @@ export default function ShopifyMenuItemsTree({
         const branchHasAddRow = Boolean(parentKey);
         const isLastSibling = !branchHasAddRow && index === branchKeys.length - 1;
         const targetLabel = String(node.linkedTargetLabel || "").trim();
-        const showTargetLabel =
-          targetLabel.length > 0 && targetLabel.toLowerCase() !== String(node.label || "").trim().toLowerCase();
+        const showTargetLabel = targetLabel.length > 0;
 
         return (
           <div
@@ -412,7 +411,7 @@ export default function ShopifyMenuItemsTree({
           border: 1px solid #2a3547;
           border-radius: 10px;
           background: #0a1324;
-          padding: 10px 12px 8px 14px;
+          padding: 12px 14px 10px 18px;
         }
         .tree {
           max-height: 65vh;
@@ -469,6 +468,27 @@ export default function ShopifyMenuItemsTree({
           gap: 10px;
           box-shadow: 0 1px 0 rgba(15, 23, 42, 0.24), 0 6px 16px rgba(2, 6, 23, 0.28);
         }
+        :global(.treeText) {
+          min-width: 0;
+          display: grid;
+          gap: 2px;
+          align-items: center;
+        }
+        :global(.treeLabel) {
+          color: #e6edf7;
+          font-size: 13px;
+          font-weight: 600;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        :global(.treeTargetLabel) {
+          color: #8fa6c4;
+          font-size: 11px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
         :global(.treeRow:hover) {
           background: #13233d;
           border-color: #5f789c;
@@ -508,7 +528,7 @@ export default function ShopifyMenuItemsTree({
           border: 0;
           padding: 0;
           background: transparent;
-          color: #9fb3cc;
+          color: #c2d2e8;
           display: inline-flex;
           align-items: center;
           justify-content: center;
@@ -560,7 +580,7 @@ export default function ShopifyMenuItemsTree({
           background: #2a1518;
         }
         :global(.treeAddRoot) {
-          margin-top: 8px;
+          margin-top: 10px;
           border-top: 1px solid rgba(255, 255, 255, 0.12);
           padding-top: 10px;
           padding-left: 0;
