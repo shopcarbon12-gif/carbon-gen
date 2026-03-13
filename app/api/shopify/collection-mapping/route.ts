@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { isRequestAuthed } from "@/lib/auth";
 import {
   getShopifyAdminToken,
   getShopifyConfig,
@@ -2077,9 +2076,6 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  if (!isRequestAuthed(req)) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
 
   try {
     const { searchParams } = new URL(req.url);
@@ -2238,9 +2234,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (!isRequestAuthed(req)) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
 
   try {
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
