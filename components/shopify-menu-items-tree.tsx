@@ -160,7 +160,6 @@ export default function ShopifyMenuItemsTree({
                   <circle cx="2" cy="12" r="1.1" />
                   <circle cx="8" cy="12" r="1.1" />
                 </svg>
-                <span className="dragHandleLabel">Move</span>
               </span>
               {hasChildren ? (
                 <button
@@ -203,7 +202,10 @@ export default function ShopifyMenuItemsTree({
                 <div className="treeChildren">{renderBranch(node.nodeKey, depth + 1)}</div>
                 <div className="treeAddChild">
                   <button type="button" className="treeAddChildBtn" onClick={() => onOpenAddEditor(node.nodeKey)}>
-                    + Add menu item to {node.label}
+                    <span className="treeAddIcon" aria-hidden="true">
+                      +
+                    </span>
+                    <span>Add menu item to {node.label}</span>
                   </button>
                 </div>
               </>
@@ -238,7 +240,10 @@ export default function ShopifyMenuItemsTree({
         {renderBranch(null, 0)}
         <div className="treeAddRoot">
           <button type="button" className="treeAddBtn" onClick={() => onOpenAddEditor(null)}>
-            + Add menu item
+            <span className="treeAddIcon" aria-hidden="true">
+              +
+            </span>
+            <span>Add menu item</span>
           </button>
         </div>
       </div>

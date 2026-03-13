@@ -1713,15 +1713,16 @@ export default function ShopifyCollectionMapping() {
           background: #0a1324;
         }
         .shopifyMenuTree {
-          border-color: rgba(255, 255, 255, 0.24);
-          background: rgba(255, 255, 255, 0.06);
+          border-color: #d9dee8;
+          background: #f6f8fb;
           box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.1),
-            0 14px 34px rgba(2, 6, 23, 0.28);
+            inset 0 1px 0 rgba(255, 255, 255, 0.9),
+            0 14px 30px rgba(2, 6, 23, 0.16);
+          padding: 12px;
         }
         .shopifyMenuTree .treeNode.has-parent::before,
         .shopifyMenuTree .treeNode.has-parent > .treeRow::before {
-          border-color: rgba(255, 255, 255, 0.28);
+          border-color: #cfd6e3;
         }
         .treeChildren {
           margin-top: var(--tree-row-gap);
@@ -1759,17 +1760,22 @@ export default function ShopifyCollectionMapping() {
           transition: background-color 120ms ease, border-color 120ms ease;
         }
         .shopifyMenuTree .treeRow {
-          border-color: rgba(255, 255, 255, 0.2);
-          background: rgba(10, 14, 24, 0.58);
+          border-color: #d9dee8;
+          background: #ffffff;
           font-family: "Inter", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+          border-radius: 10px;
+          min-height: 42px;
+          box-shadow:
+            0 1px 0 rgba(15, 23, 42, 0.04),
+            0 6px 16px rgba(15, 23, 42, 0.08);
         }
         .treeRow:hover {
           background: #15233a;
           border-color: #3b4b63;
         }
         .shopifyMenuTree .treeRow:hover {
-          background: rgba(255, 255, 255, 0.12);
-          border-color: rgba(255, 255, 255, 0.34);
+          background: #f8fafc;
+          border-color: #c8d0df;
         }
         .treeRow:focus-visible {
           outline: 2px solid #60a5fa;
@@ -1784,8 +1790,11 @@ export default function ShopifyCollectionMapping() {
         }
         .shopifyMenuTree .treeRow.active,
         .shopifyMenuTree .treeRow.active:hover {
-          background: rgba(255, 255, 255, 0.26);
-          border-color: rgba(255, 255, 255, 0.52);
+          background: #edf3ff;
+          border-color: #9db7ef;
+          box-shadow:
+            0 0 0 1px rgba(59, 130, 246, 0.28),
+            0 6px 16px rgba(15, 23, 42, 0.12);
         }
         .treeNode.has-parent > .treeRow::before {
           position: absolute;
@@ -1828,7 +1837,7 @@ export default function ShopifyCollectionMapping() {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          color: #94a3b8;
+          color: #7a889f;
           cursor: grab;
           flex: 0 0 auto;
         }
@@ -1838,16 +1847,6 @@ export default function ShopifyCollectionMapping() {
         .dragHandle svg circle {
           fill: currentColor;
         }
-        .dragHandleLabel {
-          font-size: 11px;
-          color: #94a3b8;
-          margin-left: 4px;
-          display: none;
-        }
-        .shopifyMenuTree .treeRow:hover .dragHandleLabel,
-        .shopifyMenuTree .treeRow.active .dragHandleLabel {
-          display: inline;
-        }
         .treeText {
           min-width: 0;
           display: grid;
@@ -1855,13 +1854,13 @@ export default function ShopifyCollectionMapping() {
           align-items: center;
         }
         .treeLabel {
-          color: #e2e8f0;
-          font-size: 14px;
-          font-weight: 500;
+          color: #1f2937;
+          font-size: 13px;
+          font-weight: 600;
         }
         .treeTargetLabel {
-          color: #94a3b8;
-          font-size: 12px;
+          color: #6b7280;
+          font-size: 11px;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
@@ -1870,7 +1869,7 @@ export default function ShopifyCollectionMapping() {
         .treeRow.active .treeLabel,
         .treeRow.active .treeTargetLabel,
         .treeRow.active .dragHandle {
-          color: #ffffff;
+          color: #1f2937;
         }
         .treeRow.active + .treeChildren > .treeNode.has-parent::before,
         .treeRow.active::before {
@@ -1887,7 +1886,7 @@ export default function ShopifyCollectionMapping() {
           opacity: 1;
         }
         .shopifyMenuTree .treeRowActions {
-          opacity: 0.75;
+          opacity: 1;
         }
         .shopifyMenuTree .treeRow:hover .treeRowActions,
         .shopifyMenuTree .treeRow.active .treeRowActions {
@@ -1898,27 +1897,27 @@ export default function ShopifyCollectionMapping() {
           height: 24px;
           min-height: 24px;
           padding: 0;
-          border: 1px solid #334155;
-          border-radius: 5px;
-          background: rgba(15, 23, 42, 0.45);
-          color: #cbd5e1;
+          border: 1px solid #d2d9e6;
+          border-radius: 8px;
+          background: #ffffff;
+          color: #4b5563;
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          opacity: 0.72;
+          opacity: 1;
         }
         .iconBtn svg {
           width: 14px;
           height: 14px;
         }
         .iconBtn:hover {
-          background: rgba(30, 41, 59, 0.88);
+          background: #f3f6fb;
           opacity: 1;
         }
         .iconBtn:active {
-          background: #2563eb;
-          border-color: #2563eb;
-          color: #ffffff;
+          background: #eaf2ff;
+          border-color: #9db7ef;
+          color: #1d4ed8;
           opacity: 1;
         }
         .iconBtn svg path {
@@ -1936,12 +1935,15 @@ export default function ShopifyCollectionMapping() {
         .treeAddBtn {
           min-height: 28px;
           height: 28px;
-          padding: 0 10px;
-          border-radius: 6px;
-          border: 1px dashed #33506e;
-          background: #0f1d33;
-          color: #cde0ff;
+          padding: 0 6px;
+          border-radius: 999px;
+          border: 0;
+          background: transparent;
+          color: #2563eb;
           font-size: 12px;
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
         }
         .treeAddChild {
           padding: 2px 10px 10px 58px;
@@ -1949,12 +1951,29 @@ export default function ShopifyCollectionMapping() {
         .treeAddChildBtn {
           min-height: 26px;
           height: 26px;
-          padding: 0 10px;
+          padding: 0 6px;
           border-radius: 999px;
-          border: 1px solid rgba(96, 165, 250, 0.48);
-          background: rgba(96, 165, 250, 0.12);
-          color: #bfdbfe;
+          border: 0;
+          background: transparent;
+          color: #2563eb;
           font-size: 11px;
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .treeAddIcon {
+          width: 18px;
+          height: 18px;
+          border-radius: 999px;
+          border: 1px solid #93c5fd;
+          background: #eff6ff;
+          color: #1d4ed8;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 13px;
+          line-height: 1;
+          font-weight: 700;
         }
         .editorModal {
           width: min(460px, 92vw);
