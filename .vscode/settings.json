@@ -20,5 +20,26 @@
       "mode": "auto"
     }
   ],
-  "chatgpt.commentCodeLensEnabled": true
+  "chatgpt.commentCodeLensEnabled": true,
+  "piny.project_settings": {
+    "open-pages": [
+      "pinyfakepage.html"
+    ],
+    "tw-external-config": {
+      "external_source_url": "app/globals.css"
+    },
+    "source-folders": null,
+    "preview-url": "http://localhost:3000",
+    "ai-project-brief": null,
+    "urls": {
+      "pinyfakepage.html": {
+        "open-page-views": [
+          {
+            "w": 1044,
+            "h": 0
+          }
+        ]
+      }
+    }
+  }
 }

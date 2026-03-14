@@ -222,6 +222,33 @@ function SortableTreeRow({
     };
   }, [inlineLinkPickerOpen, onInlineLinkPickerClose]);
 
+  const inlineSaveDisabled = inlineSaving || !inlineLabel.trim() || !inlineLink.trim();
+
+  useEffect(() => {
+    if (!isInlineEditing) return;
+    // #region agent log
+    fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
+      body: JSON.stringify({
+        sessionId: "9da838",
+        runId: "label-save-debug",
+        hypothesisId: "H1",
+        location: "components/shopify-menu-items-tree.tsx:SortableTreeRow",
+        message: "inline_save_state_probe",
+        data: {
+          id,
+          inlineSaving,
+          hasInlineLabel: Boolean(inlineLabel.trim()),
+          hasInlineLink: Boolean(inlineLink.trim()),
+          inlineSaveDisabled,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+  }, [id, isInlineEditing, inlineSaving, inlineLabel, inlineLink, inlineSaveDisabled]);
+
   return (
     <div
       ref={setNodeRef}
@@ -410,7 +437,7 @@ function SortableTreeRow({
               className="iconBtn success"
               onClick={onInlineSave}
               aria-label="Save menu item changes"
-              disabled={inlineSaving || !inlineLabel.trim() || !inlineLink.trim()}
+              disabled={inlineSaveDisabled}
             >
               <svg viewBox="0 0 16 16" width="14" height="14">
                 <path d="M6.3 11.7L2.6 8l1.4-1.4 2.3 2.3 5.7-5.7L13.4 4z" />

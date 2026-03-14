@@ -1,0 +1,404 @@
+{
+  "generatedAt": "2026-03-14T05:50:49.952Z",
+  "rounds": [
+    {
+      "round": 1,
+      "local": {
+        "target": "local",
+        "url": "http://localhost:3000/studio/shopify-collection-mapping?shop=30e7d3.myshopify.com",
+        "round": 1,
+        "ok": true,
+        "gotoStatus": 200,
+        "finalUrl": "http://localhost:3000/studio/shopify-collection-mapping?shop=30e7d3.myshopify.com",
+        "title": "Carbon Creative Studio",
+        "heading": "Shopify Collection Mapping",
+        "metrics": {
+          "rowCount": 0,
+          "nodeCount": 1,
+          "saveBtnCount": 1,
+          "undoBtnCount": 1,
+          "searchInputs": 1,
+          "eyeBtnCount": 0
+        },
+        "style": {
+          "searchBar": {
+            "width": "476px",
+            "height": "52px",
+            "display": "grid",
+            "position": "relative",
+            "color": "rgb(229, 231, 235)",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "fontSize": "16px",
+            "borderRadius": "0px",
+            "zIndex": "auto"
+          },
+          "undoBtn": {
+            "width": "83.1875px",
+            "height": "36px",
+            "display": "block",
+            "position": "static",
+            "color": "rgb(220, 232, 251)",
+            "backgroundColor": "rgb(18, 35, 61)",
+            "fontSize": "16px",
+            "borderRadius": "8px",
+            "zIndex": "auto"
+          },
+          "saveBtn": {
+            "width": "59.5625px",
+            "height": "36px",
+            "display": "block",
+            "position": "static",
+            "color": "rgb(248, 255, 252)",
+            "backgroundColor": "rgb(15, 138, 100)",
+            "fontSize": "16px",
+            "borderRadius": "8px",
+            "zIndex": "auto"
+          },
+          "paneDivider": {
+            "width": "22px",
+            "height": "373.5px",
+            "display": "flex",
+            "position": "static",
+            "color": "rgb(229, 231, 235)",
+            "backgroundColor": "rgb(10, 19, 36)",
+            "fontSize": "16px",
+            "borderRadius": "999px",
+            "zIndex": "auto"
+          },
+          "firstTreeRow": null
+        },
+        "consoleErrors": [],
+        "pageErrors": [],
+        "notes": [
+          "No tree rows detected"
+        ],
+        "screenshot": "tmp-compare-local-round1.png"
+      },
+      "prod": {
+        "target": "prod",
+        "url": "https://app.shopcarbon.com/studio/shopify-collection-mapping?shop=30e7d3.myshopify.com",
+        "round": 1,
+        "ok": true,
+        "gotoStatus": 200,
+        "finalUrl": "https://app.shopcarbon.com/studio/shopify-collection-mapping?shop=30e7d3.myshopify.com",
+        "title": "Carbon Creative Studio",
+        "heading": "Shopify Collection Mapping",
+        "metrics": {
+          "rowCount": 5,
+          "nodeCount": 6,
+          "saveBtnCount": 1,
+          "undoBtnCount": 1,
+          "searchInputs": 1,
+          "eyeBtnCount": 5
+        },
+        "style": {
+          "searchBar": {
+            "width": "476px",
+            "height": "52px",
+            "display": "grid",
+            "position": "relative",
+            "color": "rgb(229, 231, 235)",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "fontSize": "16px",
+            "borderRadius": "0px",
+            "zIndex": "auto"
+          },
+          "undoBtn": {
+            "width": "83.1875px",
+            "height": "36px",
+            "display": "block",
+            "position": "static",
+            "color": "rgb(220, 232, 251)",
+            "backgroundColor": "rgb(18, 35, 61)",
+            "fontSize": "16px",
+            "borderRadius": "8px",
+            "zIndex": "auto"
+          },
+          "saveBtn": {
+            "width": "59.5625px",
+            "height": "36px",
+            "display": "block",
+            "position": "static",
+            "color": "rgb(248, 255, 252)",
+            "backgroundColor": "rgb(15, 138, 100)",
+            "fontSize": "16px",
+            "borderRadius": "8px",
+            "zIndex": "auto"
+          },
+          "paneDivider": {
+            "width": "22px",
+            "height": "781.594px",
+            "display": "flex",
+            "position": "static",
+            "color": "rgb(229, 231, 235)",
+            "backgroundColor": "rgb(10, 19, 36)",
+            "fontSize": "16px",
+            "borderRadius": "999px",
+            "zIndex": "auto"
+          },
+          "firstTreeRow": {
+            "width": "436px",
+            "height": "42px",
+            "display": "flex",
+            "position": "relative",
+            "color": "rgb(229, 231, 235)",
+            "backgroundColor": "rgb(15, 26, 46)",
+            "fontSize": "16px",
+            "borderRadius": "8px",
+            "zIndex": "10"
+          }
+        },
+        "consoleErrors": [],
+        "pageErrors": [],
+        "notes": [],
+        "screenshot": "tmp-compare-prod-round1.png"
+      },
+      "comparison": {
+        "round": 1,
+        "sameHeading": true,
+        "sameFinalPath": true,
+        "metricDelta": {
+          "rowCount": {
+            "local": 0,
+            "prod": 5,
+            "delta": 5
+          },
+          "nodeCount": {
+            "local": 1,
+            "prod": 6,
+            "delta": 5
+          },
+          "saveBtnCount": {
+            "local": 1,
+            "prod": 1,
+            "delta": 0
+          },
+          "undoBtnCount": {
+            "local": 1,
+            "prod": 1,
+            "delta": 0
+          },
+          "searchInputs": {
+            "local": 1,
+            "prod": 1,
+            "delta": 0
+          },
+          "eyeBtnCount": {
+            "local": 0,
+            "prod": 5,
+            "delta": 5
+          }
+        },
+        "majorFindings": [
+          "paneDivider style mismatch (height 373.5px vs 781.594px, font 16px vs 16px)"
+        ]
+      }
+    },
+    {
+      "round": 2,
+      "local": {
+        "target": "local",
+        "url": "http://localhost:3000/studio/shopify-collection-mapping?shop=30e7d3.myshopify.com",
+        "round": 2,
+        "ok": true,
+        "gotoStatus": 200,
+        "finalUrl": "http://localhost:3000/studio/shopify-collection-mapping?shop=30e7d3.myshopify.com",
+        "title": "Carbon Creative Studio",
+        "heading": "Shopify Collection Mapping",
+        "metrics": {
+          "rowCount": 5,
+          "nodeCount": 6,
+          "saveBtnCount": 1,
+          "undoBtnCount": 1,
+          "searchInputs": 1,
+          "eyeBtnCount": 5
+        },
+        "style": {
+          "searchBar": {
+            "width": "476px",
+            "height": "52px",
+            "display": "grid",
+            "position": "relative",
+            "color": "rgb(229, 231, 235)",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "fontSize": "16px",
+            "borderRadius": "0px",
+            "zIndex": "auto"
+          },
+          "undoBtn": {
+            "width": "83.1875px",
+            "height": "36px",
+            "display": "block",
+            "position": "static",
+            "color": "rgb(220, 232, 251)",
+            "backgroundColor": "rgb(18, 35, 61)",
+            "fontSize": "16px",
+            "borderRadius": "8px",
+            "zIndex": "auto"
+          },
+          "saveBtn": {
+            "width": "59.5625px",
+            "height": "36px",
+            "display": "block",
+            "position": "static",
+            "color": "rgb(248, 255, 252)",
+            "backgroundColor": "rgb(15, 138, 100)",
+            "fontSize": "16px",
+            "borderRadius": "8px",
+            "zIndex": "auto"
+          },
+          "paneDivider": {
+            "width": "22px",
+            "height": "781.594px",
+            "display": "flex",
+            "position": "static",
+            "color": "rgb(229, 231, 235)",
+            "backgroundColor": "rgb(10, 19, 36)",
+            "fontSize": "16px",
+            "borderRadius": "999px",
+            "zIndex": "auto"
+          },
+          "firstTreeRow": {
+            "width": "436px",
+            "height": "42px",
+            "display": "flex",
+            "position": "relative",
+            "color": "rgb(229, 231, 235)",
+            "backgroundColor": "rgb(15, 26, 46)",
+            "fontSize": "16px",
+            "borderRadius": "8px",
+            "zIndex": "10"
+          }
+        },
+        "consoleErrors": [],
+        "pageErrors": [],
+        "notes": [],
+        "screenshot": "tmp-compare-local-round2.png"
+      },
+      "prod": {
+        "target": "prod",
+        "url": "https://app.shopcarbon.com/studio/shopify-collection-mapping?shop=30e7d3.myshopify.com",
+        "round": 2,
+        "ok": true,
+        "gotoStatus": 200,
+        "finalUrl": "https://app.shopcarbon.com/studio/shopify-collection-mapping?shop=30e7d3.myshopify.com",
+        "title": "Carbon Creative Studio",
+        "heading": "Shopify Collection Mapping",
+        "metrics": {
+          "rowCount": 5,
+          "nodeCount": 6,
+          "saveBtnCount": 1,
+          "undoBtnCount": 1,
+          "searchInputs": 1,
+          "eyeBtnCount": 5
+        },
+        "style": {
+          "searchBar": {
+            "width": "476px",
+            "height": "52px",
+            "display": "grid",
+            "position": "relative",
+            "color": "rgb(229, 231, 235)",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "fontSize": "16px",
+            "borderRadius": "0px",
+            "zIndex": "auto"
+          },
+          "undoBtn": {
+            "width": "83.1875px",
+            "height": "36px",
+            "display": "block",
+            "position": "static",
+            "color": "rgb(220, 232, 251)",
+            "backgroundColor": "rgb(18, 35, 61)",
+            "fontSize": "16px",
+            "borderRadius": "8px",
+            "zIndex": "auto"
+          },
+          "saveBtn": {
+            "width": "59.5625px",
+            "height": "36px",
+            "display": "block",
+            "position": "static",
+            "color": "rgb(248, 255, 252)",
+            "backgroundColor": "rgb(15, 138, 100)",
+            "fontSize": "16px",
+            "borderRadius": "8px",
+            "zIndex": "auto"
+          },
+          "paneDivider": {
+            "width": "22px",
+            "height": "781.594px",
+            "display": "flex",
+            "position": "static",
+            "color": "rgb(229, 231, 235)",
+            "backgroundColor": "rgb(10, 19, 36)",
+            "fontSize": "16px",
+            "borderRadius": "999px",
+            "zIndex": "auto"
+          },
+          "firstTreeRow": {
+            "width": "436px",
+            "height": "42px",
+            "display": "flex",
+            "position": "relative",
+            "color": "rgb(229, 231, 235)",
+            "backgroundColor": "rgb(15, 26, 46)",
+            "fontSize": "16px",
+            "borderRadius": "8px",
+            "zIndex": "10"
+          }
+        },
+        "consoleErrors": [],
+        "pageErrors": [],
+        "notes": [],
+        "screenshot": "tmp-compare-prod-round2.png"
+      },
+      "comparison": {
+        "round": 2,
+        "sameHeading": true,
+        "sameFinalPath": true,
+        "metricDelta": {
+          "rowCount": {
+            "local": 5,
+            "prod": 5,
+            "delta": 0
+          },
+          "nodeCount": {
+            "local": 6,
+            "prod": 6,
+            "delta": 0
+          },
+          "saveBtnCount": {
+            "local": 1,
+            "prod": 1,
+            "delta": 0
+          },
+          "undoBtnCount": {
+            "local": 1,
+            "prod": 1,
+            "delta": 0
+          },
+          "searchInputs": {
+            "local": 1,
+            "prod": 1,
+            "delta": 0
+          },
+          "eyeBtnCount": {
+            "local": 5,
+            "prod": 5,
+            "delta": 0
+          }
+        },
+        "majorFindings": []
+      }
+    }
+  ],
+  "summary": {
+    "roundsExecuted": 2,
+    "majorFindings": [
+      "paneDivider style mismatch (height 373.5px vs 781.594px, font 16px vs 16px)"
+    ],
+    "allMajorFindingsIdenticalAcrossRounds": false
+  }
+}

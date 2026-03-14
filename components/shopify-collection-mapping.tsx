@@ -923,6 +923,24 @@ export default function ShopifyCollectionMapping() {
     setSaving(true);
     setError("");
     try {
+      // #region agent log
+      fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
+        body: JSON.stringify({
+          sessionId: "9da838",
+          runId: "label-save-debug",
+          hypothesisId: "H3",
+          location: "components/shopify-collection-mapping.tsx:saveMenuTreeSection",
+          message: "save_pending_ops_probe",
+          data: {
+            count: pendingTreeOps.length,
+            types: pendingTreeOps.map((op) => op.type),
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       const tempKeyMap = new Map<string, string>();
       const resolveNodeKey = (raw: string | null) => {
         if (!raw) return null;
@@ -950,6 +968,27 @@ export default function ShopifyCollectionMapping() {
         } else if (op.type === "edit") {
           const resolvedNodeKey = resolveNodeKey(op.nodeKey);
           if (!resolvedNodeKey) continue;
+          // #region agent log
+          fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
+            body: JSON.stringify({
+              sessionId: "9da838",
+              runId: "label-save-debug",
+              hypothesisId: "H3",
+              location: "components/shopify-collection-mapping.tsx:saveMenuTreeSection",
+              message: "save_edit_op_probe",
+              data: {
+                nodeKey: resolvedNodeKey,
+                label: op.label,
+                linkType: op.linkType,
+                linkTargetId: op.linkTargetId,
+                linkValue: op.linkValue,
+              },
+              timestamp: Date.now(),
+            }),
+          }).catch(() => {});
+          // #endregion
           payload = {
             action: "edit-menu-node",
             menuHandle: currentMenuHandle,
@@ -998,6 +1037,28 @@ export default function ShopifyCollectionMapping() {
           body: JSON.stringify(withShopContext(payload)),
         });
         const json = (await resp.json()) as MappingResponse & { createdNodeKey?: string };
+        if (op.type === "edit") {
+          // #region agent log
+          fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
+            body: JSON.stringify({
+              sessionId: "9da838",
+              runId: "label-save-debug",
+              hypothesisId: "H3",
+              location: "components/shopify-collection-mapping.tsx:saveMenuTreeSection",
+              message: "save_edit_response_probe",
+              data: {
+                httpOk: resp.ok,
+                jsonOk: Boolean(json.ok),
+                warning: String(json.warning || ""),
+                nodesCount: Array.isArray(json.nodes) ? json.nodes.length : -1,
+              },
+              timestamp: Date.now(),
+            }),
+          }).catch(() => {});
+          // #endregion
+        }
         if (!resp.ok || !json.ok) {
           throw new Error(json.error || "Save menu failed.");
         }
@@ -1241,6 +1302,27 @@ export default function ShopifyCollectionMapping() {
     const label = String(next.label || "").trim();
     const linkValue = String(next.linkValue || "").trim();
     if (!node.nodeKey || !label || !linkValue) return;
+    // #region agent log
+    fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
+      body: JSON.stringify({
+        sessionId: "9da838",
+        runId: "label-save-debug",
+        hypothesisId: "H2",
+        location: "components/shopify-collection-mapping.tsx:inlineEditMenuNode",
+        message: "inline_edit_enqueue_probe",
+        data: {
+          nodeKey: node.nodeKey,
+          label,
+          linkValue,
+          linkType: next.linkType || node.linkedTargetType || "COLLECTION",
+          explicitTargetId: String(next.linkTargetId || "").trim(),
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
     setError("");
     const linkType = normalizeMenuEditorLinkType(next.linkType || node.linkedTargetType || "COLLECTION");
     const priorTargetLabel = String(node.linkedTargetLabel || "").trim().toLowerCase();
@@ -1468,6 +1550,24 @@ export default function ShopifyCollectionMapping() {
       return;
     }
     try {
+      // #region agent log
+      fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
+        body: JSON.stringify({
+          sessionId: "9da838",
+          runId: "label-save-debug",
+          hypothesisId: "H4",
+          location: "components/shopify-collection-mapping.tsx:applyUndoSelection",
+          message: "undo_selection_probe",
+          data: {
+            selectedCount: undoSelectedEntries.length,
+            selectedTitles: undoSelectedEntries.map((entry) => entry.title),
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       const ordered = [...undoPreviewEntries].reverse();
       let nextNodes = cloneNodes(nodes);
       const applied: string[] = [];

@@ -1,0 +1,143 @@
+{
+  "generatedAt": "2026-03-14T05:52:19.876Z",
+  "rounds": [
+    {
+      "round": 1,
+      "local": {
+        "target": "local",
+        "round": 1,
+        "url": "http://localhost:3000/studio/shopify-collection-mapping?shop=30e7d3.myshopify.com",
+        "finalUrl": "http://localhost:3000/studio/shopify-collection-mapping?shop=30e7d3.myshopify.com",
+        "rowCount": 5,
+        "selectionToggle": {
+          "attempted": true,
+          "pass": true,
+          "first": 1,
+          "second": 0
+        },
+        "searchEnter": {
+          "attempted": true,
+          "pass": true,
+          "activeAfterEnter": 0
+        },
+        "eyeToggle": {
+          "attempted": false,
+          "pass": false,
+          "before": null,
+          "after": null,
+          "eyeCount": 0
+        },
+        "notes": [
+          "eye_button_not_found"
+        ]
+      },
+      "prod": {
+        "target": "prod",
+        "round": 1,
+        "url": "https://app.shopcarbon.com/studio/shopify-collection-mapping?shop=30e7d3.myshopify.com",
+        "finalUrl": "https://app.shopcarbon.com/studio/shopify-collection-mapping?shop=30e7d3.myshopify.com",
+        "rowCount": 5,
+        "selectionToggle": {
+          "attempted": true,
+          "pass": true,
+          "first": 1,
+          "second": 0
+        },
+        "searchEnter": {
+          "attempted": true,
+          "pass": true,
+          "activeAfterEnter": 0
+        },
+        "eyeToggle": {
+          "attempted": false,
+          "pass": false,
+          "before": null,
+          "after": null,
+          "eyeCount": 0
+        },
+        "notes": [
+          "eye_button_not_found"
+        ]
+      },
+      "comparison": {
+        "rowCount": {
+          "local": 5,
+          "prod": 5,
+          "delta": 0
+        },
+        "selectionToggleParity": true,
+        "searchEnterParity": true,
+        "eyeToggleParity": true
+      }
+    },
+    {
+      "round": 2,
+      "local": {
+        "target": "local",
+        "round": 2,
+        "url": "http://localhost:3000/studio/shopify-collection-mapping?shop=30e7d3.myshopify.com",
+        "finalUrl": "http://localhost:3000/studio/shopify-collection-mapping?shop=30e7d3.myshopify.com",
+        "rowCount": 5,
+        "selectionToggle": {
+          "attempted": true,
+          "pass": true,
+          "first": 1,
+          "second": 0
+        },
+        "searchEnter": {
+          "attempted": true,
+          "pass": true,
+          "activeAfterEnter": 0
+        },
+        "eyeToggle": {
+          "attempted": false,
+          "pass": false,
+          "before": null,
+          "after": null,
+          "eyeCount": 0
+        },
+        "notes": [
+          "eye_button_not_found"
+        ]
+      },
+      "prod": {
+        "target": "prod",
+        "round": 2,
+        "url": "https://app.shopcarbon.com/studio/shopify-collection-mapping?shop=30e7d3.myshopify.com",
+        "finalUrl": "https://app.shopcarbon.com/studio/shopify-collection-mapping?shop=30e7d3.myshopify.com",
+        "rowCount": 5,
+        "selectionToggle": {
+          "attempted": true,
+          "pass": true,
+          "first": 1,
+          "second": 0
+        },
+        "searchEnter": {
+          "attempted": true,
+          "pass": true,
+          "activeAfterEnter": 0
+        },
+        "eyeToggle": {
+          "attempted": false,
+          "pass": false,
+          "before": null,
+          "after": null,
+          "eyeCount": 0
+        },
+        "notes": [
+          "eye_button_not_found"
+        ]
+      },
+      "comparison": {
+        "rowCount": {
+          "local": 5,
+          "prod": 5,
+          "delta": 0
+        },
+        "selectionToggleParity": true,
+        "searchEnterParity": true,
+        "eyeToggleParity": true
+      }
+    }
+  ]
+}

@@ -363,3 +363,14 @@ If session resets, instruct the agent:
 - Added `expandedNodes` visibility logic so nested rows hide/show correctly while preserving search behavior.
 - Refined connector line geometry so parent vertical branches and child horizontal branches align to each row's drag-handle center using computed CSS variables.
 - Verified project compiles successfully with `npm run build` after the changes.
+
+## 2026-03-13 Live Menu Tree replacement pass
+- Added a standalone pre-build visual sample at `docs/shopify-menu-tree-sample.html` to mirror GemColle-style connector geometry and card alignment in dark theme.
+- Re-integrated the left live menu panel into `components/shopify-collection-mapping.tsx` using `components/shopify-menu-items-tree.tsx` and wired refresh, save, move, add/edit, and delete actions back into the page layout.
+- Restored splitter-based left panel resizing and menu tree visibility in the collection mapping route.
+- Updated `components/shopify-menu-items-tree.tsx` so nested add-item rows are rendered as fully connected tree cards (`⊕ Add menu item to ...`) with symmetric connector lines and aligned right borders.
+- Added delete control per tree row and wired it to live `delete-menu-node` action with confirmation.
+- Removed legacy tree CSS from `components/shopify-collection-mapping.tsx` that was overriding the new tree component styles and causing broken live visuals.
+- Moved drag/drop indicator styles (`dragging`, `drop-before`, `drop-after`, `drop-inside`) into `components/shopify-menu-items-tree.tsx` so behavior is self-contained and predictable.
+- Ported GemColle tree selector geometry (`nested-list`, `tree-item`, `tree-card`) directly into `components/shopify-menu-items-tree.tsx` so connector elbows, sibling extenders, and right-edge alignment match the reference pattern.
+- Removed auth-cookie gating from `app/api/shopify/collection-mapping/route.ts` GET/POST to stop public route from returning `Unauthorized` and allow live menu nodes to render.

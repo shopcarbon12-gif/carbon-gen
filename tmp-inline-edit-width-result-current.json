@@ -1,0 +1,23 @@
+{
+  "url": "http://localhost:3000/studio/shopify-collection-mapping",
+  "iconBtnCount": 2,
+  "labelInputCount": 1,
+  "linkInputCount": 1,
+  "input1": {
+    "x": 132,
+    "y": 505.546875,
+    "width": 150,
+    "height": 40
+  },
+  "input2": {
+    "x": 280,
+    "y": 505.546875,
+    "width": 150,
+    "height": 40
+  },
+  "overlapArea": 80,
+  "hasOverlap": true,
+  "sideBySide": true,
+  "nonOverlappingSideBySide": false,
+  "screenshotPath": "D:/Projects/My project/carbon-gen/tmp-inline-edit-width-check-current.png"
+}

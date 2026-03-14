@@ -1,0 +1,66 @@
+{
+  "runs": [
+    {
+      "url": "http://localhost:3000/studio/shopify-collection-mapping",
+      "checks": [
+        {
+          "id": "ui-buttons",
+          "pass": true,
+          "details": {
+            "undoVisible": true,
+            "saveVisible": true
+          }
+        },
+        {
+          "id": "tree-search-input",
+          "pass": true,
+          "details": {
+            "hasSearch": true
+          }
+        },
+        {
+          "id": "tree-has-rows",
+          "pass": false,
+          "details": {
+            "reason": "No tree rows found"
+          }
+        }
+      ],
+      "rowCount": 0,
+      "apiSnapshots": [],
+      "consoleErrors": [],
+      "pageErrors": []
+    },
+    {
+      "url": "http://localhost:3000/studio/shopify-collection-mapping?shop=30e7d3.myshopify.com",
+      "checks": [
+        {
+          "id": "ui-buttons",
+          "pass": true,
+          "details": {
+            "undoVisible": true,
+            "saveVisible": true
+          }
+        },
+        {
+          "id": "tree-search-input",
+          "pass": true,
+          "details": {
+            "hasSearch": true
+          }
+        },
+        {
+          "id": "tree-has-rows",
+          "pass": false,
+          "details": {
+            "reason": "No tree rows found"
+          }
+        }
+      ],
+      "rowCount": 0,
+      "apiSnapshots": [],
+      "consoleErrors": [],
+      "pageErrors": []
+    }
+  ]
+}
