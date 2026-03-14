@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Script from "next/script";
 import AutoCapitalizeFirstLetter from "@/components/auto-capitalize-first-letter";
 import "./globals.css";
 
@@ -23,6 +24,9 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const pinyVisualSelectEnabled =
+    process.env.NODE_ENV === "development" && process.env.PINY_VISUAL_SELECT === "true";
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -47,6 +51,9 @@ export default function RootLayout({
         <div className="app-bg-top-photo" aria-hidden />
         <div className="app-bg-top-fade" aria-hidden />
         <div className="app-root-content">{children}</div>
+        {pinyVisualSelectEnabled ? (
+          <Script src="/_piny/piny.phone.js" strategy="beforeInteractive" />
+        ) : null}
       </body>
     </html>
   );

@@ -55,5 +55,6 @@ backups/
 .vercel
 .coolify-deploy.local.json
 .bridge/
+/public/_piny
 playwright-report/
 test-results/

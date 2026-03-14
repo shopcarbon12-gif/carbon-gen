@@ -15,9 +15,28 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { type CSSProperties, type ReactElement, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import { type CSSProperties, type ReactElement, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 type DropPosition = "before" | "after" | "inside";
+type MenuLinkType = "COLLECTION" | "PRODUCT" | "PAGE" | "BLOG";
+type MenuLinkTargetOption = {
+  id: string;
+  title: string;
+  handle: string;
+  url: string;
+};
+type MenuLinkTargets = {
+  collections: MenuLinkTargetOption[];
+  products: MenuLinkTargetOption[];
+  pages: MenuLinkTargetOption[];
+  blogs: MenuLinkTargetOption[];
+};
+type UndoToolbarEntry = {
+  id: string;
+  title: string;
+  details: string[];
+};
 
 type MenuNode = {
   nodeKey: string;
@@ -39,8 +58,13 @@ type ShopifyMenuItemsTreeProps = {
   menuHandle: string;
   treeSearch: string;
   onTreeSearchChange: (value: string) => void;
+  onTreeSearchSubmit: (value: string) => void;
   onRefreshTree: () => void;
   onSaveTree: () => Promise<void>;
+  undoEntries: UndoToolbarEntry[];
+  undoMenuOpen: boolean;
+  onUndoMenuToggle: () => void;
+  onUndoEntrySelect: (entryId: string) => void;
   saving: boolean;
   nodes: MenuNode[];
   nodeByKey: Map<string, MenuNode>;
@@ -49,8 +73,20 @@ type ShopifyMenuItemsTreeProps = {
   expandedNodes: Record<string, boolean>;
   selectedNodes: Record<string, boolean>;
   onMoveNode: (sourceKey: string, target: DropTarget) => Promise<void>;
+  onInlineEditNode: (
+    node: MenuNode,
+    next: {
+      label: string;
+      linkValue: string;
+      linkType?: MenuLinkType;
+      linkTargetId?: string | null;
+      linkTargetLabel?: string;
+    }
+  ) => Promise<void>;
+  inlineLinkTargets: MenuLinkTargets;
   onApplyNodeSelection: (nodeKey: string) => void;
   onToggleNodeExpansion: (nodeKey: string) => void;
+  onToggleNodeVisibility: (nodeKey: string) => void;
   onOpenEditEditor: (node: MenuNode) => void;
   onOpenAddEditor: (parentKey: string | null) => void;
   onDeleteNode: (nodeKey: string) => void;
@@ -65,11 +101,32 @@ type RowProps = {
   hasChildren: boolean;
   isExpanded: boolean;
   label: string;
+  enabled: boolean;
   targetLabel: string;
   showTargetLabel: boolean;
+  isInlineEditing: boolean;
+  inlineLabel: string;
+  inlineLink: string;
+  inlineLinkType: MenuLinkType;
+  inlineLinkQuery: string;
+  inlineLinkOptions: MenuLinkTargetOption[];
+  inlineLinkPickerOpen: boolean;
+  inlineLinkPickerMode: "categories" | "results";
+  inlineSaving: boolean;
   onRowClick: () => void;
   onToggle: () => void;
   onEdit: () => void;
+  onToggleVisibility: () => void;
+  onInlineLabelChange: (value: string) => void;
+  onInlineLinkChange: (value: string) => void;
+  onInlineLinkTypeChange: (value: MenuLinkType) => void;
+  onInlineLinkQueryChange: (value: string) => void;
+  onInlineLinkModeChange: (mode: "categories" | "results") => void;
+  onInlineLinkPickerOpen: () => void;
+  onInlineLinkPickerClose: () => void;
+  onInlineLinkOptionSelect: (option: MenuLinkTargetOption) => void;
+  onInlineSave: () => void;
+  onInlineCancel: () => void;
   onDelete: () => void;
 };
 
@@ -82,24 +139,93 @@ function SortableTreeRow({
   hasChildren,
   isExpanded,
   label,
+  enabled,
   targetLabel,
   showTargetLabel,
+  isInlineEditing,
+  inlineLabel,
+  inlineLink,
+  inlineLinkType,
+  inlineLinkQuery,
+  inlineLinkOptions,
+  inlineLinkPickerOpen,
+  inlineLinkPickerMode,
+  inlineSaving,
   onRowClick,
   onToggle,
   onEdit,
+  onToggleVisibility,
+  onInlineLabelChange,
+  onInlineLinkChange,
+  onInlineLinkTypeChange,
+  onInlineLinkQueryChange,
+  onInlineLinkModeChange,
+  onInlineLinkPickerOpen,
+  onInlineLinkPickerClose,
+  onInlineLinkOptionSelect,
+  onInlineSave,
+  onInlineCancel,
   onDelete,
 }: RowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const linkTriggerRef = useRef<HTMLDivElement | null>(null);
+  const pickerPanelRef = useRef<HTMLDivElement | null>(null);
+  const [pickerPosition, setPickerPosition] = useState({ top: 0, left: 0, width: 320 });
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
     ["--tree-depth"]: String(depth),
   } as CSSProperties;
 
+  useLayoutEffect(() => {
+    if (!inlineLinkPickerOpen) return;
+    const updatePosition = () => {
+      const trigger = linkTriggerRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const maxWidth = 360;
+      const minWidth = 300;
+      const width = Math.max(minWidth, Math.min(maxWidth, rect.width));
+      const left = Math.min(Math.max(8, rect.left), window.innerWidth - width - 8);
+      setPickerPosition({
+        top: rect.bottom + 4,
+        left,
+        width,
+      });
+    };
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [inlineLinkPickerOpen]);
+
+  useEffect(() => {
+    if (!inlineLinkPickerOpen) return;
+    const onMouseDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (pickerPanelRef.current?.contains(target)) return;
+      if (linkTriggerRef.current?.contains(target)) return;
+      onInlineLinkPickerClose();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onInlineLinkPickerClose();
+    };
+    window.addEventListener("mousedown", onMouseDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [inlineLinkPickerOpen, onInlineLinkPickerClose]);
+
   return (
     <div
       ref={setNodeRef}
-      className={`treeRow tree-card ${checked ? "active" : ""} ${dragging || isDragging ? "dragging" : ""} ${dropState}`}
+      className={`treeRow tree-card ${checked ? "active" : ""} ${dragging || isDragging ? "dragging" : ""} ${dropState} ${isInlineEditing ? "editing" : ""} ${enabled ? "" : "hidden-node"}`}
       style={style}
       role="button"
       tabIndex={0}
@@ -139,16 +265,189 @@ function SortableTreeRow({
       ) : (
         <span className="treeToggleSpacer" aria-hidden="true" />
       )}
-      <div className="treeText">
-        <span className="treeLabel">{label}</span>
-        {showTargetLabel ? <span className="treeTargetLabel">{targetLabel}</span> : null}
-      </div>
+      {isInlineEditing ? (
+        <div className="treeText treeTextEditing" onClick={(event) => event.stopPropagation()}>
+          <label className="treeInlineField">
+            <span className="treeInlineFieldLabel">Label</span>
+            <input
+              className="treeInlineInput"
+              style={{
+                fontSize: "13px",
+                fontWeight: 600,
+                color: "#e6edf7",
+                lineHeight: "normal",
+                fontFamily: "inherit",
+                height: "40px",
+                minHeight: "30px",
+                padding: "0 4px",
+                boxSizing: "border-box",
+              }}
+              value={inlineLabel}
+              onChange={(event) => onInlineLabelChange(event.target.value)}
+              placeholder="Menu item label"
+              autoFocus
+            />
+          </label>
+          <label className="treeInlineField">
+            <span className="treeInlineFieldLabel">Link</span>
+            <div className="treeInlineLinkPickerWrap" ref={linkTriggerRef} onClick={(event) => event.stopPropagation()}>
+              <input
+                className="treeInlineInput treeInlineInputLinkTrigger"
+                style={{
+                  fontSize: "13px",
+                  fontWeight: 600,
+                  color: "#e6edf7",
+                  lineHeight: "normal",
+                  fontFamily: "inherit",
+                  height: "40px",
+                  minHeight: "30px",
+                  padding: "0 4px",
+                  boxSizing: "border-box",
+                }}
+                value={inlineLink}
+                onClick={onInlineLinkPickerOpen}
+                onChange={(event) => onInlineLinkChange(event.target.value)}
+                placeholder="Link target"
+              />
+            </div>
+            {inlineLinkPickerOpen && typeof document !== "undefined"
+              ? createPortal(
+                  <div
+                    className="treeInlineLinkPicker treeInlineLinkPickerPortal"
+                    ref={pickerPanelRef}
+                    style={{
+                      position: "fixed",
+                      top: `${pickerPosition.top}px`,
+                      left: `${pickerPosition.left}px`,
+                      width: `${pickerPosition.width}px`,
+                    }}
+                  >
+                    {inlineLinkPickerMode === "categories" ? (
+                      <div className="treeInlineLinkCategories">
+                        {(["COLLECTION", "PRODUCT", "PAGE", "BLOG"] as MenuLinkType[]).map((type) => (
+                          <button
+                            key={type}
+                            type="button"
+                            className="treeInlineLinkCategoryOption"
+                            onClick={() => {
+                              onInlineLinkTypeChange(type);
+                              onInlineLinkModeChange("results");
+                            }}
+                          >
+                            <span>
+                              {type === "COLLECTION"
+                                ? "Collections"
+                                : type === "PRODUCT"
+                                  ? "Products"
+                                  : type === "PAGE"
+                                    ? "Pages"
+                                    : "Blogs"}
+                            </span>
+                            <span aria-hidden>›</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <>
+                        <div className="treeInlineLinkResultsHead">
+                          <button
+                            type="button"
+                            className="treeInlineLinkBackBtn"
+                            onClick={() => onInlineLinkModeChange("categories")}
+                          >
+                            ‹ Back
+                          </button>
+                          <span className="treeInlineLinkResultsCount">{inlineLinkOptions.length} results</span>
+                        </div>
+                        <input
+                          className="treeInlineLinkSearch"
+                          value={inlineLinkQuery}
+                          onChange={(event) => onInlineLinkQueryChange(event.target.value)}
+                          placeholder={`Search ${inlineLinkType.toLowerCase()}...`}
+                          autoFocus
+                        />
+                        <div className="treeInlineLinkOptions">
+                          {inlineLinkOptions.length > 0 ? (
+                            inlineLinkOptions.slice(0, 60).map((option) => (
+                              <button
+                                key={option.id}
+                                type="button"
+                                className="treeInlineLinkOption"
+                                onClick={() => onInlineLinkOptionSelect(option)}
+                                title={option.title}
+                              >
+                                {option.title}
+                              </button>
+                            ))
+                          ) : (
+                            <div className="treeInlineLinkEmpty">No results.</div>
+                          )}
+                        </div>
+                      </>
+                    )}
+                    <div className="treeInlineLinkFooter">
+                      <button type="button" className="treeInlineLinkCloseBtn" onClick={onInlineLinkPickerClose}>
+                        Close
+                      </button>
+                    </div>
+                  </div>,
+                  document.body
+                )
+              : null}
+          </label>
+        </div>
+      ) : (
+        <div className="treeText">
+          <span className="treeLabel">{label}</span>
+          {showTargetLabel ? <span className="treeTargetLabel">{targetLabel}</span> : null}
+        </div>
+      )}
       <div className="treeRowActions" onClick={(event) => event.stopPropagation()}>
-        <button type="button" className="iconBtn" onClick={onEdit} aria-label="Edit menu item">
-          <svg viewBox="0 0 16 16" width="14" height="14">
-            <path d="M11.7 2.3a1 1 0 0 1 1.4 0l.6.6a1 1 0 0 1 0 1.4L6.1 12H3v-3.1l8.7-6.6zM2 13h12v1H2z" />
-          </svg>
-        </button>
+        {isInlineEditing ? (
+          <>
+            <button
+              type="button"
+              className="iconBtn success"
+              onClick={onInlineSave}
+              aria-label="Save menu item changes"
+              disabled={inlineSaving || !inlineLabel.trim() || !inlineLink.trim()}
+            >
+              <svg viewBox="0 0 16 16" width="14" height="14">
+                <path d="M6.3 11.7L2.6 8l1.4-1.4 2.3 2.3 5.7-5.7L13.4 4z" />
+              </svg>
+            </button>
+            <button type="button" className="iconBtn" onClick={onInlineCancel} aria-label="Cancel editing">
+              <svg viewBox="0 0 16 16" width="14" height="14">
+                <path d="M3.3 3.3l9.4 9.4-1.4 1.4-9.4-9.4zM12.7 3.3l1.4 1.4-9.4 9.4-1.4-1.4z" />
+              </svg>
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              className={enabled ? "iconBtn" : "iconBtn danger"}
+              onClick={onToggleVisibility}
+              aria-label={enabled ? "Hide menu item from live website" : "Show menu item on live website"}
+              title={enabled ? "Visible on live website" : "Hidden from live website"}
+            >
+              {enabled ? (
+                <svg viewBox="0 0 16 16" width="14" height="14">
+                  <path d="M8 3c3.6 0 6.3 2.5 7.4 4.7a.7.7 0 0 1 0 .6C14.3 10.5 11.6 13 8 13s-6.3-2.5-7.4-4.7a.7.7 0 0 1 0-.6C1.7 5.5 4.4 3 8 3zm0 1.4c-2.8 0-5 1.8-6 3.6 1 1.8 3.2 3.6 6 3.6s5-1.8 6-3.6c-1-1.8-3.2-3.6-6-3.6zm0 1.1a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5z" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 16 16" width="14" height="14">
+                  <path d="M2.2 1.2l12.6 12.6-1 1L11 11.9A8.6 8.6 0 0 1 8 13c-3.6 0-6.3-2.5-7.4-4.7a.7.7 0 0 1 0-.6A10.3 10.3 0 0 1 4 4.4L1.2 2.2l1-1zm2.9 4.3A8.3 8.3 0 0 0 2 8c1 1.8 3.2 3.6 6 3.6 1 0 2-.2 2.8-.6l-1.6-1.6a2.5 2.5 0 0 1-3.4-3.4L5.1 5.5zm2-.3A2.5 2.5 0 0 1 10.8 9L7 5.2zM8 3c3.6 0 6.3 2.5 7.4 4.7a.7.7 0 0 1 0 .6 11 11 0 0 1-2.6 3.2l-1-1A9 9 0 0 0 14 8c-1-1.8-3.2-3.6-6-3.6-.8 0-1.5.1-2.2.3l-1-1A8 8 0 0 1 8 3z" />
+                </svg>
+              )}
+            </button>
+            <button type="button" className="iconBtn" onClick={onEdit} aria-label="Edit menu item">
+              <svg viewBox="0 0 16 16" width="14" height="14">
+                <path d="M11.7 2.3a1 1 0 0 1 1.4 0l.6.6a1 1 0 0 1 0 1.4L6.1 12H3v-3.1l8.7-6.6zM2 13h12v1H2z" />
+              </svg>
+            </button>
+          </>
+        )}
         <button type="button" className="iconBtn danger" onClick={onDelete} aria-label="Delete menu item">
           <svg viewBox="0 0 16 16" width="14" height="14">
             <path d="M6 2.5h4l.5 1.5H13v1H3v-1h2.5L6 2.5zm-1 3h6l-.5 7H5.5L5 5.5z" />
@@ -164,8 +463,13 @@ export default function ShopifyMenuItemsTree({
   menuHandle,
   treeSearch,
   onTreeSearchChange,
+  onTreeSearchSubmit,
   onRefreshTree,
   onSaveTree,
+  undoEntries,
+  undoMenuOpen,
+  onUndoMenuToggle,
+  onUndoEntrySelect,
   saving,
   nodes,
   nodeByKey,
@@ -174,8 +478,11 @@ export default function ShopifyMenuItemsTree({
   expandedNodes,
   selectedNodes,
   onMoveNode,
+  onInlineEditNode,
+  inlineLinkTargets,
   onApplyNodeSelection,
   onToggleNodeExpansion,
+  onToggleNodeVisibility,
   onOpenEditEditor,
   onOpenAddEditor,
   onDeleteNode,
@@ -184,6 +491,15 @@ export default function ShopifyMenuItemsTree({
   const [dragSourceKey, setDragSourceKey] = useState("");
   const [dropTarget, setDropTarget] = useState<DropTarget>(null);
   const [dragDeltaX, setDragDeltaX] = useState(0);
+  const [editingNodeKey, setEditingNodeKey] = useState("");
+  const [editingLabel, setEditingLabel] = useState("");
+  const [editingLink, setEditingLink] = useState("");
+  const [editingLinkType, setEditingLinkType] = useState<MenuLinkType>("COLLECTION");
+  const [editingLinkTargetId, setEditingLinkTargetId] = useState("");
+  const [inlineLinkPickerOpen, setInlineLinkPickerOpen] = useState(false);
+  const [inlineLinkPickerMode, setInlineLinkPickerMode] = useState<"categories" | "results">("categories");
+  const [inlineLinkQuery, setInlineLinkQuery] = useState("");
+  const [inlineSaving, setInlineSaving] = useState(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const visibleNodeKeys = useMemo(() => Array.from(visibleTreeNodeIdSet), [visibleTreeNodeIdSet]);
   const parentByKey = useMemo(() => {
@@ -191,6 +507,20 @@ export default function ShopifyMenuItemsTree({
     for (const node of nodes) map.set(node.nodeKey, node.parentKey || null);
     return map;
   }, [nodes]);
+
+  const inlineLinkAssetOptions = useMemo(() => {
+    const source =
+      editingLinkType === "COLLECTION"
+        ? inlineLinkTargets.collections
+        : editingLinkType === "PRODUCT"
+          ? inlineLinkTargets.products
+          : editingLinkType === "PAGE"
+            ? inlineLinkTargets.pages
+            : inlineLinkTargets.blogs;
+    const query = inlineLinkQuery.trim().toLowerCase();
+    if (!query) return source;
+    return source.filter((option) => option.title.toLowerCase().includes(query));
+  }, [editingLinkType, inlineLinkTargets, inlineLinkQuery]);
 
   function resolveDropTarget(sourceKey: string, overKey: string | null): DropTarget {
     if (!overKey || sourceKey === overKey) return null;
@@ -263,17 +593,25 @@ export default function ShopifyMenuItemsTree({
         );
         const hasChildren = allChildKeys.length > 0;
         const isExpanded = expandedNodes[node.nodeKey] !== false;
-        const shouldShowChildren = visibleChildKeys.length > 0 && (hasTreeSearch || isExpanded);
+        const shouldShowChildren = visibleChildKeys.length > 0;
         const branchHasAddRow = Boolean(parentKey);
         const isLastSibling = !branchHasAddRow && index === branchKeys.length - 1;
         const targetLabel = String(node.linkedTargetLabel || "").trim();
         const showTargetLabel = targetLabel.length > 0;
+        const isInlineEditing = editingNodeKey === node.nodeKey;
+        const initialLinkValue = String(node.linkedTargetLabel || node.linkedTargetUrl || "").trim();
+        const depthStyle = { ["--tree-depth"]: String(depth) } as CSSProperties;
 
         return (
           <div
             key={node.nodeKey}
-            className={`treeNode tree-item ${depth > 0 ? "has-parent" : ""} ${isLastSibling ? "is-last" : ""}`}
+            className={`treeNode tree-item depth-${depth} ${depth > 0 ? "has-parent" : ""} ${isLastSibling ? "is-last" : ""} ${isInlineEditing ? "editing-node" : ""}`}
+            style={depthStyle}
+            data-node-key={node.nodeKey}
+            data-depth={depth}
           >
+            {depth > 0 ? <span className="treeConnectorElbow" aria-hidden="true" /> : null}
+            {depth > 0 && !isLastSibling ? <span className="treeConnectorVertical" aria-hidden="true" /> : null}
             <SortableTreeRow
               id={node.nodeKey}
               checked={checked}
@@ -283,17 +621,108 @@ export default function ShopifyMenuItemsTree({
               hasChildren={hasChildren}
               isExpanded={isExpanded}
               label={node.label}
+              enabled={node.enabled !== false}
               targetLabel={targetLabel}
               showTargetLabel={showTargetLabel}
-              onRowClick={() => onApplyNodeSelection(node.nodeKey)}
+              isInlineEditing={isInlineEditing}
+              inlineLabel={editingLabel}
+              inlineLink={editingLink}
+              inlineSaving={inlineSaving}
+              onRowClick={() => {
+                if (isInlineEditing) return;
+                onApplyNodeSelection(node.nodeKey);
+              }}
               onToggle={() => onToggleNodeExpansion(node.nodeKey)}
-              onEdit={() => onOpenEditEditor(node)}
+              onToggleVisibility={() => onToggleNodeVisibility(node.nodeKey)}
+              onEdit={() => {
+                setEditingNodeKey(node.nodeKey);
+                setEditingLabel(node.label);
+                setEditingLink(initialLinkValue);
+                setEditingLinkType(
+                  String(node.linkedTargetType || "").trim().toUpperCase() === "PRODUCT"
+                    ? "PRODUCT"
+                    : String(node.linkedTargetType || "").trim().toUpperCase() === "PAGE"
+                      ? "PAGE"
+                      : String(node.linkedTargetType || "").trim().toUpperCase() === "BLOG"
+                        ? "BLOG"
+                        : "COLLECTION"
+                );
+                setEditingLinkTargetId(String(node.linkedTargetResourceId || "").trim());
+                setInlineLinkPickerOpen(false);
+                setInlineLinkPickerMode("categories");
+                setInlineLinkQuery("");
+              }}
+              onInlineLabelChange={setEditingLabel}
+              onInlineLinkChange={(value) => {
+                setEditingLink(value);
+                setEditingLinkTargetId("");
+              }}
+              inlineLinkType={editingLinkType}
+              inlineLinkQuery={inlineLinkQuery}
+              inlineLinkOptions={inlineLinkAssetOptions}
+              inlineLinkPickerOpen={inlineLinkPickerOpen && isInlineEditing}
+              inlineLinkPickerMode={inlineLinkPickerMode}
+              onInlineLinkTypeChange={(value) => {
+                setEditingLinkType(value);
+                setEditingLinkTargetId("");
+                setInlineLinkQuery("");
+              }}
+              onInlineLinkQueryChange={setInlineLinkQuery}
+              onInlineLinkModeChange={setInlineLinkPickerMode}
+              onInlineLinkPickerOpen={() => {
+                setInlineLinkPickerMode("categories");
+                setInlineLinkPickerOpen(true);
+              }}
+              onInlineLinkPickerClose={() => setInlineLinkPickerOpen(false)}
+              onInlineLinkOptionSelect={(option) => {
+                setEditingLink(option.title);
+                setEditingLinkTargetId(option.id);
+                setInlineLinkQuery(option.title);
+                setInlineLinkPickerOpen(false);
+                setInlineLinkPickerMode("results");
+              }}
+              onInlineCancel={() => {
+                if (inlineSaving) return;
+                setEditingNodeKey("");
+                setEditingLabel("");
+                setEditingLink("");
+                setEditingLinkType("COLLECTION");
+                setEditingLinkTargetId("");
+                setInlineLinkPickerOpen(false);
+                setInlineLinkPickerMode("categories");
+                setInlineLinkQuery("");
+              }}
+              onInlineSave={async () => {
+                const nextLabel = editingLabel.trim();
+                const nextLink = editingLink.trim();
+                if (!nextLabel || !nextLink || inlineSaving) return;
+                setInlineSaving(true);
+                try {
+                  await onInlineEditNode(node, {
+                    label: nextLabel,
+                    linkValue: nextLink,
+                    linkType: editingLinkType,
+                    linkTargetId: editingLinkTargetId || null,
+                    linkTargetLabel: nextLink,
+                  });
+                  setEditingNodeKey("");
+                  setEditingLabel("");
+                  setEditingLink("");
+                  setEditingLinkType("COLLECTION");
+                  setEditingLinkTargetId("");
+                  setInlineLinkPickerOpen(false);
+                  setInlineLinkPickerMode("categories");
+                  setInlineLinkQuery("");
+                } finally {
+                  setInlineSaving(false);
+                }
+              }}
               onDelete={() => onDeleteNode(node.nodeKey)}
             />
 
             {shouldShowChildren ? (
               <div className={isExpanded || hasTreeSearch ? "nestedList nested-list treeChildren" : "nestedList nested-list treeChildren collapsed"}>
-                {renderBranch(node.nodeKey, depth + 1)}
+                <div className="treeChildrenInner">{renderBranch(node.nodeKey, depth + 1)}</div>
               </div>
             ) : null}
           </div>
@@ -304,8 +733,14 @@ export default function ShopifyMenuItemsTree({
     if (parentKey) {
       const parent = nodeByKey.get(parentKey);
       const parentLabel = parent?.label || "parent";
+      const addRowDepthStyle = { ["--tree-depth"]: String(depth) } as CSSProperties;
       renderedNodes.push(
-        <div key={`add-${parentKey}`} className="treeNode tree-item has-parent is-last treeNodeAdd">
+        <div
+          key={`add-${parentKey}`}
+          className={`treeNode tree-item depth-${depth} has-parent is-last treeNodeAdd`}
+          style={addRowDepthStyle}
+        >
+          {depth > 0 ? <span className="treeConnectorElbow" aria-hidden="true" /> : null}
           <div className="treeAddChild">
             <button type="button" className="treeAddChildBtn treeCard tree-card" onClick={() => onOpenAddEditor(parentKey)}>
               <span className="treeAddIcon" aria-hidden="true">
@@ -330,9 +765,46 @@ export default function ShopifyMenuItemsTree({
           className="treeSearchInput"
           value={treeSearch}
           onChange={(event) => onTreeSearchChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter") return;
+            event.preventDefault();
+            onTreeSearchSubmit(treeSearch);
+          }}
           placeholder="Search menu items..."
           aria-label="Search menu tree"
         />
+        <button
+          type="button"
+          className="treeUndoBtn"
+          aria-label="Undo recent tree actions"
+          onClick={onUndoMenuToggle}
+          disabled={undoEntries.length < 1 || saving}
+        >
+          ↶ Undo
+        </button>
+        {undoMenuOpen ? (
+          <div className="treeUndoMenu" role="menu" aria-label="Undo action history">
+            {undoEntries.length < 1 ? (
+              <div className="treeUndoEmpty">No actions yet.</div>
+            ) : (
+              undoEntries.map((entry, index) => (
+                <button
+                  key={entry.id}
+                  type="button"
+                  className="treeUndoOption"
+                  onClick={() => onUndoEntrySelect(entry.id)}
+                  role="menuitem"
+                >
+                  <span className="treeUndoTask">Task {index + 1}</span>
+                  <span className="treeUndoTitle">{entry.title}</span>
+                </button>
+              ))
+            )}
+          </div>
+        ) : null}
+        <button type="button" className="treeSaveBtn" onClick={() => void onSaveTree()} disabled={saving}>
+          {saving ? "Saving..." : "Save"}
+        </button>
         <button
           type="button"
           className="treeRefreshBtn"
@@ -342,39 +814,37 @@ export default function ShopifyMenuItemsTree({
         >
           ⟳
         </button>
-        <button type="button" className="treeSaveBtn" onClick={() => void onSaveTree()} disabled={saving}>
-          {saving ? "Saving..." : "Save"}
-        </button>
       </div>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragMove={onDragMove} onDragEnd={onDragEnd}>
         <SortableContext items={visibleNodeKeys} strategy={verticalListSortingStrategy}>
           <div className="treeCanvas">
             <div id="root-menu" className="tree shopifyMenuTree nestedList nested-list rootList">
-            {renderBranch(null, 0)}
+              {renderBranch(null, 0)}
+              <div className="treeAddRoot treeNode tree-item">
+                <button type="button" className="treeAddBtn treeCard tree-card" onClick={() => onOpenAddEditor(null)}>
+                  <span className="treeAddIcon" aria-hidden="true">
+                    <svg viewBox="0 0 20 20" width="18" height="18">
+                      <path d="M10 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zm1-11a1 1 0 1 0-2 0v2H7a1 1 0 1 0 0 2h2v2a1 1 0 1 0 2 0v-2h2a1 1 0 1 0 0-2h-2V7z" />
+                    </svg>
+                  </span>
+                  <span>Add menu item</span>
+                </button>
+              </div>
             </div>
           </div>
         </SortableContext>
       </DndContext>
-      <div className="treeAddRoot">
-        <button type="button" className="treeAddBtn treeCard tree-card" onClick={() => onOpenAddEditor(null)}>
-          <span className="treeAddIcon" aria-hidden="true">
-            <svg viewBox="0 0 20 20" width="18" height="18">
-              <path d="M10 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zm1-11a1 1 0 1 0-2 0v2H7a1 1 0 1 0 0 2h2v2a1 1 0 1 0 2 0v-2h2a1 1 0 1 0 0-2h-2V7z" />
-            </svg>
-          </span>
-          <span>Add menu item</span>
-        </button>
-      </div>
       <style jsx>{`
         .gemTreePanel {
           padding: 12px;
         }
         .treeSearchBar {
           display: grid;
-          grid-template-columns: minmax(0, 1fr) 36px auto;
+          grid-template-columns: minmax(0, 1fr) auto auto 36px;
           gap: 8px;
           margin-bottom: 10px;
           align-items: center;
+          position: relative;
         }
         .treeSearchInput {
           min-width: 0;
@@ -407,22 +877,79 @@ export default function ShopifyMenuItemsTree({
           padding: 0 12px;
           font-weight: 600;
         }
+        .treeUndoBtn {
+          min-height: 36px;
+          border-radius: 8px;
+          border: 1px solid #415a7a;
+          background: #12233d;
+          color: #dce8fb;
+          padding: 0 12px;
+          font-weight: 600;
+        }
+        .treeUndoBtn:disabled {
+          opacity: 0.55;
+          cursor: not-allowed;
+        }
+        .treeUndoMenu {
+          position: absolute;
+          top: calc(100% + 4px);
+          right: 50px;
+          width: min(360px, 92vw);
+          z-index: 40;
+          border: 1px solid #344257;
+          border-radius: 10px;
+          background: #0a1324;
+          box-shadow: 0 14px 30px rgba(0, 0, 0, 0.5);
+          padding: 8px;
+          display: grid;
+          gap: 6px;
+        }
+        .treeUndoOption {
+          min-height: 34px;
+          border-radius: 8px;
+          border: 1px solid #2a3547;
+          background: #0f1a2e;
+          color: #dbe7fa;
+          text-align: left;
+          display: grid;
+          gap: 2px;
+          padding: 6px 8px;
+        }
+        .treeUndoTask {
+          font-size: 11px;
+          color: #9fb3cf;
+        }
+        .treeUndoTitle {
+          font-size: 12px;
+          color: #e7efff;
+          font-weight: 600;
+        }
+        .treeUndoEmpty {
+          font-size: 12px;
+          color: #9fb3cf;
+          padding: 8px;
+        }
         .treeCanvas {
           border: 1px solid #2a3547;
           border-radius: 10px;
           background: #0a1324;
-          padding: 12px 14px 10px 18px;
+          padding: 12px 16px 10px 22px;
+          max-height: 65vh;
+          overflow-y: auto;
+          overflow-x: hidden;
         }
         .tree {
-          max-height: 65vh;
-          overflow: auto;
+          overflow: visible;
         }
         .nestedList,
         .nested-list {
-          margin-left: 36px;
-          padding-top: 4px;
+          margin-left: 0;
+          padding-top: 0;
           min-height: 10px;
           display: block;
+          width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
         }
         .nestedList.rootList,
         .nested-list.root-list {
@@ -430,33 +957,46 @@ export default function ShopifyMenuItemsTree({
           padding-top: 0;
         }
         :global(.treeNode) {
+          --indent-step: 36px;
+          --connector-stem-left: -22px;
+          --connector-elbow-width: 22px;
+          --connector-node-top: -8px;
+          --connector-mid-y: 21px;
           position: relative;
+          width: calc(100% - (var(--tree-depth, 0) * var(--indent-step)));
+          min-width: 0;
+          max-width: 100%;
+          box-sizing: border-box;
+          margin-left: calc(var(--tree-depth, 0) * var(--indent-step));
           padding-bottom: 8px;
-          margin-left: 0 !important;
         }
-        :global(.nested-list > .tree-item.has-parent)::before {
-          content: "";
-          position: absolute;
-          left: -22px;
-          top: -8px;
-          width: 22px;
-          height: 31px;
-          border-left: 1px solid #5d6f88;
-          border-bottom: 1px solid #5d6f88;
-          z-index: 0;
+        :global(.treeNode.depth-2),
+        :global(.treeNode.depth-3) {
+          --connector-stem-left: -57px;
+          --connector-elbow-width: 57px;
         }
-        :global(.nested-list > .tree-item.has-parent:not(.is-last))::after {
-          content: "";
+        :global(.treeNode.has-parent.editing-node) {
+          --connector-mid-y: 49px;
+        }
+        :global(.treeConnectorElbow) {
           position: absolute;
-          left: -22px;
-          top: 23px;
+          left: var(--connector-stem-left);
+          top: var(--connector-node-top);
+          width: var(--connector-elbow-width);
+          height: calc(var(--connector-mid-y) - var(--connector-node-top) + 1px);
+          border-left: 1px solid #8aa2c4;
+          border-bottom: 1px solid #8aa2c4;
+          z-index: 1;
+          pointer-events: none;
+        }
+        :global(.treeConnectorVertical) {
+          position: absolute;
+          left: var(--connector-stem-left);
+          top: calc(var(--connector-mid-y) - 1px);
           bottom: -8px;
-          border-left: 1px solid #5d6f88;
-          z-index: 0;
-        }
-        :global(#root-menu > .tree-item::before),
-        :global(#root-menu > .tree-item::after) {
-          display: none;
+          border-left: 1px solid #8aa2c4;
+          z-index: 1;
+          pointer-events: none;
         }
         :global(.treeRow) {
           position: relative;
@@ -474,11 +1014,31 @@ export default function ShopifyMenuItemsTree({
           gap: 10px;
           box-shadow: 0 1px 0 rgba(15, 23, 42, 0.24), 0 6px 16px rgba(2, 6, 23, 0.28);
         }
+        :global(.treeRow.editing) {
+          min-height: 100px;
+          align-items: flex-start;
+          padding-top: 8px;
+          padding-bottom: 8px;
+          padding-right: 10px;
+          display: grid;
+          grid-template-columns: minmax(0, 1fr);
+          z-index: 2000;
+        }
+        :global(.treeRow.editing .dragHandle),
+        :global(.treeRow.editing .treeToggle),
+        :global(.treeRow.editing .treeToggleSpacer) {
+          display: none;
+        }
         :global(.treeText) {
           min-width: 0;
+          flex: 1 1 auto;
           display: grid;
           gap: 2px;
           align-items: center;
+        }
+        :global(.treeRow.editing .treeText) {
+          width: 100%;
+          min-width: 0;
         }
         :global(.treeLabel) {
           color: #e6edf7;
@@ -495,6 +1055,229 @@ export default function ShopifyMenuItemsTree({
           overflow: hidden;
           text-overflow: ellipsis;
         }
+        :global(.treeTextEditing) {
+          flex: 1 1 auto;
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 8px;
+          width: 100%;
+          min-width: 0;
+        }
+        :global(.treeRow.editing .treeTextEditing) {
+          display: grid !important;
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+          column-gap: 4px !important;
+          align-items: start !important;
+          justify-content: stretch !important;
+          width: 100% !important;
+          min-width: 0 !important;
+        }
+        :global(.treeInlineField) {
+          flex: 1 1 0;
+          min-width: 0;
+          width: auto;
+          max-width: none;
+          display: grid;
+          gap: 2px;
+        }
+        :global(.treeRow.editing .treeInlineField) {
+          width: 100% !important;
+          min-width: 0 !important;
+          max-width: none !important;
+          margin-top: 22px;
+        }
+        :global(.treeInlineLinkPickerWrap) {
+          position: relative;
+          width: 100%;
+          z-index: 2200;
+        }
+        :global(.treeInlineInputLinkTrigger) {
+          cursor: pointer;
+        }
+        :global(.treeInlineLinkPicker) {
+          z-index: 5000;
+          border: 1px solid #44556f;
+          border-radius: 8px;
+          background: #0b1220;
+          box-shadow: 0 10px 24px rgba(2, 6, 23, 0.5);
+          padding: 8px;
+          display: grid;
+          gap: 6px;
+          font-family: inherit;
+        }
+        :global(.treeInlineLinkTypes) {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 4px;
+        }
+        :global(.treeInlineLinkCategories) {
+          display: grid;
+          gap: 2px;
+        }
+        :global(.treeInlineLinkCategoryOption) {
+          min-height: 30px;
+          border: 1px solid #2f415d;
+          border-radius: 6px;
+          background: #0a1324;
+          color: #d7e2f1;
+          font-size: 12px;
+          font-weight: 600;
+          font-family: inherit;
+          padding: 0 8px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+        :global(.treeInlineLinkCategoryOption:hover) {
+          background: #13233d;
+          border-color: #5f789c;
+        }
+        :global(.treeInlineLinkResultsHead) {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+        }
+        :global(.treeInlineLinkBackBtn) {
+          min-height: 24px;
+          border: 1px solid #44556f;
+          border-radius: 6px;
+          background: #0a1324;
+          color: #c7d3e4;
+          padding: 0 8px;
+          font-size: 12px;
+          font-weight: 600;
+          font-family: inherit;
+        }
+        :global(.treeInlineLinkResultsCount) {
+          color: #9fb4d1;
+          font-size: 12px;
+          font-weight: 600;
+          font-family: inherit;
+        }
+        :global(.treeInlineLinkTypeBtn) {
+          min-height: 24px;
+          border: 1px solid #44556f;
+          border-radius: 6px;
+          background: #0a1324;
+          color: #c7d3e4;
+          font-size: 12px;
+          font-weight: 600;
+          font-family: inherit;
+          padding: 0 6px;
+        }
+        :global(.treeInlineLinkTypeBtn.active) {
+          border-color: #87a8da;
+          background: #13233d;
+          color: #e6edf7;
+        }
+        :global(.treeInlineLinkSearch) {
+          width: 100%;
+          min-height: 24px;
+          height: 24px;
+          border: 1px solid #44556f;
+          border-radius: 6px;
+          background: #0a1324;
+          color: #e6edf7;
+          padding: 0 7px;
+          box-sizing: border-box;
+          font-size: 12px;
+          font-weight: 600;
+          line-height: 1.2;
+          font-family: inherit;
+        }
+        :global(.treeInlineLinkPickerPortal .treeInlineLinkSearch) {
+          min-height: 24px !important;
+          height: 24px !important;
+          max-height: 24px !important;
+          padding: 0 7px !important;
+          font-size: 12px !important;
+          font-weight: 600 !important;
+          line-height: 24px !important;
+          font-family: inherit !important;
+        }
+        :global(.treeInlineLinkOptions) {
+          max-height: 180px;
+          overflow: auto;
+          display: grid;
+          gap: 4px;
+        }
+        :global(.treeInlineLinkOption) {
+          text-align: left;
+          border: 1px solid #2f415d;
+          border-radius: 6px;
+          background: #0a1324;
+          color: #d7e2f1;
+          min-height: 28px;
+          padding: 0 8px;
+          font-size: 12px;
+          font-weight: 600;
+          font-family: inherit;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        :global(.treeInlineLinkOption:hover) {
+          background: #13233d;
+          border-color: #5f789c;
+        }
+        :global(.treeInlineLinkEmpty) {
+          color: #8fa6c4;
+          font-size: 12px;
+          font-family: inherit;
+          padding: 6px 2px;
+        }
+        :global(.treeInlineLinkFooter) {
+          display: flex;
+          justify-content: flex-end;
+        }
+        :global(.treeInlineLinkCloseBtn) {
+          min-height: 24px;
+          border: 1px solid #44556f;
+          border-radius: 6px;
+          background: #0a1324;
+          color: #c7d3e4;
+          padding: 0 8px;
+          font-size: 12px;
+          font-weight: 600;
+          font-family: inherit;
+        }
+        :global(.treeInlineFieldLabel) {
+          color: #b6c7df;
+          font-size: 9px;
+          font-weight: 600;
+          line-height: 0.95;
+          margin: 0;
+          display: block;
+          text-align: left;
+          padding-left: 0;
+        }
+        :global(.treeInlineInput) {
+          width: 100%;
+          min-width: 0;
+          height: 10px;
+          min-height: 10px;
+          border-radius: 7px;
+          border: 1px solid #5f789c;
+          background: #0a1324;
+          color: #e6edf7;
+          padding: 0 6px;
+          font-size: 13px;
+          font-weight: 600;
+          line-height: normal;
+          box-sizing: border-box;
+        }
+        :global(.treeInlineInput:focus) {
+          outline: none;
+          border-color: #87a8da;
+          box-shadow: 0 0 0 1px rgba(135, 168, 218, 0.32);
+        }
+        :global(.treeRow.editing .treeInlineInput) {
+          margin-top: 4px;
+          width: 100% !important;
+          min-width: 0 !important;
+        }
         :global(.treeRow:hover) {
           background: #13233d;
           border-color: #5f789c;
@@ -502,6 +1285,9 @@ export default function ShopifyMenuItemsTree({
         :global(.treeRow.active) {
           border-color: #87a8da;
           box-shadow: inset 0 0 0 1px rgba(120, 153, 210, 0.38);
+        }
+        :global(.treeRow.hidden-node) {
+          opacity: 0.72;
         }
         :global(.treeRow.dragging) {
           opacity: 0.45;
@@ -518,8 +1304,31 @@ export default function ShopifyMenuItemsTree({
           background: rgba(56, 189, 248, 0.08);
           box-shadow: inset 0 0 0 1px #38bdf8;
         }
+        :global(.treeChildren) {
+          display: grid;
+          grid-template-rows: 1fr;
+          margin-top: 8px;
+          width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
+          transition:
+            grid-template-rows 180ms ease,
+            opacity 180ms ease;
+          opacity: 1;
+        }
+        :global(.treeChildrenInner) {
+          min-height: 0;
+          overflow: visible;
+          width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
+        }
         :global(.treeChildren.collapsed) {
-          display: none;
+          grid-template-rows: 0fr;
+          opacity: 0.45;
+        }
+        :global(.treeChildren.collapsed .treeChildrenInner) {
+          overflow: hidden;
         }
         :global(.treeToggle svg.collapsed) {
           transform: rotate(-90deg);
@@ -560,6 +1369,19 @@ export default function ShopifyMenuItemsTree({
           gap: 8px;
           opacity: 1;
         }
+        :global(.treeRow.editing .treeRowActions) {
+          position: absolute;
+          top: 8px;
+          right: 10px;
+          margin-left: 0;
+          gap: 3px;
+          flex: 0 0 auto;
+        }
+        :global(.treeRow.editing .iconBtn) {
+          width: 20px;
+          height: 20px;
+          min-height: 20px;
+        }
         :global(.iconBtn) {
           width: 24px;
           height: 24px;
@@ -580,17 +1402,22 @@ export default function ShopifyMenuItemsTree({
           border-color: #5f789c;
           background: #13233d;
         }
+        :global(.iconBtn.success) {
+          border-color: #168e69;
+          color: #9ff0d5;
+        }
+        :global(.iconBtn.success:hover) {
+          border-color: #1db783;
+          background: #11372d;
+        }
         :global(.iconBtn.danger:hover) {
           border-color: #8b2d2d;
           color: #ffb4b4;
           background: #2a1518;
         }
         :global(.treeAddRoot) {
-          margin-top: 10px;
-          border-top: 1px solid rgba(255, 255, 255, 0.12);
-          padding-top: 10px;
-          padding-left: 0;
-          padding-right: 0;
+          margin-top: 0;
+          padding: 0;
         }
         :global(.treeAddChild) {
           padding: 0;
@@ -643,6 +1470,9 @@ export default function ShopifyMenuItemsTree({
         @media (max-width: 980px) {
           .treeSearchBar {
             grid-template-columns: minmax(0, 1fr) 36px;
+          }
+          .treeUndoBtn {
+            grid-column: 1 / -1;
           }
           .treeSaveBtn {
             grid-column: 1 / -1;

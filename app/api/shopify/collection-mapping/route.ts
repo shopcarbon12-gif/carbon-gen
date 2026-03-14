@@ -36,7 +36,7 @@ const MAX_COLLECTION_PAGES = 20;
 const COLLECTION_PAGE_SIZE = 250;
 const COLLECTION_CACHE_TTL_MS = 60 * 1000;
 const PRODUCT_CACHE_TTL_MS = 45 * 1000;
-const MAX_MENU_DEPTH = 3;
+const MAX_MENU_DEPTH = 4;
 const DEFAULT_MENU_HANDLE = normalizeText(process.env.SHOPIFY_COLLECTION_MAPPING_MENU_HANDLE || "main-menu") || "main-menu";
 const REQUIRED_MENU_SCOPES = ["read_online_store_navigation", "write_online_store_navigation"] as const;
 
@@ -1770,7 +1770,7 @@ function moveMenuNode(
   const detachedDepthOffset = subtreeDepth(source.node, 0);
   const targetDepth = position === "inside" ? target.depth + 1 : target.depth;
   if (targetDepth + detachedDepthOffset > MAX_MENU_DEPTH) {
-    return { ok: false, error: "Shopify menu supports up to 3 nested levels." };
+    return { ok: false, error: "Shopify menu supports up to 4 nested levels." };
   }
 
   const detachNode = (
@@ -2612,7 +2612,7 @@ export async function POST(req: NextRequest) {
         }
         if (parent.depth + 1 > MAX_MENU_DEPTH) {
           return NextResponse.json(
-            { ok: false, error: "Shopify menu supports up to 3 nested levels." },
+            { ok: false, error: "Shopify menu supports up to 4 nested levels." },
             { status: 400 }
           );
         }

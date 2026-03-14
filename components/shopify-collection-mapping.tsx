@@ -29,6 +29,7 @@ type MappingResponse = {
   ok: boolean;
   error?: string;
   warning?: string;
+  shop?: string;
   page?: number;
   pageSize?: number;
   total?: number;
@@ -76,14 +77,59 @@ type SortValue = "title-asc" | "title-desc" | "upc-asc" | "upc-desc";
 
 type DropPosition = "before" | "after" | "inside";
 type MenuEditorMode = "add" | "edit";
-type MenuLinkType = "COLLECTION" | "PRODUCT" | "PAGE";
-const TREE_PANEL_MIN_WIDTH = 260;
-const TREE_PANEL_MAX_WIDTH = 620;
+type MenuLinkType = "COLLECTION" | "PRODUCT" | "PAGE" | "BLOG";
+type PendingTreeOp =
+  | {
+      type: "add";
+      tempNodeKey: string;
+      parentKey: string | null;
+      label: string;
+      linkType: MenuLinkType;
+      linkTargetId: string | null;
+      linkValue: string;
+    }
+  | {
+      type: "edit";
+      nodeKey: string;
+      label: string;
+      linkType: MenuLinkType;
+      linkTargetId: string | null;
+      linkValue: string;
+    }
+  | {
+      type: "move";
+      nodeKey: string;
+      targetKey: string;
+      position: DropPosition;
+    }
+  | {
+      type: "delete";
+      nodeKey: string;
+    }
+  | {
+      type: "visibility";
+      nodeKey: string;
+      enabled: boolean;
+    };
+type UndoActionType = "add" | "edit" | "move" | "delete" | "visibility";
+type UndoEntry = {
+  id: string;
+  actionType: UndoActionType;
+  title: string;
+  details: string[];
+  beforeNodes: MenuNode[];
+  afterNodes: MenuNode[];
+  createdAt: number;
+};
+const TREE_PANEL_MIN_WIDTH = 340;
+const TREE_PANEL_MAX_WIDTH = 760;
+const TREE_PANEL_DEFAULT_WIDTH = 500;
 type MoveDropTarget = { targetKey: string; position: DropPosition } | null;
 const MENU_LINK_TYPE_OPTIONS: Array<{ value: MenuLinkType; label: string }> = [
   { value: "COLLECTION", label: "Collection" },
   { value: "PRODUCT", label: "Product" },
   { value: "PAGE", label: "Page" },
+  { value: "BLOG", label: "Blog" },
 ];
 const EMPTY_LINK_TARGETS: MenuLinkTargets = {
   collections: [],
@@ -91,16 +137,27 @@ const EMPTY_LINK_TARGETS: MenuLinkTargets = {
   pages: [],
   blogs: [],
 };
+const SHOP_DOMAIN_RE = /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i;
 
 function normalizeMenuEditorLinkType(value: string): MenuLinkType {
   const normalized = String(value || "").trim().toUpperCase();
   if (normalized === "COLLECTION") return "COLLECTION";
   if (normalized === "PRODUCT") return "PRODUCT";
   if (normalized === "PAGE") return "PAGE";
+  if (normalized === "BLOG") return "BLOG";
   return "COLLECTION";
 }
 
+function normalizeShopDomain(value: string) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isValidShopDomain(value: string) {
+  return SHOP_DOMAIN_RE.test(value);
+}
+
 export default function ShopifyCollectionMapping() {
+  const [shop, setShop] = useState("");
   const [nodes, setNodes] = useState<MenuNode[]>([]);
   const [rows, setRows] = useState<ProductRow[]>([]);
   const [selectedNodes, setSelectedNodes] = useState<Record<string, boolean>>({});
@@ -141,11 +198,142 @@ export default function ShopifyCollectionMapping() {
   const [menuEditorNodeKey, setMenuEditorNodeKey] = useState("");
   const [menuLinkTargets, setMenuLinkTargets] = useState<MenuLinkTargets>(EMPTY_LINK_TARGETS);
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
-  const [treePanelWidth, setTreePanelWidth] = useState(320);
+  const [pendingTreeOps, setPendingTreeOps] = useState<PendingTreeOp[]>([]);
+  const [undoHistory, setUndoHistory] = useState<UndoEntry[]>([]);
+  const [undoMenuOpen, setUndoMenuOpen] = useState(false);
+  const [undoPreviewEntryId, setUndoPreviewEntryId] = useState("");
+  const [undoSelectedEntryIds, setUndoSelectedEntryIds] = useState<string[]>([]);
+  const [undoConfirmOpen, setUndoConfirmOpen] = useState(false);
+  const [undoResult, setUndoResult] = useState<{ ok: boolean; title: string; details: string[] } | null>(null);
+  const [treePanelWidth, setTreePanelWidth] = useState(TREE_PANEL_DEFAULT_WIDTH);
   const [resizingPanes, setResizingPanes] = useState(false);
   const paneResizeStart = useRef<{ x: number; width: number } | null>(null);
+  const tempNodeCounterRef = useRef(0);
+  const undoCounterRef = useRef(0);
   const typesDropdownRef = useRef<HTMLDivElement | null>(null);
   const menuEditorComboboxRef = useRef<HTMLDivElement | null>(null);
+
+  const activeShop = useMemo(() => {
+    const normalized = normalizeShopDomain(shop);
+    return isValidShopDomain(normalized) ? normalized : "";
+  }, [shop]);
+
+  function withShopContext(input: Record<string, unknown>) {
+    if (!activeShop) return input;
+    return { ...input, shop: activeShop };
+  }
+
+  function nextTempNodeKey() {
+    tempNodeCounterRef.current += 1;
+    return `temp-node-${Date.now()}-${tempNodeCounterRef.current}`;
+  }
+
+  function cloneNodes(rows: MenuNode[]) {
+    return rows.map((row) => ({ ...row }));
+  }
+
+  function nextUndoId() {
+    undoCounterRef.current += 1;
+    return `undo-${Date.now()}-${undoCounterRef.current}`;
+  }
+
+  function appendUndoEntry(entry: Omit<UndoEntry, "id" | "createdAt">) {
+    const next: UndoEntry = {
+      ...entry,
+      id: nextUndoId(),
+      createdAt: Date.now(),
+    };
+    setUndoHistory((prev) => [next, ...prev].slice(0, 5));
+  }
+
+
+
+  function markTreeDirty() {
+    setWarning("Tree has unsaved changes. Click Save to sync to Shopify.");
+  }
+
+  function getLinkOption(linkType: MenuLinkType, targetId: string | null) {
+    const id = String(targetId || "").trim();
+    if (!id) return null;
+    const options =
+      linkType === "COLLECTION"
+        ? menuLinkTargets.collections
+        : linkType === "PRODUCT"
+          ? menuLinkTargets.products
+          : linkType === "PAGE"
+            ? menuLinkTargets.pages
+            : menuLinkTargets.blogs;
+    return options.find((option) => option.id === id) || null;
+  }
+
+  function removeLocalNodeAndChildren(rows: MenuNode[], nodeKey: string) {
+    const toRemove = new Set<string>();
+    const visit = (key: string) => {
+      toRemove.add(key);
+      for (const row of rows) {
+        if (row.parentKey === key && !toRemove.has(row.nodeKey)) visit(row.nodeKey);
+      }
+    };
+    visit(nodeKey);
+    return rows.filter((row) => !toRemove.has(row.nodeKey));
+  }
+
+  function moveLocalNode(rows: MenuNode[], nodeKey: string, targetKey: string, position: DropPosition) {
+    const nodeMap = new Map(rows.map((row) => [row.nodeKey, { ...row }]));
+    const source = nodeMap.get(nodeKey);
+    const target = nodeMap.get(targetKey);
+    if (!source || !target || nodeKey === targetKey) return rows;
+
+    const childMap = new Map<string | null, string[]>();
+    for (const row of rows) {
+      const parent = row.parentKey || null;
+      const siblings = childMap.get(parent) || [];
+      siblings.push(row.nodeKey);
+      childMap.set(parent, siblings);
+    }
+
+    const subtree = new Set<string>();
+    const walkSubtree = (key: string) => {
+      subtree.add(key);
+      for (const child of childMap.get(key) || []) walkSubtree(child);
+    };
+    walkSubtree(nodeKey);
+    if (subtree.has(targetKey)) return rows;
+
+    const sourceParent = source.parentKey || null;
+    const sourceSiblings = (childMap.get(sourceParent) || []).filter((key) => key !== nodeKey);
+    childMap.set(sourceParent, sourceSiblings);
+
+    let nextParent: string | null = null;
+    if (position === "inside") {
+      nextParent = targetKey;
+      const targetChildren = childMap.get(nextParent) || [];
+      targetChildren.push(nodeKey);
+      childMap.set(nextParent, targetChildren);
+    } else {
+      nextParent = target.parentKey || null;
+      const siblings = childMap.get(nextParent) || [];
+      const targetIndex = siblings.indexOf(targetKey);
+      if (targetIndex < 0) return rows;
+      const insertAt = position === "before" ? targetIndex : targetIndex + 1;
+      siblings.splice(insertAt, 0, nodeKey);
+      childMap.set(nextParent, siblings);
+    }
+    source.parentKey = nextParent;
+
+    const ordered: MenuNode[] = [];
+    const walkOrdered = (parent: string | null, depth: number) => {
+      for (const key of childMap.get(parent) || []) {
+        const row = nodeMap.get(key);
+        if (!row) continue;
+        row.depth = depth;
+        ordered.push(row);
+        walkOrdered(key, depth + 1);
+      }
+    };
+    walkOrdered(null, 0);
+    return ordered;
+  }
 
   const nodeLabelByKey = useMemo(() => {
     const map = new Map<string, string>();
@@ -345,6 +533,9 @@ export default function ShopifyCollectionMapping() {
         sortField,
         sortDir,
       });
+      if (activeShop) {
+        params.set("shop", activeShop);
+      }
       if (selectedTypes.length > 0) {
         params.set("types", selectedTypes[0]);
       }
@@ -361,8 +552,17 @@ export default function ShopifyCollectionMapping() {
       if (!resp.ok || !json.ok) {
         throw new Error(json.error || "Failed to load Shopify collection mapping.");
       }
+      const responseShop = normalizeShopDomain(String(json.shop || ""));
+      if (isValidShopDomain(responseShop)) {
+        setShop(responseShop);
+        try {
+          window.localStorage.setItem("shopify_shop", responseShop);
+        } catch {
+          // ignore storage failures
+        }
+      }
 
-      const nextNodes = (json.nodes || []).filter((node) => node.enabled);
+      const nextNodes = json.nodes || [];
       setNodes(nextNodes);
       setRows(json.rows || []);
       const nextCollections = (json.collections || []).map((row) => ({
@@ -431,10 +631,10 @@ export default function ShopifyCollectionMapping() {
       const resp = await fetch("/api/shopify/collection-mapping", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        body: JSON.stringify(withShopContext({
           action: "fetch-link-assets",
           linkType,
-        }),
+        })),
       });
       const json = (await resp.json()) as MappingResponse;
       if (!resp.ok || !json.ok) {
@@ -464,6 +664,11 @@ export default function ShopifyCollectionMapping() {
   }
 
   function applyNodeSelection(nodeKey: string) {
+    const clickedAlreadySelected = Boolean(selectedNodes[nodeKey]);
+    if (clickedAlreadySelected) {
+      setSelectedNodes({});
+      return;
+    }
     const next = new Set<string>();
     next.add(nodeKey);
     let current = parentMap.get(nodeKey) || null;
@@ -483,7 +688,25 @@ export default function ShopifyCollectionMapping() {
       void loadData();
     }, 180);
     return () => window.clearTimeout(timer);
-  }, [search, selectedTypes, sort, page, pageSize]);
+  }, [search, selectedTypes, sort, page, pageSize, activeShop]);
+
+  useEffect(() => {
+    const queryShop = normalizeShopDomain(new URLSearchParams(window.location.search).get("shop") || "");
+    const storedShop = normalizeShopDomain(window.localStorage.getItem("shopify_shop") || "");
+    const nextShop = isValidShopDomain(queryShop)
+      ? queryShop
+      : isValidShopDomain(storedShop)
+        ? storedShop
+        : "";
+    if (nextShop) {
+      setShop(nextShop);
+      try {
+        window.localStorage.setItem("shopify_shop", nextShop);
+      } catch {
+        // ignore storage failures
+      }
+    }
+  }, []);
 
   useEffect(() => {
     setSelectedProducts({});
@@ -497,7 +720,7 @@ export default function ShopifyCollectionMapping() {
       }
       const next: Record<string, boolean> = {};
       for (const key of parentKeys) {
-        next[key] = key in prev ? prev[key] : true;
+        next[key] = key in prev ? prev[key] : false;
       }
       const prevKeys = Object.keys(prev);
       const nextKeys = Object.keys(next);
@@ -647,58 +870,134 @@ export default function ShopifyCollectionMapping() {
 
   async function moveMenuNode(nodeKey: string, nextDropTarget: MoveDropTarget) {
     if (!nodeKey || !nextDropTarget) return;
-    setSaving(true);
     setError("");
-    try {
-      const resp = await fetch("/api/shopify/collection-mapping", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "move-menu-node",
-          nodeKey,
-          targetKey: nextDropTarget.targetKey,
-          position: nextDropTarget.position,
-        }),
-      });
-      const json = (await resp.json()) as MappingResponse;
-      if (!resp.ok || !json.ok) {
-        throw new Error(json.error || "Menu reorder failed.");
-      }
-      const nextNodes = (json.nodes || []).filter((node) => node.enabled);
-      setNodes(nextNodes);
-      setWarning(String(json.warning || "").trim());
-      setSelectedNodes((prev) => {
-        const out: Record<string, boolean> = {};
-        for (const key of Object.keys(prev)) {
-          if (prev[key] && nextNodes.some((node) => node.nodeKey === key)) out[key] = true;
-        }
-        return out;
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Menu reorder failed.";
-      setError(message);
-    } finally {
-      setSaving(false);
-    }
+    const beforeNodes = cloneNodes(nodes);
+    const afterNodes = moveLocalNode(cloneNodes(nodes), nodeKey, nextDropTarget.targetKey, nextDropTarget.position);
+    const movedLabel = nodeByKey.get(nodeKey)?.label || "Menu item";
+    const targetLabel = nodeByKey.get(nextDropTarget.targetKey)?.label || "Menu item";
+    const placementText =
+      nextDropTarget.position === "inside"
+        ? `inside "${targetLabel}"`
+        : nextDropTarget.position === "before"
+          ? `above "${targetLabel}"`
+          : `below "${targetLabel}"`;
+    setNodes(afterNodes);
+    setPendingTreeOps((prev) => [
+      ...prev,
+      {
+        type: "move",
+        nodeKey,
+        targetKey: nextDropTarget.targetKey,
+        position: nextDropTarget.position,
+      },
+    ]);
+    appendUndoEntry({
+      actionType: "move",
+      title: `Moved "${movedLabel}"`,
+      details: [`Placed ${placementText}.`],
+      beforeNodes,
+      afterNodes: cloneNodes(afterNodes),
+    });
+    markTreeDirty();
   }
 
   async function saveMenuTreeSection() {
+    const currentMenuHandle = menuMeta.handle || "main-menu";
+    if (pendingTreeOps.length < 1) {
+      setWarning("No pending tree changes to save.");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
-      const resp = await fetch("/api/shopify/collection-mapping", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "save-menu-tree", menuHandle: menuMeta.handle || "main-menu" }),
-      });
-      const json = (await resp.json()) as MappingResponse;
-      if (!resp.ok || !json.ok) {
-        throw new Error(json.error || "Save menu failed.");
+      const tempKeyMap = new Map<string, string>();
+      const resolveNodeKey = (raw: string | null) => {
+        if (!raw) return null;
+        let out = raw;
+        const seen = new Set<string>();
+        while (tempKeyMap.has(out) && !seen.has(out)) {
+          seen.add(out);
+          out = tempKeyMap.get(out) || out;
+        }
+        return out;
+      };
+      let latestJson: MappingResponse | null = null;
+      for (const op of pendingTreeOps) {
+        let payload: Record<string, unknown> | null = null;
+        if (op.type === "add") {
+          payload = {
+            action: "add-menu-node",
+            menuHandle: currentMenuHandle,
+            parentKey: resolveNodeKey(op.parentKey),
+            label: op.label,
+            linkType: op.linkType,
+            linkTargetId: op.linkTargetId,
+            linkValue: op.linkValue,
+          };
+        } else if (op.type === "edit") {
+          const resolvedNodeKey = resolveNodeKey(op.nodeKey);
+          if (!resolvedNodeKey) continue;
+          payload = {
+            action: "edit-menu-node",
+            menuHandle: currentMenuHandle,
+            nodeKey: resolvedNodeKey,
+            label: op.label,
+            linkType: op.linkType,
+            linkTargetId: op.linkTargetId,
+            linkValue: op.linkValue,
+          };
+        } else if (op.type === "move") {
+          const resolvedNodeKey = resolveNodeKey(op.nodeKey);
+          const resolvedTargetKey = resolveNodeKey(op.targetKey);
+          if (!resolvedNodeKey || !resolvedTargetKey) continue;
+          payload = {
+            action: "move-menu-node",
+            menuHandle: currentMenuHandle,
+            nodeKey: resolvedNodeKey,
+            targetKey: resolvedTargetKey,
+            position: op.position,
+          };
+        } else if (op.type === "delete") {
+          const resolvedNodeKey = resolveNodeKey(op.nodeKey);
+          if (!resolvedNodeKey) continue;
+          payload = {
+            action: "delete-menu-node",
+            menuHandle: currentMenuHandle,
+            nodeKey: resolvedNodeKey,
+          };
+        } else if (op.type === "visibility") {
+          const resolvedNodeKey = resolveNodeKey(op.nodeKey);
+          if (!resolvedNodeKey) continue;
+          const node = nodeByKey.get(resolvedNodeKey);
+          payload = {
+            action: "set-node-mapping-live",
+            menuHandle: currentMenuHandle,
+            nodeKey: resolvedNodeKey,
+            collectionId: node?.collectionId || null,
+            enabled: op.enabled,
+            syncMenuLink: false,
+          };
+        }
+        if (!payload) continue;
+        const resp = await fetch("/api/shopify/collection-mapping", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(withShopContext(payload)),
+        });
+        const json = (await resp.json()) as MappingResponse & { createdNodeKey?: string };
+        if (!resp.ok || !json.ok) {
+          throw new Error(json.error || "Save menu failed.");
+        }
+        if (op.type === "add" && json.createdNodeKey) {
+          tempKeyMap.set(op.tempNodeKey, json.createdNodeKey);
+        }
+        latestJson = json;
       }
-      if (Array.isArray(json.nodes)) {
-        applyMenuNodesFromResponse(json);
+      if (latestJson && Array.isArray(latestJson.nodes)) {
+        applyMenuNodesFromResponse(latestJson);
       }
-      setWarning(String(json.warning || "Menu saved to Shopify.").trim());
+      setPendingTreeOps([]);
+      setWarning("Menu saved to Shopify.");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Save menu failed.";
       setError(message);
@@ -708,7 +1007,7 @@ export default function ShopifyCollectionMapping() {
   }
 
   function applyMenuNodesFromResponse(json: MappingResponse) {
-    const nextNodes = (json.nodes || []).filter((node) => node.enabled);
+    const nextNodes = json.nodes || [];
     setNodes(nextNodes);
     setWarning(String(json.warning || "").trim());
     setSelectedNodes((prev) => {
@@ -754,70 +1053,222 @@ export default function ShopifyCollectionMapping() {
     }));
   }
 
+  function toggleNodeVisibility(nodeKey: string) {
+    const target = nodeByKey.get(nodeKey);
+    if (!target) return;
+    const nextEnabled = !target.enabled;
+    const subtree = new Set<string>();
+    const stack = [nodeKey];
+    while (stack.length > 0) {
+      const current = stack.pop();
+      if (!current || subtree.has(current)) continue;
+      subtree.add(current);
+      const children = childrenByParent.get(current) || [];
+      for (const childKey of children) stack.push(childKey);
+    }
+    const beforeNodes = cloneNodes(nodes);
+    const afterNodes = cloneNodes(nodes).map((node) =>
+      subtree.has(node.nodeKey) ? { ...node, enabled: nextEnabled } : node
+    );
+    setNodes(afterNodes);
+    setPendingTreeOps((prev) => {
+      const filtered = prev.filter((op) => !(op.type === "visibility" && subtree.has(op.nodeKey)));
+      const visibilityOps: PendingTreeOp[] = Array.from(subtree).map((key) => ({
+        type: "visibility",
+        nodeKey: key,
+        enabled: nextEnabled,
+      }));
+      return [...filtered, ...visibilityOps];
+    });
+    appendUndoEntry({
+      actionType: "visibility",
+      title: `${nextEnabled ? "Showed" : "Hid"} "${target.label}"`,
+      details: [
+        subtree.size > 1
+          ? `Also updated ${subtree.size - 1} nested item(s).`
+          : "Updated this item only.",
+      ],
+      beforeNodes,
+      afterNodes: cloneNodes(afterNodes),
+    });
+    markTreeDirty();
+  }
+
+  function expandTreeForSearchResults(query: string) {
+    const normalizedQuery = query.trim().toLowerCase();
+    if (!normalizedQuery) return;
+    const matches = treeNodes.filter((node) => matchesMenuSearch(node, normalizedQuery));
+    if (matches.length < 1) return;
+    setExpandedNodes((prev) => {
+      const next = { ...prev };
+      for (const match of matches) {
+        let current = match.parentKey || null;
+        const seen = new Set<string>();
+        while (current && !seen.has(current)) {
+          next[current] = true;
+          seen.add(current);
+          current = parentMap.get(current) || null;
+        }
+      }
+      return next;
+    });
+  }
+
   async function saveMenuEditor() {
     const label = menuEditorLabel.trim();
     const linkTargetId = menuEditorLinkTargetId.trim();
     if (!label || !linkTargetId) return;
-    setSaving(true);
     setError("");
-    try {
-      const body =
-        menuEditorMode === "add"
-          ? {
-              action: "add-menu-node",
-              parentKey: menuEditorParentKey,
-              label,
-              linkType: menuEditorLinkType,
-              linkTargetId: linkTargetId || null,
-              linkValue: "",
-            }
-          : {
-              action: "edit-menu-node",
-              nodeKey: menuEditorNodeKey,
-              label,
-              linkType: menuEditorLinkType,
-              linkTargetId: linkTargetId || null,
-              linkValue: "",
-            };
-      const resp = await fetch("/api/shopify/collection-mapping", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+    const linkOption = getLinkOption(menuEditorLinkType, linkTargetId);
+    const linkValue = String(menuEditorLinkQuery || linkOption?.title || label).trim();
+    const beforeNodes = cloneNodes(nodes);
+    if (menuEditorMode === "add") {
+      const tempNodeKey = nextTempNodeKey();
+      const parentDepth =
+        menuEditorParentKey && nodeByKey.has(menuEditorParentKey)
+          ? Number(nodeByKey.get(menuEditorParentKey)?.depth || 0)
+          : -1;
+      const nextNode: MenuNode = {
+        nodeKey: tempNodeKey,
+        label,
+        parentKey: menuEditorParentKey,
+        depth: parentDepth + 1,
+        enabled: true,
+        collectionId: menuEditorLinkType === "COLLECTION" ? linkTargetId : null,
+        linkedTargetType: menuEditorLinkType,
+        linkedTargetLabel: linkOption?.title || linkValue,
+        linkedTargetResourceId: linkTargetId || null,
+        linkedTargetUrl: linkOption?.url || "",
+      };
+      const afterNodes = [...cloneNodes(nodes), nextNode];
+      setNodes(afterNodes);
+      setPendingTreeOps((prev) => [
+        ...prev,
+        {
+          type: "add",
+          tempNodeKey,
+          parentKey: menuEditorParentKey,
+          label,
+          linkType: menuEditorLinkType,
+          linkTargetId: linkTargetId || null,
+          linkValue,
+        },
+      ]);
+      appendUndoEntry({
+        actionType: "add",
+        title: `Added "${label}"`,
+        details: [
+          menuEditorParentKey
+            ? `Added under "${nodeByKey.get(menuEditorParentKey)?.label || "parent item"}".`
+            : "Added at the top level.",
+          `Link kind: ${menuEditorLinkType.toLowerCase()}.`,
+        ],
+        beforeNodes,
+        afterNodes: cloneNodes(afterNodes),
       });
-      const json = (await resp.json()) as MappingResponse;
-      if (!resp.ok || !json.ok) {
-        throw new Error(json.error || "Menu update failed.");
-      }
-      await loadData({ refreshCollections: true });
-      setShowMenuEditor(false);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Menu update failed.";
-      setError(message);
-    } finally {
-      setSaving(false);
+    } else {
+      const afterNodes = cloneNodes(nodes).map((row) =>
+        row.nodeKey === menuEditorNodeKey
+          ? {
+              ...row,
+              label,
+              collectionId: menuEditorLinkType === "COLLECTION" ? linkTargetId : null,
+              linkedTargetType: menuEditorLinkType,
+              linkedTargetLabel: linkOption?.title || linkValue,
+              linkedTargetResourceId: linkTargetId || null,
+              linkedTargetUrl: linkOption?.url || row.linkedTargetUrl || "",
+            }
+          : row
+      );
+      setNodes(afterNodes);
+      setPendingTreeOps((prev) => [
+        ...prev,
+        {
+          type: "edit",
+          nodeKey: menuEditorNodeKey,
+          label,
+          linkType: menuEditorLinkType,
+          linkTargetId: linkTargetId || null,
+          linkValue,
+        },
+      ]);
+      appendUndoEntry({
+        actionType: "edit",
+        title: `Updated "${label}"`,
+        details: [`Updated name or link.`, `Link kind: ${menuEditorLinkType.toLowerCase()}.`],
+        beforeNodes,
+        afterNodes: cloneNodes(afterNodes),
+      });
     }
+    markTreeDirty();
+    setShowMenuEditor(false);
   }
 
   async function deleteMenuNode(nodeKey: string) {
-    setSaving(true);
     setError("");
-    try {
-      const resp = await fetch("/api/shopify/collection-mapping", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "delete-menu-node", nodeKey }),
-      });
-      const json = (await resp.json()) as MappingResponse;
-      if (!resp.ok || !json.ok) {
-        throw new Error(json.error || "Delete collection failed.");
-      }
-      applyMenuNodesFromResponse(json);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Delete collection failed.";
-      setError(message);
-    } finally {
-      setSaving(false);
-    }
+    const deletedLabel = nodeByKey.get(nodeKey)?.label || "Menu item";
+    const beforeNodes = cloneNodes(nodes);
+    const afterNodes = removeLocalNodeAndChildren(cloneNodes(nodes), nodeKey);
+    setNodes(afterNodes);
+    setPendingTreeOps((prev) => [...prev, { type: "delete", nodeKey }]);
+    appendUndoEntry({
+      actionType: "delete",
+      title: `Deleted "${deletedLabel}"`,
+      details: ["This also removed nested items."],
+      beforeNodes,
+      afterNodes: cloneNodes(afterNodes),
+    });
+    markTreeDirty();
+  }
+
+  async function inlineEditMenuNode(
+    node: MenuNode,
+    next: { label: string; linkValue: string; linkType?: MenuLinkType; linkTargetId?: string | null; linkTargetLabel?: string }
+  ) {
+    const label = String(next.label || "").trim();
+    const linkValue = String(next.linkValue || "").trim();
+    if (!node.nodeKey || !label || !linkValue) return;
+    setError("");
+    const linkType = normalizeMenuEditorLinkType(next.linkType || node.linkedTargetType || "COLLECTION");
+    const priorTargetLabel = String(node.linkedTargetLabel || "").trim().toLowerCase();
+    const nextTargetLabel = linkValue.toLowerCase();
+    const keepTargetId = priorTargetLabel === nextTargetLabel;
+    const existingTargetId = String(node.linkedTargetResourceId || "").trim();
+    const explicitTargetId = String(next.linkTargetId || "").trim();
+    const linkTargetId = explicitTargetId || (keepTargetId ? existingTargetId || null : null);
+    const linkedTargetLabel = String(next.linkTargetLabel || linkValue).trim() || linkValue;
+    const beforeNodes = cloneNodes(nodes);
+    const afterNodes = cloneNodes(nodes).map((row) =>
+      row.nodeKey === node.nodeKey
+        ? {
+            ...row,
+            label,
+            linkedTargetType: linkType,
+            linkedTargetLabel,
+            linkedTargetResourceId: linkTargetId,
+          }
+        : row
+    );
+    setNodes(afterNodes);
+    setPendingTreeOps((prev) => [
+      ...prev,
+      {
+        type: "edit",
+        nodeKey: node.nodeKey,
+        label,
+        linkType,
+        linkTargetId,
+        linkValue: linkedTargetLabel,
+      },
+    ]);
+    appendUndoEntry({
+      actionType: "edit",
+      title: `Updated "${label}"`,
+      details: ["Updated name or link.", `Link kind: ${linkType.toLowerCase()}.`],
+      beforeNodes,
+      afterNodes: cloneNodes(afterNodes),
+    });
+    markTreeDirty();
   }
 
   async function toggleAssign(productId: string, checked: boolean) {
@@ -828,12 +1279,12 @@ export default function ShopifyCollectionMapping() {
       const resp = await fetch("/api/shopify/collection-mapping", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        body: JSON.stringify(withShopContext({
           action: "toggle-nodes",
           productId,
           nodeKeys: mappedSelectedNodeKeys,
           checked,
-        }),
+        })),
       });
       const json = (await resp.json()) as ToggleResponse;
       if (!resp.ok || !json.ok) {
@@ -877,12 +1328,12 @@ export default function ShopifyCollectionMapping() {
       const resp = await fetch("/api/shopify/collection-mapping", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        body: JSON.stringify(withShopContext({
           action: "bulk-toggle-nodes",
           productIds: ids,
           nodeKeys: mappedSelectedNodeKeys,
           checked,
-        }),
+        })),
       });
       const json = (await resp.json()) as ToggleResponse;
       if (!resp.ok || !json.ok) {
@@ -946,20 +1397,22 @@ export default function ShopifyCollectionMapping() {
   }
 
   async function refreshMenuTreeSection() {
+    const currentMenuHandle = menuMeta.handle || "main-menu";
     setSaving(true);
     setError("");
     try {
       const resp = await fetch("/api/shopify/collection-mapping", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "refresh-menu" }),
+        body: JSON.stringify(withShopContext({ action: "refresh-menu", menuHandle: currentMenuHandle })),
       });
       const json = (await resp.json()) as MappingResponse;
       if (!resp.ok || !json.ok) {
         throw new Error(json.error || "Menu refresh failed.");
       }
-      const nextNodes = (json.nodes || []).filter((node) => node.enabled);
+      const nextNodes = json.nodes || [];
       setNodes(nextNodes);
+      setPendingTreeOps([]);
       setTreeSearch("");
       setSelectedNodes({});
       setWarning(String(json.warning || "").trim());
@@ -968,6 +1421,66 @@ export default function ShopifyCollectionMapping() {
       setError(message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  const undoPreviewEntries = useMemo(() => {
+    if (!undoPreviewEntryId) return [] as UndoEntry[];
+    const index = undoHistory.findIndex((entry) => entry.id === undoPreviewEntryId);
+    if (index < 0) return [] as UndoEntry[];
+    return undoHistory.slice(0, index + 1);
+  }, [undoHistory, undoPreviewEntryId]);
+
+  const undoSelectedEntries = useMemo(() => {
+    if (undoSelectedEntryIds.length < 1) return [] as UndoEntry[];
+    const selected = new Set(undoSelectedEntryIds);
+    return undoPreviewEntries.filter((entry) => selected.has(entry.id));
+  }, [undoPreviewEntries, undoSelectedEntryIds]);
+
+  function openUndoPreview(entryId: string) {
+    const index = undoHistory.findIndex((entry) => entry.id === entryId);
+    if (index < 0) return;
+    const preview = undoHistory.slice(0, index + 1);
+    setUndoPreviewEntryId(entryId);
+    setUndoSelectedEntryIds(preview.map((entry) => entry.id));
+    setUndoConfirmOpen(false);
+    setUndoResult(null);
+    setUndoMenuOpen(false);
+  }
+
+  function applyUndoSelection() {
+    if (undoSelectedEntries.length < 1) {
+      setUndoResult({ ok: false, title: "Undo failed", details: ["No undo actions were selected."] });
+      setUndoConfirmOpen(false);
+      return;
+    }
+    try {
+      const ordered = [...undoPreviewEntries].reverse();
+      let nextNodes = cloneNodes(nodes);
+      const applied: string[] = [];
+      const selected = new Set(undoSelectedEntryIds);
+      for (const entry of ordered) {
+        if (!selected.has(entry.id)) continue;
+        nextNodes = cloneNodes(entry.beforeNodes);
+        applied.push(entry.title);
+      }
+      setNodes(nextNodes);
+      setPendingTreeOps([]);
+      const appliedSet = new Set(undoSelectedEntryIds);
+      setUndoHistory((prev) => prev.filter((entry) => !appliedSet.has(entry.id)));
+      setUndoResult({
+        ok: true,
+        title: "Undo completed",
+        details: [`Reverted ${applied.length} action(s).`, ...applied.map((row, idx) => `${idx + 1}. ${row}`)],
+      });
+      setWarning("Undo applied. Click Save to keep these changes.");
+    } catch (errorValue) {
+      const message = errorValue instanceof Error ? errorValue.message : "Undo process failed unexpectedly.";
+      setUndoResult({ ok: false, title: "Undo failed", details: [message] });
+    } finally {
+      setUndoConfirmOpen(false);
+      setUndoPreviewEntryId("");
+      setUndoSelectedEntryIds([]);
     }
   }
 
@@ -988,6 +1501,7 @@ export default function ShopifyCollectionMapping() {
       <section className="card">
         <h1>Shopify Collection Mapping</h1>
         <div className="topbar" style={{ marginTop: 10 }}>
+          <span className="pill">{activeShop ? `Shop: ${activeShop}` : "Shop: not selected"}</span>
           <span className="pill">Auto-parent logic ON</span>
           <span className="pill">Live Shopify sync ON</span>
           <button type="button" onClick={() => void openAuditReport()} disabled={auditOpening || saving || loading}>
@@ -1035,13 +1549,21 @@ export default function ShopifyCollectionMapping() {
       </section>
 
       <section className="card">
-        <div className="grid2" style={{ gridTemplateColumns: `${treePanelWidth}px 12px minmax(0, 1fr)` }}>
+        <div className="grid2" style={{ gridTemplateColumns: `${treePanelWidth}px 18px minmax(0, 1fr)` }}>
           <ShopifyMenuItemsTree
             menuTitle={menuMeta.title}
             menuHandle={menuMeta.handle}
             treeSearch={treeSearch}
             onTreeSearchChange={setTreeSearch}
-            onRefreshTree={() => void refreshMenuTreeSection()}
+            onTreeSearchSubmit={expandTreeForSearchResults}
+            onRefreshTree={() => {
+              setTreePanelWidth(TREE_PANEL_DEFAULT_WIDTH);
+              void refreshMenuTreeSection();
+            }}
+            undoEntries={undoHistory}
+            undoMenuOpen={undoMenuOpen}
+            onUndoMenuToggle={() => setUndoMenuOpen((prev) => !prev)}
+            onUndoEntrySelect={openUndoPreview}
             onSaveTree={saveMenuTreeSection}
             saving={saving}
             nodes={nodes}
@@ -1051,8 +1573,11 @@ export default function ShopifyCollectionMapping() {
             expandedNodes={expandedNodes}
             selectedNodes={selectedNodes}
             onMoveNode={moveMenuNode}
+            onInlineEditNode={inlineEditMenuNode}
+            inlineLinkTargets={menuLinkTargets}
             onApplyNodeSelection={applyNodeSelection}
             onToggleNodeExpansion={toggleNodeExpansion}
+            onToggleNodeVisibility={toggleNodeVisibility}
             onOpenEditEditor={openEditEditor}
             onOpenAddEditor={openAddEditor}
             onDeleteNode={(nodeKey) => {
@@ -1285,7 +1810,7 @@ export default function ShopifyCollectionMapping() {
               >
                 {[20, 50, 100, 200, 500].map((size) => (
                   <option key={size} value={size}>
-                    {size}
+                    {size} per page
                   </option>
                 ))}
               </select>
@@ -1495,6 +2020,108 @@ export default function ShopifyCollectionMapping() {
         </div>
       ) : null}
 
+      {undoPreviewEntries.length > 0 ? (
+        <div
+          className="previewOverlay"
+          onClick={() => {
+            setUndoPreviewEntryId("");
+            setUndoSelectedEntryIds([]);
+          }}
+          role="dialog"
+          aria-label="Undo actions preview"
+        >
+          <div className="editorModal" onClick={(event) => event.stopPropagation()}>
+            <h3>Undo action preview</h3>
+            <p className="muted" style={{ marginTop: 6 }}>
+              Review the selected tasks. Task 1 is the latest action.
+            </p>
+            <div className="reportList" style={{ marginTop: 12, maxHeight: 320 }}>
+              {undoPreviewEntries.map((entry, index) => {
+                const checked = undoSelectedEntryIds.includes(entry.id);
+                return (
+                  <label key={entry.id} className="typesOption" style={{ alignItems: "flex-start", padding: "8px 10px" }}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(event) => {
+                        setUndoSelectedEntryIds((prev) =>
+                          event.target.checked ? [...prev, entry.id] : prev.filter((id) => id !== entry.id)
+                        );
+                      }}
+                    />
+                    <span>
+                      <b>Task {index + 1}</b> - {entry.title}
+                      <br />
+                      <span className="muted small">{entry.details.join(" | ")}</span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            <div className="topbar" style={{ justifyContent: "flex-end", marginTop: 12 }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setUndoPreviewEntryId("");
+                  setUndoSelectedEntryIds([]);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="primary"
+                disabled={undoSelectedEntryIds.length < 1}
+                onClick={() => setUndoConfirmOpen(true)}
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {undoConfirmOpen ? (
+        <div className="previewOverlay" onClick={() => setUndoConfirmOpen(false)} role="dialog" aria-label="Confirm undo">
+          <div className="editorModal" onClick={(event) => event.stopPropagation()}>
+            <h3>Confirm undo</h3>
+            <p className="muted" style={{ marginTop: 8 }}>
+              You are about to revert {undoSelectedEntries.length} action(s).
+            </p>
+            <div className="reportList" style={{ marginTop: 12, maxHeight: 240 }}>
+              {undoSelectedEntries.map((entry, index) => (
+                <div key={entry.id} className="reportRow">
+                  <span>{index + 1}. {entry.title}</span>
+                  <span className="muted small">{entry.details.join(" | ")}</span>
+                </div>
+              ))}
+            </div>
+            <div className="topbar" style={{ justifyContent: "flex-end", marginTop: 12 }}>
+              <button type="button" onClick={() => setUndoConfirmOpen(false)}>Back</button>
+              <button type="button" className="primary" onClick={applyUndoSelection}>Confirm undo</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {undoResult ? (
+        <div className="previewOverlay" onClick={() => setUndoResult(null)} role="dialog" aria-label="Undo result">
+          <div className="editorModal" onClick={(event) => event.stopPropagation()}>
+            <h3>{undoResult.title}</h3>
+            <div className="reportList" style={{ marginTop: 12, maxHeight: 280 }}>
+              {undoResult.details.map((line, index) => (
+                <div key={`${line}-${index}`} className="reportRow">
+                  <span>{line}</span>
+                </div>
+              ))}
+            </div>
+            <div className="topbar" style={{ justifyContent: "flex-end", marginTop: 12 }}>
+              <button type="button" className="primary" onClick={() => setUndoResult(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <style jsx>{`
         .page {
           width: min(100%, calc(100vw - 24px));
@@ -1589,13 +2216,15 @@ export default function ShopifyCollectionMapping() {
         }
         .grid2 {
           display: grid;
-          grid-template-columns: 300px 12px minmax(0, 1fr);
+          grid-template-columns: 300px 18px minmax(0, 1fr);
           gap: 12px;
         }
         .paneDivider {
           display: flex;
           align-items: stretch;
           justify-content: center;
+          width: 18px;
+          justify-self: center;
           cursor: col-resize;
           border-radius: 999px;
           outline: none;
@@ -1884,6 +2513,16 @@ export default function ShopifyCollectionMapping() {
         }
         .pagerBar {
           justify-content: flex-end;
+        }
+        .pagerBar select {
+          color-scheme: dark;
+          color: #e5e7eb;
+          background: #0b1322;
+          border-color: #334155;
+        }
+        .pagerBar select option {
+          color: #e5e7eb;
+          background: #0b1322;
         }
         .imgCell {
           width: 80px;
