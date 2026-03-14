@@ -2579,7 +2579,7 @@ export async function POST(req: NextRequest) {
             summary: `Failed to update menu link for node ${nodeKey}`,
             status: "error",
             errorMessage: updateResult.error,
-            details: { nodeKey, collectionId },
+            details: { nodeKey, effectiveCollectionId },
           });
           return NextResponse.json({ ok: false, error: updateResult.error }, { status: 500 });
         }
