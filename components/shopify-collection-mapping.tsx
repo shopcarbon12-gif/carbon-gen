@@ -1132,14 +1132,41 @@ export default function ShopifyCollectionMapping() {
     if (!target) return;
     const nextEnabled = !target.enabled;
     const subtree = new Set<string>();
-    const stack = [nodeKey];
-    while (stack.length > 0) {
-      const current = stack.pop();
-      if (!current || subtree.has(current)) continue;
-      subtree.add(current);
-      const children = childrenByParent.get(current) || [];
-      for (const childKey of children) stack.push(childKey);
+    const isTopLevelParent = Number(target.depth || 0) <= 0;
+    if (isTopLevelParent) {
+      const stack = [nodeKey];
+      while (stack.length > 0) {
+        const current = stack.pop();
+        if (!current || subtree.has(current)) continue;
+        subtree.add(current);
+        const children = childrenByParent.get(current) || [];
+        for (const childKey of children) stack.push(childKey);
+      }
+    } else {
+      subtree.add(nodeKey);
     }
+    // #region agent log
+    fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
+      body: JSON.stringify({
+        sessionId: "9da838",
+        runId: "visibility-and-depth-debug",
+        hypothesisId: "H3",
+        location: "components/shopify-collection-mapping.tsx:toggleNodeVisibility",
+        message: "visibility_subtree_probe",
+        data: {
+          nodeKey,
+          nodeDepth: Number(target.depth || 0),
+          isTopLevelParent,
+          subtreeSize: subtree.size,
+          enabledBefore: Boolean(target.enabled),
+          enabledAfter: nextEnabled,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
     const beforeNodes = cloneNodes(nodes);
     const afterNodes = cloneNodes(nodes).map((node) =>
       subtree.has(node.nodeKey) ? { ...node, enabled: nextEnabled } : node

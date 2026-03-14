@@ -2504,6 +2504,30 @@ export async function POST(req: NextRequest) {
         }
 
         updateItemCollectionLink(target.node, collectionMatch);
+        // #region agent log
+        fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
+          body: JSON.stringify({
+            sessionId: "9da838",
+            runId: "visibility-and-depth-debug",
+            hypothesisId: "H4",
+            location: "app/api/shopify/collection-mapping/route.ts:set-node-mapping-live",
+            message: "visibility_link_sync_probe",
+            data: {
+              nodeKey,
+              enabled: typeof enabled === "boolean" ? enabled : null,
+              syncMenuLink,
+              collectionId,
+              targetType: normalizeText(target.node.type || ""),
+              targetTitle: normalizeText(target.node.title || ""),
+              targetResourceId: normalizeText(target.node.resourceId || ""),
+              targetUrl: normalizeText(target.node.url || ""),
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
         const updateResult = await updateMenuTree(
           shop,
           tokenResult.token,
@@ -2514,6 +2538,26 @@ export async function POST(req: NextRequest) {
           items
         );
         if (!updateResult.ok) {
+          // #region agent log
+          fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
+            body: JSON.stringify({
+              sessionId: "9da838",
+              runId: "visibility-and-depth-debug",
+              hypothesisId: "H4",
+              location: "app/api/shopify/collection-mapping/route.ts:set-node-mapping-live",
+              message: "visibility_link_sync_error_probe",
+              data: {
+                nodeKey,
+                collectionId,
+                enabled: typeof enabled === "boolean" ? enabled : null,
+                error: normalizeText(updateResult.error || ""),
+              },
+              timestamp: Date.now(),
+            }),
+          }).catch(() => {});
+          // #endregion
           await logMappingAudit({
             shop,
             action,
@@ -2681,12 +2725,56 @@ export async function POST(req: NextRequest) {
         nextItems
       );
       if (!updateResult.ok) {
+        // #region agent log
+        fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
+          body: JSON.stringify({
+            sessionId: "9da838",
+            runId: "visibility-and-depth-debug",
+            hypothesisId: "H2",
+            location: "app/api/shopify/collection-mapping/route.ts:add-menu-node",
+            message: "add_node_shopify_error_probe",
+            data: {
+              parentKey,
+              parentDepth,
+              nextDepth: parentDepth + 1,
+              label,
+              linkType,
+              error: normalizeText(updateResult.error || ""),
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
         const normalizedUpdateError = normalizeLower(updateResult.error);
         const isShopifyDepthLimitError =
           normalizedUpdateError.includes("more than 3 levels of nesting") ||
           normalizedUpdateError.includes("up to 3 levels of nesting");
         const nextDepth = parentDepth + 1;
         if (isShopifyDepthLimitError && nextDepth > MAX_SHOPIFY_MENU_DEPTH && nextDepth <= MAX_MENU_DEPTH) {
+          // #region agent log
+          fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
+            body: JSON.stringify({
+              sessionId: "9da838",
+              runId: "visibility-and-depth-debug",
+              hypothesisId: "H2",
+              location: "app/api/shopify/collection-mapping/route.ts:add-menu-node",
+              message: "add_node_fallback_triggered_probe",
+              data: {
+                parentKey,
+                parentDepth,
+                nextDepth,
+                maxDepth: MAX_MENU_DEPTH,
+                maxShopifyDepth: MAX_SHOPIFY_MENU_DEPTH,
+                label,
+              },
+              timestamp: Date.now(),
+            }),
+          }).catch(() => {});
+          // #endregion
           const slug = normalizeLower(label)
             .replace(/[^a-z0-9]+/g, "-")
             .replace(/^-+|-+$/g, "") || "node";
