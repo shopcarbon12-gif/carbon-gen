@@ -991,7 +991,71 @@ export default function ShopifyCollectionMapping() {
         return out;
       };
       let latestJson: MappingResponse | null = null;
+      // Save visibility first so it is not blocked by later move/add errors.
       for (const op of pendingTreeOps) {
+        if (op.type !== "visibility") continue;
+        const resolvedNodeKey = resolveNodeKey(op.nodeKey);
+        if (!resolvedNodeKey) continue;
+        visibilityBatch.set(resolvedNodeKey, op.enabled);
+      }
+      if (visibilityBatch.size > 0) {
+        const payload: Record<string, unknown> = {
+          action: "set-node-mapping-live-batch",
+          menuHandle: currentMenuHandle,
+          updates: Array.from(visibilityBatch.entries()).map(([nodeKey, enabled]) => ({ nodeKey, enabled })),
+        };
+        // #region agent log
+        fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
+          body: JSON.stringify({
+            sessionId: "9da838",
+            runId: "visibility-and-depth-debug",
+            hypothesisId: "H6",
+            location: "components/shopify-collection-mapping.tsx:saveMenuTreeSection",
+            message: "visibility_batch_payload_probe",
+            data: {
+              count: visibilityBatch.size,
+              order: "before-other-ops",
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
+        const resp = await fetch("/api/shopify/collection-mapping", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(withShopContext(payload)),
+        });
+        const json = (await resp.json()) as MappingResponse;
+        // #region agent log
+        fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
+          body: JSON.stringify({
+            sessionId: "9da838",
+            runId: "visibility-and-depth-debug",
+            hypothesisId: "H6",
+            location: "components/shopify-collection-mapping.tsx:saveMenuTreeSection",
+            message: "visibility_batch_response_probe",
+            data: {
+              httpOk: resp.ok,
+              status: resp.status,
+              jsonOk: Boolean(json.ok),
+              error: String(json.error || ""),
+              warning: String(json.warning || ""),
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
+        if (!resp.ok || !json.ok) {
+          throw new Error(json.error || "Save visibility failed.");
+        }
+        latestJson = json;
+      }
+      for (const op of pendingTreeOps) {
+        if (op.type === "visibility") continue;
         let payload: Record<string, unknown> | null = null;
         if (op.type === "add") {
           payload = {
@@ -1055,11 +1119,6 @@ export default function ShopifyCollectionMapping() {
             menuHandle: currentMenuHandle,
             nodeKey: resolvedNodeKey,
           };
-        } else if (op.type === "visibility") {
-          const resolvedNodeKey = resolveNodeKey(op.nodeKey);
-          if (!resolvedNodeKey) continue;
-          visibilityBatch.set(resolvedNodeKey, op.enabled);
-          continue;
         }
         if (!payload) continue;
         // #region agent log
@@ -1171,61 +1230,6 @@ export default function ShopifyCollectionMapping() {
         }
         if (op.type === "add" && json.createdNodeKey) {
           tempKeyMap.set(op.tempNodeKey, json.createdNodeKey);
-        }
-        latestJson = json;
-      }
-      if (visibilityBatch.size > 0) {
-        const payload: Record<string, unknown> = {
-          action: "set-node-mapping-live-batch",
-          menuHandle: currentMenuHandle,
-          updates: Array.from(visibilityBatch.entries()).map(([nodeKey, enabled]) => ({ nodeKey, enabled })),
-        };
-        // #region agent log
-        fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
-          body: JSON.stringify({
-            sessionId: "9da838",
-            runId: "visibility-and-depth-debug",
-            hypothesisId: "H6",
-            location: "components/shopify-collection-mapping.tsx:saveMenuTreeSection",
-            message: "visibility_batch_payload_probe",
-            data: {
-              count: visibilityBatch.size,
-            },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion
-        const resp = await fetch("/api/shopify/collection-mapping", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(withShopContext(payload)),
-        });
-        const json = (await resp.json()) as MappingResponse;
-        // #region agent log
-        fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
-          body: JSON.stringify({
-            sessionId: "9da838",
-            runId: "visibility-and-depth-debug",
-            hypothesisId: "H6",
-            location: "components/shopify-collection-mapping.tsx:saveMenuTreeSection",
-            message: "visibility_batch_response_probe",
-            data: {
-              httpOk: resp.ok,
-              status: resp.status,
-              jsonOk: Boolean(json.ok),
-              error: String(json.error || ""),
-              warning: String(json.warning || ""),
-            },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion
-        if (!resp.ok || !json.ok) {
-          throw new Error(json.error || "Save visibility failed.");
         }
         latestJson = json;
       }
@@ -1899,7 +1903,7 @@ export default function ShopifyCollectionMapping() {
           >
             <span className="paneDividerGrip" />
           </button>
-          <main className="card panel">
+          <main className="card panel productPanel">
             <div className="productControls">
               <input
                 value={search}
@@ -2523,7 +2527,7 @@ export default function ShopifyCollectionMapping() {
           align-items: stretch;
         }
         .grid2 > .card.panel {
-          height: 100%;
+          height: 72vh;
           min-height: 0;
           display: flex;
           flex-direction: column;
@@ -2556,6 +2560,9 @@ export default function ShopifyCollectionMapping() {
         }
         .panel {
           padding: 10px;
+        }
+        .productPanel {
+          min-height: 0;
         }
         .productControls {
           /* Requirement 1: Grid for strict alignment */
@@ -2763,11 +2770,13 @@ export default function ShopifyCollectionMapping() {
           font-weight: 600;
         }
         .tableWrap {
+          flex: 1 1 auto;
+          min-height: 0;
           overflow: auto;
           border: 1px solid #2a3547;
           border-radius: 10px;
           background: #0a1324;
-          max-height: 65vh;
+          max-height: none;
         }
         table {
           border-collapse: collapse;
@@ -2995,6 +3004,9 @@ export default function ShopifyCollectionMapping() {
         @media (max-width: 1200px) {
           .grid2 {
             grid-template-columns: 1fr;
+          }
+          .grid2 > .card.panel {
+            height: auto;
           }
           .paneDivider {
             display: none;

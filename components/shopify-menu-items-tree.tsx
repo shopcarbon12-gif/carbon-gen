@@ -898,6 +898,7 @@ export default function ShopifyMenuItemsTree({
           display: flex;
           flex-direction: column;
           min-height: 0;
+          height: 100%;
         }
         .treeSearchBar {
           display: grid;
