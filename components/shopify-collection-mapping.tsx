@@ -545,57 +545,10 @@ export default function ShopifyCollectionMapping() {
       if (options?.refreshCollections) {
         params.set("refreshCollections", "true");
       }
-      // #region agent log
-      fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
-        body: JSON.stringify({
-          sessionId: "9da838",
-          runId: "deep-runtime",
-          hypothesisId: "H1",
-          location: "components/shopify-collection-mapping.tsx:loadData",
-          message: "load_data_request_probe",
-          data: {
-            activeShop,
-            queryShopParam: params.get("shop"),
-            page,
-            pageSize,
-            search: search.trim(),
-            refreshProducts: Boolean(options?.refreshProducts),
-            refreshCollections: Boolean(options?.refreshCollections),
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       const resp = await fetch(`/api/shopify/collection-mapping?${params.toString()}`, {
         cache: "no-store",
       });
       const json = (await resp.json()) as MappingResponse;
-      // #region agent log
-      fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
-        body: JSON.stringify({
-          sessionId: "9da838",
-          runId: "deep-runtime",
-          hypothesisId: "H2",
-          location: "components/shopify-collection-mapping.tsx:loadData",
-          message: "load_data_response_probe",
-          data: {
-            httpOk: resp.ok,
-            httpStatus: resp.status,
-            jsonOk: Boolean(json.ok),
-            nodesCount: Array.isArray(json.nodes) ? json.nodes.length : -1,
-            rowsCount: Array.isArray(json.rows) ? json.rows.length : -1,
-            warning: String(json.warning || ""),
-            error: String(json.error || ""),
-            responseShop: String(json.shop || ""),
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       if (!resp.ok || !json.ok) {
         throw new Error(json.error || "Failed to load Shopify collection mapping.");
       }
@@ -659,21 +612,6 @@ export default function ShopifyCollectionMapping() {
       return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to load collection mapping.";
-      // #region agent log
-      fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
-        body: JSON.stringify({
-          sessionId: "9da838",
-          runId: "deep-runtime",
-          hypothesisId: "H3",
-          location: "components/shopify-collection-mapping.tsx:loadData",
-          message: "load_data_error_probe",
-          data: { message },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       setError(message);
       return false;
     } finally {
