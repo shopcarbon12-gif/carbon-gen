@@ -747,7 +747,10 @@ export async function syncLiveMenuNodes(
     const preservedLocalOnly = existing
       .filter((row) => row.nodeKey.startsWith("local4:") && !normalizedKeys.has(row.nodeKey))
       .map((row) => ({ ...row, updatedAt: nowIso }));
-    next.push(...preservedLocalOnly);
+    const preservedDisabledMissing = existing
+      .filter((row) => row.enabled === false && !normalizedKeys.has(row.nodeKey))
+      .map((row) => ({ ...row, updatedAt: nowIso }));
+    next.push(...preservedLocalOnly, ...preservedDisabledMissing);
 
     memoryNodesByShop.set(safeShop, next.map(cloneNode));
     return {
@@ -803,7 +806,8 @@ export async function syncLiveMenuNodes(
     await sqlQuery(
       `DELETE FROM shopify_collection_menu_nodes
        WHERE shop = $1
-         AND node_key NOT LIKE 'local4:%'`,
+         AND node_key NOT LIKE 'local4:%'
+         AND enabled = true`,
       [safeShop]
     );
   } else {
@@ -811,7 +815,8 @@ export async function syncLiveMenuNodes(
       `DELETE FROM shopify_collection_menu_nodes
        WHERE shop = $1
          AND NOT (node_key = ANY($2::text[]))
-         AND node_key NOT LIKE 'local4:%'`,
+         AND node_key NOT LIKE 'local4:%'
+         AND enabled = true`,
       [safeShop, keys]
     );
   }

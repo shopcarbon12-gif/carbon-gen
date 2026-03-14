@@ -2671,10 +2671,96 @@ export async function POST(req: NextRequest) {
         .filter((row) => Boolean(row.nodeKey));
 
       const saved = await saveMenuMappings(shop, mappings, collectionsResult.collections);
+      let finalNodes = saved.nodes;
+      let actionWarning = joinWarnings(saved.warning, menuSync.warning);
+
+      if (!menuSync.menuAccessDenied) {
+        const currentItems = sanitizeMenuItemTree(menuSync.menu.items);
+        const currentIndex = findMenuNodeIndex(currentItems);
+        const enabledNodes = saved.nodes
+          .filter((row) => row.enabled)
+          .sort((a, b) => {
+            if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+            return a.nodeKey.localeCompare(b.nodeKey);
+          });
+        const enabledByKey = new Map(enabledNodes.map((row) => [normalizeText(row.nodeKey), row]));
+        const childrenByParent = new Map<string | null, MenuNodeRecord[]>();
+        for (const row of enabledNodes) {
+          const parentKey = normalizeText(row.parentKey) || null;
+          const parentEnabled = parentKey ? enabledByKey.has(parentKey) : false;
+          const bucketKey = parentEnabled ? parentKey : null;
+          const list = childrenByParent.get(bucketKey) || [];
+          list.push(row);
+          childrenByParent.set(bucketKey, list);
+        }
+        for (const [key, list] of childrenByParent.entries()) {
+          list.sort((a, b) => {
+            if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+            return a.nodeKey.localeCompare(b.nodeKey);
+          });
+          childrenByParent.set(key, list);
+        }
+
+        const collectionById = new Map(
+          collectionsResult.collections.map((row) => [normalizeText(row.id), row])
+        );
+        const buildMenuItems = (parentKey: string | null): ShopifyMenuItemNode[] => {
+          const rows = childrenByParent.get(parentKey) || [];
+          return rows.map((row) => {
+            const existing = currentIndex.get(row.nodeKey)?.node;
+            const children = buildMenuItems(row.nodeKey);
+            if (existing) {
+              return {
+                ...existing,
+                title: normalizeText(row.label) || normalizeText(existing.title) || "Untitled",
+                items: children,
+              };
+            }
+            const collection = row.collectionId ? collectionById.get(normalizeText(row.collectionId)) : undefined;
+            if (collection) {
+              return {
+                title: normalizeText(row.label) || normalizeText(collection.title) || "Untitled",
+                type: "COLLECTION",
+                resourceId: normalizeText(collection.id) || null,
+                url: normalizeText(collection.handle) ? `/collections/${normalizeText(collection.handle)}` : "/collections/all",
+                tags: [],
+                items: children,
+              };
+            }
+            return {
+              title: normalizeText(row.label) || "Untitled",
+              type: "HTTP",
+              resourceId: null,
+              url: "/collections/all",
+              tags: [],
+              items: children,
+            };
+          });
+        };
+
+        const desiredItems = buildMenuItems(null);
+        const updateResult = await updateMenuTree(
+          shop,
+          tokenResult.token,
+          apiVersion,
+          menuSync.menu.menuId,
+          menuSync.menu.menuTitle,
+          menuSync.menu.menuHandle,
+          desiredItems
+        );
+        if (!updateResult.ok) {
+          return NextResponse.json({ ok: false, error: updateResult.error }, { status: 500 });
+        }
+        await syncLiveMenuNodes(shop, updateResult.liveNodes, collectionsResult.collections);
+        const listed = await listAndEnsureMenuNodes(shop, collectionsResult.collections);
+        finalNodes = listed.nodes;
+        actionWarning = joinWarnings(actionWarning, listed.warning);
+      }
+
       await logMappingAudit({
         shop,
         action,
-        summary: `Saved visibility for ${mappings.length} node(s)`,
+        summary: `Saved visibility for ${mappings.length} node(s) and synced live menu`,
         status: "ok",
         details: {
           count: mappings.length,
@@ -2686,9 +2772,9 @@ export async function POST(req: NextRequest) {
         ok: true,
         shop,
         backend: saved.backend,
-        warning: joinWarnings(saved.warning, menuSync.warning),
-        nodes: saved.nodes,
-        mappedNodes: saved.nodes.filter((node) => node.enabled && Boolean(node.collectionId)),
+        warning: actionWarning,
+        nodes: finalNodes,
+        mappedNodes: finalNodes.filter((node) => node.enabled && Boolean(node.collectionId)),
       });
     }
 
