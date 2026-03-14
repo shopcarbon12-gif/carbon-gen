@@ -2687,10 +2687,8 @@ export async function POST(req: NextRequest) {
         const childrenByParent = new Map<string | null, MenuNodeRecord[]>();
         for (const row of enabledNodes) {
           const parentKey = normalizeText(row.parentKey) || null;
-          if (parentKey && !enabledByKey.has(parentKey)) {
-            continue;
-          }
-          const bucketKey = parentKey;
+          const parentEnabled = parentKey ? enabledByKey.has(parentKey) : false;
+          const bucketKey = parentEnabled ? parentKey : null;
           const list = childrenByParent.get(bucketKey) || [];
           list.push(row);
           childrenByParent.set(bucketKey, list);
@@ -2706,11 +2704,11 @@ export async function POST(req: NextRequest) {
         const collectionById = new Map(
           collectionsResult.collections.map((row) => [normalizeText(row.id), row])
         );
-        const buildMenuItems = (parentKey: string | null, depth: number): ShopifyMenuItemNode[] => {
+        const buildMenuItems = (parentKey: string | null): ShopifyMenuItemNode[] => {
           const rows = childrenByParent.get(parentKey) || [];
           return rows.map((row) => {
             const existing = currentIndex.get(row.nodeKey)?.node;
-            const children = depth < MAX_SHOPIFY_MENU_DEPTH ? buildMenuItems(row.nodeKey, depth + 1) : [];
+            const children = buildMenuItems(row.nodeKey);
             if (existing) {
               return {
                 ...existing,
@@ -2740,7 +2738,7 @@ export async function POST(req: NextRequest) {
           });
         };
 
-        const desiredItems = buildMenuItems(null, 0);
+        const desiredItems = buildMenuItems(null);
         const updateResult = await updateMenuTree(
           shop,
           tokenResult.token,
