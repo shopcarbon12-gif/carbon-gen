@@ -974,6 +974,7 @@ export default function ShopifyCollectionMapping() {
     setSaving(true);
     setError("");
     try {
+      const nonBlockingWarnings: string[] = [];
       // #region agent log
       fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
         method: "POST",
@@ -1152,7 +1153,39 @@ export default function ShopifyCollectionMapping() {
           // #endregion
         }
         if (!resp.ok || !json.ok) {
-          throw new Error(json.error || "Save menu failed.");
+          const errorText = String(json.error || "Save menu failed.");
+          const lowerError = errorText.toLowerCase();
+          const isMoveDepthLimitError =
+            op.type === "move" &&
+            (lowerError.includes("more than 3 levels of nesting") ||
+              lowerError.includes("up to 3 levels of nesting"));
+          if (isMoveDepthLimitError) {
+            nonBlockingWarnings.push(
+              `Skipped one move because Shopify supports up to 3 live levels.`
+            );
+            // #region agent log
+            fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
+              body: JSON.stringify({
+                sessionId: "9da838",
+                runId: "visibility-and-depth-debug",
+                hypothesisId: "H7",
+                location: "components/shopify-collection-mapping.tsx:saveMenuTreeSection",
+                message: "move_depth_skip_probe",
+                data: {
+                  nodeKey: String((payload.nodeKey as string) || ""),
+                  targetKey: String((payload.targetKey as string) || ""),
+                  position: String((payload.position as string) || ""),
+                  error: errorText,
+                },
+                timestamp: Date.now(),
+              }),
+            }).catch(() => {});
+            // #endregion
+            continue;
+          }
+          throw new Error(errorText);
         }
         if (op.type === "add" && json.createdNodeKey) {
           tempKeyMap.set(op.tempNodeKey, json.createdNodeKey);
@@ -1218,7 +1251,11 @@ export default function ShopifyCollectionMapping() {
         applyMenuNodesFromResponse(latestJson);
       }
       setPendingTreeOps([]);
-      setWarning("Menu saved to Shopify.");
+      setWarning(
+        nonBlockingWarnings.length > 0
+          ? `Menu saved with notes: ${nonBlockingWarnings.join(" ")}`
+          : "Menu saved to Shopify."
+      );
     } catch (err) {
       const message = err instanceof Error ? err.message : "Save menu failed.";
       setError(message);
