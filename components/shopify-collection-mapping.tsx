@@ -122,7 +122,7 @@ type UndoEntry = {
   createdAt: number;
 };
 const TREE_PANEL_MIN_WIDTH = 340;
-const TREE_PANEL_MAX_WIDTH = 760;
+const TREE_PANEL_MAX_WIDTH = 1600;
 const TREE_PANEL_DEFAULT_WIDTH = 500;
 type MoveDropTarget = { targetKey: string; position: DropPosition } | null;
 const MENU_LINK_TYPE_OPTIONS: Array<{ value: MenuLinkType; label: string }> = [
@@ -208,6 +208,7 @@ export default function ShopifyCollectionMapping() {
   const [treePanelWidth, setTreePanelWidth] = useState(TREE_PANEL_DEFAULT_WIDTH);
   const [resizingPanes, setResizingPanes] = useState(false);
   const paneResizeStart = useRef<{ x: number; width: number } | null>(null);
+  const hasUserResizedPanesRef = useRef(false);
   const tempNodeCounterRef = useRef(0);
   const undoCounterRef = useRef(0);
   const typesDropdownRef = useRef<HTMLDivElement | null>(null);
@@ -668,40 +669,36 @@ export default function ShopifyCollectionMapping() {
   function applyNodeSelection(nodeKey: string) {
     const selectedCountBefore = Object.keys(selectedNodes).filter((key) => Boolean(selectedNodes[key])).length;
     const clickedAlreadySelected = Boolean(selectedNodes[nodeKey]);
-    // #region agent log
-    fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
-      body: JSON.stringify({
-        sessionId: "9da838",
-        runId: "multi-select-debug",
-        hypothesisId: "H1",
-        location: "components/shopify-collection-mapping.tsx:applyNodeSelection",
-        message: "selection_before_probe",
-        data: {
-          nodeKey,
-          clickedAlreadySelected,
-          selectedCountBefore,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
+    const next = new Set<string>(Object.keys(selectedNodes).filter((key) => Boolean(selectedNodes[key])));
     if (clickedAlreadySelected) {
-      setSelectedNodes({});
-      return;
+      const stack = [nodeKey];
+      const toRemove = new Set<string>();
+      while (stack.length > 0) {
+        const current = stack.pop();
+        if (!current || toRemove.has(current)) continue;
+        toRemove.add(current);
+        const children = childrenByParent.get(current) || [];
+        for (const child of children) stack.push(child);
+      }
+      for (const key of toRemove) next.delete(key);
+    } else {
+      next.add(nodeKey);
     }
-    const next = new Set<string>();
-    next.add(nodeKey);
-    let current = parentMap.get(nodeKey) || null;
-    const seen = new Set<string>();
-    while (current && !seen.has(current)) {
-      next.add(current);
-      seen.add(current);
-      current = parentMap.get(current) || null;
+
+    // Auto-select parent chain for every selected node.
+    const closed = new Set<string>(next);
+    for (const key of Array.from(next)) {
+      let current = parentMap.get(key) || null;
+      const seen = new Set<string>();
+      while (current && !seen.has(current)) {
+        closed.add(current);
+        seen.add(current);
+        current = parentMap.get(current) || null;
+      }
     }
+
     const out: Record<string, boolean> = {};
-    for (const key of next) out[key] = true;
+    for (const key of closed) out[key] = true;
     // #region agent log
     fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
       method: "POST",
@@ -714,6 +711,8 @@ export default function ShopifyCollectionMapping() {
         message: "selection_after_probe",
         data: {
           nodeKey,
+          clickedAlreadySelected,
+          selectedCountBefore,
           selectedCountAfter: Object.keys(out).length,
           selectedKeysAfter: Object.keys(out),
         },
@@ -890,6 +889,19 @@ export default function ShopifyCollectionMapping() {
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [showMenuEditor, menuEditorComboboxOpen]);
+
+  useEffect(() => {
+    const applyBalancedTreeWidth = () => {
+      if (hasUserResizedPanesRef.current) return;
+      const estimatedPadding = 84;
+      const target = Math.floor((window.innerWidth - estimatedPadding - 18) / 2);
+      const balancedWidth = Math.min(TREE_PANEL_MAX_WIDTH, Math.max(TREE_PANEL_MIN_WIDTH, target));
+      setTreePanelWidth((prev) => (prev === balancedWidth ? prev : balancedWidth));
+    };
+    applyBalancedTreeWidth();
+    window.addEventListener("resize", applyBalancedTreeWidth);
+    return () => window.removeEventListener("resize", applyBalancedTreeWidth);
+  }, []);
 
   useEffect(() => {
     if (!resizingPanes) return;
@@ -1866,6 +1878,7 @@ export default function ShopifyCollectionMapping() {
             className={`paneDivider ${resizingPanes ? "resizing" : ""}`}
             aria-label="Resize menu tree panel"
             onMouseDown={(event) => {
+              hasUserResizedPanesRef.current = true;
               setResizingPanes(true);
               paneResizeStart.current = { x: event.clientX, width: treePanelWidth };
             }}
