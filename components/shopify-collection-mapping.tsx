@@ -1059,12 +1059,10 @@ export default function ShopifyCollectionMapping() {
         } else if (op.type === "visibility") {
           const resolvedNodeKey = resolveNodeKey(op.nodeKey);
           if (!resolvedNodeKey) continue;
-          const node = nodeByKey.get(resolvedNodeKey);
           payload = {
             action: "set-node-mapping-live",
             menuHandle: currentMenuHandle,
             nodeKey: resolvedNodeKey,
-            collectionId: node?.collectionId || null,
             enabled: op.enabled,
             syncMenuLink: true,
           };

@@ -2451,7 +2451,10 @@ export async function POST(req: NextRequest) {
 
     if (action === "set-node-mapping-live") {
       const nodeKey = normalizeText(body.nodeKey || "");
-      const collectionId = normalizeText(body.collectionId || "") || null;
+      const hasCollectionIdInput = Object.prototype.hasOwnProperty.call(body, "collectionId");
+      const requestedCollectionId = hasCollectionIdInput
+        ? normalizeText(body.collectionId || "") || null
+        : undefined;
       const enabled =
         typeof body.enabled === "boolean" ? Boolean(body.enabled) : undefined;
       const syncMenuLink = body.syncMenuLink === undefined ? true : parseBool(body.syncMenuLink);
@@ -2482,9 +2485,12 @@ export async function POST(req: NextRequest) {
         title: menuSync.menu.menuTitle,
       };
       let actionWarning = joinWarnings(menuSync.warning);
+      const syncedNode = menuSync.synced.nodes.find((row) => normalizeText(row.nodeKey) === nodeKey) || null;
+      const effectiveCollectionId =
+        requestedCollectionId !== undefined ? requestedCollectionId : normalizeText(syncedNode?.collectionId) || null;
 
-      const collectionMatch = collectionId
-        ? collectionsResult.collections.find((row) => normalizeText(row.id) === collectionId) || null
+      const collectionMatch = effectiveCollectionId
+        ? collectionsResult.collections.find((row) => normalizeText(row.id) === effectiveCollectionId) || null
         : null;
 
       const shouldSyncMenuLink = syncMenuLink && !menuSync.menuAccessDenied && typeof enabled !== "boolean";
@@ -2524,7 +2530,9 @@ export async function POST(req: NextRequest) {
               nodeKey,
               enabled: typeof enabled === "boolean" ? enabled : null,
               syncMenuLink,
-              collectionId,
+              requestedCollectionId: requestedCollectionId ?? null,
+              effectiveCollectionId,
+              hasCollectionIdInput,
               targetType: normalizeText(target.node.type || ""),
               targetTitle: normalizeText(target.node.title || ""),
               targetResourceId: normalizeText(target.node.resourceId || ""),
@@ -2556,7 +2564,8 @@ export async function POST(req: NextRequest) {
               message: "visibility_link_sync_error_probe",
               data: {
                 nodeKey,
-                collectionId,
+                requestedCollectionId: requestedCollectionId ?? null,
+                effectiveCollectionId,
                 enabled: typeof enabled === "boolean" ? enabled : null,
                 error: normalizeText(updateResult.error || ""),
               },
@@ -2584,7 +2593,7 @@ export async function POST(req: NextRequest) {
         [
           {
             nodeKey,
-            collectionId,
+            collectionId: effectiveCollectionId,
             enabled,
           },
         ],
@@ -2598,7 +2607,9 @@ export async function POST(req: NextRequest) {
         status: "ok",
         details: {
           nodeKey,
-          collectionId,
+          requestedCollectionId: requestedCollectionId ?? null,
+          effectiveCollectionId,
+          hasCollectionIdInput,
           enabled,
           menuHandle: menuMeta.handle,
           menuLinkSynced: shouldSyncMenuLink,
