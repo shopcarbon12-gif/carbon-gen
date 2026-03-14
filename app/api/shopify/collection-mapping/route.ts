@@ -2187,10 +2187,17 @@ export async function GET(req: NextRequest) {
     const menuLinks = flattenMenuLinks(menuSyncResult.menu.items);
     const menuLinkByNodeKey = new Map(menuLinks.map((row) => [row.nodeKey, row]));
     const linkTargetIndexes = buildLinkTargetIndexes(linkTargetsResult.targets, collectionsResult.collections);
-    const nodesWithLinkedTargets = nodes.map((node) => ({
-      ...node,
-      ...resolveNodeLinkedTargetMeta(menuLinkByNodeKey.get(node.nodeKey), linkTargetIndexes),
-    }));
+    const nodesWithLinkedTargets = nodes.map((node) => {
+      const meta = resolveNodeLinkedTargetMeta(menuLinkByNodeKey.get(node.nodeKey), linkTargetIndexes);
+      const linkedLabel = normalizeText(meta.linkedTargetLabel);
+      const isUnlinked = !linkedLabel || linkedLabel === "No target linked";
+      const fallbackLabel = isUnlinked && node.collectionTitle ? node.collectionTitle : linkedLabel;
+      return {
+        ...node,
+        ...meta,
+        linkedTargetLabel: fallbackLabel || meta.linkedTargetLabel,
+      };
+    });
 
     return NextResponse.json({
       ok: true,
@@ -3063,7 +3070,13 @@ export async function POST(req: NextRequest) {
 
       const moveResult = moveMenuNode(menuSync.items, nodeKey, targetKey, position);
       if (!moveResult.ok) {
-        return NextResponse.json({ ok: false, error: moveResult.error }, { status: 400 });
+        const isLocal4Source = String(nodeKey || "").startsWith("local4:");
+        const isLocal4Target = String(targetKey || "").startsWith("local4:");
+        const errMsg =
+          isLocal4Source || isLocal4Target
+            ? "Editor-only (level 4) menu items cannot be moved in Shopify. Shopify supports up to 3 nesting levels. Move items to shallower positions first."
+            : moveResult.error;
+        return NextResponse.json({ ok: false, error: errMsg }, { status: 400 });
       }
 
       const updateResult = await updateMenuTree(
@@ -3150,7 +3163,11 @@ export async function POST(req: NextRequest) {
       const index = findMenuNodeIndex(items);
       const target = index.get(nodeKey);
       if (!target) {
-        return NextResponse.json({ ok: false, error: "Menu node was not found." }, { status: 404 });
+        const isLocal4 = String(nodeKey || "").startsWith("local4:");
+        const errMsg = isLocal4
+          ? "This menu item is editor-only (level 4) and cannot be synced to Shopify. Shopify supports up to 3 nesting levels. Move it to a shallower position first."
+          : "Menu node was not found.";
+        return NextResponse.json({ ok: false, error: errMsg }, { status: 404 });
       }
 
       const linkType = linkTypeRaw || normalizeText(target.node.type || "HTTP").toUpperCase() || "HTTP";
@@ -3178,7 +3195,12 @@ export async function POST(req: NextRequest) {
         linkTargetsResult.targets
       );
       if (!linkApplyResult.ok) {
-        return NextResponse.json({ ok: false, error: linkApplyResult.error }, { status: 400 });
+        const baseErr = linkApplyResult.error;
+        const hint =
+          linkType === "PAGE" && (baseErr.includes("target") || baseErr.includes("PAGE"))
+            ? " Select a page from the list and ensure your Shopify app has read access to pages."
+            : "";
+        return NextResponse.json({ ok: false, error: baseErr + hint }, { status: 400 });
       }
 
       const updateResult = await updateMenuTree(
