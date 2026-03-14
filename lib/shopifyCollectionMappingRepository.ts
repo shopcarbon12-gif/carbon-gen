@@ -725,6 +725,7 @@ export async function syncLiveMenuNodes(
   if (!(await canUseSql())) {
     const existing = memoryNodesByShop.get(safeShop) || [];
     const byExisting = new Map(existing.map((row) => [row.nodeKey, row]));
+    const normalizedKeys = new Set(normalized.map((row) => row.nodeKey));
     const nowIso = new Date().toISOString();
     const next: MenuNodeRecord[] = normalized.map((row) => {
       const current = byExisting.get(row.nodeKey);
@@ -743,6 +744,10 @@ export async function syncLiveMenuNodes(
         updatedAt: nowIso,
       };
     });
+    const preservedLocalOnly = existing
+      .filter((row) => row.nodeKey.startsWith("local4:") && !normalizedKeys.has(row.nodeKey))
+      .map((row) => ({ ...row, updatedAt: nowIso }));
+    next.push(...preservedLocalOnly);
 
     memoryNodesByShop.set(safeShop, next.map(cloneNode));
     return {
@@ -795,12 +800,18 @@ export async function syncLiveMenuNodes(
 
   const keys = normalized.map((row) => row.nodeKey);
   if (keys.length < 1) {
-    await sqlQuery(`DELETE FROM shopify_collection_menu_nodes WHERE shop = $1`, [safeShop]);
+    await sqlQuery(
+      `DELETE FROM shopify_collection_menu_nodes
+       WHERE shop = $1
+         AND node_key NOT LIKE 'local4:%'`,
+      [safeShop]
+    );
   } else {
     await sqlQuery(
       `DELETE FROM shopify_collection_menu_nodes
        WHERE shop = $1
-         AND NOT (node_key = ANY($2::text[]))`,
+         AND NOT (node_key = ANY($2::text[]))
+         AND node_key NOT LIKE 'local4:%'`,
       [safeShop, keys]
     );
   }

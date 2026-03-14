@@ -37,6 +37,7 @@ const COLLECTION_PAGE_SIZE = 250;
 const COLLECTION_CACHE_TTL_MS = 60 * 1000;
 const PRODUCT_CACHE_TTL_MS = 45 * 1000;
 const MAX_MENU_DEPTH = 4;
+const MAX_SHOPIFY_MENU_DEPTH = 2;
 const DEFAULT_MENU_HANDLE = normalizeText(process.env.SHOPIFY_COLLECTION_MAPPING_MENU_HANDLE || "main-menu") || "main-menu";
 const REQUIRED_MENU_SCOPES = ["read_online_store_navigation", "write_online_store_navigation"] as const;
 
@@ -2605,11 +2606,13 @@ export async function POST(req: NextRequest) {
 
       const items = sanitizeMenuItemTree(menuSync.items);
       const index = findMenuNodeIndex(items);
+      let parentDepth = -1;
       if (parentKey) {
         const parent = index.get(parentKey);
         if (!parent) {
           return NextResponse.json({ ok: false, error: "Parent menu collection was not found." }, { status: 404 });
         }
+        parentDepth = Number(parent.depth || 0);
         if (parent.depth + 1 > MAX_MENU_DEPTH) {
           return NextResponse.json(
             { ok: false, error: "Shopify menu supports up to 4 nested levels." },
@@ -2678,6 +2681,71 @@ export async function POST(req: NextRequest) {
         nextItems
       );
       if (!updateResult.ok) {
+        const normalizedUpdateError = normalizeLower(updateResult.error);
+        const isShopifyDepthLimitError =
+          normalizedUpdateError.includes("more than 3 levels of nesting") ||
+          normalizedUpdateError.includes("up to 3 levels of nesting");
+        const nextDepth = parentDepth + 1;
+        if (isShopifyDepthLimitError && nextDepth > MAX_SHOPIFY_MENU_DEPTH && nextDepth <= MAX_MENU_DEPTH) {
+          const slug = normalizeLower(label)
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "") || "node";
+          const localNodeKey = `local4:${parentKey || "root"}:${slug}:${Date.now()}`;
+          const siblingSortOrder =
+            menuSync.liveNodes
+              .filter((row) => normalizeText(row.parentKey) === normalizeText(parentKey))
+              .reduce((max, row) => Math.max(max, Number(row.sortOrder || 0)), 0) + 1;
+          const localLiveNode: LiveMenuNodeInput = {
+            nodeKey: localNodeKey,
+            label,
+            parentKey,
+            depth: nextDepth,
+            sortOrder: siblingSortOrder,
+            collectionIdHint: linkType === "COLLECTION" ? normalizeText(resolvedLinkTargetId) || null : null,
+          };
+          const syncedLocal = await syncLiveMenuNodes(
+            shop,
+            [...menuSync.liveNodes, localLiveNode],
+            collectionsResult.collections
+          );
+          if (linkType === "COLLECTION" && normalizeText(resolvedLinkTargetId)) {
+            await saveMenuMappings(
+              shop,
+              [{ nodeKey: localNodeKey, collectionId: normalizeText(resolvedLinkTargetId), enabled: true }],
+              collectionsResult.collections
+            );
+          }
+          await logMappingAudit({
+            shop,
+            action,
+            summary: `Created editor-only level 4 node "${label}"`,
+            status: "ok",
+            details: {
+              parentKey,
+              linkType,
+              linkValue,
+              linkTargetId: resolvedLinkTargetId,
+              nodeKey: localNodeKey,
+              fallbackReason: updateResult.error,
+            },
+          });
+          return NextResponse.json({
+            ok: true,
+            shop,
+            menu: { id: menuSync.menuId, handle: menuSync.menuHandle, title: menuSync.menuTitle },
+            backend: syncedLocal.backend,
+            warning: joinWarnings(
+              syncedLocal.warning,
+              linkTargetsResult.warning,
+              "Saved as editor-only level 4 node. Shopify live menu supports up to 3 nesting levels."
+            ),
+            createdNodeKey: localNodeKey,
+            menuLinks: flattenMenuLinks(menuSync.items),
+            linkTargets: linkTargetsResult.targets,
+            nodes: syncedLocal.nodes,
+            mappedNodes: syncedLocal.nodes.filter((node) => node.enabled && Boolean(node.collectionId)),
+          });
+        }
         await logMappingAudit({
           shop,
           action,

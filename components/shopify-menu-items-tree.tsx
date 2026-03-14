@@ -258,6 +258,14 @@ function SortableTreeRow({
       tabIndex={0}
       onClick={onRowClick}
       onKeyDown={(event) => {
+        const target = event.target as HTMLElement | null;
+        const targetTag = String(target?.tagName || "").toUpperCase();
+        const isTypingTarget =
+          targetTag === "INPUT" ||
+          targetTag === "TEXTAREA" ||
+          Boolean(target?.isContentEditable) ||
+          Boolean(target?.closest("input, textarea, [contenteditable='true']"));
+        if (isTypingTarget) return;
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           onRowClick();

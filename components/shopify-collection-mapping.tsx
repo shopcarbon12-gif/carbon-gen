@@ -1027,7 +1027,7 @@ export default function ShopifyCollectionMapping() {
             nodeKey: resolvedNodeKey,
             collectionId: node?.collectionId || null,
             enabled: op.enabled,
-            syncMenuLink: false,
+            syncMenuLink: true,
           };
         }
         if (!payload) continue;
