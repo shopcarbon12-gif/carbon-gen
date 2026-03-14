@@ -30,6 +30,7 @@ type MenuNodeSeed = {
   depth: number;
   sortOrder: number;
   defaultCollectionHandle?: string;
+  defaultUrl?: string;
 };
 
 type PersistedNodeRow = {
@@ -197,6 +198,9 @@ const DEFAULT_MENU_NODES: MenuNodeSeed[] = [
   { key: "jeans/women/skinny-jeans", label: "SKINNY JEANS", parentKey: "jeans/women", depth: 2, sortOrder: 211, defaultCollectionHandle: "skinny-jeans-women" },
   { key: "jeans/women/relaxed-jeans", label: "RELAXED JEANS", parentKey: "jeans/women", depth: 2, sortOrder: 212, defaultCollectionHandle: "relaxed-women" },
   { key: "jeans/women/flare-wide-leg-jeans", label: "FLARE & WIDE LEG JEANS", parentKey: "jeans/women", depth: 2, sortOrder: 213, defaultCollectionHandle: "jeans-women" },
+
+  { key: "rewards", label: "REWARDS", parentKey: null, depth: 0, sortOrder: 300, defaultUrl: "/pages/rewards" },
+  { key: "become-affiliate", label: "BECOME AFFILIATE", parentKey: null, depth: 0, sortOrder: 310, defaultUrl: "/pages/become-affiliate" },
 ];
 
 const memoryNodesByShop = new Map<string, MenuNodeRecord[]>();

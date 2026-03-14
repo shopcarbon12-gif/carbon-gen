@@ -899,6 +899,7 @@ function buildMenuTreeFromSeed(collections: CollectionOption[]): ShopifyMenuItem
   }
 
   function toItem(seedRow: (typeof seed)[0]): ShopifyMenuItemNode {
+    const defaultUrl = normalizeText((seedRow as { defaultUrl?: string }).defaultUrl);
     const collection = seedRow.defaultCollectionHandle
       ? byHandle.get(normalizeText(seedRow.defaultCollectionHandle).toLowerCase())
       : undefined;
@@ -906,11 +907,16 @@ function buildMenuTreeFromSeed(collections: CollectionOption[]): ShopifyMenuItem
       .filter((s) => s.parentKey === seedRow.key)
       .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
       .map(toItem);
+    const url = defaultUrl
+      ? (defaultUrl.startsWith("/") ? defaultUrl : `/${defaultUrl}`)
+      : collection?.handle
+        ? `/collections/${collection.handle}`
+        : "/collections/all";
     return {
       title: seedRow.label,
       type: collection ? "COLLECTION" : "HTTP",
       resourceId: collection?.id || null,
-      url: collection?.handle ? `/collections/${collection.handle}` : "/collections/all",
+      url,
       items: children.length > 0 ? children : undefined,
     };
   }

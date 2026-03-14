@@ -1,0 +1,42 @@
+Key,Label,Parent Key,Depth,Sort Order,Collection Handle,Path
+men,MEN,,0,100,men,MEN
+men/new-now,NEW & NOW,men,1,101,men-new-now,MEN > NEW & NOW
+men/new-now/new-arrivals,NEW ARRIVALS,men/new-now,2,102,new-arrivals,MEN > NEW & NOW > NEW ARRIVALS
+men/new-now/summer-sets,SUMMER SETS,men/new-now,2,103,summer-sets-men,MEN > NEW & NOW > SUMMER SETS
+men/new-now/winter-sets,WINTER SETS,men/new-now,2,104,winter-sets,MEN > NEW & NOW > WINTER SETS
+men/clothing,CLOTHING,men,1,110,men-clothing,MEN > CLOTHING
+men/clothing/jeans,JEANS,men/clothing,2,111,jeans-men,MEN > CLOTHING > JEANS
+men/clothing/baggy,BAGGY,men/clothing,2,112,baggy-men,MEN > CLOTHING > BAGGY
+men/clothing/super-skinny-jeans,SUPER SKINNY JEANS,men/clothing,2,113,super-skinny-jeans-men,MEN > CLOTHING > SUPER SKINNY JEANS
+men/clothing/skinny-jeans,SKINNY JEANS,men/clothing,2,114,skinny-jeans,MEN > CLOTHING > SKINNY JEANS
+men/clothing/slim-jeans,SLIM JEANS,men/clothing,2,115,slim-jeans-men,MEN > CLOTHING > SLIM JEANS
+men/clothing/shirts,SHIRTS,men/clothing,2,116,shirts,MEN > CLOTHING > SHIRTS
+men/clothing/dress-shirt,DRESS SHIRT,men/clothing,2,117,dress-shirt,MEN > CLOTHING > DRESS SHIRT
+men/clothing/denim-shirts,DENIM SHIRTS,men/clothing,2,118,denim-shirts,MEN > CLOTHING > DENIM SHIRTS
+men/clothing/linen-shirts,LINEN SHIRTS,men/clothing,2,119,linen-shirts,MEN > CLOTHING > LINEN SHIRTS
+men/clothing/graphic-t-shirts-summer,GRAPHIC T-SHIRTS (SUMMER),men/clothing,2,120,short-sleeve-shirts,MEN > CLOTHING > GRAPHIC T-SHIRTS (SUMMER)
+men/clothing/graphic-t-shirts-winter,GRAPHIC T-SHIRTS (WINTER),men/clothing,2,121,graphic-t-shirts-winter,MEN > CLOTHING > GRAPHIC T-SHIRTS (WINTER)
+men/clothing/t-shirts,T-SHIRTS,men/clothing,2,122,t-shirts,MEN > CLOTHING > T-SHIRTS
+men/clothing/tank-tops,TANK TOPS,men/clothing,2,123,tank-tops-men,MEN > CLOTHING > TANK TOPS
+men/clothing/tops,TOPS,men/clothing,2,124,tops-men,MEN > CLOTHING > TOPS
+men/clothing/shorts,SHORTS,men/clothing,2,125,shorts-1,MEN > CLOTHING > SHORTS
+men/clothing/pants,PANTS,men/clothing,2,126,pants,MEN > CLOTHING > PANTS
+men/clothing/jackets-coats,JACKETS & COATS,men/clothing,2,127,jackets-coats,MEN > CLOTHING > JACKETS & COATS
+men/clothing/tracksuits,TRACKSUITS,men/clothing,2,128,tracksuits-1,MEN > CLOTHING > TRACKSUITS
+men/clothing/sweatpants,SWEATPANTS,men/clothing,2,129,sweatpants-men,MEN > CLOTHING > SWEATPANTS
+men/clothing/sweatshirts-hoodies,SWEATSHIRTS & HOODIES,men/clothing,2,130,matching-sets,MEN > CLOTHING > SWEATSHIRTS & HOODIES
+men/clothing/overalls,OVERALLS,men/clothing,2,131,overalls,MEN > CLOTHING > OVERALLS
+men/clothing/swimwear,SWIMWEAR,men/clothing,2,132,swimwear-1,MEN > CLOTHING > SWIMWEAR
+men/clothing/sweaters,SWEATERS,men/clothing,2,133,sweaters-men,MEN > CLOTHING > SWEATERS
+men/clothing/polos,POLOS,men/clothing,2,134,polos,MEN > CLOTHING > POLOS
+men/clothing/shirt-shop,SHIRT SHOP,men/clothing,2,135,men-shirt-shop,MEN > CLOTHING > SHIRT SHOP
+men/accessories-shoes,ACCESSORIES & SHOES,men,1,140,men-accessories-shoes,MEN > ACCESSORIES & SHOES
+men/accessories-shoes/jewelry,JEWELRY,men/accessories-shoes,2,141,jewelry,MEN > ACCESSORIES & SHOES > JEWELRY
+men/accessories-shoes/sunglasses,SUNGLASSES,men/accessories-shoes,2,142,sunglasses,MEN > ACCESSORIES & SHOES > SUNGLASSES
+men/accessories-shoes/belts,BELTS,men/accessories-shoes,2,143,belts,MEN > ACCESSORIES & SHOES > BELTS
+men/accessories-shoes/hats,HATS,men/accessories-shoes,2,144,hats-men,MEN > ACCESSORIES & SHOES > HATS
+men/accessories-shoes/shoes,SHOES,men/accessories-shoes,2,145,shoes,MEN > ACCESSORIES & SHOES > SHOES
+men/accessories-shoes/fragrance-beauty,FRAGRANCE & BEAUTY,men/accessories-shoes,2,146,fragrance-beauty,MEN > ACCESSORIES & SHOES > FRAGRANCE & BEAUTY
+men/accessories-shoes/socks-underwear,SOCKS & UNDERWEAR,men/accessories-shoes,2,147,socks-underwear,MEN > ACCESSORIES & SHOES > SOCKS & UNDERWEAR
+men/accessories-shoes/ties,TIES,men/accessories-shoes,2,148,ties,MEN > ACCESSORIES & SHOES > TIES
+men/accessories-shoes/all-accessories,ALL ACCESSORIES,men/accessories-shoes,2,149,all-accessories,MEN > ACCESSORIES & SHOES > ALL ACCESSORIES
