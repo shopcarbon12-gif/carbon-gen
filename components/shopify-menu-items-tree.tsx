@@ -256,7 +256,30 @@ function SortableTreeRow({
       style={style}
       role="button"
       tabIndex={0}
-      onClick={onRowClick}
+      onClick={(event) => {
+        // #region agent log
+        fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
+          body: JSON.stringify({
+            sessionId: "9da838",
+            runId: "multi-select-debug",
+            hypothesisId: "H2",
+            location: "components/shopify-menu-items-tree.tsx:SortableTreeRow",
+            message: "row_click_modifier_probe",
+            data: {
+              id,
+              ctrlKey: Boolean(event.ctrlKey),
+              metaKey: Boolean(event.metaKey),
+              shiftKey: Boolean(event.shiftKey),
+              isInlineEditing,
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
+        onRowClick();
+      }}
       onKeyDown={(event) => {
         const target = event.target as HTMLElement | null;
         const targetTag = String(target?.tagName || "").toUpperCase();

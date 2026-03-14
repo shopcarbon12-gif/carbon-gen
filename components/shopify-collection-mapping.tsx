@@ -666,7 +666,27 @@ export default function ShopifyCollectionMapping() {
   }
 
   function applyNodeSelection(nodeKey: string) {
+    const selectedCountBefore = Object.keys(selectedNodes).filter((key) => Boolean(selectedNodes[key])).length;
     const clickedAlreadySelected = Boolean(selectedNodes[nodeKey]);
+    // #region agent log
+    fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
+      body: JSON.stringify({
+        sessionId: "9da838",
+        runId: "multi-select-debug",
+        hypothesisId: "H1",
+        location: "components/shopify-collection-mapping.tsx:applyNodeSelection",
+        message: "selection_before_probe",
+        data: {
+          nodeKey,
+          clickedAlreadySelected,
+          selectedCountBefore,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
     if (clickedAlreadySelected) {
       setSelectedNodes({});
       return;
@@ -682,6 +702,25 @@ export default function ShopifyCollectionMapping() {
     }
     const out: Record<string, boolean> = {};
     for (const key of next) out[key] = true;
+    // #region agent log
+    fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
+      body: JSON.stringify({
+        sessionId: "9da838",
+        runId: "multi-select-debug",
+        hypothesisId: "H1",
+        location: "components/shopify-collection-mapping.tsx:applyNodeSelection",
+        message: "selection_after_probe",
+        data: {
+          nodeKey,
+          selectedCountAfter: Object.keys(out).length,
+          selectedKeysAfter: Object.keys(out),
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
     setSelectedNodes(out);
   }
 
