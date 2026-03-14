@@ -208,7 +208,6 @@ export default function ShopifyCollectionMapping() {
   const [treePanelWidth, setTreePanelWidth] = useState(TREE_PANEL_DEFAULT_WIDTH);
   const [resizingPanes, setResizingPanes] = useState(false);
   const paneResizeStart = useRef<{ x: number; width: number } | null>(null);
-  const hasUserResizedPanesRef = useRef(false);
   const tempNodeCounterRef = useRef(0);
   const undoCounterRef = useRef(0);
   const typesDropdownRef = useRef<HTMLDivElement | null>(null);
@@ -889,19 +888,6 @@ export default function ShopifyCollectionMapping() {
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [showMenuEditor, menuEditorComboboxOpen]);
-
-  useEffect(() => {
-    const applyBalancedTreeWidth = () => {
-      if (hasUserResizedPanesRef.current) return;
-      const estimatedPadding = 84;
-      const target = Math.floor((window.innerWidth - estimatedPadding - 18) / 2);
-      const balancedWidth = Math.min(TREE_PANEL_MAX_WIDTH, Math.max(TREE_PANEL_MIN_WIDTH, target));
-      setTreePanelWidth((prev) => (prev === balancedWidth ? prev : balancedWidth));
-    };
-    applyBalancedTreeWidth();
-    window.addEventListener("resize", applyBalancedTreeWidth);
-    return () => window.removeEventListener("resize", applyBalancedTreeWidth);
-  }, []);
 
   useEffect(() => {
     if (!resizingPanes) return;
@@ -1915,7 +1901,6 @@ export default function ShopifyCollectionMapping() {
             className={`paneDivider ${resizingPanes ? "resizing" : ""}`}
             aria-label="Resize menu tree panel"
             onMouseDown={(event) => {
-              hasUserResizedPanesRef.current = true;
               setResizingPanes(true);
               paneResizeStart.current = { x: event.clientX, width: treePanelWidth };
             }}
