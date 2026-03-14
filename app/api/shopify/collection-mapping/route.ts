@@ -2487,11 +2487,17 @@ export async function POST(req: NextRequest) {
         ? collectionsResult.collections.find((row) => normalizeText(row.id) === collectionId) || null
         : null;
 
-      const shouldSyncMenuLink = syncMenuLink && !menuSync.menuAccessDenied;
+      const shouldSyncMenuLink = syncMenuLink && !menuSync.menuAccessDenied && typeof enabled !== "boolean";
       if (syncMenuLink && menuSync.menuAccessDenied) {
         actionWarning = joinWarnings(
           actionWarning,
           "Collection mapping was saved, but Shopify menu link sync is blocked until navigation scopes are granted."
+        );
+      }
+      if (syncMenuLink && typeof enabled === "boolean") {
+        actionWarning = joinWarnings(
+          actionWarning,
+          "Visibility was saved without changing Shopify link targets."
         );
       }
 

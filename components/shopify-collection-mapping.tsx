@@ -1070,12 +1070,59 @@ export default function ShopifyCollectionMapping() {
           };
         }
         if (!payload) continue;
+        // #region agent log
+        fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
+          body: JSON.stringify({
+            sessionId: "9da838",
+            runId: "visibility-and-depth-debug",
+            hypothesisId: "H5",
+            location: "components/shopify-collection-mapping.tsx:saveMenuTreeSection",
+            message: "save_op_payload_probe",
+            data: {
+              opType: op.type,
+              action: String(payload.action || ""),
+              nodeKey: String((payload.nodeKey as string) || ""),
+              parentKey: String((payload.parentKey as string) || ""),
+              enabled: typeof payload.enabled === "boolean" ? payload.enabled : null,
+              syncMenuLink: payload.syncMenuLink === undefined ? null : Boolean(payload.syncMenuLink),
+              label: String((payload.label as string) || ""),
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
         const resp = await fetch("/api/shopify/collection-mapping", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(withShopContext(payload)),
         });
         const json = (await resp.json()) as MappingResponse & { createdNodeKey?: string };
+        // #region agent log
+        fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
+          body: JSON.stringify({
+            sessionId: "9da838",
+            runId: "visibility-and-depth-debug",
+            hypothesisId: "H5",
+            location: "components/shopify-collection-mapping.tsx:saveMenuTreeSection",
+            message: "save_op_response_probe",
+            data: {
+              opType: op.type,
+              action: String(payload.action || ""),
+              httpOk: resp.ok,
+              status: resp.status,
+              jsonOk: Boolean(json.ok),
+              error: String(json.error || ""),
+              warning: String(json.warning || ""),
+              createdNodeKey: String(json.createdNodeKey || ""),
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
         if (op.type === "edit") {
           // #region agent log
           fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
