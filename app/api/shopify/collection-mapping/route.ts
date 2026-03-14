@@ -16,6 +16,7 @@ import {
   type LiveMenuNodeInput,
   type MappingAuditLogRow,
   type MenuNodeRecord,
+  getDefaultMenuNodes,
   listAndEnsureMenuNodes,
   listLatestProductActionStatus,
   listMappingAuditLogs,
@@ -887,6 +888,35 @@ function flattenMenuItemsToLiveNodes(items: ShopifyMenuItemNode[]) {
 
   walk(sanitizeMenuItemTree(items), null, 0);
   return out;
+}
+
+function buildMenuTreeFromSeed(collections: CollectionOption[]): ShopifyMenuItemNode[] {
+  const seed = getDefaultMenuNodes();
+  const byHandle = new Map<string, CollectionOption>();
+  for (const c of collections) {
+    const h = normalizeText(c.handle).toLowerCase();
+    if (h) byHandle.set(h, c);
+  }
+
+  function toItem(seedRow: (typeof seed)[0]): ShopifyMenuItemNode {
+    const collection = seedRow.defaultCollectionHandle
+      ? byHandle.get(normalizeText(seedRow.defaultCollectionHandle).toLowerCase())
+      : undefined;
+    const children = seed
+      .filter((s) => s.parentKey === seedRow.key)
+      .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+      .map(toItem);
+    return {
+      title: seedRow.label,
+      type: collection ? "COLLECTION" : "HTTP",
+      resourceId: collection?.id || null,
+      url: collection?.handle ? `/collections/${collection.handle}` : "/collections/all",
+      items: children.length > 0 ? children : undefined,
+    };
+  }
+
+  const roots = seed.filter((s) => !s.parentKey).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+  return roots.map(toItem);
 }
 
 function findMenuNodeIndex(items: ShopifyMenuItemNode[]) {
@@ -2427,6 +2457,66 @@ export async function POST(req: NextRequest) {
         collections: collectionsResult.collections,
         nodes: synced.nodes,
         mappedNodes: synced.nodes.filter((node) => node.enabled && Boolean(node.collectionId)),
+      });
+    }
+
+    if (action === "restore-mega-menu-from-seed") {
+      const collectionsResult = await fetchAllCollectionsCached(shop, tokenResult.token, apiVersion);
+      if ("error" in collectionsResult) {
+        return NextResponse.json({ ok: false, error: collectionsResult.error }, { status: 500 });
+      }
+      const menuSync = await fetchMenuTree(shop, tokenResult.token, apiVersion, menuHandle);
+      if (!menuSync.ok) {
+        const status = isMenuScopeErrorMessage(menuSync.error) ? 403 : 500;
+        return NextResponse.json({ ok: false, error: menuSync.error }, { status });
+      }
+      const builtItems = buildMenuTreeFromSeed(collectionsResult.collections);
+      const updateResult = await updateMenuTree(
+        shop,
+        tokenResult.token,
+        apiVersion,
+        menuSync.menuId,
+        menuSync.menuTitle,
+        menuSync.menuHandle,
+        builtItems
+      );
+      if (!updateResult.ok) {
+        await logMappingAudit({
+          shop,
+          action,
+          summary: "Failed to restore mega menu from seed",
+          status: "error",
+          errorMessage: updateResult.error,
+        });
+        return NextResponse.json({ ok: false, error: updateResult.error }, { status: 500 });
+      }
+      const synced = await syncLiveMenuNodes(shop, updateResult.liveNodes, collectionsResult.collections);
+      await saveMenuMappings(
+        shop,
+        synced.nodes.map((n) => ({
+          nodeKey: n.nodeKey,
+          collectionId: n.collectionId,
+          enabled: true,
+        })),
+        collectionsResult.collections
+      );
+      await logMappingAudit({
+        shop,
+        action,
+        summary: `Restored mega menu from seed (${synced.nodes.length} nodes)`,
+        status: "ok",
+        details: { menuHandle, nodeCount: synced.nodes.length },
+      });
+      return NextResponse.json({
+        ok: true,
+        shop,
+        menu: {
+          id: updateResult.menuId,
+          handle: updateResult.menuHandle,
+          title: updateResult.menuTitle,
+        },
+        nodes: synced.nodes,
+        nodeCount: synced.nodes.length,
       });
     }
 
