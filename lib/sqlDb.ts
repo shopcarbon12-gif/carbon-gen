@@ -30,6 +30,7 @@ function resolveSqlConnectionString(): string {
   if (fromFile) return fromFile;
   return (
     (process.env.COOLIFY_DATABASE_URL || "").trim() ||
+    (process.env.NEON_DATABASE_URL || "").trim() ||
     (process.env.POSTGRES_URL || "").trim() ||
     (process.env.DATABASE_URL || "").trim()
   );
@@ -42,7 +43,7 @@ export function hasSqlDatabaseConfigured(): boolean {
 function getPool(): Pool {
   if (_pool) return _pool;
   const url = resolveSqlConnectionString();
-  if (!url) throw new Error("Missing SQL connection string (COOLIFY_DATABASE_URL/POSTGRES_URL/DATABASE_URL)");
+  if (!url) throw new Error("Missing SQL connection string (COOLIFY_DATABASE_URL/NEON_DATABASE_URL/POSTGRES_URL/DATABASE_URL)");
   _pool = new Pool({ connectionString: url });
   return _pool;
 }

@@ -34,7 +34,14 @@ function isAffirmative(value) {
 async function main() {
   console.log("Coolify deploy setup (one-time).");
   const hookUrl = await prompt(`Deploy hook URL [${DEFAULT_HOOK_URL}]: `, DEFAULT_HOOK_URL);
-  const apiToken = await prompt("API token (leave empty if webhook is fully public): ", "");
+  const deployApiToken = await prompt(
+    "Deploy API token (leave empty if webhook is fully public): ",
+    ""
+  );
+  const watchApiToken = await prompt(
+    "Watch API token with READ permission (blank = use deploy token): ",
+    deployApiToken
+  );
 
   try {
     new URL(hookUrl);
@@ -59,7 +66,7 @@ async function main() {
       method: "GET",
       headers: {
         Accept: "application/json, text/plain, */*",
-        ...(apiToken ? { Authorization: `Bearer ${apiToken}` } : {}),
+        ...(deployApiToken ? { Authorization: `Bearer ${deployApiToken}` } : {}),
       },
     });
     const bodyText = await response.text();
@@ -81,7 +88,13 @@ async function main() {
     console.log("You can test manually later with: npm run deploy:coolify");
   }
 
-  const config = { hookUrl, apiToken };
+  const config = {
+    hookUrl,
+    deployApiToken,
+    watchApiToken,
+    // Keep legacy key for backward compatibility.
+    apiToken: deployApiToken,
+  };
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2) + "\n", "utf8");
   console.log(`Saved ${path.basename(CONFIG_PATH)}.`);
   console.log("You can now run: npm run deploy:coolify");
