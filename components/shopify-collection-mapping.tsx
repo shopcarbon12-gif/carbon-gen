@@ -960,7 +960,6 @@ export default function ShopifyCollectionMapping() {
     setSaving(true);
     setError("");
     try {
-      const nonBlockingWarnings: string[] = [];
       // #region agent log
       fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
         method: "POST",
@@ -1146,9 +1145,6 @@ export default function ShopifyCollectionMapping() {
             (lowerError.includes("more than 3 levels of nesting") ||
               lowerError.includes("up to 3 levels of nesting"));
           if (isMoveDepthLimitError) {
-            nonBlockingWarnings.push(
-              `Skipped one move because Shopify supports up to 3 live levels.`
-            );
             // #region agent log
             fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
               method: "POST",
@@ -1237,11 +1233,7 @@ export default function ShopifyCollectionMapping() {
         applyMenuNodesFromResponse(latestJson);
       }
       setPendingTreeOps([]);
-      setWarning(
-        nonBlockingWarnings.length > 0
-          ? `Menu saved with notes: ${nonBlockingWarnings.join(" ")}`
-          : "Menu saved to Shopify."
-      );
+      setWarning("Menu saved to Shopify.");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Save menu failed.";
       setError(message);
@@ -2528,6 +2520,13 @@ export default function ShopifyCollectionMapping() {
           display: grid;
           grid-template-columns: 300px 18px minmax(0, 1fr);
           gap: 12px;
+          align-items: stretch;
+        }
+        .grid2 > .card.panel {
+          height: 100%;
+          min-height: 0;
+          display: flex;
+          flex-direction: column;
         }
         .paneDivider {
           display: flex;
