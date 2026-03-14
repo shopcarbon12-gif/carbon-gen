@@ -2628,6 +2628,70 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    if (action === "set-node-mapping-live-batch") {
+      const updates = Array.isArray(body.updates)
+        ? body.updates
+            .map((row) => ({
+              nodeKey: normalizeText((row as { nodeKey?: unknown }).nodeKey || ""),
+              enabled: typeof (row as { enabled?: unknown }).enabled === "boolean" ? Boolean((row as { enabled?: unknown }).enabled) : null,
+            }))
+            .filter((row) => row.nodeKey && row.enabled !== null) as Array<{ nodeKey: string; enabled: boolean }>
+        : [];
+      if (updates.length < 1) {
+        return NextResponse.json({ ok: false, error: "updates are required." }, { status: 400 });
+      }
+
+      const collectionsResult = await fetchAllCollectionsCached(shop, tokenResult.token, apiVersion);
+      if ("error" in collectionsResult) {
+        return NextResponse.json({ ok: false, error: collectionsResult.error }, { status: 500 });
+      }
+
+      const menuSync = await syncMenuNodesFromShopify(
+        shop,
+        tokenResult.token,
+        apiVersion,
+        menuHandle,
+        collectionsResult.collections
+      );
+      if (!menuSync.ok) {
+        const status = isMenuScopeErrorMessage(menuSync.error) ? 403 : 500;
+        return NextResponse.json({ ok: false, error: menuSync.error }, { status });
+      }
+
+      const nodeByKey = new Map(menuSync.synced.nodes.map((row) => [normalizeText(row.nodeKey), row]));
+      const mappings = updates
+        .map((row) => {
+          const current = nodeByKey.get(row.nodeKey);
+          return {
+            nodeKey: row.nodeKey,
+            collectionId: normalizeText(current?.collectionId) || null,
+            enabled: row.enabled,
+          };
+        })
+        .filter((row) => Boolean(row.nodeKey));
+
+      const saved = await saveMenuMappings(shop, mappings, collectionsResult.collections);
+      await logMappingAudit({
+        shop,
+        action,
+        summary: `Saved visibility for ${mappings.length} node(s)`,
+        status: "ok",
+        details: {
+          count: mappings.length,
+          enabledCount: mappings.filter((row) => row.enabled).length,
+          disabledCount: mappings.filter((row) => !row.enabled).length,
+        },
+      });
+      return NextResponse.json({
+        ok: true,
+        shop,
+        backend: saved.backend,
+        warning: joinWarnings(saved.warning, menuSync.warning),
+        nodes: saved.nodes,
+        mappedNodes: saved.nodes.filter((node) => node.enabled && Boolean(node.collectionId)),
+      });
+    }
+
     if (action === "create-menu-node" || action === "add-menu-node") {
       const label = normalizeText(body.label || "");
       const parentKey = normalizeText(body.parentKey || "") || null;
@@ -2681,6 +2745,7 @@ export async function POST(req: NextRequest) {
           );
         }
       }
+      const nextDepth = parentDepth + 1;
 
       const newItem: ShopifyMenuItemNode = {
         title: label,
@@ -2711,6 +2776,69 @@ export async function POST(req: NextRequest) {
       );
       if (!linkApplyResult.ok) {
         return NextResponse.json({ ok: false, error: linkApplyResult.error }, { status: 400 });
+      }
+
+      if (nextDepth > MAX_SHOPIFY_MENU_DEPTH && nextDepth <= MAX_MENU_DEPTH) {
+        // Always keep level-4 editor-only to avoid Shopify depth hard failure.
+        const slug = normalizeLower(label)
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "") || "node";
+        const localNodeKey = `local4:${parentKey || "root"}:${slug}:${Date.now()}`;
+        const siblingSortOrder =
+          menuSync.liveNodes
+            .filter((row) => normalizeText(row.parentKey) === normalizeText(parentKey))
+            .reduce((max, row) => Math.max(max, Number(row.sortOrder || 0)), 0) + 1;
+        const localLiveNode: LiveMenuNodeInput = {
+          nodeKey: localNodeKey,
+          label,
+          parentKey,
+          depth: nextDepth,
+          sortOrder: siblingSortOrder,
+          collectionIdHint: linkType === "COLLECTION" ? normalizeText(resolvedLinkTargetId) || null : null,
+        };
+        const syncedLocal = await syncLiveMenuNodes(
+          shop,
+          [...menuSync.liveNodes, localLiveNode],
+          collectionsResult.collections
+        );
+        if (linkType === "COLLECTION" && normalizeText(resolvedLinkTargetId)) {
+          await saveMenuMappings(
+            shop,
+            [{ nodeKey: localNodeKey, collectionId: normalizeText(resolvedLinkTargetId), enabled: true }],
+            collectionsResult.collections
+          );
+        }
+        await logMappingAudit({
+          shop,
+          action,
+          summary: `Created editor-only level 4 node "${label}"`,
+          status: "ok",
+          details: {
+            parentKey,
+            nextDepth,
+            linkType,
+            linkValue,
+            linkTargetId: resolvedLinkTargetId,
+            nodeKey: localNodeKey,
+            strategy: "proactive-local4",
+          },
+        });
+        return NextResponse.json({
+          ok: true,
+          shop,
+          menu: { id: menuSync.menuId, handle: menuSync.menuHandle, title: menuSync.menuTitle },
+          backend: syncedLocal.backend,
+          warning: joinWarnings(
+            syncedLocal.warning,
+            linkTargetsResult.warning,
+            "Saved as editor-only level 4 node. Shopify live menu supports up to 3 nesting levels."
+          ),
+          createdNodeKey: localNodeKey,
+          menuLinks: flattenMenuLinks(menuSync.items),
+          linkTargets: linkTargetsResult.targets,
+          nodes: syncedLocal.nodes,
+          mappedNodes: syncedLocal.nodes.filter((node) => node.enabled && Boolean(node.collectionId)),
+        });
       }
 
       const insertNode = (
@@ -2768,7 +2896,6 @@ export async function POST(req: NextRequest) {
         const isShopifyDepthLimitError =
           normalizedUpdateError.includes("more than 3 levels of nesting") ||
           normalizedUpdateError.includes("up to 3 levels of nesting");
-        const nextDepth = parentDepth + 1;
         if (isShopifyDepthLimitError && nextDepth > MAX_SHOPIFY_MENU_DEPTH && nextDepth <= MAX_MENU_DEPTH) {
           // #region agent log
           fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {

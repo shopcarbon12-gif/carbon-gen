@@ -981,6 +981,7 @@ export default function ShopifyCollectionMapping() {
       }).catch(() => {});
       // #endregion
       const tempKeyMap = new Map<string, string>();
+      const visibilityBatch = new Map<string, boolean>();
       const resolveNodeKey = (raw: string | null) => {
         if (!raw) return null;
         let out = raw;
@@ -1059,13 +1060,8 @@ export default function ShopifyCollectionMapping() {
         } else if (op.type === "visibility") {
           const resolvedNodeKey = resolveNodeKey(op.nodeKey);
           if (!resolvedNodeKey) continue;
-          payload = {
-            action: "set-node-mapping-live",
-            menuHandle: currentMenuHandle,
-            nodeKey: resolvedNodeKey,
-            enabled: op.enabled,
-            syncMenuLink: true,
-          };
+          visibilityBatch.set(resolvedNodeKey, op.enabled);
+          continue;
         }
         if (!payload) continue;
         // #region agent log
@@ -1148,6 +1144,61 @@ export default function ShopifyCollectionMapping() {
         }
         if (op.type === "add" && json.createdNodeKey) {
           tempKeyMap.set(op.tempNodeKey, json.createdNodeKey);
+        }
+        latestJson = json;
+      }
+      if (visibilityBatch.size > 0) {
+        const payload: Record<string, unknown> = {
+          action: "set-node-mapping-live-batch",
+          menuHandle: currentMenuHandle,
+          updates: Array.from(visibilityBatch.entries()).map(([nodeKey, enabled]) => ({ nodeKey, enabled })),
+        };
+        // #region agent log
+        fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
+          body: JSON.stringify({
+            sessionId: "9da838",
+            runId: "visibility-and-depth-debug",
+            hypothesisId: "H6",
+            location: "components/shopify-collection-mapping.tsx:saveMenuTreeSection",
+            message: "visibility_batch_payload_probe",
+            data: {
+              count: visibilityBatch.size,
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
+        const resp = await fetch("/api/shopify/collection-mapping", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(withShopContext(payload)),
+        });
+        const json = (await resp.json()) as MappingResponse;
+        // #region agent log
+        fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
+          body: JSON.stringify({
+            sessionId: "9da838",
+            runId: "visibility-and-depth-debug",
+            hypothesisId: "H6",
+            location: "components/shopify-collection-mapping.tsx:saveMenuTreeSection",
+            message: "visibility_batch_response_probe",
+            data: {
+              httpOk: resp.ok,
+              status: resp.status,
+              jsonOk: Boolean(json.ok),
+              error: String(json.error || ""),
+              warning: String(json.warning || ""),
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
+        if (!resp.ok || !json.ok) {
+          throw new Error(json.error || "Save visibility failed.");
         }
         latestJson = json;
       }
