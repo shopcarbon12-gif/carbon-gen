@@ -144,6 +144,7 @@ function getStatusFromPayload(payload) {
 function isTerminalStatus(status) {
   return [
     "success",
+    "finished",
     "failed",
     "error",
     "cancelled",
@@ -156,7 +157,7 @@ function isTerminalStatus(status) {
 
 function statusLabel(status) {
   if (!status) return "unknown";
-  if (status === "success" || status === "completed") return "succeeded";
+  if (status === "success" || status === "completed" || status === "finished") return "succeeded";
   if (status === "cancelled" || status === "canceled") return "cancelled";
   if (status === "failed" || status === "error") return "failed";
   return status;
