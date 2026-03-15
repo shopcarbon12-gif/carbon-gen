@@ -215,6 +215,7 @@ const TREE_PANEL_MIN_WIDTH = 340;
 const TREE_PANEL_MAX_WIDTH = 1600;
 const TREE_PANEL_DEFAULT_WIDTH = 400;
 const TREE_PANEL_MAX_AUTO_WIDTH = 900;
+const TREE_PANEL_LABEL_GUTTER = 56;
 const WORKSPACE_MIN_HEIGHT = 420;
 const WORKSPACE_MAX_HEIGHT = 5000;
 type MoveDropTarget = { targetKey: string; position: DropPosition } | null;
@@ -1663,26 +1664,29 @@ export default function ShopifyCollectionMapping() {
     if (!autoTreeWidthArmed) return;
     if (resizingPanes) return;
     const host = treePanelAutoWidthRef.current;
-    if (!host) return;
+    if (!host) {
+      setAutoTreeWidthArmed(false);
+      return;
+    }
     const raf = window.requestAnimationFrame(() => {
       const labels = host.querySelectorAll<HTMLElement>(".treeLabel, .treeTargetLabel, .unmappedCardLabel");
-      let maxOverflow = 0;
+      let maxLabelWidth = 0;
       labels.forEach((label) => {
         if (label.offsetParent === null) return;
-        const overflow = label.scrollWidth - label.clientWidth;
-        if (overflow > maxOverflow) maxOverflow = overflow;
+        maxLabelWidth = Math.max(maxLabelWidth, label.scrollWidth);
       });
-      if (maxOverflow <= 1) return;
+      const next = Math.min(
+        TREE_PANEL_MAX_AUTO_WIDTH,
+        Math.max(TREE_PANEL_DEFAULT_WIDTH, Math.ceil(maxLabelWidth + TREE_PANEL_LABEL_GUTTER))
+      );
       setTreePanelWidth((prev) => {
-        const next = Math.min(
-          TREE_PANEL_MAX_AUTO_WIDTH,
-          Math.max(TREE_PANEL_DEFAULT_WIDTH, Math.ceil(prev + maxOverflow + 28))
-        );
-        return next > prev ? next : prev;
+        if (Math.abs(prev - next) <= 2) return prev;
+        return next;
       });
+      setAutoTreeWidthArmed(false);
     });
     return () => window.cancelAnimationFrame(raf);
-  }, [nodes, orderedUnmappedCollections, expandedNodes, treeSearch, resizingPanes, treePanelWidth, autoTreeWidthArmed]);
+  }, [nodes, orderedUnmappedCollections, expandedNodes, treeSearch, resizingPanes, autoTreeWidthArmed]);
 
   async function moveMenuNode(nodeKey: string, nextDropTarget: MoveDropTarget) {
     if (!nodeKey || !nextDropTarget) return;
@@ -4298,6 +4302,7 @@ export default function ShopifyCollectionMapping() {
           font-weight: 600;
         }
         .tableWrap {
+          --group-head-height: 30px;
           flex: 1 1 auto;
           min-height: 0;
           overflow: auto;
@@ -4325,7 +4330,7 @@ export default function ShopifyCollectionMapping() {
         }
         th {
           position: sticky;
-          top: 0;
+          top: var(--group-head-height);
           background: #0b1322;
           color: #cbd5e1;
           text-transform: uppercase;
@@ -4334,7 +4339,7 @@ export default function ShopifyCollectionMapping() {
         }
         .groupHead th {
           top: 0;
-          z-index: 3;
+          z-index: 4;
           background: #0f172a;
           color: #94a3b8;
           font-size: 10px;
@@ -4342,8 +4347,9 @@ export default function ShopifyCollectionMapping() {
           border-bottom: 1px solid #334155;
           text-transform: uppercase;
           text-align: center;
-          padding-top: 6px;
-          padding-bottom: 6px;
+          height: var(--group-head-height);
+          padding-top: 0;
+          padding-bottom: 0;
         }
         .sortHead {
           padding: 0;
