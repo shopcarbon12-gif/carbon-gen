@@ -16,6 +16,7 @@ export type CollectionAutoMapResult = {
   parserType: "NEW" | "LEGACY" | "UNKNOWN";
   routeKey: string;
   digit: string;
+  normalizedCode: string;
   barcodeLabel: string;
   mappingDecision: MappingDecision;
   reviewReason: string;
@@ -72,6 +73,7 @@ export function computeCollectionAutoMap(input: CollectionAutoMapInput): Collect
     parserType: parsed.parserType,
     routeKey: parsed.routeKey,
     digit: parsed.digit,
+    normalizedCode: parsed.normalizedCode,
     barcodeLabel: parsed.barcodeLabel,
     mappingDecision,
     reviewReason,

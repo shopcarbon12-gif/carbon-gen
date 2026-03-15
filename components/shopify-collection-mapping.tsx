@@ -19,12 +19,19 @@ type MenuNode = {
 
 type ProductRow = {
   id: string;
+  parentProductId?: string;
   title: string;
+  handle?: string;
+  itemType?: string;
   image: string | null;
-  sku?: string;
+  representativeSku?: string;
+  relatedSkus?: string[];
+  variantsCount?: number;
   upc: string;
+  normalizedCode?: string;
   checkedNodeKeys: string[];
-  actionStatus?: "PROCESSED" | "";
+  currentDirectCollections?: string[];
+  actionStatus?: "PROCESSED" | "FAILED" | "";
   parserType?: "NEW" | "LEGACY" | "UNKNOWN";
   routeKey?: string;
   digit?: string;
@@ -46,7 +53,7 @@ type RowStagingState = {
   finalMenuPaths: string[];
   finalMenuPathSet: Set<string>;
   finalDirectCollections: string[];
-  collectionSyncStatus: "review" | "removal-pending" | "add-pending" | "synced";
+  collectionSyncStatus: "REVIEW" | "REMOVAL_PENDING" | "ADD_PENDING" | "SYNCED";
   mappingDecision: "AUTO_MAPPED" | "SUGGESTED" | "MANUAL_REVIEW";
   reviewReason: string;
   suggestionOptions: Array<{
@@ -75,7 +82,7 @@ type PushPlannerRow = {
   plannerStatus: PlannerStatus;
   skippedReason: string;
   mappingDecision: "AUTO_MAPPED" | "SUGGESTED" | "MANUAL_REVIEW";
-  collectionSyncStatus: "review" | "removal-pending" | "add-pending" | "synced";
+  collectionSyncStatus: "REVIEW" | "REMOVAL_PENDING" | "ADD_PENDING" | "SYNCED";
   currentCollections: string[];
   finalCollections: string[];
   collectionsToAdd: string[];
@@ -628,20 +635,44 @@ export default function ShopifyCollectionMapping() {
       const closedFinalSet = closeMenuPathSetWithAncestors(finalSet);
       const addedAncestorCount = Math.max(0, closedFinalSet.size - finalSet.size);
       const finalMenuPaths = Array.from(closedFinalSet);
+      const currentDirectCollections = dedupeCollectionHandles(row.currentDirectCollections || []);
       const finalDirectCollections = dedupeCollectionHandles([
         ...(row.directCollectionsToAssign || []),
         ...effectiveSelectedSuggestionCollections,
       ]);
 
-      const addPendingPaths = Array.from(closedFinalSet).filter((path) => !currentSet.has(path));
       const hasReview = String(row.mappingDecision || "") === "MANUAL_REVIEW";
-      let collectionSyncStatus: RowStagingState["collectionSyncStatus"] = "synced";
+      const finalRefs = new Set([
+        ...Array.from(closedFinalSet).map((path) => `PATH:${path}`),
+        ...finalDirectCollections.map((handle) => `DIRECT:${handle}`),
+      ]);
+      const liveRefs = new Set([
+        ...currentAssigned.map((path) => `PATH:${path}`),
+        ...currentDirectCollections.map((handle) => `DIRECT:${handle}`),
+      ]);
+      let hasAdds = false;
+      let hasRemovals = false;
+      for (const ref of finalRefs) {
+        if (!liveRefs.has(ref)) {
+          hasAdds = true;
+          break;
+        }
+      }
+      for (const ref of liveRefs) {
+        if (!finalRefs.has(ref)) {
+          hasRemovals = true;
+          break;
+        }
+      }
+      let collectionSyncStatus: RowStagingState["collectionSyncStatus"] = "SYNCED";
       if (hasReview) {
-        collectionSyncStatus = "review";
-      } else if (manualRemovedPaths.length > 0) {
-        collectionSyncStatus = "removal-pending";
-      } else if (addPendingPaths.length > 0 || finalDirectCollections.length > 0) {
-        collectionSyncStatus = "add-pending";
+        collectionSyncStatus = "REVIEW";
+      } else if (hasAdds && hasRemovals) {
+        collectionSyncStatus = "REMOVAL_PENDING";
+      } else if (hasRemovals) {
+        collectionSyncStatus = "REMOVAL_PENDING";
+      } else if (hasAdds) {
+        collectionSyncStatus = "ADD_PENDING";
       }
 
       let mappingDecision: RowStagingState["mappingDecision"] = row.mappingDecision || "MANUAL_REVIEW";
@@ -732,7 +763,7 @@ export default function ShopifyCollectionMapping() {
     for (const row of rows) {
       const staging = rowStagingById.get(row.id);
       const decision = staging?.mappingDecision || row.mappingDecision || "MANUAL_REVIEW";
-      const syncStatus = staging?.collectionSyncStatus || "review";
+      const syncStatus = staging?.collectionSyncStatus || "REVIEW";
       const hasSuggestions = (staging?.suggestionOptions || []).some((option) => !option.disabled);
       const hasManualChanges =
         (staging?.selectedSuggestionPaths.length || 0) +
@@ -741,15 +772,15 @@ export default function ShopifyCollectionMapping() {
           (staging?.manualRemovedPaths.length || 0) >
         0;
       if (decision === "AUTO_MAPPED") autoMapped += 1;
-      if (decision === "MANUAL_REVIEW" || syncStatus === "review") reviewNeeded += 1;
-      if (syncStatus === "add-pending") addPending += 1;
-      if (syncStatus === "removal-pending") removalPending += 1;
-      if (syncStatus === "synced") synced += 1;
+      if (decision === "MANUAL_REVIEW" || syncStatus === "REVIEW") reviewNeeded += 1;
+      if (syncStatus === "ADD_PENDING") addPending += 1;
+      if (syncStatus === "REMOVAL_PENDING") removalPending += 1;
+      if (syncStatus === "SYNCED") synced += 1;
       if (hasSuggestions) suggestionReady += 1;
       if (hasManualChanges) manualChanges += 1;
-      if (syncStatus === "add-pending" || syncStatus === "removal-pending") readyToPush += 1;
+      if (syncStatus === "ADD_PENDING" || syncStatus === "REMOVAL_PENDING") readyToPush += 1;
       if (String(row.parserType || "") === "LEGACY") legacyCCode += 1;
-      if (String(row.actionStatus || "") !== "PROCESSED" && syncStatus !== "review" && !hasSuggestions) readyToAutoMap += 1;
+      if (String(row.actionStatus || "") !== "PROCESSED" && syncStatus !== "REVIEW" && !hasSuggestions) readyToAutoMap += 1;
       if (String(row.actionStatus || "").toUpperCase() === "FAILED") pushFailed += 1;
     }
     pushFailed += queueJobs.filter((job) => job.state === "failed").length;
@@ -813,7 +844,7 @@ export default function ShopifyCollectionMapping() {
           plannerStatus: "failedPlanning",
           skippedReason: "Missing staging state.",
           mappingDecision: row.mappingDecision || "MANUAL_REVIEW",
-          collectionSyncStatus: "review",
+          collectionSyncStatus: "REVIEW",
           currentCollections: [],
           finalCollections: [],
           collectionsToAdd: [],
@@ -837,7 +868,7 @@ export default function ShopifyCollectionMapping() {
       const noOp = collectionsToAdd.length < 1 && collectionsToRemove.length < 1;
       let plannerStatus: PlannerStatus = "readyToPush";
       let skippedReason = "";
-      if (mappingDecision === "MANUAL_REVIEW" || collectionSyncStatus === "review") {
+      if (mappingDecision === "MANUAL_REVIEW" || collectionSyncStatus === "REVIEW") {
         plannerStatus = "skippedReview";
         skippedReason = "Row is in review/manual state.";
       } else if (!row.id || !row.title) {
@@ -3299,7 +3330,8 @@ export default function ShopifyCollectionMapping() {
                         ...((staging?.finalDirectCollections || []).map((handle) => `COLLECTION: ${handle}`)),
                       ]);
                       const mappingDecision = staging?.mappingDecision || row.mappingDecision || "MANUAL_REVIEW";
-                      const syncStatus = staging?.collectionSyncStatus || "review";
+                      const syncStatus = staging?.collectionSyncStatus || "REVIEW";
+                      const syncStatusClass = syncStatus.toLowerCase().replace(/_/g, "-");
                       const reasoning = staging?.reviewReason || row.reviewReason || "-";
                       const isActiveRow = row.id === activeRowId;
                       const isManualReviewRow = mappingDecision === "MANUAL_REVIEW";
@@ -3367,7 +3399,7 @@ export default function ShopifyCollectionMapping() {
                             <span className={`decisionBadge decision-${mappingDecision.toLowerCase()}`}>{mappingDecision}</span>
                           </td>
                           <td className="syncStatusCol">
-                            <span className={`syncBadge sync-${syncStatus}`}>{syncStatus.toUpperCase()}</span>
+                            <span className={`syncBadge sync-${syncStatusClass}`}>{syncStatus}</span>
                           </td>
                           <td className="center">
                             {row.actionStatus === "PROCESSED" ? (

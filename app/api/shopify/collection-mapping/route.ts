@@ -58,6 +58,28 @@ const tokenCache = new Map<
   string,
   CacheEntry<{ ok: true; token: string; source: "db" | "env_token" } | { ok: false; error: string }>
 >();
+type UpcWorksheetEntry = {
+  representativeSku: string;
+  parserType: "NEW" | "LEGACY" | "UNKNOWN";
+  routeKey: string;
+  digit: string;
+  normalizedCode: string;
+  barcodeLabel: string;
+  mappingDecision: "AUTO_MAPPED" | "SUGGESTED" | "MANUAL_REVIEW";
+  reviewReason: string;
+  autoMappedPaths: string[];
+  directCollectionsToAssign: string[];
+  suggestedPaths: string[];
+  suggestedDirectCollections: string[];
+};
+
+type UpcWorksheetState = {
+  dayKey: string;
+  processedUpcSet: Set<string>;
+  upcMap: Map<string, UpcWorksheetEntry>;
+};
+
+const worksheetStateByShop = new Map<string, UpcWorksheetState>();
 
 function normalizeText(value: unknown) {
   return String(value ?? "").trim();
@@ -92,6 +114,38 @@ function parseCsvList(value: unknown) {
         .filter(Boolean)
     )
   );
+}
+
+function getWorksheetDayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function getWorksheetState(shop: string) {
+  const key = normalizeLower(shop);
+  const dayKey = getWorksheetDayKey();
+  const existing = worksheetStateByShop.get(key);
+  if (existing && existing.dayKey === dayKey) return existing;
+  const created: UpcWorksheetState = {
+    dayKey,
+    processedUpcSet: new Set<string>(),
+    upcMap: new Map<string, UpcWorksheetEntry>(),
+  };
+  worksheetStateByShop.set(key, created);
+  return created;
+}
+
+function normalizeUpcValue(raw: unknown) {
+  return normalizeText(raw).replace(/\s+/g, "");
+}
+
+function toUpcRowId(upc: string) {
+  return `upc:${upc}`;
+}
+
+function fromUpcRowId(id: string) {
+  const raw = normalizeText(id);
+  if (!raw.toLowerCase().startsWith("upc:")) return "";
+  return raw.slice(4);
 }
 
 function parseProductsCount(raw: unknown): number | null {
@@ -448,6 +502,7 @@ type ProductRow = {
   image: string | null;
   sku: string;
   upc: string;
+  variants: Array<{ id: string; sku: string; upc: string }>;
   collectionIds: string[];
 };
 
@@ -579,9 +634,16 @@ function transformProductNode(node: ShopifyProductNode): ProductRow | null {
   const id = normalizeText(node.id);
   if (!id) return null;
 
-  const variants = Array.isArray(node.variants?.nodes) ? node.variants!.nodes! : [];
-  const sku = getFirstNonEmpty(variants.map((variant) => variant?.sku));
-  const upc = getFirstNonEmpty(variants.map((variant) => variant?.barcode));
+  const variantsRaw = Array.isArray(node.variants?.nodes) ? node.variants!.nodes! : [];
+  const variants = variantsRaw
+    .map((variant) => ({
+      id: normalizeText(variant?.id),
+      sku: normalizeText(variant?.sku),
+      upc: normalizeUpcValue(variant?.barcode),
+    }))
+    .filter((variant) => Boolean(variant.id || variant.sku || variant.upc));
+  const sku = getFirstNonEmpty(variants.map((variant) => variant.sku));
+  const upc = getFirstNonEmpty(variants.map((variant) => variant.upc));
 
   const collectionIds = Array.from(
     new Set(
@@ -600,6 +662,7 @@ function transformProductNode(node: ShopifyProductNode): ProductRow | null {
     image: normalizeText(node.featuredImage?.url) || null,
     sku,
     upc,
+    variants,
     collectionIds,
   };
 }
@@ -712,11 +775,133 @@ type ProductFilters = {
   selectedItemTypes: string[];
 };
 
-function productMatchesFilters(row: ProductRow, filters: ProductFilters) {
+type UpcGroupRow = {
+  id: string;
+  upc: string;
+  title: string;
+  handle: string;
+  itemType: string;
+  updatedAt: string;
+  image: string | null;
+  representativeSku: string;
+  relatedSkus: string[];
+  variantsCount: number;
+  productIds: string[];
+  representativeProduct: ProductRow;
+  collectionIds: string[];
+};
+
+function pickRepresentativeSkuOnce(
+  worksheetState: UpcWorksheetState,
+  upc: string,
+  relatedSkus: string[]
+) {
+  const existing = worksheetState.upcMap.get(upc);
+  if (existing?.representativeSku) return existing.representativeSku;
+  const normalizedSortedSkus = Array.from(
+    new Set(
+      relatedSkus
+        .map((sku) => normalizeText(sku))
+        .filter(Boolean)
+    )
+  ).sort((left, right) =>
+    left.localeCompare(right, undefined, {
+      numeric: true,
+      sensitivity: "base",
+    })
+  );
+  if (normalizedSortedSkus.length < 1) return "";
+  const representativeSku = normalizedSortedSkus[0];
+  worksheetState.upcMap.set(upc, {
+    representativeSku,
+    parserType: "UNKNOWN",
+    routeKey: "",
+    digit: "",
+    normalizedCode: "",
+    barcodeLabel: "Unknown route",
+    mappingDecision: "MANUAL_REVIEW",
+    reviewReason: "",
+    autoMappedPaths: [],
+    directCollectionsToAssign: [],
+    suggestedPaths: [],
+    suggestedDirectCollections: [],
+  });
+  return representativeSku;
+}
+
+function groupProductsByUpc(products: ProductRow[], worksheetState: UpcWorksheetState) {
+  const sortSkus = (values: string[]) =>
+    Array.from(new Set(values.map((sku) => normalizeText(sku)).filter(Boolean))).sort((left, right) =>
+      left.localeCompare(right, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      })
+    );
+  const byUpc = new Map<string, UpcGroupRow>();
+  for (const product of products) {
+    const variantRows = product.variants.length > 0 ? product.variants : [{ id: "", sku: product.sku, upc: product.upc }];
+    const upcToSkus = new Map<string, Set<string>>();
+    for (const variant of variantRows) {
+      const upc = normalizeUpcValue(variant.upc);
+      if (!upc) continue;
+      const current = upcToSkus.get(upc) || new Set<string>();
+      const sku = normalizeText(variant.sku || product.sku);
+      if (sku) current.add(sku);
+      upcToSkus.set(upc, current);
+    }
+    if (upcToSkus.size < 1) {
+      const fallbackUpc = normalizeUpcValue(product.upc);
+      if (fallbackUpc) {
+        upcToSkus.set(fallbackUpc, new Set([normalizeText(product.sku)].filter(Boolean)));
+      }
+    }
+
+    for (const [upc, skuSet] of upcToSkus.entries()) {
+      const rowId = toUpcRowId(upc);
+      const existing = byUpc.get(upc);
+      if (!existing) {
+        byUpc.set(upc, {
+          id: rowId,
+          upc,
+          title: product.title,
+          handle: product.handle,
+          itemType: product.itemType,
+          updatedAt: product.updatedAt,
+          image: product.image,
+          representativeSku: "",
+          relatedSkus: sortSkus(Array.from(skuSet)),
+          variantsCount: sortSkus(Array.from(skuSet)).length,
+          productIds: [product.id],
+          representativeProduct: product,
+          collectionIds: [...product.collectionIds],
+        });
+        continue;
+      }
+
+      existing.relatedSkus = sortSkus([...existing.relatedSkus, ...Array.from(skuSet)]);
+      existing.variantsCount = existing.relatedSkus.length;
+      existing.productIds = Array.from(new Set([...existing.productIds, product.id]));
+      existing.collectionIds = Array.from(new Set([...existing.collectionIds, ...product.collectionIds]));
+      if (!existing.title && product.title) existing.title = product.title;
+      if (!existing.handle && product.handle) existing.handle = product.handle;
+      if (!existing.itemType && product.itemType) existing.itemType = product.itemType;
+      if (!existing.updatedAt && product.updatedAt) existing.updatedAt = product.updatedAt;
+      if (!existing.image && product.image) existing.image = product.image;
+    }
+  }
+
+  const rows = Array.from(byUpc.values());
+  for (const row of rows) {
+    row.representativeSku = pickRepresentativeSkuOnce(worksheetState, row.upc, row.relatedSkus);
+  }
+  return rows;
+}
+
+function upcRowMatchesFilters(row: UpcGroupRow, filters: ProductFilters) {
   const haystack = [
     normalizeLower(row.title),
     normalizeLower(row.handle),
-    normalizeLower(row.sku),
+    normalizeLower(row.representativeSku),
     normalizeLower(row.upc),
     normalizeLower(row.itemType),
   ];
@@ -728,7 +913,7 @@ function productMatchesFilters(row: ProductRow, filters: ProductFilters) {
   if (title && !normalizeLower(row.title).includes(title)) return false;
 
   const sku = normalizeLower(filters.sku);
-  if (sku && !normalizeLower(row.sku).includes(sku)) return false;
+  if (sku && !normalizeLower(row.representativeSku).includes(sku)) return false;
 
   const upc = normalizeLower(filters.upc);
   if (upc && !normalizeLower(row.upc).includes(upc)) return false;
@@ -744,19 +929,14 @@ function productMatchesFilters(row: ProductRow, filters: ProductFilters) {
   return true;
 }
 
-type SortField = "title" | "upc" | "sku" | "itemType" | "updatedAt";
+type SortField = "title" | "upc" | "itemType" | "updatedAt";
 type SortDir = "asc" | "desc";
 type UncheckPolicy = "keep-descendants" | "remove-descendants";
 
-function compareRows(left: ProductRow, right: ProductRow, field: SortField) {
+function compareRows(left: UpcGroupRow, right: UpcGroupRow, field: SortField) {
   switch (field) {
     case "upc":
       return normalizeText(left.upc).localeCompare(normalizeText(right.upc), undefined, {
-        numeric: true,
-        sensitivity: "base",
-      });
-    case "sku":
-      return normalizeText(left.sku).localeCompare(normalizeText(right.sku), undefined, {
         numeric: true,
         sensitivity: "base",
       });
@@ -782,7 +962,6 @@ function compareRows(left: ProductRow, right: ProductRow, field: SortField) {
 function toSortField(value: string): SortField {
   const normalized = normalizeText(value);
   if (normalized === "upc") return "upc";
-  if (normalized === "sku") return "sku";
   if (normalized === "itemType") return "itemType";
   if (normalized === "updatedAt") return "updatedAt";
   return "title";
@@ -2190,26 +2369,68 @@ async function applyCollectionRemove(
   return null;
 }
 
-function mapProductRowToResponse(
-  row: ProductRow,
+function mapUpcRowToResponse(
+  row: UpcGroupRow,
   nodes: MenuNodeRecord[],
+  worksheetState: UpcWorksheetState,
   actionStatusByProductId: Map<string, ProductActionStatus>,
-  nodePathByKey: Map<string, string>
+  nodePathByKey: Map<string, string>,
+  collectionHandleById: Map<string, string>,
+  mappedCollectionIdSet: Set<string>
 ) {
-  const membership = new Set(row.collectionIds);
+  const worksheetEntry = worksheetState.upcMap.get(row.upc);
+  const membership = new Set(row.representativeProduct.collectionIds);
   const checkedNodeKeys = nodes
     .filter((node) => node.enabled && node.collectionId && membership.has(node.collectionId))
     .map((node) => node.nodeKey);
   const assignedMenuPaths = checkedNodeKeys
     .map((nodeKey) => nodePathByKey.get(nodeKey) || "")
     .filter(Boolean);
-  const autoMap = computeCollectionAutoMap({
-    sku: row.sku,
-    upc: row.upc,
-    title: row.title,
-    itemType: row.itemType,
-    assignedMenuPaths,
-  });
+  const representativeSku = row.representativeSku || row.relatedSkus[0] || "";
+  let autoMap = worksheetEntry;
+  const shouldComputeMapping = !worksheetState.processedUpcSet.has(row.upc);
+  if (!autoMap || shouldComputeMapping) {
+    const computed = computeCollectionAutoMap({
+      sku: representativeSku,
+      upc: row.upc,
+      title: row.title,
+      itemType: row.itemType,
+      assignedMenuPaths,
+    });
+    autoMap = {
+      representativeSku,
+      parserType: computed.parserType,
+      routeKey: computed.routeKey,
+      digit: computed.digit,
+      normalizedCode: computed.normalizedCode,
+      barcodeLabel: computed.barcodeLabel,
+      mappingDecision: computed.mappingDecision,
+      reviewReason: computed.reviewReason,
+      autoMappedPaths: computed.autoMappedPaths,
+      directCollectionsToAssign: computed.directCollectionsToAssign,
+      suggestedPaths: computed.suggestedPaths,
+      suggestedDirectCollections: computed.suggestedDirectCollections,
+    };
+    worksheetState.upcMap.set(row.upc, autoMap);
+    worksheetState.processedUpcSet.add(row.upc);
+  }
+
+  const directCollectionHandles = Array.from(
+    new Set(
+      row.representativeProduct.collectionIds
+        .filter((collectionId) => !mappedCollectionIdSet.has(collectionId))
+        .map((collectionId) => normalizeText(collectionHandleById.get(collectionId)))
+        .filter(Boolean)
+    )
+  );
+  const actionStatuses = row.productIds
+    .map((productId) => normalizeText(actionStatusByProductId.get(productId) || ""))
+    .filter(Boolean);
+  const actionStatus = actionStatuses.includes("FAILED")
+    ? "FAILED"
+    : actionStatuses.includes("PROCESSED")
+      ? "PROCESSED"
+      : "";
 
   return {
     id: row.id,
@@ -2218,14 +2439,19 @@ function mapProductRowToResponse(
     itemType: row.itemType,
     updatedAt: row.updatedAt,
     image: row.image,
-    sku: row.sku,
+    parentProductId: row.representativeProduct.id,
+    representativeSku,
+    relatedSkus: row.relatedSkus,
+    variantsCount: row.variantsCount,
     upc: row.upc,
-    collectionIds: row.collectionIds,
+    collectionIds: row.representativeProduct.collectionIds,
     checkedNodeKeys,
-    actionStatus: actionStatusByProductId.get(row.id) || "",
+    currentDirectCollections: directCollectionHandles,
+    actionStatus,
     parserType: autoMap.parserType,
     routeKey: autoMap.routeKey,
     digit: autoMap.digit,
+    normalizedCode: autoMap.normalizedCode,
     barcodeLabel: autoMap.barcodeLabel,
     mappingDecision: autoMap.mappingDecision,
     reviewReason: autoMap.reviewReason,
@@ -2336,8 +2562,10 @@ export async function GET(req: NextRequest) {
     const nodes = nodesResult.nodes;
     const nodePathByKey = buildNodePathByKey(nodes);
 
+    const worksheetState = getWorksheetState(shop);
+    const upcRows = groupProductsByUpc(productsResult.products, worksheetState);
     const typeLabelByKey = new Map<string, string>();
-    for (const row of productsResult.products) {
+    for (const row of upcRows) {
       const itemType = normalizeText(row.itemType);
       if (!itemType) continue;
       const key = normalizeLower(itemType);
@@ -2347,7 +2575,7 @@ export async function GET(req: NextRequest) {
       left.localeCompare(right, undefined, { sensitivity: "base" })
     );
 
-    const filtered = productsResult.products.filter((row) => productMatchesFilters(row, filters));
+    const filtered = upcRows.filter((row) => upcRowMatchesFilters(row, filters));
 
     const sorted = [...filtered].sort((left, right) => compareRows(left, right, sortField));
     if (sortDir === "desc") sorted.reverse();
@@ -2357,10 +2585,8 @@ export async function GET(req: NextRequest) {
     const clampedPage = Math.max(1, Math.min(page, totalPages));
     const start = (clampedPage - 1) * pageSize;
     const paged = sorted.slice(start, start + pageSize);
-    const actionStatusResult = await listLatestProductActionStatus(
-      shop,
-      paged.map((row) => row.id)
-    );
+    const pagedProductIds = Array.from(new Set(paged.flatMap((row) => row.productIds).filter(Boolean)));
+    const actionStatusResult = await listLatestProductActionStatus(shop, pagedProductIds);
 
     const logsResult = includeLogs ? await listMappingAuditLogs(shop, logLimit) : null;
     const warningParts = [
@@ -2374,6 +2600,18 @@ export async function GET(req: NextRequest) {
     const menuLinks = flattenMenuLinks(menuSyncResult.menu.items);
     const menuLinkByNodeKey = new Map(menuLinks.map((row) => [row.nodeKey, row]));
     const linkTargetIndexes = buildLinkTargetIndexes(linkTargetsResult.targets, collectionsResult.collections);
+    const collectionHandleById = new Map(
+      collectionsResult.collections.map((collection): [string, string] => [
+        normalizeText(collection.id),
+        normalizeText(collection.handle),
+      ])
+    );
+    const mappedCollectionIdSet = new Set(
+      nodes
+        .filter((node) => node.enabled && Boolean(node.collectionId))
+        .map((node) => normalizeText(node.collectionId))
+        .filter(Boolean)
+    );
     const nodesWithLinkedTargets = nodes.map((node) => {
       const meta = resolveNodeLinkedTargetMeta(menuLinkByNodeKey.get(node.nodeKey), linkTargetIndexes);
       const linkedLabel = normalizeText(meta.linkedTargetLabel);
@@ -2409,7 +2647,15 @@ export async function GET(req: NextRequest) {
       nodes: nodesWithLinkedTargets,
       mappedNodes: nodesWithLinkedTargets.filter((node) => node.enabled && Boolean(node.collectionId)),
       rows: paged.map((row) =>
-        mapProductRowToResponse(row, nodes, actionStatusResult.statusByProductId, nodePathByKey)
+        mapUpcRowToResponse(
+          row,
+          nodes,
+          worksheetState,
+          actionStatusResult.statusByProductId,
+          nodePathByKey,
+          collectionHandleById,
+          mappedCollectionIdSet
+        )
       ),
       logs: logsResult?.logs || [],
       summary: {
@@ -3715,7 +3961,7 @@ export async function POST(req: NextRequest) {
             .filter(Boolean)
         )
       );
-      const requestedProductIds =
+      const requestedRowOrProductIds =
         action === "bulk-toggle-nodes"
           ? Array.from(
               new Set(
@@ -3725,6 +3971,24 @@ export async function POST(req: NextRequest) {
               )
             )
           : Array.from(new Set([normalizeText(body.productId || "")].filter(Boolean)));
+      const productsForResolution = await fetchAllProductsCached(shop, tokenResult.token, apiVersion);
+      if ("error" in productsForResolution) {
+        return NextResponse.json({ ok: false, error: productsForResolution.error }, { status: 500 });
+      }
+      const worksheetState = getWorksheetState(shop);
+      const upcGroups = groupProductsByUpc(productsForResolution.products, worksheetState);
+      const productIdsByUpc = new Map<string, string[]>(
+        upcGroups.map((row): [string, string[]] => [row.upc, row.productIds])
+      );
+      const requestedProductIds = Array.from(
+        new Set(
+          requestedRowOrProductIds.flatMap((id) => {
+            const upc = fromUpcRowId(id);
+            if (upc) return productIdsByUpc.get(upc) || [];
+            return [id];
+          })
+        )
+      );
       const checked = parseBool(body.checked);
       const uncheckPolicy = toUncheckPolicy(body.uncheckPolicy);
       if (requestedProductIds.length < 1 || (requestedNodeKeys.length < 1 && requestedDirectCollectionIds.length < 1)) {
