@@ -553,6 +553,23 @@ export default function ShopifyCollectionMapping() {
     return map;
   }, [nodePathByKey]);
 
+  const closeMenuPathSetWithAncestors = (paths: Set<string>) => {
+    const closed = new Set<string>(paths);
+    for (const path of Array.from(paths)) {
+      const nodeKey = nodeKeyByPath.get(normalizeMenuPath(path));
+      if (!nodeKey) continue;
+      let current = parentMap.get(nodeKey) || null;
+      const seen = new Set<string>();
+      while (current && !seen.has(current)) {
+        const parentPath = normalizeMenuPath(nodePathByKey.get(current) || "");
+        if (parentPath) closed.add(parentPath);
+        seen.add(current);
+        current = parentMap.get(current) || null;
+      }
+    }
+    return closed;
+  };
+
   const rowStagingById = useMemo(() => {
     const out = new Map<string, RowStagingState>();
     for (const row of rows) {
@@ -608,13 +625,14 @@ export default function ShopifyCollectionMapping() {
       for (const path of effectiveSelectedSuggestions) finalSet.add(path);
       for (const path of manualAddedPaths) finalSet.add(path);
       for (const path of manualRemovedPaths) finalSet.delete(path);
-      const finalMenuPaths = Array.from(finalSet);
+      const closedFinalSet = closeMenuPathSetWithAncestors(finalSet);
+      const finalMenuPaths = Array.from(closedFinalSet);
       const finalDirectCollections = dedupeCollectionHandles([
         ...(row.directCollectionsToAssign || []),
         ...effectiveSelectedSuggestionCollections,
       ]);
 
-      const addPendingPaths = Array.from(finalSet).filter((path) => !currentSet.has(path));
+      const addPendingPaths = Array.from(closedFinalSet).filter((path) => !currentSet.has(path));
       const hasReview = String(row.mappingDecision || "") === "MANUAL_REVIEW";
       let collectionSyncStatus: RowStagingState["collectionSyncStatus"] = "synced";
       if (hasReview) {
@@ -648,7 +666,7 @@ export default function ShopifyCollectionMapping() {
         manualAddedPaths,
         manualRemovedPaths,
         finalMenuPaths,
-        finalMenuPathSet: finalSet,
+        finalMenuPathSet: closedFinalSet,
         finalDirectCollections,
         collectionSyncStatus,
         mappingDecision,
@@ -664,6 +682,9 @@ export default function ShopifyCollectionMapping() {
     selectedSuggestionCollectionsByRow,
     manualAddedPathsByRow,
     manualRemovedPathsByRow,
+    nodeKeyByPath,
+    nodePathByKey,
+    parentMap,
   ]);
 
   const selectedNodeKeys = useMemo(() => {
