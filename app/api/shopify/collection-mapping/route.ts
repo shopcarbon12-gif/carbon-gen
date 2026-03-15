@@ -2232,6 +2232,7 @@ function mapProductRowToResponse(
     autoMappedPaths: autoMap.autoMappedPaths,
     directCollectionsToAssign: autoMap.directCollectionsToAssign,
     suggestedPaths: autoMap.suggestedPaths,
+    suggestedDirectCollections: autoMap.suggestedDirectCollections,
   };
 }
 

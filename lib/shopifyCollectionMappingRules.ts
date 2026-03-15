@@ -16,79 +16,347 @@ type MappingRuleInput = {
   sku?: string;
 };
 
-type RuleEntry = {
-  menuPaths?: string[];
-  directCollections?: string[];
-  unresolved?: boolean;
-  reason?: string;
+type WorkbookRuleRow = {
+  routeKey: string;
+  digit: string;
+  category?: string;
+  targetCells: string[];
+  note?: string;
 };
 
-const RULES: Record<string, Record<string, RuleEntry>> = {
-  "11": {
-    "1": { menuPaths: ["MEN > NEW & NOW > NEW ARRIVALS"] },
-    "2": { menuPaths: ["MEN > NEW & NOW > SUMMER SETS"] },
-    "3": { menuPaths: ["MEN > CLOTHING > T-SHIRTS"] },
-    "4": { menuPaths: ["MEN > CLOTHING > GRAPHIC T-SHIRTS (SUMMER)"] },
-    // Intentional: business confirmed same mapping as digit 4.
-    "5": { menuPaths: ["MEN > CLOTHING > GRAPHIC T-SHIRTS (SUMMER)"] },
-    "6": { menuPaths: ["MEN > CLOTHING > SHORTS"] },
-    "7": { menuPaths: ["MEN > CLOTHING > SWIMWEAR"] },
-    "8": { menuPaths: ["MEN > CLOTHING > TOPS"] },
-    "9": { unresolved: true, reason: "IF SET: ERROR" },
-    "0": { unresolved: true, reason: "IF SET: ERROR" },
-  },
-  "12": {
-    "1": { menuPaths: ["MEN > NEW & NOW > WINTER SETS"] },
-    "2": { menuPaths: ["MEN > CLOTHING > SWEATERS"] },
-    "3": { menuPaths: ["MEN > CLOTHING > SWEATSHIRTS & HOODIES"] },
-    "4": { menuPaths: ["MEN > CLOTHING > JACKETS & COATS"] },
-    "5": { menuPaths: ["MEN > CLOTHING > PANTS"] },
-    "6": { menuPaths: ["MEN > CLOTHING > JEANS"] },
-    "7": { menuPaths: ["MEN > CLOTHING > SHIRTS"] },
-    "8": { menuPaths: ["MEN > CLOTHING > LONG SLEEVE SHIRTS"] },
-    "9": { unresolved: true, reason: "IF SET: ERROR" },
-    "0": { unresolved: true, reason: "IF SET: ERROR" },
-  },
-  "21": {
-    "1": { menuPaths: ["WOMEN > NEW & NOW > NEW ARRIVALS"] },
-    "2": { menuPaths: ["WOMEN > NEW & NOW > SUMMER SETS"] },
-    "3": { menuPaths: ["WOMEN > CLOTHING > DRESSES"] },
-    "4": { menuPaths: ["WOMEN > CLOTHING > TOPS"] },
-    "5": { menuPaths: ["WOMEN > CLOTHING > T-SHIRTS"] },
-    "6": { menuPaths: ["WOMEN > CLOTHING > JEANS"], directCollections: ["clothing-jeans"] },
-    "7": { menuPaths: ["WOMEN > CLOTHING > SKIRTS"] },
-    "8": { menuPaths: ["WOMEN > CLOTHING > SHORTS"] },
-    "9": { unresolved: true, reason: "IF SET: ERROR" },
-    "0": { unresolved: true, reason: "IF SET: ERROR" },
-  },
-  "22": {
-    "1": { menuPaths: ["WOMEN > NEW & NOW > WINTER SETS"] },
-    "2": { menuPaths: ["WOMEN > CLOTHING > SWEATERS"] },
-    "3": { menuPaths: ["WOMEN > CLOTHING > SWEATSHIRTS & HOODIES"] },
-    "4": { menuPaths: ["WOMEN > CLOTHING > JACKETS & COATS"] },
-    "5": { menuPaths: ["WOMEN > CLOTHING > PANTS & LEGGINGS"] },
-    "6": { menuPaths: ["WOMEN > CLOTHING > JEANS"], directCollections: ["clothing-jeans"] },
-    "7": { menuPaths: ["WOMEN > CLOTHING > DRESSES"] },
-    "8": { menuPaths: ["WOMEN > CLOTHING > TRACKSUITS"] },
-    "9": { unresolved: true, reason: "IF SET: ERROR" },
-    "0": { unresolved: true, reason: "IF SET: ERROR" },
-  },
+type CompiledInstruction =
+  | {
+      kind: "menu";
+      conditionalToken: string;
+      value: string;
+      sourceCell: string;
+    }
+  | {
+      kind: "collection";
+      conditionalToken: string;
+      value: string;
+      sourceCell: string;
+    }
+  | {
+      kind: "error";
+      conditionalToken: string;
+      sourceCell: string;
+    };
+
+type CompiledRuleRow = {
+  routeKey: string;
+  digit: string;
+  category: string;
+  instructions: CompiledInstruction[];
+  note: string;
 };
 
-function dedupe(values: string[]) {
-  return Array.from(new Set(values.map((value) => String(value || "").trim()).filter(Boolean)));
+type RuleBucket = {
+  exactRows: CompiledRuleRow[];
+  ambiguousRows: CompiledRuleRow[];
+};
+
+const WORKBOOK_RULE_ROWS: WorkbookRuleRow[] = [
+  // Route 11 (Men Summer)
+  { routeKey: "11", digit: "0", targetCells: ["MEN > CLOTHING > JEANS", "JEANS > MEN", "COLLECTION: jeans-men"] },
+  { routeKey: "11", digit: "1", category: "JEANS", targetCells: ["MEN > CLOTHING > JEANS", "JEANS > MEN", "COLLECTION: jeans-men"] },
+  { routeKey: "11", digit: "1", category: "OVERALL", targetCells: ["MEN > CLOTHING > OVERALLS"] },
+  { routeKey: "11", digit: "2", category: "TANK TOP", targetCells: ["MEN > CLOTHING > TANK TOPS"] },
+  { routeKey: "11", digit: "2", category: "JACKET", targetCells: ["MEN > CLOTHING > JACKETS & COATS"] },
+  { routeKey: "11", digit: "2", category: "DENIM JACKET", targetCells: ["MEN > CLOTHING > JACKETS & COATS"] },
+  { routeKey: "11", digit: "3", targetCells: ["MEN > CLOTHING > SHORTS"] },
+  { routeKey: "11", digit: "4", category: "T-SHIRT", targetCells: ["MEN > CLOTHING > T-SHIRTS"] },
+  { routeKey: "11", digit: "4", category: "TOP", targetCells: ["MEN > CLOTHING > TOPS"] },
+  // Men Summer digit 5 intentionally same as digit 4.
+  {
+    routeKey: "11",
+    digit: "5",
+    category: "T-SHIRT",
+    targetCells: ["MEN > CLOTHING > T-SHIRTS"],
+    note: "Intentional same mapping as Route 11 digit 4",
+  },
+  {
+    routeKey: "11",
+    digit: "5",
+    category: "TOP",
+    targetCells: ["MEN > CLOTHING > TOPS"],
+    note: "Intentional same mapping as Route 11 digit 4",
+  },
+  { routeKey: "11", digit: "6", targetCells: ["MEN > ACCESSORIES & SHOES > SHOES"] },
+  { routeKey: "11", digit: "7", category: "DENIM SHIRT", targetCells: ["MEN > CLOTHING > DENIM SHIRTS"] },
+  { routeKey: "11", digit: "7", category: "BUTTON SHIRT", targetCells: ["MEN > CLOTHING > DRESS SHIRT"] },
+  { routeKey: "11", digit: "8", category: "PANTS", targetCells: ["MEN > CLOTHING > PANTS"] },
+  { routeKey: "11", digit: "8", category: "EVENING PANTS", targetCells: ["MEN > CLOTHING > PANTS"] },
+  { routeKey: "11", digit: "9", category: "ACCESSORIES", targetCells: ["MEN > ACCESSORIES & SHOES > ALL ACCESSORIES"] },
+  { routeKey: "11", digit: "9", category: "SWIMWEAR", targetCells: ["MEN > CLOTHING > SWIMWEAR"] },
+
+  // Route 12 (Men Winter)
+  { routeKey: "12", digit: "0", targetCells: ["MEN > CLOTHING > JEANS", "JEANS > MEN", "COLLECTION: jeans-men"] },
+  { routeKey: "12", digit: "1", category: "JEANS", targetCells: ["MEN > CLOTHING > JEANS", "JEANS > MEN", "COLLECTION: jeans-men"] },
+  { routeKey: "12", digit: "1", category: "OVERALL", targetCells: ["MEN > CLOTHING > OVERALLS"] },
+  { routeKey: "12", digit: "2", targetCells: ["MEN > CLOTHING > SWEATSHIRTS & HOODIES"] },
+  { routeKey: "12", digit: "3", category: "JACKET", targetCells: ["MEN > CLOTHING > JACKETS & COATS"] },
+  { routeKey: "12", digit: "3", category: "COAT", targetCells: ["MEN > CLOTHING > JACKETS & COATS"] },
+  { routeKey: "12", digit: "3", category: "VEST", targetCells: ["MEN > CLOTHING > JACKETS & COATS"] },
+  { routeKey: "12", digit: "3", category: "DENIM JACKET", targetCells: ["MEN > CLOTHING > JACKETS & COATS"] },
+  { routeKey: "12", digit: "4", category: "T-SHIRT", targetCells: ["MEN > CLOTHING > T-SHIRTS"] },
+  { routeKey: "12", digit: "4", category: "TOP", targetCells: ["MEN > CLOTHING > TOPS"] },
+  { routeKey: "12", digit: "5", targetCells: ["MEN > CLOTHING > SWEATERS"] },
+  { routeKey: "12", digit: "6", targetCells: ["MEN > ACCESSORIES & SHOES > SHOES"] },
+  { routeKey: "12", digit: "7", category: "DENIM SHIRT", targetCells: ["MEN > CLOTHING > DENIM SHIRTS"] },
+  { routeKey: "12", digit: "7", category: "BUTTON SHIRT", targetCells: ["MEN > CLOTHING > DRESS SHIRT"] },
+  { routeKey: "12", digit: "8", targetCells: ["MEN > CLOTHING > SWEATPANTS"] },
+  { routeKey: "12", digit: "9", targetCells: ["MEN > ACCESSORIES & SHOES > ALL ACCESSORIES"] },
+
+  // Route 21 (Women Summer)
+  { routeKey: "21", digit: "0", targetCells: ["WOMEN > CLOTHING > JEANS", "JEANS > WOMEN", "COLLECTION: clothing-jeans"] },
+  { routeKey: "21", digit: "1", targetCells: ["WOMEN > CLOTHING > DRESSES"] },
+  { routeKey: "21", digit: "2", category: "JACKET", targetCells: ["WOMEN > CLOTHING > JACKETS & COATS"] },
+  { routeKey: "21", digit: "2", category: "VEST", targetCells: ["WOMEN > CLOTHING > JACKETS & COATS"] },
+  { routeKey: "21", digit: "3", targetCells: ["WOMEN > CLOTHING > SHORTS"] },
+  { routeKey: "21", digit: "4", category: "TOP", targetCells: ["WOMEN > CLOTHING > TOPS"] },
+  { routeKey: "21", digit: "4", category: "TEES", targetCells: ["WOMEN > CLOTHING > T-SHIRTS"] },
+  { routeKey: "21", digit: "4", category: "BLOUSE", targetCells: ["WOMEN > CLOTHING > TOPS"] },
+  { routeKey: "21", digit: "5", category: "SKIRT", targetCells: ["WOMEN > CLOTHING > SKIRTS"] },
+  {
+    routeKey: "21",
+    digit: "5",
+    category: "SET",
+    targetCells: ["IF SET: ERROR"],
+    note: "Intentional unresolved workbook rule",
+  },
+  { routeKey: "21", digit: "6", targetCells: ["WOMEN > ACCESSORIES & SHOES > SHOES"] },
+  { routeKey: "21", digit: "7", category: "JUMPSUIT", targetCells: ["WOMEN > CLOTHING > JUMPSUITS & ROMPERS"] },
+  { routeKey: "21", digit: "7", category: "ROMPER", targetCells: ["WOMEN > CLOTHING > JUMPSUITS & ROMPERS"] },
+  { routeKey: "21", digit: "7", category: "BODYSUIT", targetCells: ["WOMEN > CLOTHING > BODYSUITS"] },
+  { routeKey: "21", digit: "8", category: "PANTS", targetCells: ["WOMEN > CLOTHING > PANTS & LEGGINGS"] },
+  { routeKey: "21", digit: "8", category: "LEGGINGS", targetCells: ["WOMEN > CLOTHING > LEGGINGS"] },
+  { routeKey: "21", digit: "9", category: "ACCESSORIES", targetCells: ["WOMEN > ACCESSORIES & SHOES > ALL ACCESSORIES"] },
+  { routeKey: "21", digit: "9", category: "SWIMSUIT", targetCells: ["WOMEN > CLOTHING > SWIMWEAR"] },
+
+  // Route 22 (Women Winter)
+  { routeKey: "22", digit: "0", targetCells: ["WOMEN > CLOTHING > JEANS", "JEANS > WOMEN", "COLLECTION: clothing-jeans"] },
+  { routeKey: "22", digit: "1", targetCells: ["WOMEN > CLOTHING > DRESSES"] },
+  { routeKey: "22", digit: "2", category: "JACKET", targetCells: ["WOMEN > CLOTHING > JACKETS & COATS"] },
+  { routeKey: "22", digit: "2", category: "COAT", targetCells: ["WOMEN > CLOTHING > JACKETS & COATS"] },
+  { routeKey: "22", digit: "2", category: "VEST", targetCells: ["WOMEN > CLOTHING > JACKETS & COATS"] },
+  { routeKey: "22", digit: "3", category: "HOODIE", targetCells: ["WOMEN > CLOTHING > SWEATSHIRTS & HOODIES"] },
+  { routeKey: "22", digit: "3", category: "SWEATSHIRT", targetCells: ["WOMEN > CLOTHING > SWEATSHIRTS & HOODIES"] },
+  { routeKey: "22", digit: "4", category: "TOP", targetCells: ["WOMEN > CLOTHING > TOPS"] },
+  { routeKey: "22", digit: "4", category: "TEES", targetCells: ["WOMEN > CLOTHING > T-SHIRTS"] },
+  { routeKey: "22", digit: "4", category: "BLOUSE", targetCells: ["WOMEN > CLOTHING > TOPS"] },
+  { routeKey: "22", digit: "5", targetCells: ["WOMEN > CLOTHING > SKIRTS"] },
+  { routeKey: "22", digit: "6", targetCells: ["WOMEN > ACCESSORIES & SHOES > SHOES"] },
+  { routeKey: "22", digit: "7", category: "JUMPSUIT", targetCells: ["WOMEN > CLOTHING > JUMPSUITS & ROMPERS"] },
+  { routeKey: "22", digit: "7", category: "ROMPER", targetCells: ["WOMEN > CLOTHING > JUMPSUITS & ROMPERS"] },
+  { routeKey: "22", digit: "7", category: "BODYSUIT", targetCells: ["WOMEN > CLOTHING > BODYSUITS"] },
+  { routeKey: "22", digit: "8", category: "PANTS", targetCells: ["WOMEN > CLOTHING > PANTS & LEGGINGS"] },
+  { routeKey: "22", digit: "8", category: "LEGGINGS", targetCells: ["WOMEN > CLOTHING > LEGGINGS"] },
+  { routeKey: "22", digit: "8", category: "SWEATPANTS", targetCells: ["WOMEN > CLOTHING > SWEATPANTS"] },
+  { routeKey: "22", digit: "9", targetCells: ["WOMEN > ACCESSORIES & SHOES > ALL ACCESSORIES"] },
+];
+
+function normalizeText(value: unknown) {
+  return String(value ?? "").trim();
 }
 
-function normalizePath(value: string) {
-  return value
-    .replace(/\s*>\s*/g, " > ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toUpperCase();
+function normalizeUpper(value: unknown) {
+  return normalizeText(value).toUpperCase();
+}
+
+function normalizePath(value: unknown) {
+  return normalizeUpper(value).replace(/\s*>\s*/g, " > ").replace(/\s+/g, " ").trim();
+}
+
+function normalizeCollectionHandle(value: unknown) {
+  return normalizeText(value).toLowerCase();
+}
+
+function dedupe(values: string[]) {
+  return Array.from(new Set(values.map((value) => normalizeText(value)).filter(Boolean)));
+}
+
+function splitCellTargets(cell: string) {
+  const raw = normalizeText(cell);
+  if (!raw) return [];
+  return raw
+    .split(/\r?\n|;/g)
+    .map((part) => normalizeText(part))
+    .filter(Boolean);
+}
+
+function parseTargetExpression(cellValue: string): CompiledInstruction {
+  const raw = normalizeText(cellValue);
+  const conditionalMatch = raw.match(/^IF\s+(.+?)\s*:\s*(.+)$/i);
+  const conditionToken = conditionalMatch ? normalizeUpper(conditionalMatch[1]) : "";
+  const rhs = conditionalMatch ? normalizeText(conditionalMatch[2]) : raw;
+  const rhsUpper = normalizeUpper(rhs);
+
+  if (rhsUpper === "ERROR" || rhsUpper === "IF SET: ERROR") {
+    return {
+      kind: "error",
+      conditionalToken: conditionToken,
+      sourceCell: raw,
+    };
+  }
+
+  const collectionMatch = rhs.match(/^COLLECTION\s*:\s*(.+)$/i);
+  if (collectionMatch) {
+    return {
+      kind: "collection",
+      conditionalToken: conditionToken,
+      value: normalizeCollectionHandle(collectionMatch[1]),
+      sourceCell: raw,
+    };
+  }
+
+  return {
+    kind: "menu",
+    conditionalToken: conditionToken,
+    value: normalizePath(rhs),
+    sourceCell: raw,
+  };
+}
+
+function compileWorkbookRows(rows: WorkbookRuleRow[]) {
+  const buckets = new Map<string, RuleBucket>();
+
+  for (const row of rows) {
+    const routeKey = normalizeText(row.routeKey);
+    const digit = normalizeText(row.digit);
+    if (!routeKey || !digit) continue;
+
+    const key = `${routeKey}::${digit}`;
+    const existing = buckets.get(key) || { exactRows: [], ambiguousRows: [] };
+
+    const instructions = row.targetCells.flatMap(splitCellTargets).map(parseTargetExpression);
+    const compiled: CompiledRuleRow = {
+      routeKey,
+      digit,
+      category: normalizeUpper(row.category || ""),
+      instructions,
+      note: normalizeText(row.note || ""),
+    };
+
+    if (compiled.category) existing.ambiguousRows.push(compiled);
+    else existing.exactRows.push(compiled);
+
+    buckets.set(key, existing);
+  }
+
+  return buckets;
+}
+
+const COMPILED_WORKBOOK_RULES = compileWorkbookRows(WORKBOOK_RULE_ROWS);
+
+function buildProductTokens(input: MappingRuleInput) {
+  const rawTokens = [
+    ...tokenizeCandidateText(input.itemType || ""),
+    ...tokenizeCandidateText(input.title || ""),
+    ...tokenizeCandidateText(input.sku || ""),
+  ];
+  const out = new Set<string>();
+  for (const token of rawTokens) {
+    const normalized = normalizeUpper(token);
+    if (normalized) out.add(normalized);
+  }
+  return out;
+}
+
+function conditionMatches(conditionToken: string, productTokens: Set<string>) {
+  if (!conditionToken) return true;
+  const normalized = normalizeUpper(conditionToken);
+  if (!normalized) return true;
+  return productTokens.has(normalized);
+}
+
+function evaluateRuleRow(row: CompiledRuleRow, productTokens: Set<string>): MappingRuleResult {
+  const menuPaths: string[] = [];
+  const collections: string[] = [];
+
+  for (const instruction of row.instructions) {
+    if (!conditionMatches(instruction.conditionalToken, productTokens)) continue;
+
+    if (instruction.kind === "error") {
+      return {
+        menuPathsToAssign: [],
+        directCollectionsToAssign: [],
+        unresolved: true,
+        reason: `Intentional unresolved rule: ${instruction.sourceCell}`,
+      };
+    }
+
+    if (instruction.kind === "menu") {
+      if (instruction.value) menuPaths.push(instruction.value);
+      continue;
+    }
+
+    if (instruction.kind === "collection") {
+      if (instruction.value) collections.push(instruction.value);
+    }
+  }
+
+  const dedupedMenuPaths = dedupe(menuPaths).map((value) => normalizePath(value));
+  const dedupedCollections = dedupe(collections).map((value) => normalizeCollectionHandle(value));
+  const hasOutputs = dedupedMenuPaths.length > 0 || dedupedCollections.length > 0;
+
+  if (!hasOutputs) {
+    return {
+      menuPathsToAssign: [],
+      directCollectionsToAssign: [],
+      unresolved: true,
+      reason: row.category
+        ? `Ambiguous rule matched category ${row.category} but produced no applicable targets.`
+        : "Rule produced no applicable targets.",
+    };
+  }
+
+  return {
+    menuPathsToAssign: dedupedMenuPaths,
+    directCollectionsToAssign: dedupedCollections,
+    unresolved: false,
+    reason: row.category ? `Resolved via category ${row.category}.` : "Resolved via exact workbook row.",
+  };
+}
+
+function pickAmbiguousRow(rows: CompiledRuleRow[], productTokens: Set<string>) {
+  const scored = rows
+    .map((row) => {
+      const categoryTokens = tokenizeCandidateText(row.category).map((token) => normalizeUpper(token));
+      const matches = categoryTokens.filter((token) => productTokens.has(token));
+      return {
+        row,
+        score: matches.length,
+      };
+    })
+    .filter((entry) => entry.score > 0)
+    .sort((left, right) => right.score - left.score);
+
+  if (scored.length < 1) {
+    return {
+      row: null as CompiledRuleRow | null,
+      reason: "Ambiguous workbook rows exist, but no candidate category matched product tokens.",
+    };
+  }
+
+  if (scored.length > 1 && scored[0].score === scored[1].score) {
+    return {
+      row: null as CompiledRuleRow | null,
+      reason: "Ambiguous workbook rows matched multiple candidate categories with equal score.",
+    };
+  }
+
+  return {
+    row: scored[0].row,
+    reason: "",
+  };
 }
 
 export function resolveCollectionMappingRules(input: MappingRuleInput): MappingRuleResult {
-  if (!input.routeKey || !input.digit) {
+  const routeKey = normalizeText(input.routeKey);
+  const digit = normalizeText(input.digit);
+
+  if (!routeKey || !digit) {
     return {
       menuPathsToAssign: [],
       directCollectionsToAssign: [],
@@ -97,49 +365,52 @@ export function resolveCollectionMappingRules(input: MappingRuleInput): MappingR
     };
   }
 
-  const routeRules = RULES[input.routeKey];
-  const baseRule = routeRules?.[input.digit];
-  if (!baseRule) {
+  const bucket = COMPILED_WORKBOOK_RULES.get(`${routeKey}::${digit}`);
+  if (!bucket) {
     return {
       menuPathsToAssign: [],
       directCollectionsToAssign: [],
       unresolved: true,
-      reason: "No exact mapping rule for this route/digit.",
+      reason: `No workbook rule row found for routeKey=${routeKey}, digit=${digit}.`,
     };
   }
 
-  if (baseRule.unresolved) {
+  const productTokens = buildProductTokens(input);
+
+  if (bucket.exactRows.length > 0) {
+    const mergedMenu: string[] = [];
+    const mergedCollections: string[] = [];
+    for (const row of bucket.exactRows) {
+      const result = evaluateRuleRow(row, productTokens);
+      if (result.unresolved) return result;
+      mergedMenu.push(...result.menuPathsToAssign);
+      mergedCollections.push(...result.directCollectionsToAssign);
+    }
     return {
-      menuPathsToAssign: [],
-      directCollectionsToAssign: [],
-      unresolved: true,
-      reason: baseRule.reason || "IF SET: ERROR",
+      menuPathsToAssign: dedupe(mergedMenu).map((value) => normalizePath(value)),
+      directCollectionsToAssign: dedupe(mergedCollections).map((value) => normalizeCollectionHandle(value)),
+      unresolved: false,
+      reason: "Resolved via exact workbook row(s).",
     };
   }
 
-  const tokens = dedupe([
-    ...tokenizeCandidateText(input.itemType || ""),
-    ...tokenizeCandidateText(input.title || ""),
-    ...tokenizeCandidateText(input.sku || ""),
-  ]);
-  const hasJeansSignal = tokens.includes("jeans") || tokens.includes("jean");
-
-  const menuPaths = dedupe((baseRule.menuPaths || []).map(normalizePath));
-  const directCollections = dedupe(baseRule.directCollections || []);
-  // Business confirmation: women jeans should also directly assign clothing-jeans.
-  if ((input.routeKey === "21" || input.routeKey === "22") && hasJeansSignal) {
-    directCollections.push("clothing-jeans");
+  if (bucket.ambiguousRows.length > 0) {
+    const picked = pickAmbiguousRow(bucket.ambiguousRows, productTokens);
+    if (!picked.row) {
+      return {
+        menuPathsToAssign: [],
+        directCollectionsToAssign: [],
+        unresolved: true,
+        reason: picked.reason,
+      };
+    }
+    return evaluateRuleRow(picked.row, productTokens);
   }
-
-  const reason =
-    menuPaths.length > 0 || directCollections.length > 0
-      ? `Matched ${input.routeKey}-${input.digit} via ${input.parserType} parser.`
-      : "No rule outputs.";
 
   return {
-    menuPathsToAssign: dedupe(menuPaths),
-    directCollectionsToAssign: dedupe(directCollections),
-    unresolved: false,
-    reason,
+    menuPathsToAssign: [],
+    directCollectionsToAssign: [],
+    unresolved: true,
+    reason: `Workbook bucket routeKey=${routeKey}, digit=${digit} has no usable rows.`,
   };
 }

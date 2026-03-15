@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import ShopifyMenuItemsTree from "@/components/shopify-menu-items-tree";
+import { normalizeMenuPath } from "@/lib/shopifyCollectionSkuParser";
 
 type MenuNode = {
   nodeKey: string;
@@ -33,6 +34,85 @@ type ProductRow = {
   autoMappedPaths?: string[];
   directCollectionsToAssign?: string[];
   suggestedPaths?: string[];
+  suggestedDirectCollections?: string[];
+};
+
+type RowStagingState = {
+  autoMappedPaths: string[];
+  selectedSuggestionPaths: string[];
+  selectedSuggestionDirectCollections: string[];
+  manualAddedPaths: string[];
+  manualRemovedPaths: string[];
+  finalMenuPaths: string[];
+  finalMenuPathSet: Set<string>;
+  finalDirectCollections: string[];
+  collectionSyncStatus: "review" | "removal-pending" | "add-pending" | "synced";
+  mappingDecision: "AUTO_MAPPED" | "SUGGESTED" | "MANUAL_REVIEW";
+  reviewReason: string;
+  suggestionOptions: Array<{
+    kind: "menu" | "collection";
+    value: string;
+    label: string;
+    disabled: boolean;
+    selected: boolean;
+  }>;
+};
+
+type PlannerStatus = "readyToPush" | "noChange" | "skippedReview" | "skippedMissingData" | "failedPlanning";
+type QueueJobState = "queued" | "running" | "completed" | "failed" | "skipped";
+type QueueJobType =
+  | "pull_products"
+  | "auto_map"
+  | "push_suggestions"
+  | "push_manual_changes"
+  | "push_all_final_changes"
+  | "remove_all_collections";
+type PushActionKind = "push-selected" | "push-all-final" | "remove-all-collections";
+
+type PushPlannerRow = {
+  rowId: string;
+  title: string;
+  plannerStatus: PlannerStatus;
+  skippedReason: string;
+  mappingDecision: "AUTO_MAPPED" | "SUGGESTED" | "MANUAL_REVIEW";
+  collectionSyncStatus: "review" | "removal-pending" | "add-pending" | "synced";
+  currentCollections: string[];
+  finalCollections: string[];
+  collectionsToAdd: string[];
+  collectionsToRemove: string[];
+  noOp: boolean;
+};
+
+type PushPlanSummary = {
+  totalRows: number;
+  eligibleRows: number;
+  skippedRows: number;
+  addRows: number;
+  removalRows: number;
+  totalAdditions: number;
+  totalRemovals: number;
+  statusCounts: Record<PlannerStatus, number>;
+};
+
+type QueueJob = {
+  id: string;
+  type: QueueJobType;
+  state: QueueJobState;
+  startedAt: number;
+  finishedAt: number;
+  totalRows: number;
+  completedRows: number;
+  failedRows: number;
+  skippedRows: number;
+  note: string;
+};
+
+type PushPreviewModalState = {
+  open: boolean;
+  actionKind: PushActionKind;
+  targetIds: string[];
+  summary: PushPlanSummary;
+  rows: PushPlannerRow[];
 };
 
 type MappingResponse = {
@@ -181,13 +261,28 @@ function formatListPreview(values: string[] | undefined, fallback = "-") {
   return `${items.slice(0, 2).join(", ")} +${items.length - 2}`;
 }
 
-function toCollectionSyncStatus(row: ProductRow) {
-  const autoPaths = (row.autoMappedPaths || []).length;
-  const directCollections = (row.directCollectionsToAssign || []).length;
-  if (row.actionStatus === "PROCESSED" && (autoPaths > 0 || directCollections > 0)) return "synced";
-  if (autoPaths > 0 || directCollections > 0) return "pending";
-  if ((row.suggestedPaths || []).length > 0) return "review";
-  return "manual";
+function dedupeNormalizedPaths(values: string[]) {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of values) {
+    const normalized = normalizeMenuPath(raw);
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    out.push(normalized);
+  }
+  return out;
+}
+
+function dedupeCollectionHandles(values: string[]) {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of values) {
+    const normalized = String(raw || "").trim().toLowerCase();
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    out.push(normalized);
+  }
+  return out;
 }
 
 export default function ShopifyCollectionMapping() {
@@ -195,6 +290,11 @@ export default function ShopifyCollectionMapping() {
   const [nodes, setNodes] = useState<MenuNode[]>([]);
   const [lastSyncedNodes, setLastSyncedNodes] = useState<MenuNode[]>([]);
   const [rows, setRows] = useState<ProductRow[]>([]);
+  const [activeRowId, setActiveRowId] = useState("");
+  const [selectedSuggestionPathsByRow, setSelectedSuggestionPathsByRow] = useState<Record<string, Record<string, boolean>>>({});
+  const [selectedSuggestionCollectionsByRow, setSelectedSuggestionCollectionsByRow] = useState<Record<string, Record<string, boolean>>>({});
+  const [manualAddedPathsByRow, setManualAddedPathsByRow] = useState<Record<string, Record<string, boolean>>>({});
+  const [manualRemovedPathsByRow, setManualRemovedPathsByRow] = useState<Record<string, Record<string, boolean>>>({});
   const [selectedNodes, setSelectedNodes] = useState<Record<string, boolean>>({});
   const [selectedUnmappedCollectionIds, setSelectedUnmappedCollectionIds] = useState<Record<string, boolean>>({});
   const [dismissedUnmappedCollectionIds, setDismissedUnmappedCollectionIds] = useState<Record<string, boolean>>({});
@@ -205,6 +305,12 @@ export default function ShopifyCollectionMapping() {
   const [typeOptions, setTypeOptions] = useState<string[]>([]);
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [showTypesDropdown, setShowTypesDropdown] = useState(false);
+  const [activeQueueTab, setActiveQueueTab] = useState("all");
+  const [activeReportTab, setActiveReportTab] = useState("master-audit");
+  const [queueJobs, setQueueJobs] = useState<QueueJob[]>([]);
+  const [executionBusy, setExecutionBusy] = useState(false);
+  const [pushPreviewModal, setPushPreviewModal] = useState<PushPreviewModalState | null>(null);
+  const [removeAllConfirmText, setRemoveAllConfirmText] = useState("");
   const [sort, setSort] = useState<SortValue>("title-asc");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -412,6 +518,153 @@ export default function ShopifyCollectionMapping() {
     return map;
   }, [nodes]);
 
+  const nodePathByKey = useMemo(() => {
+    const map = new Map<string, string>();
+    const buildPath = (nodeKey: string): string => {
+      const cached = map.get(nodeKey);
+      if (cached) return cached;
+      const node = nodeByKey.get(nodeKey);
+      if (!node) return "";
+      const parentKey = node.parentKey || null;
+      const self = normalizeMenuPath(node.label);
+      if (!parentKey) {
+        map.set(nodeKey, self);
+        return self;
+      }
+      const parentPath = buildPath(parentKey);
+      const full = normalizeMenuPath(parentPath ? `${parentPath} > ${self}` : self);
+      map.set(nodeKey, full);
+      return full;
+    };
+    for (const node of nodes) {
+      buildPath(node.nodeKey);
+    }
+    return map;
+  }, [nodes, nodeByKey]);
+
+  const nodeKeyByPath = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const [nodeKey, path] of nodePathByKey.entries()) {
+      const normalized = normalizeMenuPath(path);
+      if (!normalized || map.has(normalized)) continue;
+      map.set(normalized, nodeKey);
+    }
+    return map;
+  }, [nodePathByKey]);
+
+  const rowStagingById = useMemo(() => {
+    const out = new Map<string, RowStagingState>();
+    for (const row of rows) {
+      const selectedSuggestionMap = selectedSuggestionPathsByRow[row.id] || {};
+      const selectedSuggestionCollectionsMap = selectedSuggestionCollectionsByRow[row.id] || {};
+      const manualAddedMap = manualAddedPathsByRow[row.id] || {};
+      const manualRemovedMap = manualRemovedPathsByRow[row.id] || {};
+      const currentAssigned = dedupeNormalizedPaths((row.checkedNodeKeys || []).map((key) => nodePathByKey.get(key) || key));
+      const autoMappedPaths = dedupeNormalizedPaths(row.autoMappedPaths || []);
+      const selectedSuggestionPaths = dedupeNormalizedPaths(
+        Object.keys(selectedSuggestionMap).filter((path) => selectedSuggestionMap[path])
+      );
+      const selectedSuggestionDirectCollections = dedupeCollectionHandles(
+        Object.keys(selectedSuggestionCollectionsMap).filter((handle) => selectedSuggestionCollectionsMap[handle])
+      );
+      const manualAddedPaths = dedupeNormalizedPaths(
+        Object.keys(manualAddedMap).filter((path) => manualAddedMap[path])
+      );
+      const manualRemovedPaths = dedupeNormalizedPaths(
+        Object.keys(manualRemovedMap).filter((path) => manualRemovedMap[path])
+      );
+
+      const currentSet = new Set(currentAssigned);
+      const autoSet = new Set(autoMappedPaths);
+      const currentDirectCollectionSet = new Set(dedupeCollectionHandles(row.directCollectionsToAssign || []));
+      const manualAddedSet = new Set(manualAddedPaths);
+      const suggestionPathBase = dedupeNormalizedPaths(row.suggestedPaths || []);
+      const suggestionPathOptions = suggestionPathBase.map((path) => {
+        const disabled = currentSet.has(path) || autoSet.has(path) || manualAddedSet.has(path);
+        const selected = selectedSuggestionPaths.includes(path) && !disabled;
+        return { kind: "menu" as const, value: path, label: path, disabled, selected };
+      });
+      const suggestionCollectionBase = dedupeCollectionHandles(row.suggestedDirectCollections || []);
+      const suggestionCollectionOptions = suggestionCollectionBase.map((handle) => {
+        const disabled = currentDirectCollectionSet.has(handle);
+        const selected = selectedSuggestionDirectCollections.includes(handle) && !disabled;
+        return {
+          kind: "collection" as const,
+          value: handle,
+          label: `COLLECTION: ${handle}`,
+          disabled,
+          selected,
+        };
+      });
+      const suggestionOptions = [...suggestionPathOptions, ...suggestionCollectionOptions];
+      const effectiveSelectedSuggestions = suggestionPathOptions.filter((entry) => entry.selected).map((entry) => entry.value);
+      const effectiveSelectedSuggestionCollections = suggestionCollectionOptions
+        .filter((entry) => entry.selected)
+        .map((entry) => entry.value);
+
+      const finalSet = new Set<string>(currentAssigned);
+      for (const path of autoMappedPaths) finalSet.add(path);
+      for (const path of effectiveSelectedSuggestions) finalSet.add(path);
+      for (const path of manualAddedPaths) finalSet.add(path);
+      for (const path of manualRemovedPaths) finalSet.delete(path);
+      const finalMenuPaths = Array.from(finalSet);
+      const finalDirectCollections = dedupeCollectionHandles([
+        ...(row.directCollectionsToAssign || []),
+        ...effectiveSelectedSuggestionCollections,
+      ]);
+
+      const addPendingPaths = Array.from(finalSet).filter((path) => !currentSet.has(path));
+      const hasReview = String(row.mappingDecision || "") === "MANUAL_REVIEW";
+      let collectionSyncStatus: RowStagingState["collectionSyncStatus"] = "synced";
+      if (hasReview) {
+        collectionSyncStatus = "review";
+      } else if (manualRemovedPaths.length > 0) {
+        collectionSyncStatus = "removal-pending";
+      } else if (addPendingPaths.length > 0 || finalDirectCollections.length > 0) {
+        collectionSyncStatus = "add-pending";
+      }
+
+      let mappingDecision: RowStagingState["mappingDecision"] = row.mappingDecision || "MANUAL_REVIEW";
+      if (!hasReview && effectiveSelectedSuggestions.length > 0) {
+        mappingDecision = "SUGGESTED";
+      }
+      if (!hasReview && mappingDecision === "MANUAL_REVIEW" && (autoMappedPaths.length > 0 || finalDirectCollections.length > 0)) {
+        mappingDecision = "AUTO_MAPPED";
+      }
+
+      const reasons: string[] = [];
+      if (row.reviewReason) reasons.push(row.reviewReason);
+      const selectedSuggestionCount = effectiveSelectedSuggestions.length + effectiveSelectedSuggestionCollections.length;
+      if (selectedSuggestionCount > 0) reasons.push(`Selected ${selectedSuggestionCount} suggestion(s).`);
+      if (manualAddedPaths.length > 0) reasons.push(`Manually added ${manualAddedPaths.length} path(s).`);
+      if (manualRemovedPaths.length > 0) reasons.push(`Manually removed ${manualRemovedPaths.length} path(s).`);
+      const reviewReason = reasons.filter(Boolean).join(" ");
+
+      out.set(row.id, {
+        autoMappedPaths,
+        selectedSuggestionPaths: effectiveSelectedSuggestions,
+        selectedSuggestionDirectCollections: effectiveSelectedSuggestionCollections,
+        manualAddedPaths,
+        manualRemovedPaths,
+        finalMenuPaths,
+        finalMenuPathSet: finalSet,
+        finalDirectCollections,
+        collectionSyncStatus,
+        mappingDecision,
+        reviewReason,
+        suggestionOptions,
+      });
+    }
+    return out;
+  }, [
+    rows,
+    nodePathByKey,
+    selectedSuggestionPathsByRow,
+    selectedSuggestionCollectionsByRow,
+    manualAddedPathsByRow,
+    manualRemovedPathsByRow,
+  ]);
+
   const selectedNodeKeys = useMemo(() => {
     return Object.keys(selectedNodes).filter((key) => Boolean(selectedNodes[key]));
   }, [selectedNodes]);
@@ -439,6 +692,156 @@ export default function ShopifyCollectionMapping() {
   }, [selectedUnmappedCollectionIds]);
 
   const hasSelectedAssignTargets = mappedSelectedNodeKeys.length > 0 || selectedDirectCollectionIds.length > 0;
+
+  const moduleSummary = useMemo(() => {
+    let autoMapped = 0;
+    let reviewNeeded = 0;
+    let addPending = 0;
+    let removalPending = 0;
+    let synced = 0;
+    let suggestionReady = 0;
+    let manualChanges = 0;
+    let readyToPush = 0;
+    let legacyCCode = 0;
+    let pushFailed = 0;
+    let readyToAutoMap = 0;
+    for (const row of rows) {
+      const staging = rowStagingById.get(row.id);
+      const decision = staging?.mappingDecision || row.mappingDecision || "MANUAL_REVIEW";
+      const syncStatus = staging?.collectionSyncStatus || "review";
+      const hasSuggestions = (staging?.suggestionOptions || []).some((option) => !option.disabled);
+      const hasManualChanges =
+        (staging?.selectedSuggestionPaths.length || 0) +
+          (staging?.selectedSuggestionDirectCollections.length || 0) +
+          (staging?.manualAddedPaths.length || 0) +
+          (staging?.manualRemovedPaths.length || 0) >
+        0;
+      if (decision === "AUTO_MAPPED") autoMapped += 1;
+      if (decision === "MANUAL_REVIEW" || syncStatus === "review") reviewNeeded += 1;
+      if (syncStatus === "add-pending") addPending += 1;
+      if (syncStatus === "removal-pending") removalPending += 1;
+      if (syncStatus === "synced") synced += 1;
+      if (hasSuggestions) suggestionReady += 1;
+      if (hasManualChanges) manualChanges += 1;
+      if (syncStatus === "add-pending" || syncStatus === "removal-pending") readyToPush += 1;
+      if (String(row.parserType || "") === "LEGACY") legacyCCode += 1;
+      if (String(row.actionStatus || "") !== "PROCESSED" && syncStatus !== "review" && !hasSuggestions) readyToAutoMap += 1;
+      if (String(row.actionStatus || "").toUpperCase() === "FAILED") pushFailed += 1;
+    }
+    pushFailed += queueJobs.filter((job) => job.state === "failed").length;
+    return {
+      totalLoaded: rows.length,
+      autoMapped,
+      reviewNeeded,
+      addPending,
+      removalPending,
+      synced,
+      suggestionReady,
+      manualChanges,
+      readyToPush,
+      legacyCCode,
+      pushFailed,
+      readyToAutoMap,
+    };
+  }, [rows, rowStagingById, queueJobs]);
+
+  const queueTabs = useMemo(
+    () => [
+      { id: "all", label: "All", count: moduleSummary.totalLoaded },
+      { id: "ready-auto", label: "Ready to Auto Map", count: moduleSummary.readyToAutoMap },
+      { id: "suggestion-ready", label: "Suggestion Ready", count: moduleSummary.suggestionReady },
+      { id: "manual-changes", label: "Manual Changes", count: moduleSummary.manualChanges },
+      { id: "ready-push", label: "Ready to Push", count: moduleSummary.readyToPush },
+      { id: "push-failed", label: "Push Failed", count: moduleSummary.pushFailed },
+      { id: "needs-review", label: "Needs Review", count: moduleSummary.reviewNeeded },
+      { id: "legacy-c", label: "Legacy C-Code", count: moduleSummary.legacyCCode },
+    ],
+    [moduleSummary]
+  );
+
+  const visibleQueueJobs = useMemo(() => {
+    if (activeQueueTab === "all") return queueJobs;
+    if (activeQueueTab === "push-failed") return queueJobs.filter((job) => job.state === "failed");
+    if (activeQueueTab === "ready-push") {
+      return queueJobs.filter((job) =>
+        ["push_suggestions", "push_manual_changes", "push_all_final_changes", "remove_all_collections"].includes(job.type)
+      );
+    }
+    if (activeQueueTab === "ready-auto") return queueJobs.filter((job) => job.type === "auto_map");
+    if (activeQueueTab === "manual-changes") return queueJobs.filter((job) => job.type === "push_manual_changes");
+    return queueJobs;
+  }, [queueJobs, activeQueueTab]);
+
+  const rowById = useMemo(() => {
+    return new Map(rows.map((row) => [row.id, row]));
+  }, [rows]);
+
+  const plannerRowsById = useMemo(() => {
+    const out = new Map<string, PushPlannerRow>();
+    const toPathRefs = (paths: string[]) => paths.map((path) => `PATH:${normalizeMenuPath(path)}`);
+    const toDirectRefs = (handles: string[]) => handles.map((handle) => `DIRECT:${String(handle || "").trim().toLowerCase()}`);
+    for (const row of rows) {
+      const staging = rowStagingById.get(row.id);
+      if (!staging) {
+        out.set(row.id, {
+          rowId: row.id,
+          title: row.title,
+          plannerStatus: "failedPlanning",
+          skippedReason: "Missing staging state.",
+          mappingDecision: row.mappingDecision || "MANUAL_REVIEW",
+          collectionSyncStatus: "review",
+          currentCollections: [],
+          finalCollections: [],
+          collectionsToAdd: [],
+          collectionsToRemove: [],
+          noOp: true,
+        });
+        continue;
+      }
+      const mappingDecision = staging.mappingDecision;
+      const collectionSyncStatus = staging.collectionSyncStatus;
+      const currentPaths = dedupeNormalizedPaths((row.checkedNodeKeys || []).map((key) => nodePathByKey.get(key) || key));
+      const finalPaths = dedupeNormalizedPaths(staging.finalMenuPaths || []);
+      const currentDirect = dedupeCollectionHandles(row.directCollectionsToAssign || []);
+      const finalDirect = dedupeCollectionHandles(staging.finalDirectCollections || []);
+      const currentRefs = [...toPathRefs(currentPaths), ...toDirectRefs(currentDirect)];
+      const finalRefs = [...toPathRefs(finalPaths), ...toDirectRefs(finalDirect)];
+      const currentSet = new Set(currentRefs);
+      const finalSet = new Set(finalRefs);
+      const collectionsToAdd = finalRefs.filter((entry) => !currentSet.has(entry));
+      const collectionsToRemove = currentRefs.filter((entry) => !finalSet.has(entry));
+      const noOp = collectionsToAdd.length < 1 && collectionsToRemove.length < 1;
+      let plannerStatus: PlannerStatus = "readyToPush";
+      let skippedReason = "";
+      if (mappingDecision === "MANUAL_REVIEW" || collectionSyncStatus === "review") {
+        plannerStatus = "skippedReview";
+        skippedReason = "Row is in review/manual state.";
+      } else if (!row.id || !row.title) {
+        plannerStatus = "skippedMissingData";
+        skippedReason = "Missing row identity fields.";
+      } else if (finalRefs.length < 1) {
+        plannerStatus = "skippedMissingData";
+        skippedReason = "No final collections resolved.";
+      } else if (noOp) {
+        plannerStatus = "noChange";
+        skippedReason = "No add/remove delta.";
+      }
+      out.set(row.id, {
+        rowId: row.id,
+        title: row.title,
+        plannerStatus,
+        skippedReason,
+        mappingDecision,
+        collectionSyncStatus,
+        currentCollections: currentRefs,
+        finalCollections: finalRefs,
+        collectionsToAdd,
+        collectionsToRemove,
+        noOp,
+      });
+    }
+    return out;
+  }, [rows, rowStagingById, nodePathByKey]);
 
   const allSelectedOnPage = useMemo(() => {
     if (rows.length < 1) return false;
@@ -856,6 +1259,40 @@ export default function ShopifyCollectionMapping() {
   }
 
   function applyNodeSelection(nodeKey: string) {
+    if (activeRowId) {
+      const nodePath = normalizeMenuPath(nodePathByKey.get(nodeKey) || nodeLabelByKey.get(nodeKey) || "");
+      if (!nodePath) return;
+      const staging = rowStagingById.get(activeRowId);
+      const currentlySelected = Boolean(staging?.finalMenuPathSet.has(nodePath));
+      if (currentlySelected) {
+        setManualRemovedPathsByRow((prev) => ({
+          ...prev,
+          [activeRowId]: { ...(prev[activeRowId] || {}), [nodePath]: true },
+        }));
+        setManualAddedPathsByRow((prev) => {
+          const current = { ...(prev[activeRowId] || {}) };
+          delete current[nodePath];
+          return { ...prev, [activeRowId]: current };
+        });
+        setSelectedSuggestionPathsByRow((prev) => {
+          const current = { ...(prev[activeRowId] || {}) };
+          delete current[nodePath];
+          return { ...prev, [activeRowId]: current };
+        });
+      } else {
+        setManualAddedPathsByRow((prev) => ({
+          ...prev,
+          [activeRowId]: { ...(prev[activeRowId] || {}), [nodePath]: true },
+        }));
+        setManualRemovedPathsByRow((prev) => {
+          const current = { ...(prev[activeRowId] || {}) };
+          delete current[nodePath];
+          return { ...prev, [activeRowId]: current };
+        });
+      }
+      return;
+    }
+
     const selectedCountBefore = Object.keys(selectedNodes).filter((key) => Boolean(selectedNodes[key])).length;
     const clickedAlreadySelected = Boolean(selectedNodes[nodeKey]);
     const next = new Set<string>(Object.keys(selectedNodes).filter((key) => Boolean(selectedNodes[key])));
@@ -920,6 +1357,57 @@ export default function ShopifyCollectionMapping() {
       return next;
     });
   }, [collectionAudit.unmapped]);
+
+  useEffect(() => {
+    if (rows.length < 1) {
+      setActiveRowId("");
+      return;
+    }
+    const exists = rows.some((row) => row.id === activeRowId);
+    if (!exists) {
+      setActiveRowId(rows[0].id);
+    }
+  }, [rows, activeRowId]);
+
+  useEffect(() => {
+    if (!activeRowId) return;
+    const staging = rowStagingById.get(activeRowId);
+    if (!staging) return;
+    const selected = new Set<string>();
+    for (const path of staging.finalMenuPaths) {
+      const nodeKey = nodeKeyByPath.get(normalizeMenuPath(path));
+      if (!nodeKey) continue;
+      selected.add(nodeKey);
+      let current = parentMap.get(nodeKey) || null;
+      const seen = new Set<string>();
+      while (current && !seen.has(current)) {
+        selected.add(current);
+        seen.add(current);
+        current = parentMap.get(current) || null;
+      }
+    }
+    const next: Record<string, boolean> = {};
+    for (const key of selected) {
+      next[key] = true;
+    }
+    setSelectedNodes(next);
+  }, [activeRowId, rowStagingById, nodeKeyByPath, parentMap]);
+
+  useEffect(() => {
+    const valid = new Set(rows.map((row) => row.id));
+    const prune = (state: Record<string, Record<string, boolean>>) => {
+      const next: Record<string, Record<string, boolean>> = {};
+      for (const [rowId, values] of Object.entries(state)) {
+        if (!valid.has(rowId)) continue;
+        next[rowId] = values;
+      }
+      return next;
+    };
+    setSelectedSuggestionPathsByRow((prev) => prune(prev));
+    setSelectedSuggestionCollectionsByRow((prev) => prune(prev));
+    setManualAddedPathsByRow((prev) => prune(prev));
+    setManualRemovedPathsByRow((prev) => prune(prev));
+  }, [rows]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -1886,6 +2374,306 @@ export default function ShopifyCollectionMapping() {
     }
   }
 
+  function getToolbarTargetProductIds() {
+    const selectedIds = Object.keys(selectedProducts).filter((key) => Boolean(selectedProducts[key]));
+    if (selectedIds.length > 0) return selectedIds;
+    if (activeRowId) return [activeRowId];
+    return [];
+  }
+
+  function plannerSummaryFromRows(rowsToPlan: PushPlannerRow[]): PushPlanSummary {
+    const statusCounts: Record<PlannerStatus, number> = {
+      readyToPush: 0,
+      noChange: 0,
+      skippedReview: 0,
+      skippedMissingData: 0,
+      failedPlanning: 0,
+    };
+    let eligibleRows = 0;
+    let addRows = 0;
+    let removalRows = 0;
+    let totalAdditions = 0;
+    let totalRemovals = 0;
+    for (const row of rowsToPlan) {
+      statusCounts[row.plannerStatus] += 1;
+      if (row.plannerStatus === "readyToPush") {
+        eligibleRows += 1;
+        if (row.collectionsToAdd.length > 0) addRows += 1;
+        if (row.collectionsToRemove.length > 0) removalRows += 1;
+        totalAdditions += row.collectionsToAdd.length;
+        totalRemovals += row.collectionsToRemove.length;
+      }
+    }
+    return {
+      totalRows: rowsToPlan.length,
+      eligibleRows,
+      skippedRows: rowsToPlan.length - eligibleRows,
+      addRows,
+      removalRows,
+      totalAdditions,
+      totalRemovals,
+      statusCounts,
+    };
+  }
+
+  function openPushPreview(actionKind: PushActionKind, targetIds: string[]) {
+    const normalizedTargetIds = Array.from(new Set(targetIds.filter((id) => rowById.has(id))));
+    if (normalizedTargetIds.length < 1) {
+      setWarning("No target rows available for planning.");
+      return;
+    }
+    let rowsToPlan = normalizedTargetIds
+      .map((id) => plannerRowsById.get(id))
+      .filter((row): row is PushPlannerRow => Boolean(row));
+    if (actionKind === "remove-all-collections") {
+      rowsToPlan = rowsToPlan.map((row) => {
+        if (row.plannerStatus !== "readyToPush" && row.plannerStatus !== "noChange") return row;
+        const nextRemovals = [...row.currentCollections];
+        const noOp = nextRemovals.length < 1;
+        return {
+          ...row,
+          finalCollections: [],
+          collectionsToAdd: [],
+          collectionsToRemove: nextRemovals,
+          noOp,
+          plannerStatus: noOp ? "noChange" : "readyToPush",
+          skippedReason: noOp ? "No collections to remove." : "",
+        };
+      });
+    }
+    const summary = plannerSummaryFromRows(rowsToPlan);
+    setRemoveAllConfirmText("");
+    setPushPreviewModal({
+      open: true,
+      actionKind,
+      targetIds: normalizedTargetIds,
+      summary,
+      rows: rowsToPlan,
+    });
+  }
+
+  function applySuggestionsForTargets() {
+    const ids = getToolbarTargetProductIds();
+    if (ids.length < 1) {
+      setWarning("Select at least one row (or an active row) before applying suggestions.");
+      return;
+    }
+    setSelectedSuggestionPathsByRow((prev) => {
+      const next = { ...prev };
+      for (const id of ids) {
+        const staging = rowStagingById.get(id);
+        if (!staging) continue;
+        const current = { ...(next[id] || {}) };
+        for (const option of staging.suggestionOptions) {
+          if (option.disabled || option.kind !== "menu") continue;
+          current[option.value] = true;
+        }
+        next[id] = current;
+      }
+      return next;
+    });
+    setSelectedSuggestionCollectionsByRow((prev) => {
+      const next = { ...prev };
+      for (const id of ids) {
+        const staging = rowStagingById.get(id);
+        if (!staging) continue;
+        const current = { ...(next[id] || {}) };
+        for (const option of staging.suggestionOptions) {
+          if (option.disabled || option.kind !== "collection") continue;
+          current[option.value] = true;
+        }
+        next[id] = current;
+      }
+      return next;
+    });
+    setWarning(`Applied available suggestions for ${ids.length} row(s).`);
+  }
+
+  function clearStagedChangesForTargets() {
+    const ids = getToolbarTargetProductIds();
+    if (ids.length < 1) {
+      setWarning("Select at least one row (or an active row) before clearing staged changes.");
+      return;
+    }
+    const clearByIds = (state: Record<string, Record<string, boolean>>) => {
+      const next = { ...state };
+      for (const id of ids) delete next[id];
+      return next;
+    };
+    setSelectedSuggestionPathsByRow((prev) => clearByIds(prev));
+    setSelectedSuggestionCollectionsByRow((prev) => clearByIds(prev));
+    setManualAddedPathsByRow((prev) => clearByIds(prev));
+    setManualRemovedPathsByRow((prev) => clearByIds(prev));
+    setWarning(`Cleared staged changes for ${ids.length} row(s).`);
+  }
+
+  function pushSelectedScaffold() {
+    const ids = Object.keys(selectedProducts).filter((key) => Boolean(selectedProducts[key]));
+    if (ids.length < 1) {
+      setWarning("Select products to push staged changes.");
+      return;
+    }
+    openPushPreview("push-selected", ids);
+  }
+
+  function pushAllFinalChangesScaffold() {
+    openPushPreview("push-all-final", rows.map((row) => row.id));
+  }
+
+  function removeAllCollectionsScaffold() {
+    openPushPreview("remove-all-collections", rows.map((row) => row.id));
+  }
+
+  function downloadCsvFile(filename: string, lines: string[]) {
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportPushSummaryReport() {
+    const rowsToPlan = rows.map((row) => plannerRowsById.get(row.id)).filter((row): row is PushPlannerRow => Boolean(row));
+    const summary = plannerSummaryFromRows(rowsToPlan);
+    const lines = [
+      "report,value",
+      `total_rows,${summary.totalRows}`,
+      `eligible_rows,${summary.eligibleRows}`,
+      `skipped_rows,${summary.skippedRows}`,
+      `add_rows,${summary.addRows}`,
+      `removal_rows,${summary.removalRows}`,
+      `total_additions,${summary.totalAdditions}`,
+      `total_removals,${summary.totalRemovals}`,
+    ];
+    downloadCsvFile(`push-summary-${new Date().toISOString().slice(0, 10)}.csv`, lines);
+  }
+
+  function exportPushFailureReport() {
+    const lines = ["title,status,reason"];
+    for (const row of plannerRowsById.values()) {
+      if (row.plannerStatus !== "failedPlanning") continue;
+      lines.push(`"${row.title.replace(/"/g, '""')}",${row.plannerStatus},"${row.skippedReason.replace(/"/g, '""')}"`);
+    }
+    if (lines.length < 2) lines.push('"No failed planning rows",failedPlanning,"-"');
+    downloadCsvFile(`push-failure-${new Date().toISOString().slice(0, 10)}.csv`, lines);
+  }
+
+  function exportSkippedReviewReport() {
+    const lines = ["title,status,reason"];
+    for (const row of plannerRowsById.values()) {
+      if (row.plannerStatus !== "skippedReview") continue;
+      lines.push(`"${row.title.replace(/"/g, '""')}",${row.plannerStatus},"${row.skippedReason.replace(/"/g, '""')}"`);
+    }
+    if (lines.length < 2) lines.push('"No skipped review rows",skippedReview,"-"');
+    downloadCsvFile(`skipped-review-${new Date().toISOString().slice(0, 10)}.csv`, lines);
+  }
+
+  function exportCollectionDeltaReport() {
+    const lines = ["title,status,adds,removals"];
+    for (const row of plannerRowsById.values()) {
+      const adds = row.collectionsToAdd.join(" | ");
+      const removals = row.collectionsToRemove.join(" | ");
+      lines.push(
+        `"${row.title.replace(/"/g, '""')}",${row.plannerStatus},"${adds.replace(/"/g, '""')}","${removals.replace(/"/g, '""')}"`
+      );
+    }
+    downloadCsvFile(`collection-delta-${new Date().toISOString().slice(0, 10)}.csv`, lines);
+  }
+
+  function executePushPreviewScaffold() {
+    if (!pushPreviewModal) return;
+    if (pushPreviewModal.actionKind === "remove-all-collections" && removeAllConfirmText.trim() !== "REMOVE ALL") {
+      setError('Type "REMOVE ALL" to confirm destructive removal.');
+      return;
+    }
+    setExecutionBusy(true);
+    const queuedRows = pushPreviewModal.rows.filter((row) => row.plannerStatus === "readyToPush");
+    const skippedRows = pushPreviewModal.rows.filter((row) => row.plannerStatus !== "readyToPush");
+    const startedAt = Date.now();
+    const jobId = `job-${startedAt}`;
+    const typeMap: Record<PushActionKind, QueueJobType> = {
+      "push-selected": "push_manual_changes",
+      "push-all-final": "push_all_final_changes",
+      "remove-all-collections": "remove_all_collections",
+    };
+    const jobType = typeMap[pushPreviewModal.actionKind];
+    setQueueJobs((prev) => [
+      {
+        id: jobId,
+        type: jobType,
+        state: "queued",
+        startedAt,
+        finishedAt: 0,
+        totalRows: pushPreviewModal.rows.length,
+        completedRows: 0,
+        failedRows: 0,
+        skippedRows: skippedRows.length,
+        note: `Dry-run scaffold: ${queuedRows.length} eligible, ${skippedRows.length} skipped.`,
+      },
+      ...prev,
+    ]);
+    window.setTimeout(() => {
+      setQueueJobs((prev) =>
+        prev.map((job) =>
+          job.id === jobId
+            ? {
+                ...job,
+                state: "running",
+                completedRows: Math.max(0, queuedRows.length - 1),
+              }
+            : job
+        )
+      );
+      window.setTimeout(() => {
+        setQueueJobs((prev) =>
+          prev.map((job) =>
+            job.id === jobId
+              ? {
+                  ...job,
+                  state: "completed",
+                  completedRows: queuedRows.length,
+                  finishedAt: Date.now(),
+                }
+              : job
+          )
+        );
+        setExecutionBusy(false);
+      }, 700);
+    }, 300);
+    setWarning(
+      `${pushPreviewModal.actionKind} execution scaffold queued (${queuedRows.length} eligible / ${skippedRows.length} skipped).`
+    );
+    setPushPreviewModal(null);
+  }
+
+  function toggleSuggestionSelection(rowId: string, kind: "menu" | "collection", value: string, disabled: boolean) {
+    if (disabled) return;
+    if (kind === "collection") {
+      const normalizedHandle = String(value || "").trim().toLowerCase();
+      if (!normalizedHandle) return;
+      setSelectedSuggestionCollectionsByRow((prev) => {
+        const current = { ...(prev[rowId] || {}) };
+        current[normalizedHandle] = !current[normalizedHandle];
+        return { ...prev, [rowId]: current };
+      });
+      return;
+    }
+    const normalizedPath = normalizeMenuPath(value);
+    if (!normalizedPath) return;
+    setSelectedSuggestionPathsByRow((prev) => {
+      const current = { ...(prev[rowId] || {}) };
+      current[normalizedPath] = !current[normalizedPath];
+      return { ...prev, [rowId]: current };
+    });
+    setManualRemovedPathsByRow((prev) => {
+      const current = { ...(prev[rowId] || {}) };
+      delete current[normalizedPath];
+      return { ...prev, [rowId]: current };
+    });
+  }
+
   function toggleSelectedType(type: string) {
     const normalized = type.trim();
     if (!normalized) return;
@@ -2076,19 +2864,45 @@ export default function ShopifyCollectionMapping() {
             {auditOpening ? "Refreshing Audit..." : "Collection Audit Log"}
           </button>
         </div>
-        <div className="kpi" style={{ marginTop: 10 }}>
-          <div className="k">
-            <div className="muted">Collections</div>
-            <b>{collectionCount}</b>
+        <div className="kpi stage4SummaryGrid" style={{ marginTop: 10 }}>
+          <div className="k kTotal">
+            <div className="muted">Total Loaded</div>
+            <b>{moduleSummary.totalLoaded}</b>
           </div>
-          <div className="k">
-            <div className="muted">Menu Collections</div>
-            <b>{nodes.length}</b>
+          <div className="k kAutoMapped">
+            <div className="muted">Auto-Mapped</div>
+            <b>{moduleSummary.autoMapped}</b>
           </div>
-          <div className="k">
-            <div className="muted">Products</div>
-            <b>{productCount}</b>
+          <div className="k kReview">
+            <div className="muted">Review Needed</div>
+            <b>{moduleSummary.reviewNeeded}</b>
           </div>
+          <div className="k kAddPending">
+            <div className="muted">Add Pending</div>
+            <b>{moduleSummary.addPending}</b>
+          </div>
+          <div className="k kRemovalPending">
+            <div className="muted">Removal Pending</div>
+            <b>{moduleSummary.removalPending}</b>
+          </div>
+          <div className="k kSynced">
+            <div className="muted">Synced</div>
+            <b>{moduleSummary.synced}</b>
+          </div>
+        </div>
+        <div className="workflowRail">
+          {[
+            { id: "pull-detect", label: "Pull / Detect" },
+            { id: "auto-map", label: "Auto Map" },
+            { id: "suggestions", label: "Suggestions" },
+            { id: "manual-review", label: "Manual Review" },
+            { id: "ready-push", label: "Ready to Push" },
+          ].map((step, index) => (
+            <div key={step.id} className="workflowStep">
+              <span className="workflowIndex">{index + 1}</span>
+              <span>{step.label}</span>
+            </div>
+          ))}
         </div>
         
         {/* Requirement 2: Dynamic Link Display */}
@@ -2269,10 +3083,121 @@ export default function ShopifyCollectionMapping() {
                 Unassign Checked Products
               </button>
             </div>
+            <div className="stage4BulkToolbar">
+              <button type="button" className="primary" onClick={applySuggestionsForTargets} disabled={saving || loading}>
+                Apply Suggestions
+              </button>
+              <button type="button" onClick={clearStagedChangesForTargets} disabled={saving || loading || executionBusy}>
+                Clear Staged Changes
+              </button>
+              <button type="button" onClick={pushSelectedScaffold} disabled={saving || loading || executionBusy}>
+                Push Selected
+              </button>
+              <button type="button" onClick={pushAllFinalChangesScaffold} disabled={saving || loading || executionBusy}>
+                Push All Final Changes
+              </button>
+              <button
+                type="button"
+                className="dangerBtn"
+                onClick={removeAllCollectionsScaffold}
+                disabled={saving || loading || executionBusy}
+              >
+                Remove All Collections
+              </button>
+            </div>
+            <div className="stage4ScaffoldGrid">
+              <section className="stage4Panel">
+                <h3>Jobs / Queue</h3>
+                <div className="stage4TabRow">
+                  {queueTabs.map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      className={`stage4Tab${activeQueueTab === tab.id ? " active" : ""}`}
+                      onClick={() => setActiveQueueTab(tab.id)}
+                    >
+                      {tab.label} <span className="muted">({tab.count})</span>
+                    </button>
+                  ))}
+                </div>
+                <p className="muted small">
+                  Lifecycle scaffold: {queueJobs.filter((job) => job.state === "queued").length} queued /{" "}
+                  {queueJobs.filter((job) => job.state === "running").length} running /{" "}
+                  {queueJobs.filter((job) => job.state === "completed").length} completed.
+                </p>
+                <div className="reportList" style={{ marginTop: 10, maxHeight: 220 }}>
+                  {visibleQueueJobs.length < 1 ? (
+                    <div className="empty">No push jobs yet.</div>
+                  ) : (
+                    visibleQueueJobs.slice(0, 10).map((job) => (
+                      <div className="reportRow" key={job.id}>
+                        <span>
+                          <b>{job.type}</b> - {job.state}
+                        </span>
+                        <span className="muted small">
+                          rows {job.completedRows}/{job.totalRows} | skipped {job.skippedRows}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </section>
+              <section className="stage4Panel">
+                <h3>Reporting</h3>
+                <div className="stage4TabRow">
+                  {[
+                    { id: "master-audit", label: "Master Audit Report" },
+                    { id: "batch-summary", label: "Batch Summary Report" },
+                    { id: "errors-review", label: "Errors & Review Report" },
+                    { id: "collection-sync", label: "Collection Sync Report" },
+                  ].map((report) => (
+                    <button
+                      key={report.id}
+                      type="button"
+                      className={`stage4Tab${activeReportTab === report.id ? " active" : ""}`}
+                      onClick={() => setActiveReportTab(report.id)}
+                    >
+                      {report.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="topbar">
+                  <button type="button" onClick={() => void openAuditReport()} disabled={auditOpening || saving || loading}>
+                    Open Audit Modal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (activeReportTab === "master-audit") downloadAuditCsv();
+                      if (activeReportTab === "batch-summary") exportPushSummaryReport();
+                      if (activeReportTab === "errors-review") exportPushFailureReport();
+                      if (activeReportTab === "collection-sync") exportCollectionDeltaReport();
+                    }}
+                  >
+                    Export CSV
+                  </button>
+                  <button type="button" onClick={exportSkippedReviewReport}>
+                    Export Skipped Review
+                  </button>
+                </div>
+                <div className="topbar" style={{ marginTop: 8 }}>
+                  <button type="button" onClick={exportPushSummaryReport}>Push Summary Report</button>
+                  <button type="button" onClick={exportPushFailureReport}>Push Failure Report</button>
+                  <button type="button" onClick={exportCollectionDeltaReport}>Collection Delta Report</button>
+                </div>
+              </section>
+            </div>
 
             <div className="tableWrap" style={{ marginTop: 10 }}>
               <table>
                 <thead>
+                  <tr className="groupHead">
+                    <th colSpan={4}>Product Identity</th>
+                    <th colSpan={2}>Parser / Rule Proof</th>
+                    <th colSpan={2}>Auto + Suggestions</th>
+                    <th colSpan={2}>Decision / Sync</th>
+                    <th colSpan={2}>Current vs Final</th>
+                  </tr>
                   <tr>
                     <th className="center">
                       <input
@@ -2310,6 +3235,12 @@ export default function ShopifyCollectionMapping() {
                         UPC <span className="sortArrow">{getHeaderArrow("upc")}</span>
                       </button>
                     </th>
+                    <th className="sourceParserCol">Source Parser</th>
+                    <th className="routingProofCol">Routing Proof</th>
+                    <th className="autoMappedCol">Auto-Mapped Menus</th>
+                    <th className="suggestedCol">Suggested Menus</th>
+                    <th className="mappingDecisionCol">Mapping Decision</th>
+                    <th className="syncStatusCol">Collection Sync Status</th>
                     <th className="center">Status</th>
                     <th>Current Collections</th>
                   </tr>
@@ -2317,20 +3248,40 @@ export default function ShopifyCollectionMapping() {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={6} className="empty">Loading Shopify products...</td>
+                      <td colSpan={12} className="empty">Loading Shopify products...</td>
                     </tr>
                   ) : rows.length < 1 ? (
                     <tr>
-                      <td colSpan={6} className="empty">No products found.</td>
+                      <td colSpan={12} className="empty">No products found.</td>
                     </tr>
                   ) : (
                     rows.map((row) => {
-                      const currentCollections = row.checkedNodeKeys
-                        .map((key) => nodeLabelByKey.get(key) || key)
+                      const staging = rowStagingById.get(row.id);
+                      const currentCollections = dedupeNormalizedPaths(
+                        row.checkedNodeKeys.map((key) => nodePathByKey.get(key) || nodeLabelByKey.get(key) || key)
+                      )
                         .slice(0, 6)
                         .join(", ");
+                      const finalCollections = (staging?.finalMenuPaths || []).slice(0, 6).join(", ");
+                      const finalDirectCollections = (staging?.finalDirectCollections || []).join(", ");
+                      const parserSource = row.parserType || "-";
+                      const routingProof =
+                        row.routeKey && row.digit ? `${row.routeKey}-${row.digit} (${row.barcodeLabel || ""})` : row.barcodeLabel || "-";
+                      const autoMappedMenus = formatListPreview([
+                        ...(staging?.autoMappedPaths || []),
+                        ...((staging?.finalDirectCollections || []).map((handle) => `COLLECTION: ${handle}`)),
+                      ]);
+                      const mappingDecision = staging?.mappingDecision || row.mappingDecision || "MANUAL_REVIEW";
+                      const syncStatus = staging?.collectionSyncStatus || "review";
+                      const reasoning = staging?.reviewReason || row.reviewReason || "-";
+                      const isActiveRow = row.id === activeRowId;
+                      const isManualReviewRow = mappingDecision === "MANUAL_REVIEW";
                       return (
-                        <tr key={row.id}>
+                        <tr
+                          key={row.id}
+                          className={`${isActiveRow ? "activeProductRow" : ""}${isManualReviewRow ? " manualReviewRow" : ""}`}
+                          onClick={() => setActiveRowId(row.id)}
+                        >
                           <td className="center">
                             <input
                               type="checkbox"
@@ -2354,6 +3305,43 @@ export default function ShopifyCollectionMapping() {
                           </td>
                           <td className="productNameCol">{row.title}</td>
                           <td className="upcCol">{row.upc || "-"}</td>
+                          <td className="sourceParserCol"><span className="muted small">{parserSource}</span></td>
+                          <td className="routingProofCol">
+                            <span className="muted small" title={reasoning}>{routingProof}</span>
+                            <div className="muted tiny">{reasoning}</div>
+                          </td>
+                          <td className="autoMappedCol">
+                            <span className="muted small">{autoMappedMenus}</span>
+                          </td>
+                          <td className="suggestedCol">
+                            {staging?.suggestionOptions && staging.suggestionOptions.length > 0 ? (
+                              <div className="suggestionChips">
+                                {staging.suggestionOptions.map((option) => (
+                                  <button
+                                    key={`${row.id}-${option.kind}-${option.value}`}
+                                    type="button"
+                                    className={`suggestionChip${option.selected ? " selected" : ""}`}
+                                    disabled={option.disabled}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      toggleSuggestionSelection(row.id, option.kind, option.value, option.disabled);
+                                    }}
+                                    title={option.disabled ? "Already assigned or staged; cannot select." : option.label}
+                                  >
+                                    {option.label}
+                                  </button>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="muted small">-</span>
+                            )}
+                          </td>
+                          <td className="mappingDecisionCol">
+                            <span className={`decisionBadge decision-${mappingDecision.toLowerCase()}`}>{mappingDecision}</span>
+                          </td>
+                          <td className="syncStatusCol">
+                            <span className={`syncBadge sync-${syncStatus}`}>{syncStatus.toUpperCase()}</span>
+                          </td>
                           <td className="center">
                             {row.actionStatus === "PROCESSED" ? (
                               <img src="/badge-processed.png" alt="Processed" className="statusBadgeImg" />
@@ -2362,7 +3350,15 @@ export default function ShopifyCollectionMapping() {
                             )}
                           </td>
                           <td>
-                            <span className="muted small">{currentCollections || "-"}</span>
+                            <div className="stage4ResultBlock">
+                              <div className="muted tiny"><b>Current</b>: {currentCollections || "-"}</div>
+                              <div className="muted tiny"><b>Auto</b>: {formatListPreview(staging?.autoMappedPaths, "-")}</div>
+                              <div className="muted tiny"><b>Final Paths</b>: {finalCollections || "-"}</div>
+                              <div className="muted tiny"><b>Final Collections</b>: {finalDirectCollections || "-"}</div>
+                              <div className="muted tiny">
+                                <b>Manual</b>: +{staging?.manualAddedPaths.length || 0} / -{staging?.manualRemovedPaths.length || 0}
+                              </div>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -2506,6 +3502,71 @@ export default function ShopifyCollectionMapping() {
                   <div className="empty">No duplicate mapped collections.</div>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {pushPreviewModal?.open ? (
+        <div className="previewOverlay" onClick={() => setPushPreviewModal(null)} role="dialog" aria-label="Push dry run preview">
+          <div className="editorModal" onClick={(event) => event.stopPropagation()}>
+            <h3>Dry-Run Preview: {pushPreviewModal.actionKind}</h3>
+            <p className="muted" style={{ marginTop: 6 }}>
+              Eligible rows: {pushPreviewModal.summary.eligibleRows} / {pushPreviewModal.summary.totalRows}. Skipped rows are excluded.
+            </p>
+            <div className="kpi" style={{ marginTop: 12 }}>
+              <div className="k">
+                <div className="muted">Rows Selected</div>
+                <b>{pushPreviewModal.summary.totalRows}</b>
+              </div>
+              <div className="k">
+                <div className="muted">Rows Eligible</div>
+                <b>{pushPreviewModal.summary.eligibleRows}</b>
+              </div>
+              <div className="k">
+                <div className="muted">Rows Skipped</div>
+                <b>{pushPreviewModal.summary.skippedRows}</b>
+              </div>
+              <div className="k">
+                <div className="muted">Total Additions</div>
+                <b>{pushPreviewModal.summary.totalAdditions}</b>
+              </div>
+              <div className="k">
+                <div className="muted">Total Removals</div>
+                <b>{pushPreviewModal.summary.totalRemovals}</b>
+              </div>
+            </div>
+            <div className="reportList" style={{ marginTop: 12, maxHeight: 280 }}>
+              {pushPreviewModal.rows.map((row) => (
+                <div key={row.rowId} className="reportRow">
+                  <span>
+                    <b>{row.title}</b> - {row.plannerStatus}
+                  </span>
+                  <span className="muted small">
+                    +{row.collectionsToAdd.length} / -{row.collectionsToRemove.length}
+                    {row.skippedReason ? ` | ${row.skippedReason}` : ""}
+                  </span>
+                </div>
+              ))}
+            </div>
+            {pushPreviewModal.actionKind === "remove-all-collections" ? (
+              <div className="editorField" style={{ marginTop: 12 }}>
+                <label htmlFor="remove-all-confirm">Type REMOVE ALL to confirm destructive removal</label>
+                <input
+                  id="remove-all-confirm"
+                  value={removeAllConfirmText}
+                  onChange={(event) => setRemoveAllConfirmText(event.target.value)}
+                  placeholder="REMOVE ALL"
+                />
+              </div>
+            ) : null}
+            <div className="topbar" style={{ justifyContent: "flex-end", marginTop: 12 }}>
+              <button type="button" onClick={() => setPushPreviewModal(null)}>
+                Cancel
+              </button>
+              <button type="button" className="primary" onClick={executePushPreviewScaffold} disabled={executionBusy}>
+                {executionBusy ? "Queuing..." : "Confirm Scaffold Run"}
+              </button>
             </div>
           </div>
         </div>
@@ -2833,6 +3894,58 @@ export default function ShopifyCollectionMapping() {
           gap: 8px;
           flex-wrap: wrap;
         }
+        .stage4SummaryGrid .k {
+          min-width: 150px;
+          flex: 1 1 150px;
+        }
+        .stage4SummaryGrid .kAutoMapped {
+          border-color: #166534;
+          background: #052e16;
+        }
+        .stage4SummaryGrid .kReview {
+          border-color: #c2410c;
+          background: #431407;
+        }
+        .stage4SummaryGrid .kAddPending {
+          border-color: #1d4ed8;
+          background: #0a1d33;
+        }
+        .stage4SummaryGrid .kRemovalPending {
+          border-color: #991b1b;
+          background: #3f0d0d;
+        }
+        .stage4SummaryGrid .kSynced {
+          border-color: #065f46;
+          background: #042f2e;
+        }
+        .workflowRail {
+          margin-top: 10px;
+          display: grid;
+          grid-template-columns: repeat(5, minmax(0, 1fr));
+          gap: 8px;
+        }
+        .workflowStep {
+          border: 1px solid #2a3547;
+          border-radius: 8px;
+          background: #0a1324;
+          padding: 8px 10px;
+          font-size: 11px;
+          display: inline-flex;
+          gap: 8px;
+          align-items: center;
+          color: #cbd5e1;
+        }
+        .workflowIndex {
+          width: 18px;
+          height: 18px;
+          border-radius: 999px;
+          border: 1px solid #334155;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 10px;
+          color: #93c5fd;
+        }
         .k {
           border: 1px solid #2a3547;
           border-radius: 8px;
@@ -2940,6 +4053,53 @@ export default function ShopifyCollectionMapping() {
           align-items: center;
           margin-bottom: 10px;
           width: 100%;
+        }
+        .stage4BulkToolbar {
+          margin-top: 10px;
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+          align-items: center;
+        }
+        .dangerBtn {
+          border-color: #7f1d1d;
+          color: #fecaca;
+          background: #2f1414;
+        }
+        .stage4ScaffoldGrid {
+          margin-top: 10px;
+          display: grid;
+          gap: 10px;
+          grid-template-columns: 1fr 1fr;
+        }
+        .stage4Panel {
+          border: 1px solid #2a3547;
+          border-radius: 10px;
+          background: #0a1324;
+          padding: 10px;
+          display: grid;
+          gap: 8px;
+        }
+        .stage4Panel h3 {
+          font-size: 13px;
+          color: #e2e8f0;
+        }
+        .stage4TabRow {
+          display: flex;
+          gap: 6px;
+          flex-wrap: wrap;
+        }
+        .stage4Tab {
+          min-height: 30px;
+          height: 30px;
+          font-size: 11px;
+          padding: 0 9px;
+          border-radius: 999px;
+        }
+        .stage4Tab.active {
+          border-color: #1d4ed8;
+          background: #112a4a;
+          color: #bfdbfe;
         }
         .productSearchInput {
           min-width: 320px;
@@ -3149,7 +4309,7 @@ export default function ShopifyCollectionMapping() {
         table {
           border-collapse: collapse;
           width: 100%;
-          min-width: 1200px;
+          min-width: 1900px;
         }
         th,
         td {
@@ -3171,6 +4331,19 @@ export default function ShopifyCollectionMapping() {
           text-transform: uppercase;
           font-size: 11px;
           z-index: 2;
+        }
+        .groupHead th {
+          top: 0;
+          z-index: 3;
+          background: #0f172a;
+          color: #94a3b8;
+          font-size: 10px;
+          letter-spacing: 0.04em;
+          border-bottom: 1px solid #334155;
+          text-transform: uppercase;
+          text-align: center;
+          padding-top: 6px;
+          padding-bottom: 6px;
         }
         .sortHead {
           padding: 0;
@@ -3275,6 +4448,106 @@ export default function ShopifyCollectionMapping() {
         }
         .upcCol {
           text-align: center;
+        }
+        .sourceParserCol,
+        .routingProofCol,
+        .autoMappedCol,
+        .suggestedCol,
+        .mappingDecisionCol,
+        .syncStatusCol {
+          text-align: center;
+        }
+        .decisionBadge,
+        .syncBadge {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 22px;
+          padding: 0 8px;
+          border-radius: 999px;
+          border: 1px solid #334155;
+          font-size: 10px;
+          letter-spacing: 0.03em;
+          text-transform: uppercase;
+          color: #cbd5e1;
+          background: #0b1322;
+        }
+        .decision-auto_mapped {
+          border-color: #0f766e;
+          color: #99f6e4;
+          background: #0f2e2f;
+        }
+        .decision-suggested {
+          border-color: #475569;
+          color: #dbeafe;
+          background: #1e293b;
+        }
+        .decision-manual_review {
+          border-color: #7c2d12;
+          color: #fdba74;
+          background: #2f1e14;
+        }
+        .sync-synced {
+          border-color: #14532d;
+          color: #86efac;
+          background: #12291f;
+        }
+        .sync-add-pending {
+          border-color: #92400e;
+          color: #fcd34d;
+          background: #2f2415;
+        }
+        .sync-removal-pending {
+          border-color: #7f1d1d;
+          color: #fecaca;
+          background: #2f1414;
+        }
+        .sync-review {
+          border-color: #475569;
+          color: #cbd5e1;
+          background: #1e293b;
+        }
+        .activeProductRow {
+          background: rgba(30, 64, 175, 0.16);
+        }
+        .manualReviewRow {
+          box-shadow: inset 3px 0 0 #f97316;
+        }
+        .tiny {
+          font-size: 10px;
+          margin-top: 4px;
+          line-height: 1.3;
+          display: block;
+        }
+        .suggestionChips {
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: center;
+          gap: 4px;
+        }
+        .suggestionChip {
+          border: 1px solid #334155;
+          background: #0b1322;
+          color: #cbd5e1;
+          border-radius: 999px;
+          font-size: 10px;
+          padding: 2px 8px;
+          cursor: pointer;
+        }
+        .suggestionChip.selected {
+          border-color: #0f766e;
+          color: #99f6e4;
+          background: #0f2e2f;
+        }
+        .suggestionChip:disabled {
+          cursor: not-allowed;
+          opacity: 0.55;
+        }
+        .stage4ResultBlock {
+          display: grid;
+          gap: 3px;
+          min-width: 260px;
+          text-align: left;
         }
         .thumb {
           width: 56px;
@@ -3440,6 +4713,10 @@ export default function ShopifyCollectionMapping() {
           .productControls {
             grid-template-columns: 1fr;
             gap: 10px;
+          }
+          .workflowRail,
+          .stage4ScaffoldGrid {
+            grid-template-columns: 1fr;
           }
         }
       `}</style>

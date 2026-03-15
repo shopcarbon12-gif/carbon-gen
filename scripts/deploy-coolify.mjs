@@ -23,6 +23,11 @@ if (!DEPLOY_GUARD) {
   console.error("Coolify deploy is blocked by local-only safety guard.");
   console.error("To deploy intentionally, run:");
   console.error("  ALLOW_COOLIFY_DEPLOY=true npm run deploy:coolify");
+  notifyDeployEvent({
+    title: "Coolify Deploy Blocked",
+    message: "Deploy guard is active. Set ALLOW_COOLIFY_DEPLOY=true.",
+    success: false,
+  });
   process.exit(1);
 }
 
@@ -279,6 +284,15 @@ function notifyWindows({ title, message, success = true }) {
   }
 }
 
+function notifyDeployEvent(payload) {
+  try {
+    notifyWindows(payload);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error || "unknown error");
+    console.warn(`Deploy notification failed: ${message}`);
+  }
+}
+
 async function fetchDeploymentStatus({ apiBaseUrl, deploymentUuid, apiToken }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), STATUS_REQUEST_TIMEOUT_MS);
@@ -362,6 +376,11 @@ async function main() {
     console.log(
       "Use ALLOW_DUPLICATE_COOLIFY_DEPLOY=true to force another trigger for the same commit."
     );
+    notifyDeployEvent({
+      title: "Coolify Deploy Skipped",
+      message: `Duplicate deploy skipped for ${headSha.slice(0, 7)}.`,
+      success: false,
+    });
     return;
   }
 
@@ -378,6 +397,11 @@ async function main() {
   if (!response.ok) {
     console.error(`Coolify deploy hook failed (${response.status}).`);
     if (bodyText) console.error(bodyText);
+    notifyDeployEvent({
+      title: "Coolify Deploy Failed",
+      message: `Deploy hook failed (${response.status}).`,
+      success: false,
+    });
     if (response.status === 401 || response.status === 403) {
       console.error("Authorization failed for Coolify deploy.");
       console.error("Run: npm run deploy:coolify:setup");
@@ -391,6 +415,11 @@ async function main() {
     console.error("Deploy endpoint returned HTML instead of deploy API response.");
     console.error("This usually means the hook URL points to a UI/webhook page, not the deploy API.");
     console.error("Run: npm run deploy:coolify:setup");
+    notifyDeployEvent({
+      title: "Coolify Deploy Failed",
+      message: "Hook returned HTML; check webhook/API URL.",
+      success: false,
+    });
     process.exit(1);
   }
 
@@ -406,7 +435,16 @@ async function main() {
     deploymentUuid,
   });
 
-  if (!WATCH_DEPLOY_COMPLETION || !deploymentUuid) return;
+  if (!WATCH_DEPLOY_COMPLETION || !deploymentUuid) {
+    notifyDeployEvent({
+      title: "Coolify Deploy Queued",
+      message: deploymentUuid
+        ? `Deploy queued (${deploymentUuid.slice(0, 8)}). Completion watch is disabled.`
+        : "Deploy hook accepted, but no deployment id returned.",
+      success: true,
+    });
+    return;
+  }
 
   const apiBaseUrl = getApiBaseUrl(hookUrl);
   if (!apiBaseUrl) return;
@@ -434,6 +472,12 @@ async function main() {
       "Deploy queued, but completion polling is forbidden for current watch token. " +
       "Set COOLIFY_WATCH_API_TOKEN (or setup watchApiToken) with read permission.";
     console.warn(message);
+    notifyDeployEvent({
+      title: "Coolify Deploy Queued",
+      message:
+        `Deploy ${deploymentUuid.slice(0, 8)} queued; watcher is forbidden (token lacks read permission).`,
+      success: false,
+    });
     return;
   }
 
@@ -441,10 +485,20 @@ async function main() {
     const message = `Timed out waiting for deployment ${deploymentUuid.slice(0, 8)} completion.`;
     console.warn(message);
     console.log("No desktop notification sent (configured: notify only on terminal completion).");
+    notifyDeployEvent({
+      title: "Coolify Deploy Still Running",
+      message,
+      success: false,
+    });
   }
 }
 
 main().catch((error) => {
   console.error("Failed to trigger Coolify deploy:", error?.message || error);
+  notifyDeployEvent({
+    title: "Coolify Deploy Failed",
+    message: `Failed to trigger deploy: ${error?.message || error}`,
+    success: false,
+  });
   process.exit(1);
 });

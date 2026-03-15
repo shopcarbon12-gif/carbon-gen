@@ -4,10 +4,8 @@ export type ParsedSkuRoute = {
   parserType: CollectionParserType;
   routeKey: string;
   digit: string;
+  normalizedCode: string;
   barcodeLabel: string;
-  normalizedSku: string;
-  normalizedUpc: string;
-  normalizedTokens: string[];
 };
 
 const ROUTE_KEY_LABELS: Record<string, string> = {
@@ -86,6 +84,46 @@ function parseRouteFromDigits(rawDigits: string) {
   return { routeKey, digit };
 }
 
+function parseNewSkuCode(skuDigits: string) {
+  if (skuDigits.length < 5) {
+    return {
+      routeKey: "",
+      digit: "",
+      normalizedCode: "",
+    };
+  }
+  const gender = skuDigits.slice(0, 1);
+  const season = skuDigits.slice(1, 2);
+  const categoryDigit = skuDigits.slice(4, 5);
+  return {
+    routeKey: `${gender}${season}`,
+    digit: categoryDigit,
+    normalizedCode: skuDigits.slice(0, 5),
+  };
+}
+
+function parseLegacyNormalizedCode(code: string) {
+  const digits = code.replace(/[^0-9]/g, "");
+  if (digits.length < 7) {
+    return {
+      routeKey: "",
+      digit: "",
+      normalizedCode: "",
+    };
+  }
+  const gender = digits.slice(0, 1);
+  const supplier = digits.slice(1, 3);
+  const season = digits.slice(3, 4);
+  const categoryDigit = digits.slice(4, 5);
+  const style = digits.slice(5, 7);
+  const normalizedCode = `${gender}${supplier}${season}${categoryDigit}${style}`;
+  return {
+    routeKey: `${gender}${season}`,
+    digit: categoryDigit,
+    normalizedCode,
+  };
+}
+
 export function parseSkuRouteInfo(input: {
   sku: string;
   upc?: string;
@@ -95,8 +133,9 @@ export function parseSkuRouteInfo(input: {
   const normalizedSku = normalizeText(input.sku).toUpperCase();
   const normalizedUpc = normalizeText(input.upc || "");
   const skuCompact = normalizedSku.replace(/[\s\-_]+/g, "");
+  const skuDigits = skuCompact.replace(/[^0-9]/g, "");
   const upcDigits = normalizedUpc.replace(/[^0-9]/g, "");
-  const parserType: CollectionParserType =
+  let parserType: CollectionParserType =
     skuCompact.startsWith("1") || skuCompact.startsWith("2")
       ? "NEW"
       : skuCompact.startsWith("C")
@@ -105,37 +144,33 @@ export function parseSkuRouteInfo(input: {
 
   let routeKey = "";
   let digit = "";
+  let normalizedCode = "";
   if (parserType === "NEW") {
-    const parsed = parseRouteFromDigits(skuCompact);
+    const parsed = parseNewSkuCode(skuDigits);
     routeKey = parsed.routeKey;
     digit = parsed.digit;
+    normalizedCode = parsed.normalizedCode;
   } else if (parserType === "LEGACY") {
-    const parsed = parseRouteFromDigits(skuCompact.slice(1));
-    routeKey = parsed.routeKey;
-    digit = parsed.digit;
-  }
-
-  if (!routeKey || !digit) {
-    const fallback = parseRouteFromDigits(upcDigits);
-    if (fallback.routeKey && fallback.digit) {
-      routeKey = fallback.routeKey;
-      digit = fallback.digit;
+    if (upcDigits.length >= 7) {
+      const parsed = parseLegacyNormalizedCode(upcDigits);
+      routeKey = parsed.routeKey;
+      digit = parsed.digit;
+      normalizedCode = parsed.normalizedCode;
     }
   }
 
-  const normalizedTokens = dedupe([
-    ...tokenizeCandidateText(input.title || ""),
-    ...tokenizeCandidateText(input.itemType || ""),
-    ...tokenizeCandidateText(normalizedSku),
-  ]);
+  if (!routeKey || !digit || !normalizedCode) {
+    parserType = "UNKNOWN";
+    routeKey = "";
+    digit = "";
+    normalizedCode = "";
+  }
 
   return {
     parserType,
     routeKey,
     digit,
+    normalizedCode,
     barcodeLabel: toBarcodeLabel(routeKey, digit),
-    normalizedSku: skuCompact,
-    normalizedUpc: upcDigits,
-    normalizedTokens,
   };
 }

@@ -22,6 +22,7 @@ export type CollectionAutoMapResult = {
   autoMappedPaths: string[];
   directCollectionsToAssign: string[];
   suggestedPaths: string[];
+  suggestedDirectCollections: string[];
 };
 
 function dedupe(values: string[]) {
@@ -45,18 +46,22 @@ export function computeCollectionAutoMap(input: CollectionAutoMapInput): Collect
   });
   const autoMappedPaths = dedupe(ruleResult.menuPathsToAssign);
   const directCollectionsToAssign = dedupe(ruleResult.directCollectionsToAssign);
-  const suggestedPaths = buildCollectionSuggestions({
+  const suggestions = buildCollectionSuggestions({
+    autoMappedPaths,
+    alreadyAssignedPaths: [...input.assignedMenuPaths, ...autoMappedPaths],
+    alreadyAssignedDirectCollections: directCollectionsToAssign,
     title: input.title,
     itemType: input.itemType,
     sku: input.sku,
-    alreadyAssignedPaths: [...input.assignedMenuPaths, ...autoMappedPaths],
   });
+  const suggestedPaths = suggestions.menuPaths;
+  const suggestedDirectCollections = suggestions.directCollections;
 
   let mappingDecision: MappingDecision = "MANUAL_REVIEW";
   let reviewReason = ruleResult.reason;
   if (!ruleResult.unresolved && (autoMappedPaths.length > 0 || directCollectionsToAssign.length > 0)) {
     mappingDecision = "AUTO_MAPPED";
-  } else if (suggestedPaths.length > 0) {
+  } else if (suggestedPaths.length > 0 || suggestedDirectCollections.length > 0) {
     mappingDecision = "SUGGESTED";
     if (!reviewReason) reviewReason = "Suggestion candidates available.";
   } else if (!reviewReason) {
@@ -73,5 +78,6 @@ export function computeCollectionAutoMap(input: CollectionAutoMapInput): Collect
     autoMappedPaths,
     directCollectionsToAssign,
     suggestedPaths,
+    suggestedDirectCollections,
   };
 }
