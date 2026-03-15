@@ -637,6 +637,7 @@ export default function ShopifyCollectionMapping() {
       const finalMenuPaths = Array.from(closedFinalSet);
       const currentDirectCollections = dedupeCollectionHandles(row.currentDirectCollections || []);
       const finalDirectCollections = dedupeCollectionHandles([
+        ...currentDirectCollections,
         ...(row.directCollectionsToAssign || []),
         ...effectiveSelectedSuggestionCollections,
       ]);
@@ -857,7 +858,7 @@ export default function ShopifyCollectionMapping() {
       const collectionSyncStatus = staging.collectionSyncStatus;
       const currentPaths = dedupeNormalizedPaths((row.checkedNodeKeys || []).map((key) => nodePathByKey.get(key) || key));
       const finalPaths = dedupeNormalizedPaths(staging.finalMenuPaths || []);
-      const currentDirect = dedupeCollectionHandles(row.directCollectionsToAssign || []);
+      const currentDirect = dedupeCollectionHandles(row.currentDirectCollections || []);
       const finalDirect = dedupeCollectionHandles(staging.finalDirectCollections || []);
       const currentRefs = [...toPathRefs(currentPaths), ...toDirectRefs(currentDirect)];
       const finalRefs = [...toPathRefs(finalPaths), ...toDirectRefs(finalDirect)];
