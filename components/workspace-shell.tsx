@@ -64,7 +64,7 @@ const navItems: NavItem[] = [
   { href: "/studio/rfid-price-tag", label: "RFID Price Tag" },
   { href: "/studio/lightspeed-catalog", label: "Lightspeed Catalog" },
   { href: SHOPIFY_MAPPING_INVENTORY_ROOT, label: "Shopify Mapping Inventory" },
-  { href: "/studio/shopify-collection-mapping", label: "Collection Mapping" },
+  { href: "/shopify-collection-mapping", label: "Collection Mapping" },
   { href: "/studio/video", label: "Create New Items" },
   { href: "/studio/social", label: "Social Ads & Meta" },
   { href: "/ops/inventory", label: "Ops Inventory" },
@@ -121,7 +121,9 @@ function getCurrentTitle(pathname: string) {
 export function WorkspaceShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const isCollectionMappingRoute = pathname.startsWith("/studio/shopify-collection-mapping");
+  const isCollectionMappingRoute =
+    pathname.startsWith("/shopify-collection-mapping") ||
+    pathname.startsWith("/studio/shopify-collection-mapping");
   const hideSideRailsOnCollectionMapping = isCollectionMappingRoute;
   const showIntegrationPanel =
     !pathname.startsWith("/settings") && !hideSideRailsOnCollectionMapping;

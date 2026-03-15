@@ -1,12 +1,62 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+function normalize(value: unknown): string {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function isTruthy(value: unknown): boolean {
+  const v = normalize(value);
+  return v === "1" || v === "true" || v === "yes" || v === "on";
+}
+
+function isCoolifyRuntime(): boolean {
+  return Boolean(
+    normalize(process.env.COOLIFY_FQDN) ||
+      normalize(process.env.COOLIFY_URL) ||
+      normalize(process.env.COOLIFY_APP_ID) ||
+      normalize(process.env.COOLIFY_BRANCH)
+  );
+}
+
+function shouldBlockShopifyLiveUpdates(): boolean {
+  if (!isCoolifyRuntime()) return false;
+  return !isTruthy(process.env.SHOPIFY_LIVE_UPDATES_ON_COOLIFY);
+}
+
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const method = req.method.toUpperCase();
+  const legacyCollectionMappingPath = "/studio/shopify-collection-mapping";
+  const publicCollectionMappingPath = "/shopify-collection-mapping";
+
+  if (pathname === legacyCollectionMappingPath || pathname.startsWith(`${legacyCollectionMappingPath}/`)) {
+    const redirectUrl = req.nextUrl.clone();
+    redirectUrl.pathname = pathname.replace(legacyCollectionMappingPath, publicCollectionMappingPath);
+    return NextResponse.redirect(redirectUrl, { status: 308 });
+  }
+
+  if (shouldBlockShopifyLiveUpdates()) {
+    const isWebhookIngress = pathname.startsWith("/api/shopify/webhooks/");
+    const isCronSync = pathname === "/api/cron/cart-sync";
+    const isShopifyMutation = pathname.startsWith("/api/shopify/") && method !== "GET";
+    if (isWebhookIngress || isCronSync || isShopifyMutation) {
+      return NextResponse.json(
+        {
+          ok: false,
+          blocked: true,
+          reason: "shopify_live_updates_disabled_on_coolify",
+          message:
+            "Shopify live updates are disabled on Coolify. Use localhost for development. Re-enable by setting SHOPIFY_LIVE_UPDATES_ON_COOLIFY=true when ready.",
+        },
+        { status: 503 }
+      );
+    }
+  }
+
   const loginPreview = req.nextUrl.searchParams.get("preview") === "1";
-  const publicStudioPath = "/studio/shopify-collection-mapping";
-  const isPublicStudioPath =
-    pathname === publicStudioPath || pathname.startsWith(`${publicStudioPath}/`);
+  const isPublicCollectionMappingPath =
+    pathname === publicCollectionMappingPath || pathname.startsWith(`${publicCollectionMappingPath}/`);
   const isProd = process.env.NODE_ENV === "production";
   const authBypass =
     !isProd && (process.env.AUTH_BYPASS || "false").trim().toLowerCase() === "true";
@@ -67,7 +117,7 @@ export function proxy(req: NextRequest) {
   ];
   const isProtected = protectedRoutes.some((route) => pathname.startsWith(route));
 
-  if (isProtected && !isAuthed && !isPublicStudioPath) {
+  if (isProtected && !isAuthed && !isPublicCollectionMappingPath) {
     const loginUrl = req.nextUrl.clone();
     loginUrl.pathname = "/login";
     return NextResponse.redirect(loginUrl);
@@ -85,6 +135,8 @@ export function proxy(req: NextRequest) {
 export const config = {
   matcher: [
     "/api/:path*",
+    "/shopify-collection-mapping",
+    "/shopify-collection-mapping/:path*",
     "/dashboard/:path*",
     "/generate/:path*",
     "/studio/:path*",

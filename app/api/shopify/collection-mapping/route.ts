@@ -941,6 +941,87 @@ function findMenuNodeIndex(items: ShopifyMenuItemNode[]) {
   return map;
 }
 
+function buildVisibleMenuItemsFromNodes(
+  sourceItems: ShopifyMenuItemNode[],
+  nodes: MenuNodeRecord[],
+  collections: CollectionOption[]
+) {
+  const sourceIndex = findMenuNodeIndex(sourceItems);
+  const byId = new Map<string, CollectionOption>();
+  const byHandle = new Map<string, CollectionOption>();
+  for (const row of collections) {
+    const id = normalizeText(row.id);
+    if (id) byId.set(id, row);
+    const handle = normalizeText(row.handle).toLowerCase();
+    if (handle) byHandle.set(handle, row);
+  }
+
+  const enabledNodes = nodes.filter((row) => row.enabled);
+  const childrenByParent = new Map<string, MenuNodeRecord[]>();
+  for (const row of enabledNodes) {
+    const parentKey = normalizeText(row.parentKey) || "__root__";
+    const current = childrenByParent.get(parentKey) || [];
+    current.push(row);
+    childrenByParent.set(parentKey, current);
+  }
+  for (const list of childrenByParent.values()) {
+    list.sort((a, b) => {
+      const aSource = sourceIndex.get(normalizeText(a.nodeKey));
+      const bSource = sourceIndex.get(normalizeText(b.nodeKey));
+      const aHasSource = Boolean(aSource);
+      const bHasSource = Boolean(bSource);
+      if (aHasSource && bHasSource && aSource && bSource) {
+        if (aSource.siblingIndex !== bSource.siblingIndex) {
+          return aSource.siblingIndex - bSource.siblingIndex;
+        }
+      }
+      if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+      return normalizeText(a.nodeKey).localeCompare(normalizeText(b.nodeKey));
+    });
+  }
+
+  const buildNode = (row: MenuNodeRecord): ShopifyMenuItemNode => {
+    const existing = sourceIndex.get(normalizeText(row.nodeKey))?.node;
+    const children = (childrenByParent.get(normalizeText(row.nodeKey)) || []).map((child) => buildNode(child));
+    if (existing) {
+      return {
+        ...existing,
+        title: normalizeText(row.label) || normalizeText(existing.title) || "Untitled",
+        items: children,
+      };
+    }
+
+    const collectionId = normalizeText(row.collectionId);
+    const collectionFromId = collectionId ? byId.get(collectionId) : undefined;
+    const handleHint = normalizeText(row.defaultCollectionHandle).toLowerCase();
+    const collectionFromHandle = !collectionFromId && handleHint ? byHandle.get(handleHint) : undefined;
+    const collection = collectionFromId || collectionFromHandle || null;
+
+    if (collection) {
+      return {
+        title: normalizeText(row.label) || "Untitled",
+        type: "COLLECTION",
+        resourceId: normalizeText(collection.id) || null,
+        url: collection.handle ? `/collections/${collection.handle}` : "/collections/all",
+        items: children,
+      };
+    }
+
+    const fallbackHandle = normalizeText(row.defaultCollectionHandle);
+    const fallbackUrl = fallbackHandle ? `/collections/${fallbackHandle}` : "/";
+    return {
+      title: normalizeText(row.label) || "Untitled",
+      type: "HTTP",
+      resourceId: null,
+      url: fallbackUrl,
+      items: children,
+    };
+  };
+
+  const roots = childrenByParent.get("__root__") || [];
+  return roots.map((row) => buildNode(row));
+}
+
 function collectMenuDescendantKeys(node: ShopifyMenuItemNode) {
   const out = new Set<string>();
   const queue = [...(Array.isArray(node.items) ? node.items : [])];
@@ -2325,6 +2406,90 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    if (action === "rename-collection-title") {
+      const collectionId = normalizeText(body.collectionId || "");
+      const nextTitle = normalizeText(body.title || "");
+      if (!collectionId || !nextTitle) {
+        return NextResponse.json({ ok: false, error: "collectionId and title are required." }, { status: 400 });
+      }
+
+      const mutation = `
+        mutation RenameCollectionForMapping($input: CollectionInput!) {
+          collectionUpdate(input: $input) {
+            collection {
+              id
+              title
+              handle
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }
+      `;
+      type RenameCollectionMutationData = {
+        collectionUpdate: {
+          collection: { id?: string; title?: string; handle?: string } | null;
+          userErrors: Array<{ field?: string[]; message?: string }>;
+        } | null;
+      };
+      const updateResult: GraphResult<RenameCollectionMutationData> =
+        (await runShopifyGraphql<RenameCollectionMutationData>({
+          shop,
+          token: tokenResult.token,
+          apiVersion,
+          query: mutation,
+          variables: {
+            input: {
+              id: collectionId,
+              title: nextTitle,
+            },
+          },
+        })) as GraphResult<RenameCollectionMutationData>;
+
+      if (!updateResult.ok || !updateResult.data?.collectionUpdate) {
+        return NextResponse.json(
+          { ok: false, error: `Failed to rename collection: ${JSON.stringify(updateResult.errors || "unknown")}` },
+          { status: 500 }
+        );
+      }
+      const userErrors = updateResult.data.collectionUpdate.userErrors || [];
+      if (userErrors.length > 0) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: userErrors.map((row) => normalizeText(row.message)).filter(Boolean).join(" | ") || "Collection rename failed.",
+          },
+          { status: 400 }
+        );
+      }
+
+      collectionsCache.delete(buildShopCacheKey(shop, apiVersion));
+      const updated = updateResult.data.collectionUpdate.collection;
+      await logMappingAudit({
+        shop,
+        action,
+        summary: `Renamed collection to "${nextTitle}"`,
+        status: "ok",
+        details: {
+          collectionId,
+          title: nextTitle,
+        },
+      });
+      return NextResponse.json({
+        ok: true,
+        shop,
+        collection: updated
+          ? {
+              id: normalizeText(updated.id),
+              title: normalizeText(updated.title),
+              handle: normalizeText(updated.handle),
+            }
+          : null,
+      });
+    }
+
     if (action === "get-logs") {
       const logs = await listMappingAuditLogs(shop, parseLogLimit(body.limit));
       return NextResponse.json({
@@ -2774,6 +2939,40 @@ export async function POST(req: NextRequest) {
         .filter((row) => Boolean(row.nodeKey));
 
       const saved = await saveMenuMappings(shop, mappings, collectionsResult.collections);
+      let responseNodes = saved.nodes;
+      let actionWarning = joinWarnings(saved.warning, menuSync.warning);
+      if (!menuSync.menuAccessDenied) {
+        const nextItems = buildVisibleMenuItemsFromNodes(menuSync.menu.items, saved.nodes, collectionsResult.collections);
+        const updateResult = await updateMenuTree(
+          shop,
+          tokenResult.token,
+          apiVersion,
+          menuSync.menu.menuId,
+          menuSync.menu.menuTitle,
+          menuSync.menu.menuHandle,
+          nextItems
+        );
+        if (!updateResult.ok) {
+          await logMappingAudit({
+            shop,
+            action,
+            summary: `Failed to apply visibility to Shopify for ${mappings.length} node(s)`,
+            status: "error",
+            errorMessage: updateResult.error,
+            details: { count: mappings.length },
+          });
+          return NextResponse.json({ ok: false, error: updateResult.error }, { status: 500 });
+        }
+
+        const syncedAfterUpdate = await syncLiveMenuNodes(shop, updateResult.liveNodes, collectionsResult.collections);
+        responseNodes = syncedAfterUpdate.nodes;
+        actionWarning = joinWarnings(actionWarning, syncedAfterUpdate.warning);
+      } else {
+        actionWarning = joinWarnings(
+          actionWarning,
+          "Visibility was saved locally, but live menu update is blocked until navigation scopes are granted."
+        );
+      }
       await logMappingAudit({
         shop,
         action,
@@ -2789,9 +2988,9 @@ export async function POST(req: NextRequest) {
         ok: true,
         shop,
         backend: saved.backend,
-        warning: joinWarnings(saved.warning, menuSync.warning),
-        nodes: saved.nodes,
-        mappedNodes: saved.nodes.filter((node) => node.enabled && Boolean(node.collectionId)),
+        warning: actionWarning,
+        nodes: responseNodes,
+        mappedNodes: responseNodes.filter((node) => node.enabled && Boolean(node.collectionId)),
       });
     }
 
@@ -3432,6 +3631,13 @@ export async function POST(req: NextRequest) {
             .concat(singleNodeKey ? [singleNodeKey] : [])
         )
       );
+      const requestedDirectCollectionIds = Array.from(
+        new Set(
+          (Array.isArray(body.directCollectionIds) ? body.directCollectionIds : [])
+            .map((row) => normalizeText(row))
+            .filter(Boolean)
+        )
+      );
       const requestedProductIds =
         action === "bulk-toggle-nodes"
           ? Array.from(
@@ -3444,9 +3650,9 @@ export async function POST(req: NextRequest) {
           : Array.from(new Set([normalizeText(body.productId || "")].filter(Boolean)));
       const checked = parseBool(body.checked);
       const uncheckPolicy = toUncheckPolicy(body.uncheckPolicy);
-      if (requestedProductIds.length < 1 || requestedNodeKeys.length < 1) {
+      if (requestedProductIds.length < 1 || (requestedNodeKeys.length < 1 && requestedDirectCollectionIds.length < 1)) {
         return NextResponse.json(
-          { ok: false, error: "productIds and at least one node key are required." },
+          { ok: false, error: "productIds and at least one node key or direct collection ID are required." },
           { status: 400 }
         );
       }
@@ -3454,6 +3660,20 @@ export async function POST(req: NextRequest) {
       const collectionsResult = await fetchAllCollectionsCached(shop, tokenResult.token, apiVersion);
       if ("error" in collectionsResult) {
         return NextResponse.json({ ok: false, error: collectionsResult.error }, { status: 500 });
+      }
+      const collectionById = new Map(
+        collectionsResult.collections.map((row): [string, CollectionOption] => [normalizeText(row.id), row])
+      );
+      const invalidDirectCollectionIds = requestedDirectCollectionIds.filter((id) => !collectionById.has(id));
+      if (invalidDirectCollectionIds.length > 0) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "One or more direct collection IDs are invalid.",
+            invalidDirectCollectionIds,
+          },
+          { status: 400 }
+        );
       }
 
       const menuSyncResult = await syncMenuNodesFromShopify(
@@ -3487,7 +3707,12 @@ export async function POST(req: NextRequest) {
       const parentMap = buildParentMap(nodes);
       const childrenMap = buildChildrenMap(nodes);
       const mappedCollectionIds = new Set(nodes.map((node) => normalizeText(node.collectionId)).filter(Boolean));
+      const managedCollectionIds = new Set<string>([...mappedCollectionIds, ...requestedDirectCollectionIds]);
       const activeToken = String(tokenResult.token || "");
+      const requestedTargetSummary = [
+        ...requestedNodeKeys,
+        ...requestedDirectCollectionIds.map((id) => `collection:${id}`),
+      ].join(",");
 
       async function processOneProduct(productId: string) {
         const productGid = toProductGid(productId);
@@ -3501,7 +3726,7 @@ export async function POST(req: NextRequest) {
             shop,
             productId,
             productTitle: "",
-            nodeKey: requestedNodeKeys.join(","),
+            nodeKey: requestedTargetSummary,
             checked,
             addedCollectionIds: [],
             removedCollectionIds: [],
@@ -3542,6 +3767,15 @@ export async function POST(req: NextRequest) {
           const collectionId = normalizeText(node?.collectionId);
           if (collectionId) desiredCollectionIds.add(collectionId);
         }
+        if (checked) {
+          for (const collectionId of requestedDirectCollectionIds) {
+            desiredCollectionIds.add(collectionId);
+          }
+        } else {
+          for (const collectionId of requestedDirectCollectionIds) {
+            desiredCollectionIds.delete(collectionId);
+          }
+        }
 
         const additions: string[] = [];
         const removals: string[] = [];
@@ -3549,7 +3783,7 @@ export async function POST(req: NextRequest) {
           if (!currentCollectionSet.has(collectionId)) additions.push(collectionId);
         }
         for (const currentCollectionId of currentCollectionSet) {
-          if (!mappedCollectionIds.has(currentCollectionId)) continue;
+          if (!managedCollectionIds.has(currentCollectionId)) continue;
           if (!desiredCollectionIds.has(currentCollectionId)) removals.push(currentCollectionId);
         }
 
@@ -3561,7 +3795,7 @@ export async function POST(req: NextRequest) {
             shop,
             productId: currentResult.productId,
             productTitle: currentResult.title,
-            nodeKey: requestedNodeKeys.join(","),
+            nodeKey: requestedTargetSummary,
             checked,
             addedCollectionIds: [],
             removedCollectionIds: [],
@@ -3599,7 +3833,7 @@ export async function POST(req: NextRequest) {
             shop,
             productId: currentResult.productId,
             productTitle: currentResult.title,
-            nodeKey: requestedNodeKeys.join(","),
+            nodeKey: requestedTargetSummary,
             checked,
             addedCollectionIds: additions,
             removedCollectionIds: removals,
@@ -3617,7 +3851,7 @@ export async function POST(req: NextRequest) {
           shop,
           productId: refreshedResult.productId,
           productTitle: refreshedResult.title,
-          nodeKey: requestedNodeKeys.join(","),
+          nodeKey: requestedTargetSummary,
           checked,
           addedCollectionIds: additions,
           removedCollectionIds: removals,
@@ -3677,11 +3911,14 @@ export async function POST(req: NextRequest) {
       await logMappingAudit({
         shop,
         action,
-        summary: `${checked ? "Checked" : "Unchecked"} ${requestedNodeKeys.length} node(s) for ${requestedProductIds.length} product(s)`,
+        summary:
+          `${checked ? "Checked" : "Unchecked"} ${requestedNodeKeys.length} node(s), ` +
+          `${requestedDirectCollectionIds.length} direct collection(s) for ${requestedProductIds.length} product(s)`,
         status: failed.length > 0 ? "error" : "ok",
         details: {
           requestedProductIds,
           requestedNodeKeys,
+          requestedDirectCollectionIds,
           checked,
           failedCount: failed.length,
         },
@@ -3695,6 +3932,7 @@ export async function POST(req: NextRequest) {
           uncheckPolicy,
           product: succeeded[0].product,
           requestedNodeKeys,
+          requestedDirectCollectionIds,
           addedCollectionIds: succeeded[0].addedCollectionIds,
           removedCollectionIds: succeeded[0].removedCollectionIds,
           warning: joinWarnings(...warnings, ...failed.map((row) => row.error), menuSyncResult.warning, nodesResult.warning),
@@ -3706,6 +3944,7 @@ export async function POST(req: NextRequest) {
         shop,
         uncheckPolicy,
         requestedNodeKeys,
+        requestedDirectCollectionIds,
         processedCount: requestedProductIds.length,
         failedCount: failed.length,
         products: succeeded.map((row) => row.product),

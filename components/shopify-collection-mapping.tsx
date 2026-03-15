@@ -123,7 +123,10 @@ type UndoEntry = {
 };
 const TREE_PANEL_MIN_WIDTH = 340;
 const TREE_PANEL_MAX_WIDTH = 1600;
-const TREE_PANEL_DEFAULT_WIDTH = 500;
+const TREE_PANEL_DEFAULT_WIDTH = 400;
+const TREE_PANEL_MAX_AUTO_WIDTH = 900;
+const WORKSPACE_MIN_HEIGHT = 420;
+const WORKSPACE_MAX_HEIGHT = 5000;
 type MoveDropTarget = { targetKey: string; position: DropPosition } | null;
 const MENU_LINK_TYPE_OPTIONS: Array<{ value: MenuLinkType; label: string }> = [
   { value: "COLLECTION", label: "Collection" },
@@ -161,6 +164,9 @@ export default function ShopifyCollectionMapping() {
   const [nodes, setNodes] = useState<MenuNode[]>([]);
   const [rows, setRows] = useState<ProductRow[]>([]);
   const [selectedNodes, setSelectedNodes] = useState<Record<string, boolean>>({});
+  const [selectedUnmappedCollectionIds, setSelectedUnmappedCollectionIds] = useState<Record<string, boolean>>({});
+  const [dismissedUnmappedCollectionIds, setDismissedUnmappedCollectionIds] = useState<Record<string, boolean>>({});
+  const [unmappedCollectionOrder, setUnmappedCollectionOrder] = useState<string[]>([]);
   const [selectedProducts, setSelectedProducts] = useState<Record<string, boolean>>({});
   const [treeSearch, setTreeSearch] = useState("");
   const [search, setSearch] = useState("");
@@ -206,8 +212,16 @@ export default function ShopifyCollectionMapping() {
   const [undoConfirmOpen, setUndoConfirmOpen] = useState(false);
   const [undoResult, setUndoResult] = useState<{ ok: boolean; title: string; details: string[] } | null>(null);
   const [treePanelWidth, setTreePanelWidth] = useState(TREE_PANEL_DEFAULT_WIDTH);
+  const [autoTreeWidthArmed, setAutoTreeWidthArmed] = useState(false);
   const [resizingPanes, setResizingPanes] = useState(false);
+  const [resizingWorkspaceHeight, setResizingWorkspaceHeight] = useState(false);
+  const [workspaceHeight, setWorkspaceHeight] = useState<number | null>(null);
   const paneResizeStart = useRef<{ x: number; width: number } | null>(null);
+  const workspaceResizeStart = useRef<{ pageY: number; height: number } | null>(null);
+  const workspaceResizePointerClientY = useRef(0);
+  const pageScrollRef = useRef<HTMLElement | null>(null);
+  const workspaceGridRef = useRef<HTMLDivElement | null>(null);
+  const treePanelAutoWidthRef = useRef<HTMLDivElement | null>(null);
   const tempNodeCounterRef = useRef(0);
   const undoCounterRef = useRef(0);
   const typesDropdownRef = useRef<HTMLDivElement | null>(null);
@@ -377,6 +391,12 @@ export default function ShopifyCollectionMapping() {
     return selectedNodeKeysWithParents.filter((key) => Boolean(nodeByKey.get(key)?.collectionId));
   }, [nodeByKey, selectedNodeKeysWithParents]);
 
+  const selectedDirectCollectionIds = useMemo(() => {
+    return Object.keys(selectedUnmappedCollectionIds).filter((id) => Boolean(selectedUnmappedCollectionIds[id]));
+  }, [selectedUnmappedCollectionIds]);
+
+  const hasSelectedAssignTargets = mappedSelectedNodeKeys.length > 0 || selectedDirectCollectionIds.length > 0;
+
   const allSelectedOnPage = useMemo(() => {
     if (rows.length < 1) return false;
     return rows.every((row) => Boolean(selectedProducts[row.id]));
@@ -468,6 +488,21 @@ export default function ShopifyCollectionMapping() {
       generatedAt: new Date().toISOString(),
     };
   }, [collections, nodes]);
+
+  const orderedUnmappedCollections = useMemo(() => {
+    const rankById = new Map<string, number>();
+    for (let index = 0; index < unmappedCollectionOrder.length; index += 1) {
+      rankById.set(unmappedCollectionOrder[index], index);
+    }
+    return collectionAudit.unmapped
+      .filter((row) => !dismissedUnmappedCollectionIds[row.id])
+      .sort((left, right) => {
+        const leftRank = rankById.has(left.id) ? Number(rankById.get(left.id)) : Number.MAX_SAFE_INTEGER;
+        const rightRank = rankById.has(right.id) ? Number(rankById.get(right.id)) : Number.MAX_SAFE_INTEGER;
+        if (leftRank !== rightRank) return leftRank - rightRank;
+        return left.title.localeCompare(right.title, undefined, { sensitivity: "base" });
+      });
+  }, [collectionAudit.unmapped, unmappedCollectionOrder, dismissedUnmappedCollectionIds]);
 
   // Requirement 2: Dynamic Linking Behavior
   // Generate a live link based on the actively selected node in the tree.
@@ -663,6 +698,82 @@ export default function ShopifyCollectionMapping() {
 
   function resetTreeSelectionToDefault() {
     setSelectedNodes({});
+    setSelectedUnmappedCollectionIds({});
+  }
+
+  function collapseTreeToDefault() {
+    setTreeSearch("");
+    setExpandedNodes({});
+  }
+
+  function toggleUnmappedCollectionSelection(collectionId: string) {
+    const normalized = String(collectionId || "").trim();
+    if (!normalized) return;
+    setSelectedUnmappedCollectionIds((prev) => ({
+      ...prev,
+      [normalized]: !prev[normalized],
+    }));
+  }
+
+  function reorderUnmappedCollection(sourceId: string, targetId: string) {
+    const source = String(sourceId || "").trim();
+    const target = String(targetId || "").trim();
+    if (!source || !target || source === target) return;
+    setUnmappedCollectionOrder((prev) => {
+      const base = prev.length > 0 ? [...prev] : orderedUnmappedCollections.map((row) => row.id);
+      const sourceIndex = base.indexOf(source);
+      const targetIndex = base.indexOf(target);
+      if (sourceIndex < 0 || targetIndex < 0) return prev;
+      const next = [...base];
+      next.splice(sourceIndex, 1);
+      next.splice(targetIndex, 0, source);
+      return next;
+    });
+  }
+
+  async function editUnmappedCollection(collectionId: string, nextTitleInput: string) {
+    const target = collectionAudit.unmapped.find((row) => row.id === collectionId);
+    if (!target) return;
+    const nextTitle = nextTitleInput.trim();
+    if (!nextTitle || nextTitle === target.title) return;
+
+    setSaving(true);
+    setError("");
+    try {
+      const resp = await fetch("/api/shopify/collection-mapping", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          withShopContext({
+            action: "rename-collection-title",
+            collectionId: target.id,
+            title: nextTitle,
+          })
+        ),
+      });
+      const json = (await resp.json()) as MappingResponse;
+      if (!resp.ok || !json.ok) {
+        throw new Error(json.error || "Failed to rename collection.");
+      }
+      await loadData({ refreshCollections: true });
+      setWarning(`Collection renamed to "${nextTitle}".`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to rename collection.";
+      setError(message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function deleteUnmappedCollectionCard(collectionId: string) {
+    setDismissedUnmappedCollectionIds((prev) => ({ ...prev, [collectionId]: true }));
+    setSelectedUnmappedCollectionIds((prev) => {
+      if (!prev[collectionId]) return prev;
+      const next = { ...prev };
+      delete next[collectionId];
+      return next;
+    });
+    setUnmappedCollectionOrder((prev) => prev.filter((id) => id !== collectionId));
   }
 
   function applyNodeSelection(nodeKey: string) {
@@ -721,6 +832,19 @@ export default function ShopifyCollectionMapping() {
     // #endregion
     setSelectedNodes(out);
   }
+
+  useEffect(() => {
+    const currentIds = collectionAudit.unmapped.map((row) => row.id);
+    setUnmappedCollectionOrder((prev) => {
+      const currentSet = new Set(currentIds);
+      const kept = prev.filter((id) => currentSet.has(id));
+      const keptSet = new Set(kept);
+      const appended = currentIds.filter((id) => !keptSet.has(id));
+      const next = [...kept, ...appended];
+      if (next.length === prev.length && next.every((id, idx) => id === prev[idx])) return prev;
+      return next;
+    });
+  }, [collectionAudit.unmapped]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -917,6 +1041,82 @@ export default function ShopifyCollectionMapping() {
       window.removeEventListener("mouseup", stopResize);
     };
   }, [resizingPanes]);
+
+  useEffect(() => {
+    if (!resizingWorkspaceHeight) return;
+    let rafId = 0;
+    const EDGE_THRESHOLD = 36;
+    const SCROLL_STEP = 18;
+    const tick = () => {
+      const start = workspaceResizeStart.current;
+      if (!start) return;
+
+      const currentPageY = workspaceResizePointerClientY.current + window.scrollY;
+      const deltaY = currentPageY - start.pageY;
+      const nextHeight = Math.min(
+        WORKSPACE_MAX_HEIGHT,
+        Math.max(WORKSPACE_MIN_HEIGHT, start.height + deltaY)
+      );
+      setWorkspaceHeight(nextHeight);
+
+      const clientY = workspaceResizePointerClientY.current;
+      if (clientY > window.innerHeight - EDGE_THRESHOLD) {
+        window.scrollBy({ top: SCROLL_STEP, behavior: "auto" });
+      } else if (clientY < EDGE_THRESHOLD) {
+        window.scrollBy({ top: -SCROLL_STEP, behavior: "auto" });
+      }
+
+      const pageEl = pageScrollRef.current;
+      if (pageEl) pageEl.scrollTop = pageEl.scrollHeight;
+      rafId = window.requestAnimationFrame(tick);
+    };
+    const onMouseMove = (event: MouseEvent) => {
+      workspaceResizePointerClientY.current = event.clientY;
+    };
+    const stopResize = () => {
+      setResizingWorkspaceHeight(false);
+      workspaceResizeStart.current = null;
+    };
+    const priorCursor = document.body.style.cursor;
+    const priorUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", stopResize);
+    rafId = window.requestAnimationFrame(tick);
+    return () => {
+      document.body.style.cursor = priorCursor;
+      document.body.style.userSelect = priorUserSelect;
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", stopResize);
+      if (rafId) window.cancelAnimationFrame(rafId);
+    };
+  }, [resizingWorkspaceHeight]);
+
+  useEffect(() => {
+    if (!autoTreeWidthArmed) return;
+    if (resizingPanes) return;
+    const host = treePanelAutoWidthRef.current;
+    if (!host) return;
+    const raf = window.requestAnimationFrame(() => {
+      const labels = host.querySelectorAll<HTMLElement>(".treeLabel, .treeTargetLabel, .unmappedCardLabel");
+      let maxOverflow = 0;
+      labels.forEach((label) => {
+        if (label.offsetParent === null) return;
+        const overflow = label.scrollWidth - label.clientWidth;
+        if (overflow > maxOverflow) maxOverflow = overflow;
+      });
+      if (maxOverflow <= 1) return;
+      setTreePanelWidth((prev) => {
+        const next = Math.min(
+          TREE_PANEL_MAX_AUTO_WIDTH,
+          Math.max(TREE_PANEL_DEFAULT_WIDTH, Math.ceil(prev + maxOverflow + 28))
+        );
+        return next > prev ? next : prev;
+      });
+    });
+    return () => window.cancelAnimationFrame(raf);
+  }, [nodes, orderedUnmappedCollections, expandedNodes, treeSearch, resizingPanes, treePanelWidth, autoTreeWidthArmed]);
 
   async function moveMenuNode(nodeKey: string, nextDropTarget: MoveDropTarget) {
     if (!nodeKey || !nextDropTarget) return;
@@ -1236,6 +1436,7 @@ export default function ShopifyCollectionMapping() {
       if (latestJson && Array.isArray(latestJson.nodes)) {
         applyMenuNodesFromResponse(latestJson);
       }
+      collapseTreeToDefault();
       setPendingTreeOps([]);
       setWarning("Menu saved to Shopify.");
     } catch (err) {
@@ -1287,6 +1488,7 @@ export default function ShopifyCollectionMapping() {
   }
 
   function toggleNodeExpansion(nodeKey: string) {
+    setAutoTreeWidthArmed(true);
     setExpandedNodes((prev) => ({
       ...prev,
       [nodeKey]: prev[nodeKey] === false ? true : false,
@@ -1298,18 +1500,13 @@ export default function ShopifyCollectionMapping() {
     if (!target) return;
     const nextEnabled = !target.enabled;
     const subtree = new Set<string>();
-    const isTopLevelParent = Number(target.depth || 0) <= 0;
-    if (isTopLevelParent) {
-      const stack = [nodeKey];
-      while (stack.length > 0) {
-        const current = stack.pop();
-        if (!current || subtree.has(current)) continue;
-        subtree.add(current);
-        const children = childrenByParent.get(current) || [];
-        for (const childKey of children) stack.push(childKey);
-      }
-    } else {
-      subtree.add(nodeKey);
+    const stack = [nodeKey];
+    while (stack.length > 0) {
+      const current = stack.pop();
+      if (!current || subtree.has(current)) continue;
+      subtree.add(current);
+      const children = childrenByParent.get(current) || [];
+      for (const childKey of children) stack.push(childKey);
     }
     // #region agent log
     fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
@@ -1324,7 +1521,7 @@ export default function ShopifyCollectionMapping() {
         data: {
           nodeKey,
           nodeDepth: Number(target.depth || 0),
-          isTopLevelParent,
+          isTopLevelParent: Number(target.depth || 0) <= 0,
           subtreeSize: subtree.size,
           enabledBefore: Boolean(target.enabled),
           enabledAfter: nextEnabled,
@@ -1560,7 +1757,7 @@ export default function ShopifyCollectionMapping() {
   }
 
   async function toggleAssign(productId: string, checked: boolean) {
-    if (mappedSelectedNodeKeys.length < 1) return;
+    if (!hasSelectedAssignTargets) return;
     setSaving(true);
     setError("");
     try {
@@ -1571,6 +1768,7 @@ export default function ShopifyCollectionMapping() {
           action: "toggle-nodes",
           productId,
           nodeKeys: mappedSelectedNodeKeys,
+          directCollectionIds: selectedDirectCollectionIds,
           checked,
         })),
       });
@@ -1607,7 +1805,7 @@ export default function ShopifyCollectionMapping() {
   }
 
   async function bulkAssign(checked: boolean) {
-    if (mappedSelectedNodeKeys.length < 1) return;
+    if (!hasSelectedAssignTargets) return;
     const ids = Object.keys(selectedProducts).filter((key) => Boolean(selectedProducts[key]));
     if (ids.length < 1) return;
     setSaving(true);
@@ -1620,6 +1818,7 @@ export default function ShopifyCollectionMapping() {
           action: "bulk-toggle-nodes",
           productIds: ids,
           nodeKeys: mappedSelectedNodeKeys,
+          directCollectionIds: selectedDirectCollectionIds,
           checked,
         })),
       });
@@ -1699,10 +1898,17 @@ export default function ShopifyCollectionMapping() {
         throw new Error(json.error || "Menu refresh failed.");
       }
       const nextNodes = json.nodes || [];
+      const nextCollections = (json.collections || []).map((row) => ({
+        id: String(row.id || ""),
+        title: String(row.title || row.id || ""),
+      }));
       setNodes(nextNodes);
+      setCollections(nextCollections);
+      setCollectionCount(nextCollections.length);
       setPendingTreeOps([]);
-      setTreeSearch("");
+      collapseTreeToDefault();
       setSelectedNodes({});
+      setSelectedUnmappedCollectionIds({});
       setWarning(String(json.warning || "").trim());
     } catch (err) {
       const message = err instanceof Error ? err.message : "Menu refresh failed.";
@@ -1791,7 +1997,7 @@ export default function ShopifyCollectionMapping() {
   }
 
   return (
-    <main className="page">
+    <main className={`page${workspaceHeight ? " pageExpanded" : ""}`} ref={pageScrollRef}>
       <style jsx global>{`
         .app-bg-photo,
         .app-bg-fade,
@@ -1804,7 +2010,7 @@ export default function ShopifyCollectionMapping() {
         }
       `}</style>
 
-      <section className="card">
+      <section className="card workspaceCard">
         <h1>Shopify Collection Mapping</h1>
         <div className="topbar" style={{ marginTop: 10 }}>
           <span className="pill">{activeShop ? `Shop: ${activeShop}` : "Shop: not selected"}</span>
@@ -1855,43 +2061,63 @@ export default function ShopifyCollectionMapping() {
       </section>
 
       <section className="card">
-        <div className="grid2" style={{ gridTemplateColumns: `${treePanelWidth}px 18px minmax(0, 1fr)` }}>
-          <ShopifyMenuItemsTree
-            menuTitle={menuMeta.title}
-            menuHandle={menuMeta.handle}
-            treeSearch={treeSearch}
-            onTreeSearchChange={setTreeSearch}
-            onTreeSearchSubmit={expandTreeForSearchResults}
-            onRefreshTree={() => {
-              setTreePanelWidth(TREE_PANEL_DEFAULT_WIDTH);
-              void refreshMenuTreeSection();
-            }}
-            undoEntries={undoHistory}
-            undoMenuOpen={undoMenuOpen}
-            onUndoMenuToggle={() => setUndoMenuOpen((prev) => !prev)}
-            onUndoEntrySelect={openUndoPreview}
-            onSaveTree={saveMenuTreeSection}
-            saving={saving}
-            nodes={nodes}
-            nodeByKey={nodeByKey}
-            childrenByParent={childrenByParent}
-            visibleTreeNodeIdSet={visibleTreeNodeIdSet}
-            expandedNodes={expandedNodes}
-            selectedNodes={selectedNodes}
-            onMoveNode={moveMenuNode}
-            onInlineEditNode={inlineEditMenuNode}
-            inlineLinkTargets={menuLinkTargets}
-            onApplyNodeSelection={applyNodeSelection}
-            onToggleNodeExpansion={toggleNodeExpansion}
-            onToggleNodeVisibility={toggleNodeVisibility}
-            onOpenEditEditor={openEditEditor}
-            onOpenAddEditor={openAddEditor}
-            onDeleteNode={(nodeKey) => {
-              const ok = window.confirm("Delete this menu item and all nested children?");
-              if (!ok) return;
-              void deleteMenuNode(nodeKey);
-            }}
-          />
+        <div
+          ref={workspaceGridRef}
+          className="grid2"
+          style={{
+            gridTemplateColumns: `${treePanelWidth}px 18px minmax(0, 1fr)`,
+            height: workspaceHeight ? `${workspaceHeight}px` : "100%",
+            transition: resizingPanes ? "none" : "grid-template-columns 220ms cubic-bezier(0.22, 1, 0.36, 1)",
+          }}
+        >
+          <div ref={treePanelAutoWidthRef} className="treePaneHost">
+            <ShopifyMenuItemsTree
+              menuTitle={menuMeta.title}
+              menuHandle={menuMeta.handle}
+              treeSearch={treeSearch}
+              onTreeSearchChange={setTreeSearch}
+              onTreeSearchSubmit={expandTreeForSearchResults}
+              onRefreshTree={() => {
+                setTreePanelWidth(TREE_PANEL_DEFAULT_WIDTH);
+                setAutoTreeWidthArmed(false);
+                void refreshMenuTreeSection();
+              }}
+              undoEntries={undoHistory}
+              undoMenuOpen={undoMenuOpen}
+              onUndoMenuToggle={() => setUndoMenuOpen((prev) => !prev)}
+              onUndoEntrySelect={openUndoPreview}
+              onSaveTree={saveMenuTreeSection}
+              saving={saving}
+              nodes={nodes}
+              nodeByKey={nodeByKey}
+              childrenByParent={childrenByParent}
+              visibleTreeNodeIdSet={visibleTreeNodeIdSet}
+              expandedNodes={expandedNodes}
+              selectedNodes={selectedNodes}
+              unmappedCollections={orderedUnmappedCollections.map((row) => ({
+                id: row.id,
+                title: row.title,
+                selected: Boolean(selectedUnmappedCollectionIds[row.id]),
+              }))}
+              onMoveNode={moveMenuNode}
+              onInlineEditNode={inlineEditMenuNode}
+              inlineLinkTargets={menuLinkTargets}
+              onApplyNodeSelection={applyNodeSelection}
+              onToggleNodeExpansion={toggleNodeExpansion}
+              onToggleNodeVisibility={toggleNodeVisibility}
+              onOpenEditEditor={openEditEditor}
+              onOpenAddEditor={openAddEditor}
+              onDeleteNode={(nodeKey) => {
+                const ok = window.confirm("Delete this menu item and all nested children?");
+                if (!ok) return;
+                void deleteMenuNode(nodeKey);
+              }}
+              onToggleUnmappedCollection={toggleUnmappedCollectionSelection}
+              onReorderUnmappedCollections={reorderUnmappedCollection}
+            onEditUnmappedCollection={editUnmappedCollection}
+            onDeleteUnmappedCollection={deleteUnmappedCollectionCard}
+            />
+          </div>
           <button
             type="button"
             className={`paneDivider ${resizingPanes ? "resizing" : ""}`}
@@ -1967,21 +2193,22 @@ export default function ShopifyCollectionMapping() {
               </button>
             </div>
             <div className="topbar">
-              <span className="chip">Selected Collections: {selectedNodeKeysWithParents.length}</span>
+              <span className="chip">Selected Collections: {selectedNodeKeysWithParents.length + selectedDirectCollectionIds.length}</span>
               <span className="chip">Mapped Selected: {mappedSelectedNodeKeys.length}</span>
+              <span className="chip">Unmapped Selected: {selectedDirectCollectionIds.length}</span>
               <span className="chip">Page {page} / {totalPages}</span>
               <button
                 className="primary"
                 type="button"
                 onClick={() => void bulkAssign(true)}
-                disabled={saving || mappedSelectedNodeKeys.length < 1}
+                disabled={saving || !hasSelectedAssignTargets}
               >
                 Assign Checked Products
               </button>
               <button
                 type="button"
                 onClick={() => void bulkAssign(false)}
-                disabled={saving || mappedSelectedNodeKeys.length < 1}
+                disabled={saving || !hasSelectedAssignTargets}
               >
                 Unassign Checked Products
               </button>
@@ -2089,40 +2316,64 @@ export default function ShopifyCollectionMapping() {
               </table>
             </div>
             <div className="topbar pagerBar" style={{ marginTop: 10 }}>
-              <button type="button" onClick={() => setPage(1)} disabled={page <= 1 || loading}>
-                {"<<"}
-              </button>
-              <button type="button" onClick={() => setPage((prev) => Math.max(1, prev - 1))} disabled={page <= 1 || loading}>
-                {"<"}
-              </button>
-              <span className="muted">Page {page} of {totalPages}</span>
-              <button
-                type="button"
-                onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
-                disabled={page >= totalPages || loading}
-              >
-                {">"}
-              </button>
-              <button type="button" onClick={() => setPage(totalPages)} disabled={page >= totalPages || loading}>
-                {">>"}
-              </button>
-              <span className="muted">Products per page</span>
-              <select
-                value={pageSize}
-                onChange={(event) => {
-                  setPageSize(Number(event.target.value) || 20);
-                  setPage(1);
-                }}
-              >
-                {[20, 50, 100, 200, 500].map((size) => (
-                  <option key={size} value={size}>
-                    {size} per page
-                  </option>
-                ))}
-              </select>
+              <div className="pagerNav">
+                <button type="button" onClick={() => setPage(1)} disabled={page <= 1 || loading}>
+                  {"<<"}
+                </button>
+                <button type="button" onClick={() => setPage((prev) => Math.max(1, prev - 1))} disabled={page <= 1 || loading}>
+                  {"<"}
+                </button>
+                <span className="muted">Page {page} of {totalPages}</span>
+                <button
+                  type="button"
+                  onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+                  disabled={page >= totalPages || loading}
+                >
+                  {">"}
+                </button>
+                <button type="button" onClick={() => setPage(totalPages)} disabled={page >= totalPages || loading}>
+                  {">>"}
+                </button>
+              </div>
+              <label className="pagerPerPage" aria-label="Products per page">
+                <span className="muted">Per page</span>
+                <select
+                  className="pagerPerPageSelect"
+                  value={pageSize}
+                  onChange={(event) => {
+                    setPageSize(Number(event.target.value) || 20);
+                    setPage(1);
+                  }}
+                >
+                  {[20, 50, 100, 200, 500].map((size) => (
+                    <option key={size} value={size}>
+                      {size}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
           </main>
         </div>
+        <button
+          type="button"
+          className={`workspaceHeightDivider ${resizingWorkspaceHeight ? "resizing" : ""}`}
+          aria-label="Resize workspace height"
+          onMouseDown={(event) => {
+            const currentHeight =
+              workspaceGridRef.current?.getBoundingClientRect().height ||
+              workspaceHeight ||
+              560;
+            workspaceResizeStart.current = {
+              pageY: event.pageY,
+              height: Math.max(WORKSPACE_MIN_HEIGHT, currentHeight),
+            };
+            workspaceResizePointerClientY.current = event.clientY;
+            setResizingWorkspaceHeight(true);
+          }}
+        >
+          <span className="workspaceHeightGrip" />
+        </button>
       </section>
 
       {previewImage ? (
@@ -2437,9 +2688,22 @@ export default function ShopifyCollectionMapping() {
           margin: 0 auto;
           padding: 12px;
           display: grid;
+          grid-template-rows: auto minmax(0, 1fr);
           gap: 12px;
+          height: 100vh;
+          height: 100dvh;
+          max-height: 100vh;
+          max-height: 100dvh;
+          overflow-x: hidden;
+          overflow-y: auto;
           color: #e5e7eb;
           font-family: ui-sans-serif, system-ui, Segoe UI, Arial;
+        }
+        .page.pageExpanded {
+          grid-template-rows: auto auto;
+          height: auto;
+          max-height: none;
+          overflow: visible;
         }
         .card {
           background: #111827;
@@ -2525,12 +2789,29 @@ export default function ShopifyCollectionMapping() {
           grid-template-columns: 300px 18px minmax(0, 1fr);
           gap: 12px;
           align-items: stretch;
+          height: 100%;
+          min-height: 0;
+        }
+        .workspaceCard {
+          min-height: 0;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+        }
+        .treePaneHost {
+          min-height: 0;
+          height: 100%;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
         }
         .grid2 > .card.panel {
-          height: 72vh;
+          height: 100%;
+          max-height: 100%;
           min-height: 0;
           display: flex;
           flex-direction: column;
+          overflow: hidden;
         }
         .paneDivider {
           display: flex;
@@ -2557,6 +2838,37 @@ export default function ShopifyCollectionMapping() {
         .paneDivider:focus-visible {
           box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.4);
           border-radius: 999px;
+        }
+        .workspaceHeightDivider {
+          margin-top: 8px;
+          width: 100%;
+          height: 16px;
+          min-height: 16px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 999px;
+          cursor: row-resize;
+          outline: none;
+          padding: 0;
+          border: 0;
+          background: transparent;
+        }
+        .workspaceHeightGrip {
+          width: 84px;
+          height: 4px;
+          border-radius: 999px;
+          background: #33506e;
+          transition: background-color 120ms ease, box-shadow 120ms ease;
+        }
+        .workspaceHeightDivider:hover .workspaceHeightGrip,
+        .workspaceHeightDivider.resizing .workspaceHeightGrip,
+        .workspaceHeightDivider:focus-visible .workspaceHeightGrip {
+          background: #60a5fa;
+          box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.4);
+        }
+        .workspaceHeightDivider:focus-visible {
+          box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.35);
         }
         .panel {
           padding: 10px;
@@ -2830,7 +3142,53 @@ export default function ShopifyCollectionMapping() {
           text-align: center;
         }
         .pagerBar {
-          justify-content: flex-end;
+          width: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          flex-wrap: nowrap;
+        }
+        .pagerNav {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          min-width: 0;
+        }
+        .pagerPerPage {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          margin-left: auto;
+          white-space: nowrap;
+        }
+        .pagerPerPageSelect {
+          width: auto;
+          min-width: 72px;
+          max-width: 86px;
+          padding: 0 8px;
+          min-height: 32px;
+          height: 32px;
+          font-size: 12px;
+          line-height: 1;
+          color-scheme: dark;
+          color: #e5e7eb;
+          background: #0b1322;
+          border-color: #334155;
+        }
+        .pagerPerPageSelect option {
+          color: #e5e7eb;
+          background: #0b1322;
+        }
+        .pagerBar > button,
+        .pagerNav > button {
+          min-height: 32px;
+          height: 32px;
+          padding: 0 9px;
+          line-height: 1;
+        }
+        .pagerBar .muted {
+          font-size: 11px;
         }
         .pagerBar select {
           color-scheme: dark;
@@ -3002,13 +3360,25 @@ export default function ShopifyCollectionMapping() {
           text-align: center;
         }
         @media (max-width: 1200px) {
+          .page {
+            height: auto;
+            max-height: none;
+            overflow: visible;
+            grid-template-rows: auto auto;
+          }
           .grid2 {
             grid-template-columns: 1fr;
+            height: auto;
           }
           .grid2 > .card.panel {
             height: auto;
+            max-height: none;
+            overflow: visible;
           }
           .paneDivider {
+            display: none;
+          }
+          .workspaceHeightDivider {
             display: none;
           }
           .productControls {

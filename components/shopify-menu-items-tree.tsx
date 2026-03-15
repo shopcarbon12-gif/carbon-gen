@@ -72,6 +72,7 @@ type ShopifyMenuItemsTreeProps = {
   visibleTreeNodeIdSet: Set<string>;
   expandedNodes: Record<string, boolean>;
   selectedNodes: Record<string, boolean>;
+  unmappedCollections: Array<{ id: string; title: string; selected: boolean }>;
   onMoveNode: (sourceKey: string, target: DropTarget) => Promise<void>;
   onInlineEditNode: (
     node: MenuNode,
@@ -90,6 +91,10 @@ type ShopifyMenuItemsTreeProps = {
   onOpenEditEditor: (node: MenuNode) => void;
   onOpenAddEditor: (parentKey: string | null) => void;
   onDeleteNode: (nodeKey: string) => void;
+  onToggleUnmappedCollection: (collectionId: string) => void;
+  onReorderUnmappedCollections: (sourceCollectionId: string, targetCollectionId: string) => void;
+  onEditUnmappedCollection: (collectionId: string, title: string) => Promise<void>;
+  onDeleteUnmappedCollection: (collectionId: string) => void;
 };
 
 type RowProps = {
@@ -486,8 +491,8 @@ function SortableTreeRow({
               type="button"
               className={enabled ? "iconBtn" : "iconBtn danger"}
               onClick={onToggleVisibility}
-              aria-label={enabled ? "Hide menu item from live website" : "Show menu item on live website"}
-              title={enabled ? "Visible on live website" : "Hidden from live website"}
+              aria-label={enabled ? "Hide this menu branch on live website (save required)" : "Show this menu branch on live website (save required)"}
+              title={enabled ? "Visible on website (click to hide, then Save)" : "Hidden from website (click to show, then Save)"}
             >
               {enabled ? (
                 <svg viewBox="0 0 16 16" width="14" height="14">
@@ -535,6 +540,7 @@ export default function ShopifyMenuItemsTree({
   visibleTreeNodeIdSet,
   expandedNodes,
   selectedNodes,
+  unmappedCollections,
   onMoveNode,
   onInlineEditNode,
   inlineLinkTargets,
@@ -544,6 +550,10 @@ export default function ShopifyMenuItemsTree({
   onOpenEditEditor,
   onOpenAddEditor,
   onDeleteNode,
+  onToggleUnmappedCollection,
+  onReorderUnmappedCollections,
+  onEditUnmappedCollection,
+  onDeleteUnmappedCollection,
 }: ShopifyMenuItemsTreeProps) {
   const hasTreeSearch = treeSearch.trim().length > 0;
   const [dragSourceKey, setDragSourceKey] = useState("");
@@ -558,6 +568,10 @@ export default function ShopifyMenuItemsTree({
   const [inlineLinkPickerMode, setInlineLinkPickerMode] = useState<"categories" | "results">("categories");
   const [inlineLinkQuery, setInlineLinkQuery] = useState("");
   const [inlineSaving, setInlineSaving] = useState(false);
+  const [draggingUnmappedCollectionId, setDraggingUnmappedCollectionId] = useState("");
+  const [editingUnmappedCollectionId, setEditingUnmappedCollectionId] = useState("");
+  const [editingUnmappedTitle, setEditingUnmappedTitle] = useState("");
+  const [savingUnmappedEdit, setSavingUnmappedEdit] = useState(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const visibleNodeKeys = useMemo(() => Array.from(visibleTreeNodeIdSet), [visibleTreeNodeIdSet]);
   const parentByKey = useMemo(() => {
@@ -889,6 +903,176 @@ export default function ShopifyMenuItemsTree({
                 </button>
               </div>
             </div>
+            <div className="unmappedWrap">
+              <div className="unmappedDivider" />
+              <div className="unmappedHead">
+                <span>UNMAPPED COLLECTIONS</span>
+                <span className="unmappedCount">{unmappedCollections.length}</span>
+              </div>
+              <div className="unmappedList">
+                {unmappedCollections.length > 0 ? (
+                  unmappedCollections.map((row) => {
+                    const isEditingUnmapped = editingUnmappedCollectionId === row.id;
+                    return (
+                    <div
+                      key={row.id}
+                      role="button"
+                      tabIndex={0}
+                      className={[
+                        "unmappedCard",
+                        row.selected ? "selected" : "",
+                        isEditingUnmapped ? "editing" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      onClick={() => {
+                        if (isEditingUnmapped) return;
+                        onToggleUnmappedCollection(row.id);
+                      }}
+                      onKeyDown={(event) => {
+                        if (isEditingUnmapped) return;
+                        if (event.key !== "Enter" && event.key !== " ") return;
+                        event.preventDefault();
+                        onToggleUnmappedCollection(row.id);
+                      }}
+                      onDragOver={(event) => {
+                        event.preventDefault();
+                      }}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        if (!draggingUnmappedCollectionId || draggingUnmappedCollectionId === row.id) return;
+                        onReorderUnmappedCollections(draggingUnmappedCollectionId, row.id);
+                        setDraggingUnmappedCollectionId("");
+                      }}
+                      title={row.title}
+                      aria-pressed={row.selected}
+                    >
+                      <span className="unmappedDragHandle" aria-hidden="true">
+                        <button
+                          type="button"
+                          className="unmappedDragBtn"
+                          draggable
+                          disabled={isEditingUnmapped}
+                          onClick={(event) => event.stopPropagation()}
+                          onDragStart={(event) => {
+                            event.stopPropagation();
+                            setDraggingUnmappedCollectionId(row.id);
+                          }}
+                          onDragEnd={(event) => {
+                            event.stopPropagation();
+                            setDraggingUnmappedCollectionId("");
+                          }}
+                          aria-label={`Drag ${row.title}`}
+                          title="Drag to reorder"
+                        >
+                          <svg viewBox="0 0 10 14" width="10" height="14">
+                            <circle cx="2" cy="2" r="1.1" />
+                            <circle cx="8" cy="2" r="1.1" />
+                            <circle cx="2" cy="7" r="1.1" />
+                            <circle cx="8" cy="7" r="1.1" />
+                            <circle cx="2" cy="12" r="1.1" />
+                            <circle cx="8" cy="12" r="1.1" />
+                          </svg>
+                        </button>
+                      </span>
+                      {isEditingUnmapped ? (
+                        <input
+                          className="unmappedInlineInput"
+                          value={editingUnmappedTitle}
+                          onClick={(event) => event.stopPropagation()}
+                          onChange={(event) => setEditingUnmappedTitle(event.target.value)}
+                          onKeyDown={async (event) => {
+                            event.stopPropagation();
+                            if (event.key === "Escape") {
+                              setEditingUnmappedCollectionId("");
+                              setEditingUnmappedTitle("");
+                              return;
+                            }
+                            if (event.key !== "Enter") return;
+                            const nextTitle = editingUnmappedTitle.trim();
+                            if (!nextTitle || savingUnmappedEdit) return;
+                            setSavingUnmappedEdit(true);
+                            try {
+                              await onEditUnmappedCollection(row.id, nextTitle);
+                              setEditingUnmappedCollectionId("");
+                              setEditingUnmappedTitle("");
+                            } finally {
+                              setSavingUnmappedEdit(false);
+                            }
+                          }}
+                          aria-label="Collection name"
+                          autoFocus
+                        />
+                      ) : (
+                        <span className="unmappedCardLabel">{row.title}</span>
+                      )}
+                      <span className="unmappedCardActions">
+                        {isEditingUnmapped ? (
+                          <button
+                            type="button"
+                            className="iconBtn success"
+                            disabled={savingUnmappedEdit || !editingUnmappedTitle.trim()}
+                            onClick={async (event) => {
+                              event.stopPropagation();
+                              const nextTitle = editingUnmappedTitle.trim();
+                              if (!nextTitle || savingUnmappedEdit) return;
+                              setSavingUnmappedEdit(true);
+                              try {
+                                await onEditUnmappedCollection(row.id, nextTitle);
+                                setEditingUnmappedCollectionId("");
+                                setEditingUnmappedTitle("");
+                              } finally {
+                                setSavingUnmappedEdit(false);
+                              }
+                            }}
+                            aria-label="Save collection name"
+                            title="Save"
+                          >
+                            <svg viewBox="0 0 20 20" width="14" height="14">
+                              <path d="M7.8 13.8 4.5 10.5l1.4-1.4 1.9 1.9 6.3-6.3 1.4 1.4z" />
+                            </svg>
+                          </button>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              className="iconBtn"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setEditingUnmappedCollectionId(row.id);
+                                setEditingUnmappedTitle(row.title);
+                              }}
+                              aria-label="Edit collection name"
+                              title="Edit name"
+                            >
+                              <svg viewBox="0 0 20 20" width="14" height="14">
+                                <path d="M14.69 2.86a1.5 1.5 0 0 1 2.12 2.12l-7.77 7.77-3.28.63.63-3.28 7.77-7.77zM4 15.5h12v1.5H4z" />
+                              </svg>
+                            </button>
+                            <button
+                              type="button"
+                              className="iconBtn danger"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                onDeleteUnmappedCollection(row.id);
+                              }}
+                              aria-label="Delete unmapped collection card"
+                              title="Remove from unmapped list"
+                            >
+                              <svg viewBox="0 0 20 20" width="14" height="14">
+                                <path d="M7.5 2.5h5l.7 1.5H17V6H3V4h3.8l.7-1.5zM5 7h10l-.8 10.5a1.5 1.5 0 0 1-1.5 1.3H7.3a1.5 1.5 0 0 1-1.5-1.3L5 7z" />
+                              </svg>
+                            </button>
+                          </>
+                        )}
+                      </span>
+                    </div>
+                  )})
+                ) : (
+                  <div className="unmappedEmpty">No unmapped collections.</div>
+                )}
+              </div>
+            </div>
           </div>
         </SortableContext>
       </DndContext>
@@ -899,6 +1083,7 @@ export default function ShopifyMenuItemsTree({
           flex-direction: column;
           min-height: 0;
           height: 100%;
+          overflow: hidden;
         }
         .treeSearchBar {
           display: grid;
@@ -1001,6 +1186,132 @@ export default function ShopifyMenuItemsTree({
           height: 100%;
           overflow-y: auto;
           overflow-x: hidden;
+        }
+        .unmappedWrap {
+          margin-top: 12px;
+          min-height: 0;
+          display: grid;
+          gap: 8px;
+        }
+        .unmappedDivider {
+          border-top: 1px solid #2a3547;
+        }
+        .unmappedHead {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          color: #d6e3f4;
+          font-size: 13px;
+          font-weight: 700;
+          letter-spacing: 0.05em;
+        }
+        .unmappedCount {
+          border: 1px solid #3a4b61;
+          border-radius: 999px;
+          padding: 1px 7px;
+          color: #aec3de;
+          font-size: 11px;
+          font-weight: 700;
+        }
+        .unmappedList {
+          display: grid;
+          gap: 6px;
+          padding-right: 2px;
+        }
+        .unmappedCard {
+          width: 100%;
+          min-height: 38px;
+          border-radius: 8px;
+          border: 1px solid #44556f;
+          background: #0f1a2e;
+          color: #d6e3f4;
+          text-align: left;
+          padding: 0 10px;
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          cursor: pointer;
+          box-shadow: 0 1px 0 rgba(15, 23, 42, 0.24), 0 6px 16px rgba(2, 6, 23, 0.28);
+        }
+        .unmappedCard.editing {
+          min-height: 38px;
+          height: 38px;
+        }
+        .unmappedCard:hover {
+          background: #13233d;
+          border-color: #5f789c;
+        }
+        .unmappedCard.selected {
+          border-color: #87a8da;
+          box-shadow: inset 0 0 0 1px rgba(120, 153, 210, 0.38);
+        }
+        .unmappedDragHandle {
+          color: #7a889f;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          flex: 0 0 auto;
+        }
+        .unmappedDragBtn {
+          min-height: 0;
+          width: 18px;
+          height: 18px;
+          border: 0;
+          padding: 0;
+          border-radius: 4px;
+          background: transparent;
+          color: inherit;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          cursor: grab;
+        }
+        .unmappedDragBtn:active {
+          cursor: grabbing;
+        }
+        .unmappedDragBtn:hover {
+          background: rgba(148, 163, 184, 0.14);
+        }
+        .unmappedDragHandle svg circle {
+          fill: currentColor;
+        }
+        .unmappedCardLabel {
+          min-width: 0;
+          flex: 1 1 auto;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          font-size: 12px;
+          font-weight: 600;
+        }
+        .unmappedInlineInput {
+          min-height: 24px !important;
+          height: 24px !important;
+          width: 100%;
+          min-width: 0;
+          border-radius: 6px !important;
+          border: 1px solid #3f587a !important;
+          background: #0d1a2f !important;
+          color: #e6edf7 !important;
+          padding: 0 8px !important;
+          font-size: 12px !important;
+          font-weight: 500 !important;
+          line-height: 1 !important;
+          margin: 0 !important;
+          flex: 1 1 auto;
+        }
+        .unmappedCardActions {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          margin-left: auto;
+          flex: 0 0 auto;
+        }
+        .unmappedEmpty {
+          color: #8fa6c4;
+          font-size: 12px;
+          padding: 8px 2px;
         }
         .tree {
           overflow: visible;
