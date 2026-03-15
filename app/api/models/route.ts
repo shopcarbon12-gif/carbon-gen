@@ -6,6 +6,19 @@ import { getStoragePublicUrl } from "@/lib/storageProvider";
 
 const DEFAULT_SESSION_USER_ID = "00000000-0000-0000-0000-000000000001";
 const modelSaveInFlight = new Set<string>();
+const MAX_MODEL_REFERENCE_URLS = Number.parseInt(
+  process.env.MODEL_REFERENCE_MAX_URLS || "",
+  10
+) || 50;
+const MAX_MODEL_UPLOAD_FILES = Number.parseInt(process.env.MODEL_UPLOAD_MAX_FILES || "", 10) || 30;
+const MAX_MODEL_UPLOAD_FILE_BYTES = Number.parseInt(
+  process.env.MODEL_UPLOAD_MAX_FILE_BYTES || "",
+  10
+) || 12 * 1024 * 1024;
+const MODEL_UPLOAD_CONCURRENCY = Number.parseInt(
+  process.env.MODEL_UPLOAD_CONCURRENCY || "",
+  10
+) || 3;
 
 function normalizeModelName(value: string) {
   return String(value || "")
@@ -102,6 +115,26 @@ function normalizeReferenceUrl(raw: string) {
   }
 }
 
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>
+) {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  const size = Math.max(1, Math.min(limit, items.length));
+  const runners = Array.from({ length: size }, async () => {
+    while (true) {
+      const current = nextIndex;
+      nextIndex += 1;
+      if (current >= items.length) return;
+      results[current] = await worker(items[current], current);
+    }
+  });
+  await Promise.all(runners);
+  return results;
+}
+
 export async function POST(req: NextRequest) {
   let inFlightKey = "";
   try {
@@ -148,6 +181,14 @@ export async function POST(req: NextRequest) {
             .filter((v: string) => v.length > 0)
         : [];
       urls = Array.from(new Set(urls));
+      if (urls.length > MAX_MODEL_REFERENCE_URLS) {
+        return NextResponse.json(
+          {
+            error: `Too many model URLs. Maximum allowed is ${MAX_MODEL_REFERENCE_URLS}.`,
+          },
+          { status: 413 }
+        );
+      }
 
       if (urls.some((u) => isTemporaryReferenceUrl(u))) {
         return NextResponse.json(
@@ -185,6 +226,36 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         );
       }
+      if (files.length > MAX_MODEL_UPLOAD_FILES) {
+        return NextResponse.json(
+          {
+            error: `Too many files. Maximum allowed is ${MAX_MODEL_UPLOAD_FILES}.`,
+          },
+          { status: 413 }
+        );
+      }
+      const invalidType = files.find(
+        (file) => !String(file.type || "").toLowerCase().startsWith("image/")
+      );
+      if (invalidType) {
+        return NextResponse.json(
+          {
+            error: `Unsupported file type for "${invalidType.name}". Only image uploads are allowed.`,
+          },
+          { status: 415 }
+        );
+      }
+      const tooLarge = files.find((file) => file.size > MAX_MODEL_UPLOAD_FILE_BYTES);
+      if (tooLarge) {
+        return NextResponse.json(
+          {
+            error: `File "${tooLarge.name}" is too large. Max size is ${Math.floor(
+              MAX_MODEL_UPLOAD_FILE_BYTES / (1024 * 1024)
+            )}MB.`,
+          },
+          { status: 413 }
+        );
+      }
       if (gender !== "male" && gender !== "female") {
         return NextResponse.json({ error: "Gender must be male or female." }, { status: 400 });
       }
@@ -205,7 +276,7 @@ export async function POST(req: NextRequest) {
       alreadyCheckedDuplicate = true;
 
       const tempId = crypto.randomUUID();
-      const uploadJobs = files.map(async (file) => {
+      const uploadJobs = await mapWithConcurrency(files, MODEL_UPLOAD_CONCURRENCY, async (file) => {
         const arrayBuffer = await file.arrayBuffer();
         const bytes = new Uint8Array(arrayBuffer);
         const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
@@ -219,7 +290,7 @@ export async function POST(req: NextRequest) {
         return uploaded.url;
       });
 
-      urls = (await Promise.all(uploadJobs))
+      urls = uploadJobs
         .map((v) => sanitizeReferenceUrl(v))
         .filter((v) => v.length > 0);
     }

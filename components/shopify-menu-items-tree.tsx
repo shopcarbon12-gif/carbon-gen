@@ -18,6 +18,23 @@ import { CSS } from "@dnd-kit/utilities";
 import { createPortal } from "react-dom";
 import { type CSSProperties, type ReactElement, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
+const DEBUG_INGEST_URL = "http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692";
+const DEBUG_INGEST_ENABLED =
+  String(process.env.NEXT_PUBLIC_COLLECTION_MAPPING_DEBUG_INGEST || "")
+    .trim()
+    .toLowerCase() === "true";
+const TREE_RENDER_INITIAL_LIMIT = 350;
+const TREE_RENDER_STEP = 200;
+
+function debugIngest(payload: Record<string, unknown>) {
+  if (!DEBUG_INGEST_ENABLED) return;
+  fetch(DEBUG_INGEST_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
+    body: JSON.stringify(payload),
+  }).catch(() => {});
+}
+
 type DropPosition = "before" | "after" | "inside";
 type MenuLinkType = "COLLECTION" | "PRODUCT" | "PAGE" | "BLOG";
 type MenuLinkTargetOption = {
@@ -232,10 +249,7 @@ function SortableTreeRow({
   useEffect(() => {
     if (!isInlineEditing) return;
     // #region agent log
-    fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
-      body: JSON.stringify({
+    debugIngest({
         sessionId: "9da838",
         runId: "label-save-debug",
         hypothesisId: "H1",
@@ -249,8 +263,7 @@ function SortableTreeRow({
           inlineSaveDisabled,
         },
         timestamp: Date.now(),
-      }),
-    }).catch(() => {});
+      });
     // #endregion
   }, [id, isInlineEditing, inlineSaving, inlineLabel, inlineLink, inlineSaveDisabled]);
 
@@ -263,10 +276,7 @@ function SortableTreeRow({
       tabIndex={0}
       onClick={(event) => {
         // #region agent log
-        fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
-          body: JSON.stringify({
+        debugIngest({
             sessionId: "9da838",
             runId: "multi-select-debug",
             hypothesisId: "H2",
@@ -280,8 +290,7 @@ function SortableTreeRow({
               isInlineEditing,
             },
             timestamp: Date.now(),
-          }),
-        }).catch(() => {});
+          });
         // #endregion
         onRowClick();
       }}
@@ -572,8 +581,13 @@ export default function ShopifyMenuItemsTree({
   const [editingUnmappedCollectionId, setEditingUnmappedCollectionId] = useState("");
   const [editingUnmappedTitle, setEditingUnmappedTitle] = useState("");
   const [savingUnmappedEdit, setSavingUnmappedEdit] = useState(false);
+  const [renderNodeLimit, setRenderNodeLimit] = useState(TREE_RENDER_INITIAL_LIMIT);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const visibleNodeKeys = useMemo(() => Array.from(visibleTreeNodeIdSet), [visibleTreeNodeIdSet]);
+  useEffect(() => {
+    setRenderNodeLimit(TREE_RENDER_INITIAL_LIMIT);
+  }, [nodes, treeSearch, expandedNodes]);
+
   const parentByKey = useMemo(() => {
     const map = new Map<string, string | null>();
     for (const node of nodes) map.set(node.nodeKey, node.parentKey || null);
@@ -645,7 +659,11 @@ export default function ShopifyMenuItemsTree({
     setDropTarget(resolveDropTarget(sourceKey, overKey));
   }
 
-  const renderBranch = (parentKey: string | null, depth: number): ReactElement[] => {
+  const renderBranch = (
+    parentKey: string | null,
+    depth: number,
+    renderTracker: { count: number; keys: string[] }
+  ): ReactElement[] => {
     const branchKeys = (
       parentKey
         ? childrenByParent.get(parentKey) || []
@@ -654,8 +672,11 @@ export default function ShopifyMenuItemsTree({
 
     const renderedNodes = branchKeys
       .map((nodeKey, index) => {
+        if (renderTracker.count >= renderNodeLimit) return null;
         const node = nodeByKey.get(nodeKey);
         if (!node) return null;
+        renderTracker.count += 1;
+        renderTracker.keys.push(node.nodeKey);
         const checked = Boolean(selectedNodes[node.nodeKey]);
         const dragging = dragSourceKey === node.nodeKey;
         const dropState = dropTarget?.targetKey === node.nodeKey ? `drop-${dropTarget.position}` : "";
@@ -794,7 +815,7 @@ export default function ShopifyMenuItemsTree({
 
             {shouldShowChildren ? (
               <div className={isExpanded || hasTreeSearch ? "nestedList nested-list treeChildren" : "nestedList nested-list treeChildren collapsed"}>
-                <div className="treeChildrenInner">{renderBranch(node.nodeKey, depth + 1)}</div>
+                <div className="treeChildrenInner">{renderBranch(node.nodeKey, depth + 1, renderTracker)}</div>
               </div>
             ) : null}
           </div>
@@ -829,6 +850,11 @@ export default function ShopifyMenuItemsTree({
 
     return renderedNodes;
   };
+
+  const renderTracker = { count: 0, keys: [] as string[] };
+  const renderedTree = renderBranch(null, 0, renderTracker);
+  const isTreeRenderTruncated =
+    renderTracker.count >= renderNodeLimit && visibleNodeKeys.length > renderTracker.count;
 
   return (
     <aside className="card panel gemTreePanel">
@@ -888,10 +914,21 @@ export default function ShopifyMenuItemsTree({
         </button>
       </div>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragMove={onDragMove} onDragEnd={onDragEnd}>
-        <SortableContext items={visibleNodeKeys} strategy={verticalListSortingStrategy}>
+        <SortableContext items={renderTracker.keys} strategy={verticalListSortingStrategy}>
           <div className="treeCanvas">
             <div id="root-menu" className="tree shopifyMenuTree nestedList nested-list rootList">
-              {renderBranch(null, 0)}
+              {renderedTree}
+              {isTreeRenderTruncated ? (
+                <div className="treeRenderMore">
+                  <button
+                    type="button"
+                    className="treeAddBtn treeCard tree-card"
+                    onClick={() => setRenderNodeLimit((prev) => prev + TREE_RENDER_STEP)}
+                  >
+                    Load more menu items
+                  </button>
+                </div>
+              ) : null}
               <div className="treeAddRoot treeNode tree-item">
                 <button type="button" className="treeAddBtn treeCard tree-card" onClick={() => onOpenAddEditor(null)}>
                   <span className="treeAddIcon" aria-hidden="true">

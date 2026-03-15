@@ -12,6 +12,19 @@ import {
 import { getShopifyAccessToken } from "@/lib/shopifyTokenRepository";
 
 const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
+const MAX_SHOPIFY_PUSH_JSON_BYTES = Number.parseInt(
+  process.env.SHOPIFY_PUSH_MAX_BODY_BYTES || "",
+  10
+) || 2 * 1024 * 1024;
+const MAX_SHOPIFY_PUSH_IMAGES = Number.parseInt(process.env.SHOPIFY_PUSH_MAX_IMAGES || "", 10) || 250;
+const MAX_SHOPIFY_PUSH_MEDIA_IDS = Number.parseInt(
+  process.env.SHOPIFY_PUSH_MAX_MEDIA_IDS || "",
+  10
+) || 1000;
+const MAX_SHOPIFY_PUSH_COLOR_ASSIGNMENTS = Number.parseInt(
+  process.env.SHOPIFY_PUSH_MAX_COLOR_ASSIGNMENTS || "",
+  10
+) || 2000;
 
 type ProductMediaNode = {
   id: string;
@@ -946,6 +959,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const contentLength = Number.parseInt(req.headers.get("content-length") || "", 10);
+  if (Number.isFinite(contentLength) && contentLength > MAX_SHOPIFY_PUSH_JSON_BYTES) {
+    return NextResponse.json(
+      {
+        error: `Payload too large. Maximum allowed is ${Math.floor(
+          MAX_SHOPIFY_PUSH_JSON_BYTES / (1024 * 1024)
+        )}MB.`,
+      },
+      { status: 413 }
+    );
+  }
   const body = await req.json().catch(() => ({}));
   const action = norm(body?.action) || "replace-product-images";
   const shop = normalizeShopDomain(norm(body?.shop));
@@ -977,6 +1001,26 @@ export async function POST(req: NextRequest) {
         }))
         .filter((row: any) => row.url || row.storagePath)
     : [];
+  if (mediaIds.length > MAX_SHOPIFY_PUSH_MEDIA_IDS) {
+    return NextResponse.json(
+      { error: `Too many mediaIds. Maximum allowed is ${MAX_SHOPIFY_PUSH_MEDIA_IDS}.` },
+      { status: 413 }
+    );
+  }
+  if (colorAssignments.length > MAX_SHOPIFY_PUSH_COLOR_ASSIGNMENTS) {
+    return NextResponse.json(
+      {
+        error: `Too many color assignments. Maximum allowed is ${MAX_SHOPIFY_PUSH_COLOR_ASSIGNMENTS}.`,
+      },
+      { status: 413 }
+    );
+  }
+  if (images.length > MAX_SHOPIFY_PUSH_IMAGES) {
+    return NextResponse.json(
+      { error: `Too many images. Maximum allowed is ${MAX_SHOPIFY_PUSH_IMAGES}.` },
+      { status: 413 }
+    );
+  }
 
   if (!shop) {
     return NextResponse.json({ error: "Missing shop" }, { status: 400 });

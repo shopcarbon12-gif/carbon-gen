@@ -3,6 +3,39 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 
+const IMAGE_UPLOAD_TIMEOUT_MS = 30_000;
+const IMAGE_UPLOAD_RETRIES = 2;
+
+async function postFormDataWithRetry(
+  url: string,
+  form: FormData,
+  retries = IMAGE_UPLOAD_RETRIES,
+  timeoutMs = IMAGE_UPLOAD_TIMEOUT_MS
+) {
+  let attempt = 0;
+  let lastError: unknown = null;
+  while (attempt <= retries) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        body: form,
+        signal: controller.signal,
+      });
+      return response;
+    } catch (error) {
+      lastError = error;
+      if (attempt >= retries) break;
+      await new Promise((resolve) => setTimeout(resolve, 450 * (attempt + 1)));
+    } finally {
+      clearTimeout(timeout);
+    }
+    attempt += 1;
+  }
+  throw lastError instanceof Error ? lastError : new Error("Upload failed.");
+}
+
 async function optimizeCameraTrack(track: MediaStreamTrack | null) {
   if (!track || track.kind !== "video" || typeof track.applyConstraints !== "function") return;
   const getCapabilities = (track as MediaStreamTrack & { getCapabilities?: () => any }).getCapabilities;
@@ -215,10 +248,10 @@ export default function ImageUploadSessionPage() {
         previewForm.append("file", previewFile, previewFile.name || "camera-preview.jpg");
         previewForm.append("captureId", captureId);
         previewForm.append("kind", "preview");
-        const previewResp = await fetch(`/api/image-handoff/session/${encodeURIComponent(sessionId)}`, {
-          method: "POST",
-          body: previewForm,
-        });
+        const previewResp = await postFormDataWithRetry(
+          `/api/image-handoff/session/${encodeURIComponent(sessionId)}`,
+          previewForm
+        );
         const previewJson = await previewResp.json().catch(() => null);
         if (!previewResp.ok) throw new Error(String(previewJson?.error || "Failed to send preview image."));
       })
@@ -227,10 +260,10 @@ export default function ImageUploadSessionPage() {
         sourceForm.append("file", sourceFile, sourceFile.name || "camera-upload.jpg");
         sourceForm.append("captureId", captureId);
         sourceForm.append("kind", "source");
-        const sourceResp = await fetch(`/api/image-handoff/session/${encodeURIComponent(sessionId)}`, {
-          method: "POST",
-          body: sourceForm,
-        });
+        const sourceResp = await postFormDataWithRetry(
+          `/api/image-handoff/session/${encodeURIComponent(sessionId)}`,
+          sourceForm
+        );
         const sourceJson = await sourceResp.json().catch(() => null);
         if (!sourceResp.ok) throw new Error(String(sourceJson?.error || "Failed to send source image."));
       })

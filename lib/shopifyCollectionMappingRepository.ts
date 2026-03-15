@@ -191,6 +191,8 @@ const memoryAuditLogsByShop = new Map<string, MappingAuditLogRow[]>();
 let sqlTablesEnsured = false;
 const MAPPING_AUDIT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const MAPPING_AUDIT_LIMIT_MAX = 1000;
+const TRIM_AUDIT_LOGS_INTERVAL_MS = 60 * 60 * 1000;
+const trimAuditLogsLastRunByShop = new Map<string, number>();
 
 function normalizeText(value: unknown) {
   return String(value ?? "").trim();
@@ -515,16 +517,25 @@ export async function saveMenuMappings(
   shop: string,
   mappings: Array<{ nodeKey: string; collectionId: string | null; enabled?: boolean }>,
   collections: CollectionOption[]
-): Promise<{ backend: "sql" | "memory"; nodes: MenuNodeRecord[]; warning?: string }> {
+): Promise<{
+  backend: "sql" | "memory";
+  nodes: MenuNodeRecord[];
+  warning?: string;
+  invalidNodeKeys: string[];
+}> {
   const safeShop = normalizeShopKey(shop);
   const { byId } = toCollectionMaps(collections);
 
   if (!(await canUseSql())) {
     const current = getMemoryNodes(safeShop, collections);
     const byKey = new Map(current.map((row) => [row.nodeKey, cloneNode(row)]));
+    const invalidNodeKeys = new Set<string>();
     for (const mapping of mappings) {
       const nodeKey = normalizeText(mapping.nodeKey);
-      if (!nodeKey || !byKey.has(nodeKey)) continue;
+      if (!nodeKey || !byKey.has(nodeKey)) {
+        if (nodeKey) invalidNodeKeys.add(nodeKey);
+        continue;
+      }
       const row = byKey.get(nodeKey)!;
       const collectionId = normalizeText(mapping.collectionId) || "";
       const match = collectionId ? byId.get(collectionId) : null;
@@ -541,32 +552,65 @@ export async function saveMenuMappings(
       backend: "memory",
       warning: "SQL is not configured. Mapping data is running in memory for this local session.",
       nodes: next,
+      invalidNodeKeys: Array.from(invalidNodeKeys).sort(),
     };
   }
 
   await seedSqlNodesIfMissing(safeShop, collections);
+  const existing = await listSqlNodes(safeShop);
+  const knownKeys = new Set(existing.map((row) => normalizeText(row.nodeKey)).filter(Boolean));
+  const invalidNodeKeys = new Set<string>();
+  const validMappings: Array<{
+    nodeKey: string;
+    collectionId: string | null;
+    collectionTitle: string | null;
+    collectionHandle: string | null;
+    enabled: boolean | null;
+  }> = [];
 
   for (const mapping of mappings) {
     const nodeKey = normalizeText(mapping.nodeKey);
     if (!nodeKey) continue;
+    if (!knownKeys.has(nodeKey)) {
+      invalidNodeKeys.add(nodeKey);
+      continue;
+    }
     const collectionId = normalizeText(mapping.collectionId) || "";
     const match = collectionId ? byId.get(collectionId) : null;
-
+    validMappings.push({
+      nodeKey,
+      collectionId: match?.id || null,
+      collectionTitle: match?.title || null,
+      collectionHandle: match?.handle || null,
+      enabled: typeof mapping.enabled === "boolean" ? mapping.enabled : null,
+    });
+  }
+  if (validMappings.length > 0) {
     await sqlQuery(
-      `UPDATE shopify_collection_menu_nodes
-       SET collection_id = $3,
-           collection_title = $4,
-           collection_handle = $5,
-           enabled = COALESCE($6, enabled),
+      `WITH input_rows AS (
+         SELECT
+           unnest($2::text[]) AS node_key,
+           unnest($3::text[]) AS collection_id,
+           unnest($4::text[]) AS collection_title,
+           unnest($5::text[]) AS collection_handle,
+           unnest($6::boolean[]) AS enabled
+       )
+       UPDATE shopify_collection_menu_nodes AS n
+       SET collection_id = i.collection_id,
+           collection_title = i.collection_title,
+           collection_handle = i.collection_handle,
+           enabled = COALESCE(i.enabled, n.enabled),
            updated_at = now()
-       WHERE shop = $1 AND node_key = $2`,
+       FROM input_rows AS i
+       WHERE n.shop = $1
+         AND n.node_key = i.node_key`,
       [
         safeShop,
-        nodeKey,
-        match?.id || null,
-        match?.title || null,
-        match?.handle || null,
-        typeof mapping.enabled === "boolean" ? mapping.enabled : null,
+        validMappings.map((row) => row.nodeKey),
+        validMappings.map((row) => row.collectionId),
+        validMappings.map((row) => row.collectionTitle),
+        validMappings.map((row) => row.collectionHandle),
+        validMappings.map((row) => row.enabled),
       ]
     );
   }
@@ -574,6 +618,7 @@ export async function saveMenuMappings(
   return {
     backend: "sql",
     nodes: sortNodes(await listSqlNodes(safeShop)),
+    invalidNodeKeys: Array.from(invalidNodeKeys).sort(),
   };
 }
 
@@ -712,6 +757,23 @@ export async function syncLiveMenuNodes(
       if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
       return a.nodeKey.localeCompare(b.nodeKey);
     });
+  if (normalized.length < 1) {
+    if (!(await canUseSql())) {
+      const existing = memoryNodesByShop.get(safeShop) || [];
+      return {
+        backend: "memory",
+        warning:
+          "Skipped live menu sync because Shopify returned no menu nodes. Kept existing local menu mapping state.",
+        nodes: sortNodes(existing.map(cloneNode)),
+      };
+    }
+    return {
+      backend: "sql",
+      warning:
+        "Skipped live menu sync because Shopify returned no menu nodes. Kept existing local menu mapping state.",
+      nodes: sortNodes(await listSqlNodes(safeShop)),
+    };
+  }
 
   if (!(await canUseSql())) {
     const existing = memoryNodesByShop.get(safeShop) || [];
@@ -755,62 +817,78 @@ export async function syncLiveMenuNodes(
   const byExisting = new Map(existingRows.map((row) => [row.nodeKey, row]));
   const now = new Date().toISOString();
 
-  for (const row of normalized) {
+  const upsertRows = normalized.map((row) => {
     const current = byExisting.get(row.nodeKey);
     const collectionState = resolveNodeCollectionState(current, row, byId, byHandle);
+    return {
+      nodeKey: row.nodeKey,
+      label: row.label,
+      parentKey: row.parentKey,
+      depth: row.depth,
+      sortOrder: row.sortOrder,
+      enabled: typeof current?.enabled === "boolean" ? current.enabled : true,
+      collectionId: collectionState.collectionId,
+      collectionTitle: collectionState.collectionTitle,
+      collectionHandle: collectionState.collectionHandle,
+      defaultCollectionHandle: collectionState.defaultCollectionHandle,
+    };
+  });
+  if (upsertRows.length > 0) {
     await sqlQuery(
       `INSERT INTO shopify_collection_menu_nodes (
-        shop, node_key, label, parent_key, depth, sort_order, enabled,
-        collection_id, collection_title, collection_handle, default_collection_handle, updated_at
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::timestamptz)
-      ON CONFLICT (shop, node_key) DO UPDATE
-        SET label = EXCLUDED.label,
-            parent_key = EXCLUDED.parent_key,
-            depth = EXCLUDED.depth,
-            sort_order = EXCLUDED.sort_order,
-            enabled = EXCLUDED.enabled,
-            collection_id = EXCLUDED.collection_id,
-            collection_title = EXCLUDED.collection_title,
-            collection_handle = EXCLUDED.collection_handle,
-            default_collection_handle = EXCLUDED.default_collection_handle,
-            updated_at = EXCLUDED.updated_at`,
+         shop, node_key, label, parent_key, depth, sort_order, enabled,
+         collection_id, collection_title, collection_handle, default_collection_handle, updated_at
+       )
+       SELECT
+         $1,
+         unnest($2::text[]),
+         unnest($3::text[]),
+         unnest($4::text[]),
+         unnest($5::int[]),
+         unnest($6::int[]),
+         unnest($7::boolean[]),
+         unnest($8::text[]),
+         unnest($9::text[]),
+         unnest($10::text[]),
+         unnest($11::text[]),
+         $12::timestamptz
+       ON CONFLICT (shop, node_key) DO UPDATE
+         SET label = EXCLUDED.label,
+             parent_key = EXCLUDED.parent_key,
+             depth = EXCLUDED.depth,
+             sort_order = EXCLUDED.sort_order,
+             enabled = EXCLUDED.enabled,
+             collection_id = EXCLUDED.collection_id,
+             collection_title = EXCLUDED.collection_title,
+             collection_handle = EXCLUDED.collection_handle,
+             default_collection_handle = EXCLUDED.default_collection_handle,
+             updated_at = EXCLUDED.updated_at`,
       [
         safeShop,
-        row.nodeKey,
-        row.label,
-        row.parentKey,
-        row.depth,
-        row.sortOrder,
-        typeof current?.enabled === "boolean" ? current.enabled : true,
-        collectionState.collectionId,
-        collectionState.collectionTitle,
-        collectionState.collectionHandle,
-        collectionState.defaultCollectionHandle,
+        upsertRows.map((row) => row.nodeKey),
+        upsertRows.map((row) => row.label),
+        upsertRows.map((row) => row.parentKey),
+        upsertRows.map((row) => row.depth),
+        upsertRows.map((row) => row.sortOrder),
+        upsertRows.map((row) => row.enabled),
+        upsertRows.map((row) => row.collectionId),
+        upsertRows.map((row) => row.collectionTitle),
+        upsertRows.map((row) => row.collectionHandle),
+        upsertRows.map((row) => row.defaultCollectionHandle),
         now,
       ]
     );
   }
 
   const keys = normalized.map((row) => row.nodeKey);
-  if (keys.length < 1) {
-    await sqlQuery(
-      `DELETE FROM shopify_collection_menu_nodes
-       WHERE shop = $1
-         AND node_key NOT LIKE 'local4:%'
-         AND enabled = true`,
-      [safeShop]
-    );
-  } else {
-    await sqlQuery(
-      `DELETE FROM shopify_collection_menu_nodes
-       WHERE shop = $1
-         AND NOT (node_key = ANY($2::text[]))
-         AND node_key NOT LIKE 'local4:%'
-         AND enabled = true`,
-      [safeShop, keys]
-    );
-  }
+  await sqlQuery(
+    `DELETE FROM shopify_collection_menu_nodes
+     WHERE shop = $1
+       AND NOT (node_key = ANY($2::text[]))
+       AND node_key NOT LIKE 'local4:%'
+       AND enabled = true`,
+    [safeShop, keys]
+  );
 
   return {
     backend: "sql",
@@ -854,12 +932,16 @@ export async function logCollectionMappingAction(input: ToggleAuditInput): Promi
 }
 
 async function trimSqlMappingAuditLogs(shop: string) {
+  const now = Date.now();
+  const lastTrim = trimAuditLogsLastRunByShop.get(shop) || 0;
+  if (now - lastTrim < TRIM_AUDIT_LOGS_INTERVAL_MS) return;
   await sqlQuery(
     `DELETE FROM shopify_collection_mapping_audit
      WHERE shop = $1
        AND created_at < now() - interval '7 days'`,
     [shop]
   );
+  trimAuditLogsLastRunByShop.set(shop, now);
 }
 
 export async function logMappingAudit(input: MappingAuditInput): Promise<void> {

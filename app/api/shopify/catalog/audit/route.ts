@@ -7,6 +7,12 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
+const MAX_AUDIT_FETCH_PAGES = Number.parseInt(process.env.SHOPIFY_AUDIT_MAX_PAGES || "", 10) || 60;
+const MAX_AUDIT_MISMATCHES = Number.parseInt(
+  process.env.SHOPIFY_AUDIT_MAX_MISMATCHES || "",
+  10
+) || 1000;
+const MAX_AUDIT_POST_IDS = Number.parseInt(process.env.SHOPIFY_AUDIT_POST_MAX_IDS || "", 10) || 1000;
 
 async function getToken(shop: string): Promise<string | null> {
   const dbToken = await getShopifyAccessToken(shop);
@@ -70,7 +76,7 @@ function flatten(p: ProductNode): FlatProduct {
 async function fetchAll(shop: string, token: string, statusFilter: string): Promise<FlatProduct[]> {
   const results: FlatProduct[] = [];
   let cursor: string | null = null;
-  for (let page = 0; page < 120; page++) {
+  for (let page = 0; page < MAX_AUDIT_FETCH_PAGES; page++) {
     const afterClause: string = cursor ? `, after: "${cursor}"` : "";
     const res = await runShopifyGraphql<{
       products?: {
@@ -180,7 +186,9 @@ export async function GET(req: NextRequest) {
           archivedProduct: { id: c.product.id, title: c.product.title, variants: c.product.variants, productType: c.product.productType, vendor: c.product.vendor, hasDescription: c.product.hasDescription, descriptionLength: c.product.descriptionLength, hasPicture: c.product.hasPicture, imageCount: c.product.imageCount },
           matchedBy: c.matchedBy,
         });
+        if (mismatches.length >= MAX_AUDIT_MISMATCHES) break;
       }
+      if (mismatches.length >= MAX_AUDIT_MISMATCHES) break;
     }
 
     const activeNoDesc = active.filter((a) => !a.hasDescription).length;
@@ -192,6 +200,7 @@ export async function GET(req: NextRequest) {
       activeWithoutDescription: activeNoDesc,
       activeWithDescription: active.length - activeNoDesc,
       mismatchCount: mismatches.length,
+      mismatchesTruncated: mismatches.length >= MAX_AUDIT_MISMATCHES,
       mismatches,
     });
   } catch (e: unknown) {
@@ -216,6 +225,12 @@ export async function POST(req: NextRequest) {
       return s.startsWith("gid://") ? s : `gid://shopify/Product/${s}`;
     });
     if (!ids.length) return NextResponse.json({ ok: false, error: "No ids provided" }, { status: 400 });
+    if (ids.length > MAX_AUDIT_POST_IDS) {
+      return NextResponse.json(
+        { ok: false, error: `Too many ids. Maximum allowed is ${MAX_AUDIT_POST_IDS}.` },
+        { status: 413 }
+      );
+    }
 
     const BATCH = 50;
     const results: Array<{

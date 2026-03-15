@@ -25,6 +25,7 @@ import {
   logCollectionMappingAction,
   syncLiveMenuNodes,
 } from "@/lib/shopifyCollectionMappingRepository";
+import { computeCollectionAutoMap } from "@/lib/shopifyCollectionAutoMapper";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,10 +38,14 @@ const MAX_COLLECTION_PAGES = 20;
 const COLLECTION_PAGE_SIZE = 250;
 const COLLECTION_CACHE_TTL_MS = 60 * 1000;
 const PRODUCT_CACHE_TTL_MS = 45 * 1000;
+const TOKEN_CACHE_TTL_MS = 60 * 1000;
 const MAX_MENU_DEPTH = 4;
 const MAX_SHOPIFY_MENU_DEPTH = 2;
 const DEFAULT_MENU_HANDLE = normalizeText(process.env.SHOPIFY_COLLECTION_MAPPING_MENU_HANDLE || "main-menu") || "main-menu";
 const REQUIRED_MENU_SCOPES = ["read_online_store_navigation", "write_online_store_navigation"] as const;
+const DEBUG_INGEST_ENABLED =
+  normalizeLower(process.env.COLLECTION_MAPPING_DEBUG_INGEST || "") === "true";
+const DEBUG_INGEST_URL = "http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692";
 
 type CacheEntry<T> = {
   expiresAt: number;
@@ -49,6 +54,10 @@ type CacheEntry<T> = {
 
 const collectionsCache = new Map<string, CacheEntry<CollectionOption[]>>();
 const productsCache = new Map<string, CacheEntry<ProductRow[]>>();
+const tokenCache = new Map<
+  string,
+  CacheEntry<{ ok: true; token: string; source: "db" | "env_token" } | { ok: false; error: string }>
+>();
 
 function normalizeText(value: unknown) {
   return String(value ?? "").trim();
@@ -154,6 +163,15 @@ function joinWarnings(...parts: Array<unknown>) {
   return Array.from(unique).join(" | ");
 }
 
+function debugIngest(payload: Record<string, unknown>) {
+  if (!DEBUG_INGEST_ENABLED) return;
+  fetch(DEBUG_INGEST_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
+    body: JSON.stringify(payload),
+  }).catch(() => {});
+}
+
 function isModuleEnabled() {
   return normalizeLower(process.env.DISABLE_SHOPIFY_COLLECTION_MAPPING || "") !== "true";
 }
@@ -189,9 +207,14 @@ async function getTokenCandidates(shop: string) {
 }
 
 async function resolveWorkingToken(shop: string, apiVersion: string) {
+  const cacheKey = buildShopCacheKey(shop, apiVersion);
+  const cached = getCachedValue(tokenCache, cacheKey);
+  if (cached) return cached;
   const candidates = await getTokenCandidates(shop);
   if (!candidates.length) {
-    return { ok: false as const, error: "Shop not connected." };
+    const out = { ok: false as const, error: "Shop not connected." };
+    tokenCache.set(cacheKey, { value: out, expiresAt: Date.now() + TOKEN_CACHE_TTL_MS });
+    return out;
   }
 
   let firstUsableToken: { token: string; source: "db" | "env_token" } | null = null;
@@ -225,7 +248,9 @@ async function resolveWorkingToken(shop: string, apiVersion: string) {
       });
 
       if (menuProbe.ok && menuProbe.data?.menus?.nodes) {
-        return { ok: true as const, token: candidate.token, source: candidate.source };
+        const out = { ok: true as const, token: candidate.token, source: candidate.source };
+        tokenCache.set(cacheKey, { value: out, expiresAt: Date.now() + TOKEN_CACHE_TTL_MS });
+        return out;
       }
     }
 
@@ -233,13 +258,17 @@ async function resolveWorkingToken(shop: string, apiVersion: string) {
   }
 
   if (firstUsableToken) {
-    return { ok: true as const, token: firstUsableToken.token, source: firstUsableToken.source };
+    const out = { ok: true as const, token: firstUsableToken.token, source: firstUsableToken.source };
+    tokenCache.set(cacheKey, { value: out, expiresAt: Date.now() + TOKEN_CACHE_TTL_MS });
+    return out;
   }
 
-  return {
+  const out = {
     ok: false as const,
     error: `Shop token validation failed.${lastError ? ` ${lastError}` : ""}`,
   };
+  tokenCache.set(cacheKey, { value: out, expiresAt: Date.now() + TOKEN_CACHE_TTL_MS });
+  return out;
 }
 
 function buildShopCacheKey(shop: string, apiVersion: string) {
@@ -2164,12 +2193,23 @@ async function applyCollectionRemove(
 function mapProductRowToResponse(
   row: ProductRow,
   nodes: MenuNodeRecord[],
-  actionStatusByProductId: Map<string, ProductActionStatus>
+  actionStatusByProductId: Map<string, ProductActionStatus>,
+  nodePathByKey: Map<string, string>
 ) {
   const membership = new Set(row.collectionIds);
   const checkedNodeKeys = nodes
     .filter((node) => node.enabled && node.collectionId && membership.has(node.collectionId))
     .map((node) => node.nodeKey);
+  const assignedMenuPaths = checkedNodeKeys
+    .map((nodeKey) => nodePathByKey.get(nodeKey) || "")
+    .filter(Boolean);
+  const autoMap = computeCollectionAutoMap({
+    sku: row.sku,
+    upc: row.upc,
+    title: row.title,
+    itemType: row.itemType,
+    assignedMenuPaths,
+  });
 
   return {
     id: row.id,
@@ -2183,7 +2223,35 @@ function mapProductRowToResponse(
     collectionIds: row.collectionIds,
     checkedNodeKeys,
     actionStatus: actionStatusByProductId.get(row.id) || "",
+    parserType: autoMap.parserType,
+    routeKey: autoMap.routeKey,
+    digit: autoMap.digit,
+    barcodeLabel: autoMap.barcodeLabel,
+    mappingDecision: autoMap.mappingDecision,
+    reviewReason: autoMap.reviewReason,
+    autoMappedPaths: autoMap.autoMappedPaths,
+    directCollectionsToAssign: autoMap.directCollectionsToAssign,
+    suggestedPaths: autoMap.suggestedPaths,
   };
+}
+
+function buildNodePathByKey(nodes: MenuNodeRecord[]) {
+  const byKey = new Map(nodes.map((node) => [node.nodeKey, node]));
+  const out = new Map<string, string>();
+  for (const node of nodes) {
+    const parts: string[] = [];
+    let current: MenuNodeRecord | undefined = node;
+    const seen = new Set<string>();
+    while (current && !seen.has(current.nodeKey)) {
+      seen.add(current.nodeKey);
+      const label = normalizeText(current.label);
+      if (label) parts.unshift(label.toUpperCase());
+      const parentKey = normalizeText(current.parentKey || "");
+      current = parentKey ? byKey.get(parentKey) : undefined;
+    }
+    out.set(node.nodeKey, parts.join(" > "));
+  }
+  return out;
 }
 
 export async function GET(req: NextRequest) {
@@ -2265,6 +2333,7 @@ export async function GET(req: NextRequest) {
 
     const nodesResult = menuSyncResult.synced;
     const nodes = nodesResult.nodes;
+    const nodePathByKey = buildNodePathByKey(nodes);
 
     const typeLabelByKey = new Map<string, string>();
     for (const row of productsResult.products) {
@@ -2338,7 +2407,9 @@ export async function GET(req: NextRequest) {
       collections: collectionsResult.collections,
       nodes: nodesWithLinkedTargets,
       mappedNodes: nodesWithLinkedTargets.filter((node) => node.enabled && Boolean(node.collectionId)),
-      rows: paged.map((row) => mapProductRowToResponse(row, nodes, actionStatusResult.statusByProductId)),
+      rows: paged.map((row) =>
+        mapProductRowToResponse(row, nodes, actionStatusResult.statusByProductId, nodePathByKey)
+      ),
       logs: logsResult?.logs || [],
       summary: {
         totalProducts: total,
@@ -2696,11 +2767,32 @@ export async function POST(req: NextRequest) {
       if ("error" in collectionsResult) {
         return NextResponse.json({ ok: false, error: collectionsResult.error }, { status: 500 });
       }
+      const menuSync = await syncMenuNodesFromShopify(
+        shop,
+        tokenResult.token,
+        apiVersion,
+        menuHandle,
+        collectionsResult.collections
+      );
+      if (!menuSync.ok) {
+        const status = isMenuScopeErrorMessage(menuSync.error) ? 403 : 500;
+        return NextResponse.json({ ok: false, error: menuSync.error }, { status });
+      }
 
       const mappings = Array.isArray(body.mappings)
         ? (body.mappings as Array<{ nodeKey: string; collectionId: string | null; enabled?: boolean }>)
         : [];
       const saved = await saveMenuMappings(shop, mappings, collectionsResult.collections);
+      if (saved.invalidNodeKeys.length > 0) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "Some node keys are invalid or no longer exist in the live menu.",
+            invalidNodeKeys: saved.invalidNodeKeys,
+          },
+          { status: 400 }
+        );
+      }
       await logMappingAudit({
         shop,
         action,
@@ -2785,10 +2877,7 @@ export async function POST(req: NextRequest) {
 
         updateItemCollectionLink(target.node, collectionMatch);
         // #region agent log
-        fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
-          body: JSON.stringify({
+        debugIngest({
             sessionId: "9da838",
             runId: "visibility-and-depth-debug",
             hypothesisId: "H4",
@@ -2807,8 +2896,7 @@ export async function POST(req: NextRequest) {
               targetUrl: normalizeText(target.node.url || ""),
             },
             timestamp: Date.now(),
-          }),
-        }).catch(() => {});
+          });
         // #endregion
         const updateResult = await updateMenuTree(
           shop,
@@ -2821,10 +2909,7 @@ export async function POST(req: NextRequest) {
         );
         if (!updateResult.ok) {
           // #region agent log
-          fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
-            body: JSON.stringify({
+          debugIngest({
               sessionId: "9da838",
               runId: "visibility-and-depth-debug",
               hypothesisId: "H4",
@@ -2838,8 +2923,7 @@ export async function POST(req: NextRequest) {
                 error: normalizeText(updateResult.error || ""),
               },
               timestamp: Date.now(),
-            }),
-          }).catch(() => {});
+            });
           // #endregion
           await logMappingAudit({
             shop,
@@ -3173,10 +3257,7 @@ export async function POST(req: NextRequest) {
       );
       if (!updateResult.ok) {
         // #region agent log
-        fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
-          body: JSON.stringify({
+        debugIngest({
             sessionId: "9da838",
             runId: "visibility-and-depth-debug",
             hypothesisId: "H2",
@@ -3191,8 +3272,7 @@ export async function POST(req: NextRequest) {
               error: normalizeText(updateResult.error || ""),
             },
             timestamp: Date.now(),
-          }),
-        }).catch(() => {});
+          });
         // #endregion
         const normalizedUpdateError = normalizeLower(updateResult.error);
         const isShopifyDepthLimitError =
@@ -3200,10 +3280,7 @@ export async function POST(req: NextRequest) {
           normalizedUpdateError.includes("up to 3 levels of nesting");
         if (isShopifyDepthLimitError && nextDepth > MAX_SHOPIFY_MENU_DEPTH && nextDepth <= MAX_MENU_DEPTH) {
           // #region agent log
-          fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
-            body: JSON.stringify({
+          debugIngest({
               sessionId: "9da838",
               runId: "visibility-and-depth-debug",
               hypothesisId: "H2",
@@ -3218,8 +3295,7 @@ export async function POST(req: NextRequest) {
                 label,
               },
               timestamp: Date.now(),
-            }),
-          }).catch(() => {});
+            });
           // #endregion
           const slug = normalizeLower(label)
             .replace(/[^a-z0-9]+/g, "-")

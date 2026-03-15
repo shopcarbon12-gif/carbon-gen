@@ -20,9 +20,19 @@ type ProductRow = {
   id: string;
   title: string;
   image: string | null;
+  sku?: string;
   upc: string;
   checkedNodeKeys: string[];
   actionStatus?: "PROCESSED" | "";
+  parserType?: "NEW" | "LEGACY" | "UNKNOWN";
+  routeKey?: string;
+  digit?: string;
+  barcodeLabel?: string;
+  mappingDecision?: "AUTO_MAPPED" | "SUGGESTED" | "MANUAL_REVIEW";
+  reviewReason?: string;
+  autoMappedPaths?: string[];
+  directCollectionsToAssign?: string[];
+  suggestedPaths?: string[];
 };
 
 type MappingResponse = {
@@ -141,6 +151,11 @@ const EMPTY_LINK_TARGETS: MenuLinkTargets = {
   blogs: [],
 };
 const SHOP_DOMAIN_RE = /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i;
+const DEBUG_INGEST_URL = "http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692";
+const DEBUG_INGEST_ENABLED =
+  String(process.env.NEXT_PUBLIC_COLLECTION_MAPPING_DEBUG_INGEST || "")
+    .trim()
+    .toLowerCase() === "true";
 
 function normalizeMenuEditorLinkType(value: string): MenuLinkType {
   const normalized = String(value || "").trim().toUpperCase();
@@ -157,6 +172,22 @@ function normalizeShopDomain(value: string) {
 
 function isValidShopDomain(value: string) {
   return SHOP_DOMAIN_RE.test(value);
+}
+
+function formatListPreview(values: string[] | undefined, fallback = "-") {
+  const items = Array.from(new Set((values || []).map((value) => String(value || "").trim()).filter(Boolean)));
+  if (items.length < 1) return fallback;
+  if (items.length <= 2) return items.join(", ");
+  return `${items.slice(0, 2).join(", ")} +${items.length - 2}`;
+}
+
+function toCollectionSyncStatus(row: ProductRow) {
+  const autoPaths = (row.autoMappedPaths || []).length;
+  const directCollections = (row.directCollectionsToAssign || []).length;
+  if (row.actionStatus === "PROCESSED" && (autoPaths > 0 || directCollections > 0)) return "synced";
+  if (autoPaths > 0 || directCollections > 0) return "pending";
+  if ((row.suggestedPaths || []).length > 0) return "review";
+  return "manual";
 }
 
 export default function ShopifyCollectionMapping() {
@@ -227,6 +258,8 @@ export default function ShopifyCollectionMapping() {
   const undoCounterRef = useRef(0);
   const typesDropdownRef = useRef<HTMLDivElement | null>(null);
   const menuEditorComboboxRef = useRef<HTMLDivElement | null>(null);
+  const loadDataAbortRef = useRef<AbortController | null>(null);
+  const loadDataReqIdRef = useRef(0);
 
   const activeShop = useMemo(() => {
     const normalized = normalizeShopDomain(shop);
@@ -236,6 +269,15 @@ export default function ShopifyCollectionMapping() {
   function withShopContext(input: Record<string, unknown>) {
     if (!activeShop) return input;
     return { ...input, shop: activeShop };
+  }
+
+  function debugIngest(payload: Record<string, unknown>) {
+    if (!DEBUG_INGEST_ENABLED) return;
+    fetch(DEBUG_INGEST_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
+      body: JSON.stringify(payload),
+    }).catch(() => {});
   }
 
   function nextTempNodeKey() {
@@ -557,6 +599,11 @@ export default function ShopifyCollectionMapping() {
   }, [visibleTreeNodes]);
 
   async function loadData(options?: { refreshProducts?: boolean; refreshCollections?: boolean }) {
+    const requestId = loadDataReqIdRef.current + 1;
+    loadDataReqIdRef.current = requestId;
+    loadDataAbortRef.current?.abort();
+    const controller = new AbortController();
+    loadDataAbortRef.current = controller;
     setLoading(true);
     setError("");
     setWarning("");
@@ -583,8 +630,10 @@ export default function ShopifyCollectionMapping() {
       }
       const resp = await fetch(`/api/shopify/collection-mapping?${params.toString()}`, {
         cache: "no-store",
+        signal: controller.signal,
       });
       const json = (await resp.json()) as MappingResponse;
+      if (requestId !== loadDataReqIdRef.current) return false;
       if (!resp.ok || !json.ok) {
         throw new Error(json.error || "Failed to load Shopify collection mapping.");
       }
@@ -648,11 +697,16 @@ export default function ShopifyCollectionMapping() {
       });
       return true;
     } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        return false;
+      }
       const message = err instanceof Error ? err.message : "Failed to load collection mapping.";
       setError(message);
       return false;
     } finally {
-      setLoading(false);
+      if (requestId === loadDataReqIdRef.current) {
+        setLoading(false);
+      }
     }
   }
 
@@ -835,10 +889,7 @@ export default function ShopifyCollectionMapping() {
     const out: Record<string, boolean> = {};
     for (const key of closed) out[key] = true;
     // #region agent log
-    fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
-      body: JSON.stringify({
+    debugIngest({
         sessionId: "9da838",
         runId: "multi-select-debug",
         hypothesisId: "H1",
@@ -852,8 +903,7 @@ export default function ShopifyCollectionMapping() {
           selectedKeysAfter: Object.keys(out),
         },
         timestamp: Date.now(),
-      }),
-    }).catch(() => {});
+      });
     // #endregion
     setSelectedNodes(out);
   }
@@ -875,7 +925,10 @@ export default function ShopifyCollectionMapping() {
     const timer = window.setTimeout(() => {
       void loadData();
     }, 180);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      loadDataAbortRef.current?.abort();
+    };
   }, [search, selectedTypes, sort, page, pageSize, activeShop]);
 
   useEffect(() => {
@@ -1186,10 +1239,7 @@ export default function ShopifyCollectionMapping() {
     setError("");
     try {
       // #region agent log
-      fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
-        body: JSON.stringify({
+      debugIngest({
           sessionId: "9da838",
           runId: "label-save-debug",
           hypothesisId: "H3",
@@ -1200,8 +1250,7 @@ export default function ShopifyCollectionMapping() {
             types: pendingTreeOps.map((op) => op.type),
           },
           timestamp: Date.now(),
-        }),
-      }).catch(() => {});
+        });
       // #endregion
       const tempKeyMap = new Map<string, string>();
       const visibilityBatch = new Map<string, boolean>();
@@ -1230,10 +1279,7 @@ export default function ShopifyCollectionMapping() {
           updates: Array.from(visibilityBatch.entries()).map(([nodeKey, enabled]) => ({ nodeKey, enabled })),
         };
         // #region agent log
-        fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
-          body: JSON.stringify({
+        debugIngest({
             sessionId: "9da838",
             runId: "visibility-and-depth-debug",
             hypothesisId: "H6",
@@ -1244,8 +1290,7 @@ export default function ShopifyCollectionMapping() {
               order: "before-other-ops",
             },
             timestamp: Date.now(),
-          }),
-        }).catch(() => {});
+          });
         // #endregion
         const resp = await fetch("/api/shopify/collection-mapping", {
           method: "POST",
@@ -1254,10 +1299,7 @@ export default function ShopifyCollectionMapping() {
         });
         const json = (await resp.json()) as MappingResponse;
         // #region agent log
-        fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
-          body: JSON.stringify({
+        debugIngest({
             sessionId: "9da838",
             runId: "visibility-and-depth-debug",
             hypothesisId: "H6",
@@ -1271,8 +1313,7 @@ export default function ShopifyCollectionMapping() {
               warning: String(json.warning || ""),
             },
             timestamp: Date.now(),
-          }),
-        }).catch(() => {});
+          });
         // #endregion
         if (!resp.ok || !json.ok) {
           throw new Error(json.error || "Save visibility failed.");
@@ -1296,10 +1337,7 @@ export default function ShopifyCollectionMapping() {
           const resolvedNodeKey = resolveNodeKey(op.nodeKey);
           if (!resolvedNodeKey) continue;
           // #region agent log
-          fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
-            body: JSON.stringify({
+          debugIngest({
               sessionId: "9da838",
               runId: "label-save-debug",
               hypothesisId: "H3",
@@ -1313,8 +1351,7 @@ export default function ShopifyCollectionMapping() {
                 linkValue: op.linkValue,
               },
               timestamp: Date.now(),
-            }),
-          }).catch(() => {});
+            });
           // #endregion
           payload = {
             action: "edit-menu-node",
@@ -1347,10 +1384,7 @@ export default function ShopifyCollectionMapping() {
         }
         if (!payload) continue;
         // #region agent log
-        fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
-          body: JSON.stringify({
+        debugIngest({
             sessionId: "9da838",
             runId: "visibility-and-depth-debug",
             hypothesisId: "H5",
@@ -1366,8 +1400,7 @@ export default function ShopifyCollectionMapping() {
               label: String((payload.label as string) || ""),
             },
             timestamp: Date.now(),
-          }),
-        }).catch(() => {});
+          });
         // #endregion
         const resp = await fetch("/api/shopify/collection-mapping", {
           method: "POST",
@@ -1376,10 +1409,7 @@ export default function ShopifyCollectionMapping() {
         });
         const json = (await resp.json()) as MappingResponse & { createdNodeKey?: string };
         // #region agent log
-        fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
-          body: JSON.stringify({
+        debugIngest({
             sessionId: "9da838",
             runId: "visibility-and-depth-debug",
             hypothesisId: "H5",
@@ -1396,15 +1426,11 @@ export default function ShopifyCollectionMapping() {
               createdNodeKey: String(json.createdNodeKey || ""),
             },
             timestamp: Date.now(),
-          }),
-        }).catch(() => {});
+          });
         // #endregion
         if (op.type === "edit") {
           // #region agent log
-          fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
-            body: JSON.stringify({
+          debugIngest({
               sessionId: "9da838",
               runId: "label-save-debug",
               hypothesisId: "H3",
@@ -1417,8 +1443,7 @@ export default function ShopifyCollectionMapping() {
                 nodesCount: Array.isArray(json.nodes) ? json.nodes.length : -1,
               },
               timestamp: Date.now(),
-            }),
-          }).catch(() => {});
+            });
           // #endregion
         }
         if (!resp.ok || !json.ok) {
@@ -1430,10 +1455,7 @@ export default function ShopifyCollectionMapping() {
               lowerError.includes("up to 3 levels of nesting"));
           if (isMoveDepthLimitError) {
             // #region agent log
-            fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
-              method: "POST",
-              headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
-              body: JSON.stringify({
+            debugIngest({
                 sessionId: "9da838",
                 runId: "visibility-and-depth-debug",
                 hypothesisId: "H7",
@@ -1446,8 +1468,7 @@ export default function ShopifyCollectionMapping() {
                   error: errorText,
                 },
                 timestamp: Date.now(),
-              }),
-            }).catch(() => {});
+              });
             // #endregion
             continue;
           }
@@ -1535,10 +1556,7 @@ export default function ShopifyCollectionMapping() {
       for (const childKey of children) stack.push(childKey);
     }
     // #region agent log
-    fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
-      body: JSON.stringify({
+    debugIngest({
         sessionId: "9da838",
         runId: "visibility-and-depth-debug",
         hypothesisId: "H3",
@@ -1553,8 +1571,7 @@ export default function ShopifyCollectionMapping() {
           enabledAfter: nextEnabled,
         },
         timestamp: Date.now(),
-      }),
-    }).catch(() => {});
+      });
     // #endregion
     const beforeNodes = cloneNodes(nodes);
     const afterNodes = cloneNodes(nodes).map((node) =>
@@ -1719,10 +1736,7 @@ export default function ShopifyCollectionMapping() {
     const linkValue = String(next.linkValue || "").trim();
     if (!node.nodeKey || !label || !linkValue) return;
     // #region agent log
-    fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
-      body: JSON.stringify({
+    debugIngest({
         sessionId: "9da838",
         runId: "label-save-debug",
         hypothesisId: "H2",
@@ -1736,8 +1750,7 @@ export default function ShopifyCollectionMapping() {
           explicitTargetId: String(next.linkTargetId || "").trim(),
         },
         timestamp: Date.now(),
-      }),
-    }).catch(() => {});
+      });
     // #endregion
     setError("");
     const linkType = normalizeMenuEditorLinkType(next.linkType || node.linkedTargetType || "COLLECTION");
@@ -1954,6 +1967,9 @@ export default function ShopifyCollectionMapping() {
         setPendingTreeOps([]);
         setSelectedNodes({});
         setSelectedUnmappedCollectionIds({});
+        setWarning("Menu refresh fallback applied. Latest server menu snapshot is temporarily unavailable.");
+        setError("");
+        return;
       }
       const message = err instanceof Error ? err.message : "Menu refresh failed.";
       setError(message);
@@ -1994,10 +2010,7 @@ export default function ShopifyCollectionMapping() {
     }
     try {
       // #region agent log
-      fetch("http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9da838" },
-        body: JSON.stringify({
+      debugIngest({
           sessionId: "9da838",
           runId: "label-save-debug",
           hypothesisId: "H4",
@@ -2008,8 +2021,7 @@ export default function ShopifyCollectionMapping() {
             selectedTitles: undoSelectedEntries.map((entry) => entry.title),
           },
           timestamp: Date.now(),
-        }),
-      }).catch(() => {});
+        });
       // #endregion
       const ordered = [...undoPreviewEntries].reverse();
       let nextNodes = cloneNodes(nodes);

@@ -2,6 +2,17 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { uploadBytesToStorage } from "@/lib/storageProvider";
 
+const MAX_ITEM_UPLOAD_FILES = Number.parseInt(process.env.ITEM_UPLOAD_MAX_FILES || "", 10) || 60;
+const MAX_ITEM_UPLOAD_FILE_BYTES = Number.parseInt(
+  process.env.ITEM_UPLOAD_MAX_FILE_BYTES || "",
+  10
+) || 12 * 1024 * 1024;
+const MAX_ITEM_IMPORT_URLS = Number.parseInt(process.env.ITEM_IMPORT_MAX_URLS || "", 10) || 150;
+const ITEM_IMPORT_FETCH_TIMEOUT_MS = Number.parseInt(
+  process.env.ITEM_IMPORT_FETCH_TIMEOUT_MS || "",
+  10
+) || 15000;
+
 function sanitizeFileName(input: string) {
   const base = input.replace(/[^a-zA-Z0-9.\-_]/g, "_");
   return base || "catalog-image.jpg";
@@ -50,6 +61,16 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
+async function fetchWithTimeout(url: string, timeoutMs: number) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const isAuthed =
@@ -78,6 +99,12 @@ export async function POST(req: NextRequest) {
         );
       }
       if (inputUrls.length) {
+        if (inputUrls.length > MAX_ITEM_IMPORT_URLS) {
+          return NextResponse.json(
+            { error: `Too many source URLs. Maximum allowed is ${MAX_ITEM_IMPORT_URLS}.` },
+            { status: 413 }
+          );
+        }
         const folderPrefix = sanitizeFolderPrefix(body?.folderPrefix);
 
         const batchId = crypto.randomUUID();
@@ -86,14 +113,33 @@ export async function POST(req: NextRequest) {
           inputUrls,
           importConcurrency,
           async (sourceUrl, i) => {
-          const remote = await fetch(sourceUrl);
+          const remote = await fetchWithTimeout(sourceUrl, ITEM_IMPORT_FETCH_TIMEOUT_MS);
           if (!remote.ok) {
             throw new Error(`Failed to fetch catalog image (${remote.status})`);
           }
 
+          const remoteContentType = remote.headers.get("content-type") || "application/octet-stream";
+          if (!String(remoteContentType).toLowerCase().startsWith("image/")) {
+            throw new Error("Source URL is not an image.");
+          }
+          const remoteLengthRaw = remote.headers.get("content-length");
+          const remoteLength = remoteLengthRaw ? Number.parseInt(remoteLengthRaw, 10) : 0;
+          if (remoteLength > MAX_ITEM_UPLOAD_FILE_BYTES) {
+            throw new Error(
+              `Source image is too large. Max size is ${Math.floor(
+                MAX_ITEM_UPLOAD_FILE_BYTES / (1024 * 1024)
+              )}MB.`
+            );
+          }
           const arrayBuffer = await remote.arrayBuffer();
           const bytes = new Uint8Array(arrayBuffer);
-          const remoteContentType = remote.headers.get("content-type") || "application/octet-stream";
+          if (bytes.byteLength > MAX_ITEM_UPLOAD_FILE_BYTES) {
+            throw new Error(
+              `Source image is too large. Max size is ${Math.floor(
+                MAX_ITEM_UPLOAD_FILE_BYTES / (1024 * 1024)
+              )}MB.`
+            );
+          }
           const safeName = guessFileNameFromUrl(sourceUrl, i);
           const path = `${folderPrefix}/${batchId}/${Date.now()}-${crypto.randomUUID()}-${safeName}`;
 
@@ -131,6 +177,32 @@ export async function POST(req: NextRequest) {
 
     if (!files.length) {
       return NextResponse.json({ error: "No files uploaded." }, { status: 400 });
+    }
+    if (files.length > MAX_ITEM_UPLOAD_FILES) {
+      return NextResponse.json(
+        { error: `Too many files. Maximum allowed is ${MAX_ITEM_UPLOAD_FILES}.` },
+        { status: 413 }
+      );
+    }
+    const invalidType = files.find(
+      (file) => !String(file.type || "").toLowerCase().startsWith("image/")
+    );
+    if (invalidType) {
+      return NextResponse.json(
+        { error: `Unsupported file type for "${invalidType.name}". Only images are allowed.` },
+        { status: 415 }
+      );
+    }
+    const tooLarge = files.find((file) => file.size > MAX_ITEM_UPLOAD_FILE_BYTES);
+    if (tooLarge) {
+      return NextResponse.json(
+        {
+          error: `File "${tooLarge.name}" is too large. Max size is ${Math.floor(
+            MAX_ITEM_UPLOAD_FILE_BYTES / (1024 * 1024)
+          )}MB.`,
+        },
+        { status: 413 }
+      );
     }
 
     const batchId = crypto.randomUUID();

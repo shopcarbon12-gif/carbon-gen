@@ -141,12 +141,17 @@ export async function deleteStorageObjects(paths: string[]) {
   return { deleted };
 }
 
-export async function listStorageFiles(prefix: string) {
+export async function listStorageFiles(
+  prefix: string,
+  options?: { maxKeys?: number; pageSize?: number }
+) {
   const provider = getActiveStorageProvider();
   const normalizedPrefix = normalizePath(prefix);
   const client = getR2Client(provider.r2);
   const files: StorageFile[] = [];
   let continuationToken: string | undefined;
+  const maxKeys = Math.max(1, Number(options?.maxKeys || 10_000));
+  const pageSize = Math.max(100, Math.min(1000, Number(options?.pageSize || 1000)));
 
   do {
     const resp = await client.send(
@@ -154,6 +159,7 @@ export async function listStorageFiles(prefix: string) {
         Bucket: provider.r2.bucket,
         Prefix: normalizedPrefix ? `${normalizedPrefix.replace(/\/+$/, "")}/` : undefined,
         ContinuationToken: continuationToken,
+        MaxKeys: pageSize,
       })
     );
     for (const entry of resp.Contents || []) {
@@ -164,7 +170,12 @@ export async function listStorageFiles(prefix: string) {
         updatedAt: entry.LastModified ? entry.LastModified.toISOString() : null,
         createdAt: entry.LastModified ? entry.LastModified.toISOString() : null,
       });
+      if (files.length >= maxKeys) {
+        continuationToken = undefined;
+        break;
+      }
     }
+    if (files.length >= maxKeys) break;
     continuationToken = resp.IsTruncated ? resp.NextContinuationToken : undefined;
   } while (continuationToken);
 

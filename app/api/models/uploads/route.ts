@@ -22,6 +22,11 @@ type CachedUploadsResponse = {
 
 const uploadsResponseCache = new Map<string, CachedUploadsResponse>();
 const UPLOADS_CACHE_TTL_MS = 10_000;
+const MAX_MODEL_UPLOAD_STORAGE_SCAN = Number.parseInt(
+  process.env.MODEL_UPLOAD_STORAGE_SCAN_MAX || "",
+  10
+) || 3000;
+const MAX_MODEL_UPLOAD_RESPONSE_LIMIT = 500;
 
 function extractPathFromStorageUrl(url: string) {
   try {
@@ -225,7 +230,9 @@ export async function GET(req: NextRequest) {
     const r2Bucket = String(process.env.R2_BUCKET || "").trim();
     const userId = req.cookies.get("carbon_gen_user_id")?.value?.trim() || null;
     const limitRaw = Number(req.nextUrl.searchParams.get("limit") || "");
-    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(500, Math.floor(limitRaw))) : 250;
+    const limit = Number.isFinite(limitRaw)
+      ? Math.max(1, Math.min(MAX_MODEL_UPLOAD_RESPONSE_LIMIT, Math.floor(limitRaw)))
+      : 250;
     const cacheKey = userId || "__global__";
     const cached = uploadsResponseCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
@@ -233,7 +240,10 @@ export async function GET(req: NextRequest) {
     }
     const modelRows = await loadModelRowsForSession(userId);
     const uploadPrefix = userId ? `models/uploads/${userId}` : "models/uploads";
-    const storageFiles = await listStorageFiles(uploadPrefix).catch(() => []);
+    const storageFiles = await listStorageFiles(uploadPrefix, {
+      maxKeys: MAX_MODEL_UPLOAD_STORAGE_SCAN,
+      pageSize: 1000,
+    }).catch(() => []);
 
     const entries: Array<{
       id: string;

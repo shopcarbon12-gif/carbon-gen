@@ -1463,13 +1463,16 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   async function fetchJsonWithRetry(
     endpoint: string,
     init: RequestInit,
-    retries = 1
+    retries = 1,
+    timeoutMs = 45000
   ): Promise<{ resp: Response; json: any }> {
     let attempt = 0;
     let lastError: any = null;
     while (attempt <= retries) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
       try {
-        const resp = await fetch(endpoint, init);
+        const resp = await fetch(endpoint, { ...init, signal: controller.signal });
         const json = await parseJsonResponse(resp, endpoint);
         return { resp, json };
       } catch (e: any) {
@@ -1478,9 +1481,12 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         const isNetwork =
           /failed to fetch/i.test(msg) ||
           /networkerror/i.test(msg) ||
-          /network request failed/i.test(msg);
+          /network request failed/i.test(msg) ||
+          /aborted/i.test(msg);
         if (!isNetwork || attempt >= retries) break;
         await new Promise((resolve) => setTimeout(resolve, 500));
+      } finally {
+        clearTimeout(timeout);
       }
       attempt += 1;
     }
@@ -1628,11 +1634,15 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       const form = new FormData();
       files.forEach((file) => form.append("files", file));
 
-      const resp = await fetch("/api/items", {
-        method: "POST",
-        body: form,
-      });
-      const json = await parseJsonResponse(resp);
+      const { resp, json } = await fetchJsonWithRetry(
+        "/api/items",
+        {
+          method: "POST",
+          body: form,
+        },
+        2,
+        45000
+      );
       if (!resp.ok) throw new Error(json.error || "Item upload failed");
       uploadedUrls = Array.isArray(json.urls) ? json.urls : [];
     }
@@ -3099,12 +3109,16 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     );
 
     try {
-      const resp = await fetch("/api/items", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ urls: [image.url] }),
-      });
-      const json = await parseJsonResponse(resp, "/api/items");
+      const { resp, json } = await fetchJsonWithRetry(
+        "/api/items",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ urls: [image.url] }),
+        },
+        2,
+        45000
+      );
       if (!resp.ok) {
         throw new Error(json?.error || "Failed to import selected catalog image.");
       }
@@ -3329,11 +3343,15 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       uploadForm.append("batchId", batchId);
       uploadForm.append("file", file);
       try {
-        const resp = await fetch("/api/models/upload", {
-          method: "POST",
-          body: uploadForm,
-        });
-        const json = await parseJsonResponse(resp);
+        const { resp, json } = await fetchJsonWithRetry(
+          "/api/models/upload",
+          {
+            method: "POST",
+            body: uploadForm,
+          },
+          2,
+          45000
+        );
         if (!resp.ok) {
           throw new Error(json.error || "File upload failed");
         }
@@ -4893,8 +4911,12 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     const form = new FormData();
     files.forEach((file) => form.append("files", file));
     form.append("folderPrefix", folderPrefix);
-    const resp = await fetch("/api/items", { method: "POST", body: form });
-    const json = await parseJsonResponse(resp, "/api/items");
+    const { resp, json } = await fetchJsonWithRetry(
+      "/api/items",
+      { method: "POST", body: form },
+      2,
+      45000
+    );
     if (!resp.ok) {
       throw new Error(json?.error || "Failed to upload image(s).");
     }
