@@ -626,6 +626,7 @@ export default function ShopifyCollectionMapping() {
       for (const path of manualAddedPaths) finalSet.add(path);
       for (const path of manualRemovedPaths) finalSet.delete(path);
       const closedFinalSet = closeMenuPathSetWithAncestors(finalSet);
+      const addedAncestorCount = Math.max(0, closedFinalSet.size - finalSet.size);
       const finalMenuPaths = Array.from(closedFinalSet);
       const finalDirectCollections = dedupeCollectionHandles([
         ...(row.directCollectionsToAssign || []),
@@ -657,6 +658,7 @@ export default function ShopifyCollectionMapping() {
       if (selectedSuggestionCount > 0) reasons.push(`Selected ${selectedSuggestionCount} suggestion(s).`);
       if (manualAddedPaths.length > 0) reasons.push(`Manually added ${manualAddedPaths.length} path(s).`);
       if (manualRemovedPaths.length > 0) reasons.push(`Manually removed ${manualRemovedPaths.length} path(s).`);
+      if (addedAncestorCount > 0) reasons.push(`Ancestor closure applied (+${addedAncestorCount} parent/root path(s)).`);
       const reviewReason = reasons.filter(Boolean).join(" ");
 
       out.set(row.id, {
