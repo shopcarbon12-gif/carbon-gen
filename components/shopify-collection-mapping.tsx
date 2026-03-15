@@ -162,6 +162,7 @@ function isValidShopDomain(value: string) {
 export default function ShopifyCollectionMapping() {
   const [shop, setShop] = useState("");
   const [nodes, setNodes] = useState<MenuNode[]>([]);
+  const [lastSyncedNodes, setLastSyncedNodes] = useState<MenuNode[]>([]);
   const [rows, setRows] = useState<ProductRow[]>([]);
   const [selectedNodes, setSelectedNodes] = useState<Record<string, boolean>>({});
   const [selectedUnmappedCollectionIds, setSelectedUnmappedCollectionIds] = useState<Record<string, boolean>>({});
@@ -601,6 +602,7 @@ export default function ShopifyCollectionMapping() {
 
       const nextNodes = json.nodes || [];
       setNodes(nextNodes);
+      setLastSyncedNodes(cloneNodes(nextNodes));
       setRows(json.rows || []);
       const nextCollections = (json.collections || []).map((row) => ({
         id: String(row.id || ""),
@@ -1473,6 +1475,7 @@ export default function ShopifyCollectionMapping() {
   function applyMenuNodesFromResponse(json: MappingResponse) {
     const nextNodes = json.nodes || [];
     setNodes(nextNodes);
+    setLastSyncedNodes(cloneNodes(nextNodes));
     setWarning(String(json.warning || "").trim());
     setSelectedNodes((prev) => {
       const out: Record<string, boolean> = {};
@@ -1908,8 +1911,18 @@ export default function ShopifyCollectionMapping() {
 
   async function refreshMenuTreeSection() {
     const currentMenuHandle = menuMeta.handle || "main-menu";
+    const fallbackNodes = lastSyncedNodes.length > 0 ? cloneNodes(lastSyncedNodes) : null;
     setSaving(true);
     setError("");
+    // Refresh is a "discard local edits and re-sync" action.
+    // Reset to last known server state immediately, even if the fetch later fails.
+    if (fallbackNodes) {
+      setNodes(fallbackNodes);
+      collapseTreeToDefault(fallbackNodes);
+      setPendingTreeOps([]);
+      setSelectedNodes({});
+      setSelectedUnmappedCollectionIds({});
+    }
     try {
       const resp = await fetch("/api/shopify/collection-mapping", {
         method: "POST",
@@ -1926,6 +1939,7 @@ export default function ShopifyCollectionMapping() {
         title: String(row.title || row.id || ""),
       }));
       setNodes(nextNodes);
+      setLastSyncedNodes(cloneNodes(nextNodes));
       setCollections(nextCollections);
       setCollectionCount(nextCollections.length);
       setPendingTreeOps([]);
@@ -1934,6 +1948,13 @@ export default function ShopifyCollectionMapping() {
       setSelectedUnmappedCollectionIds({});
       setWarning(String(json.warning || "").trim());
     } catch (err) {
+      if (fallbackNodes) {
+        setNodes(fallbackNodes);
+        collapseTreeToDefault(fallbackNodes);
+        setPendingTreeOps([]);
+        setSelectedNodes({});
+        setSelectedUnmappedCollectionIds({});
+      }
       const message = err instanceof Error ? err.message : "Menu refresh failed.";
       setError(message);
     } finally {
