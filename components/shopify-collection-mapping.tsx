@@ -701,8 +701,28 @@ export default function ShopifyCollectionMapping() {
     setSelectedUnmappedCollectionIds({});
   }
 
-  function collapseTreeToDefault() {
+  function buildCollapsedExpansionMap(rows: MenuNode[]) {
+    const parentKeys = new Set<string>();
+    const childCounts = new Map<string, number>();
+    for (const row of rows) {
+      const parentKey = String(row.parentKey || "").trim();
+      if (!parentKey) continue;
+      childCounts.set(parentKey, (childCounts.get(parentKey) || 0) + 1);
+    }
+    for (const [key, count] of childCounts.entries()) {
+      if (count > 0) parentKeys.add(key);
+    }
+    const out: Record<string, boolean> = {};
+    for (const key of parentKeys) out[key] = false;
+    return out;
+  }
+
+  function collapseTreeToDefault(rows?: MenuNode[]) {
     setTreeSearch("");
+    if (Array.isArray(rows)) {
+      setExpandedNodes(buildCollapsedExpansionMap(rows));
+      return;
+    }
     setExpandedNodes({});
   }
 
@@ -1436,7 +1456,7 @@ export default function ShopifyCollectionMapping() {
       if (latestJson && Array.isArray(latestJson.nodes)) {
         applyMenuNodesFromResponse(latestJson);
       }
-      collapseTreeToDefault();
+      collapseTreeToDefault(nextNodes);
       setPendingTreeOps([]);
       setWarning("Menu saved to Shopify.");
     } catch (err) {
@@ -1906,7 +1926,7 @@ export default function ShopifyCollectionMapping() {
       setCollections(nextCollections);
       setCollectionCount(nextCollections.length);
       setPendingTreeOps([]);
-      collapseTreeToDefault();
+      collapseTreeToDefault(nextNodes);
       setSelectedNodes({});
       setSelectedUnmappedCollectionIds({});
       setWarning(String(json.warning || "").trim());
