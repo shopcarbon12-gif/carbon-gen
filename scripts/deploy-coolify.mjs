@@ -178,31 +178,26 @@ function runPowerShell(script) {
 function notifyWindows({ title, message, success = true }) {
   const safeTitle = escapePsSingleQuoted(title);
   const safeMessage = escapePsSingleQuoted(message);
-  const successSound = String(process.env.COOLIFY_NOTIFY_SOUND_SUCCESS || "Exclamation")
+  const successWav = String(process.env.COOLIFY_NOTIFY_WAV_SUCCESS || "C:\\Windows\\Media\\Alarm03.wav").trim();
+  const failWav = String(process.env.COOLIFY_NOTIFY_WAV_FAIL || "C:\\Windows\\Media\\Alarm10.wav").trim();
+  const wavPath = escapePsSingleQuoted(success ? successWav : failWav);
+  const successSound = String(process.env.COOLIFY_NOTIFY_SOUND_SUCCESS || "Asterisk")
     .trim()
     .replace(/[^A-Za-z]/g, "") || "Exclamation";
-  const failSound = String(process.env.COOLIFY_NOTIFY_SOUND_FAIL || "Hand")
+  const failSound = String(process.env.COOLIFY_NOTIFY_SOUND_FAIL || "Exclamation")
     .trim()
     .replace(/[^A-Za-z]/g, "") || "Hand";
   const soundExpr = success
     ? `[System.Media.SystemSounds]::${successSound}.Play()`
     : `[System.Media.SystemSounds]::${failSound}.Play()`;
-  const toastSound = success
-    ? "ms-winsoundevent:Notification.Default"
-    : "ms-winsoundevent:Notification.Looping.Alarm2";
+  const enableToast = String(process.env.COOLIFY_NOTIFY_ENABLE_TOAST || "false").trim().toLowerCase() === "true";
   const toastScript = [
     "& {",
     `$title = '${safeTitle}'`,
     `$message = '${safeMessage}'`,
-    "$toastSent = $false",
-    "if (Get-Command New-BurntToastNotification -ErrorAction SilentlyContinue) {",
-    "  New-BurntToastNotification -Text $title, $message | Out-Null",
-    "  $toastSent = $true",
-    "}",
-    "if (-not $toastSent) {",
-    "  [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null",
-    "  [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] > $null",
-    `  $toastXml = '<toast><visual><binding template=\"ToastGeneric\"><text>' + [Security.SecurityElement]::Escape($title) + '</text><text>' + [Security.SecurityElement]::Escape($message) + '</text></binding></visual><audio src=\"${toastSound}\"/></toast>'`,
+    "[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null",
+    "[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] > $null",
+    "  $toastXml = '<toast><visual><binding template=\"ToastGeneric\"><text>' + [Security.SecurityElement]::Escape($title) + '</text><text>' + [Security.SecurityElement]::Escape($message) + '</text></binding></visual><audio silent=\"true\"/></toast>'",
     "  $xml = New-Object Windows.Data.Xml.Dom.XmlDocument",
     "  $xml.LoadXml($toastXml)",
     "  $toast = [Windows.UI.Notifications.ToastNotification]::new($xml)",
@@ -210,15 +205,14 @@ function notifyWindows({ title, message, success = true }) {
     "  $notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('PowerShell')",
     "  $notifier.Show($toast)",
     "}",
-    "}",
   ].join("; ");
-  const topMostFormScript = [
+  const popupFormScript = [
     "& {",
     "[void][Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms')",
     "[void][Reflection.Assembly]::LoadWithPartialName('System.Drawing')",
-    soundExpr,
     `$title = '${safeTitle}'`,
     `$message = '${safeMessage}'`,
+    `$wavPath = '${wavPath}'`,
     "$cursorScreen = [System.Windows.Forms.Screen]::FromPoint([System.Windows.Forms.Cursor]::Position)",
     "$bounds = $cursorScreen.WorkingArea",
     "$form = New-Object System.Windows.Forms.Form",
@@ -254,23 +248,47 @@ function notifyWindows({ title, message, success = true }) {
     "$timer.Start()",
     "$form.Controls.Add($label)",
     "$form.Controls.Add($ok)",
-    "$form.Add_Shown({ $form.Activate() })",
+    "if (Test-Path $wavPath) {",
+    "  $form.Add_Shown({",
+    "    try {",
+    "      $player = New-Object System.Media.SoundPlayer $wavPath",
+    "      $player.Play()",
+    "    } catch {",
+    soundExpr,
+    "    }",
+    "    $form.Activate()",
+    "  })",
+    "} else {",
+    `  $form.Add_Shown({ ${soundExpr}; $form.Activate() })`,
+    "}",
     "[void]$form.ShowDialog()",
     "}",
   ].join("; ");
   let sent = false;
-  try {
-    runPowerShell(toastScript);
-    sent = true;
-  } catch (error) {
-    if (String(process.env.COOLIFY_NOTIFY_DEBUG || "").trim().toLowerCase() === "true") {
-      const msg = error instanceof Error ? error.message : String(error || "unknown error");
-      console.warn(`Toast notification failed: ${msg}`);
+  if (enableToast) {
+    try {
+      runPowerShell(toastScript);
+      sent = true;
+    } catch (error) {
+      if (String(process.env.COOLIFY_NOTIFY_DEBUG || "").trim().toLowerCase() === "true") {
+        const msg = error instanceof Error ? error.message : String(error || "unknown error");
+        console.warn(`Toast notification failed: ${msg}`);
+      }
     }
   }
-  if (sent) return;
+  if (sent) {
+    try {
+      runPowerShell(popupFormScript);
+    } catch (error) {
+      if (String(process.env.COOLIFY_NOTIFY_DEBUG || "").trim().toLowerCase() === "true") {
+        const msg = error instanceof Error ? error.message : String(error || "unknown error");
+        console.warn(`Topmost form notification failed: ${msg}`);
+      }
+    }
+    return;
+  }
   try {
-    runPowerShell(topMostFormScript);
+    runPowerShell(popupFormScript);
     sent = true;
   } catch (error) {
     if (String(process.env.COOLIFY_NOTIFY_DEBUG || "").trim().toLowerCase() === "true") {
