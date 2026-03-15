@@ -664,7 +664,7 @@ export default function ShopifyMenuItemsTree({
           visibleTreeNodeIdSet.has(childKey)
         );
         const hasChildren = allChildKeys.length > 0;
-        const isExpanded = expandedNodes[node.nodeKey] !== false;
+        const isExpanded = expandedNodes[node.nodeKey] === true;
         const shouldShowChildren = visibleChildKeys.length > 0;
         const branchHasAddRow = Boolean(parentKey);
         const isLastSibling = !branchHasAddRow && index === branchKeys.length - 1;
