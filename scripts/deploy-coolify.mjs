@@ -181,40 +181,95 @@ function notifyWindows({ title, message, success = true }) {
   const soundExpr = success
     ? `[System.Media.SystemSounds]::${successSound}.Play()`
     : `[System.Media.SystemSounds]::${failSound}.Play()`;
-  const popupFlags = success ? "64" : "16";
-  const popupScript = [
+  const toastSound = success
+    ? "ms-winsoundevent:Notification.Default"
+    : "ms-winsoundevent:Notification.Looping.Alarm2";
+  const toastScript = [
     "& {",
-    "[void][Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms')",
-    soundExpr,
-    "$ws = New-Object -ComObject WScript.Shell",
-    `$null = $ws.Popup('${safeMessage}', 30, '${safeTitle}', ${popupFlags})`,
+    `$title = '${safeTitle}'`,
+    `$message = '${safeMessage}'`,
+    "$toastSent = $false",
+    "if (Get-Command New-BurntToastNotification -ErrorAction SilentlyContinue) {",
+    "  New-BurntToastNotification -Text $title, $message | Out-Null",
+    "  $toastSent = $true",
+    "}",
+    "if (-not $toastSent) {",
+    "  [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null",
+    "  [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] > $null",
+    `  $toastXml = '<toast><visual><binding template=\"ToastGeneric\"><text>' + [Security.SecurityElement]::Escape($title) + '</text><text>' + [Security.SecurityElement]::Escape($message) + '</text></binding></visual><audio src=\"${toastSound}\"/></toast>'`,
+    "  $xml = New-Object Windows.Data.Xml.Dom.XmlDocument",
+    "  $xml.LoadXml($toastXml)",
+    "  $toast = [Windows.UI.Notifications.ToastNotification]::new($xml)",
+    "  $toast.ExpirationTime = [DateTimeOffset]::Now.AddMinutes(2)",
+    "  $notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('PowerShell')",
+    "  $notifier.Show($toast)",
+    "}",
     "}",
   ].join("; ");
-  const messageBoxScript = [
+  const topMostFormScript = [
     "& {",
     "[void][Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms')",
+    "[void][Reflection.Assembly]::LoadWithPartialName('System.Drawing')",
     soundExpr,
-    `$null = [System.Windows.Forms.MessageBox]::Show('${safeMessage}', '${safeTitle}', 'OK', 'Information')`,
+    `$title = '${safeTitle}'`,
+    `$message = '${safeMessage}'`,
+    "$cursorScreen = [System.Windows.Forms.Screen]::FromPoint([System.Windows.Forms.Cursor]::Position)",
+    "$bounds = $cursorScreen.WorkingArea",
+    "$form = New-Object System.Windows.Forms.Form",
+    "$form.Text = $title",
+    "$form.StartPosition = 'Manual'",
+    "$form.FormBorderStyle = 'FixedDialog'",
+    "$form.MaximizeBox = $false",
+    "$form.MinimizeBox = $false",
+    "$form.TopMost = $true",
+    "$form.Width = 520",
+    "$form.Height = 180",
+    "$form.ShowInTaskbar = $true",
+    "$form.Location = New-Object System.Drawing.Point([Math]::Max($bounds.Left + 10, $bounds.Left + [int](($bounds.Width - $form.Width) / 2)), [Math]::Max($bounds.Top + 10, $bounds.Top + [int](($bounds.Height - $form.Height) / 2)))",
+    "$label = New-Object System.Windows.Forms.Label",
+    "$label.AutoSize = $false",
+    "$label.Text = $message",
+    "$label.Width = 480",
+    "$label.Height = 80",
+    "$label.Left = 16",
+    "$label.Top = 20",
+    "$label.Font = New-Object System.Drawing.Font('Segoe UI', 10)",
+    "$label.TextAlign = 'MiddleLeft'",
+    "$ok = New-Object System.Windows.Forms.Button",
+    "$ok.Text = 'OK'",
+    "$ok.Width = 100",
+    "$ok.Height = 34",
+    "$ok.Left = 400",
+    "$ok.Top = 110",
+    "$ok.Add_Click({ $form.Close() })",
+    "$timer = New-Object System.Windows.Forms.Timer",
+    "$timer.Interval = 30000",
+    "$timer.Add_Tick({ $timer.Stop(); if ($form.Visible) { $form.Close() } })",
+    "$timer.Start()",
+    "$form.Controls.Add($label)",
+    "$form.Controls.Add($ok)",
+    "$form.Add_Shown({ $form.Activate() })",
+    "[void]$form.ShowDialog()",
     "}",
   ].join("; ");
   let sent = false;
   try {
-    runPowerShell(popupScript);
+    runPowerShell(toastScript);
     sent = true;
   } catch (error) {
     if (String(process.env.COOLIFY_NOTIFY_DEBUG || "").trim().toLowerCase() === "true") {
       const msg = error instanceof Error ? error.message : String(error || "unknown error");
-      console.warn(`Popup notification failed: ${msg}`);
+      console.warn(`Toast notification failed: ${msg}`);
     }
   }
   if (sent) return;
   try {
-    runPowerShell(messageBoxScript);
+    runPowerShell(topMostFormScript);
     sent = true;
   } catch (error) {
     if (String(process.env.COOLIFY_NOTIFY_DEBUG || "").trim().toLowerCase() === "true") {
       const msg = error instanceof Error ? error.message : String(error || "unknown error");
-      console.warn(`MessageBox notification failed: ${msg}`);
+      console.warn(`Topmost form notification failed: ${msg}`);
     }
   }
   if (!sent) {
@@ -379,24 +434,13 @@ async function main() {
       "Deploy queued, but completion polling is forbidden for current watch token. " +
       "Set COOLIFY_WATCH_API_TOKEN (or setup watchApiToken) with read permission.";
     console.warn(message);
-    console.log("Sending Windows queued notification...");
-    notifyWindows({
-      title: "Coolify Deploy Queued",
-      message: "Queued. Cannot watch completion with current watch token.",
-      success: false,
-    });
     return;
   }
 
   if (watchResult.reason === "timeout") {
     const message = `Timed out waiting for deployment ${deploymentUuid.slice(0, 8)} completion.`;
     console.warn(message);
-    console.log("Sending Windows timeout notification...");
-    notifyWindows({
-      title: "Coolify Deploy Watch Timeout",
-      message: "Deploy still running or status unavailable.",
-      success: false,
-    });
+    console.log("No desktop notification sent (configured: notify only on terminal completion).");
   }
 }
 

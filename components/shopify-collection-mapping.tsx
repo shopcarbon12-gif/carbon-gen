@@ -1459,7 +1459,7 @@ export default function ShopifyCollectionMapping() {
       if (latestJson && Array.isArray(latestJson.nodes)) {
         applyMenuNodesFromResponse(latestJson);
       }
-      collapseTreeToDefault(nextNodes);
+      collapseTreeToDefault(Array.isArray(latestJson?.nodes) ? latestJson.nodes : undefined);
       setPendingTreeOps([]);
       setWarning("Menu saved to Shopify.");
     } catch (err) {
