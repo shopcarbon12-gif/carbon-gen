@@ -720,7 +720,10 @@ export default function ShopifyCollectionMapping() {
   function collapseTreeToDefault(rows?: MenuNode[]) {
     setTreeSearch("");
     if (Array.isArray(rows)) {
-      setExpandedNodes(buildCollapsedExpansionMap(rows));
+      const collapsed = buildCollapsedExpansionMap(rows);
+      setExpandedNodes(collapsed);
+      // Ensure collapse wins over any queued expansion state updates.
+      window.setTimeout(() => setExpandedNodes(collapsed), 0);
       return;
     }
     setExpandedNodes({});
