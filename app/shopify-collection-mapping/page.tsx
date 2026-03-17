@@ -10,7 +10,7 @@ export default function ShopifyCollectionMappingPage() {
   }
 
   return (
-    <div className="collection-mapping-route">
+    <div className="collection-mapping-route collection-mapping-standalone-route">
       <ShopifyCollectionMapping />
     </div>
   );

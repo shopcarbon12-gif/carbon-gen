@@ -857,8 +857,28 @@ export default function ShopifyMenuItemsTree({
     renderTracker.count >= renderNodeLimit && visibleNodeKeys.length > renderTracker.count;
 
   return (
-    <aside className="card panel gemTreePanel">
+    <div className="gemTreePanel">
       <div className="treeSearchBar">
+        <button
+          type="button"
+          className="treeRefreshBtn"
+          aria-label="refresh"
+          title="refresh"
+          onClick={onRefreshTree}
+          disabled={saving}
+        >
+          ⟳
+        </button>
+        <button
+          type="button"
+          className="treeUndoBtn"
+          aria-label="undo"
+          title="undo"
+          onClick={onUndoMenuToggle}
+          disabled={undoEntries.length < 1 || saving}
+        >
+          ↶
+        </button>
         <input
           className="treeSearchInput"
           value={treeSearch}
@@ -871,15 +891,6 @@ export default function ShopifyMenuItemsTree({
           placeholder="Search menu items..."
           aria-label="Search menu tree"
         />
-        <button
-          type="button"
-          className="treeUndoBtn"
-          aria-label="Undo recent tree actions"
-          onClick={onUndoMenuToggle}
-          disabled={undoEntries.length < 1 || saving}
-        >
-          ↶ Undo
-        </button>
         {undoMenuOpen ? (
           <div className="treeUndoMenu" role="menu" aria-label="Undo action history">
             {undoEntries.length < 1 ? (
@@ -900,22 +911,21 @@ export default function ShopifyMenuItemsTree({
             )}
           </div>
         ) : null}
-        <button type="button" className="treeSaveBtn" onClick={() => void onSaveTree()} disabled={saving}>
-          {saving ? "Saving..." : "Save"}
-        </button>
         <button
           type="button"
-          className="treeRefreshBtn"
-          aria-label="Refresh menu tree"
-          onClick={onRefreshTree}
+          className="treeSaveBtn"
+          aria-label={saving ? "Saving menu tree" : "Save menu tree"}
+          onClick={() => void onSaveTree()}
           disabled={saving}
         >
-          ⟳
+          <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true">
+            <path d="M2 2.5A1.5 1.5 0 0 1 3.5 1h7.8l2.7 2.7V13.5A1.5 1.5 0 0 1 12.5 15h-9A1.5 1.5 0 0 1 2 13.5v-11zM4 2.7v3.6h6V2.7H4zm0 5v5.3h8V7.7H4z" />
+          </svg>
         </button>
       </div>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragMove={onDragMove} onDragEnd={onDragEnd}>
         <SortableContext items={renderTracker.keys} strategy={verticalListSortingStrategy}>
-          <div className="treeCanvas">
+          <div className="treeContent">
             <div id="root-menu" className="tree shopifyMenuTree nestedList nested-list rootList">
               {renderedTree}
               {isTreeRenderTruncated ? (
@@ -1124,7 +1134,7 @@ export default function ShopifyMenuItemsTree({
         }
         .treeSearchBar {
           display: grid;
-          grid-template-columns: minmax(0, 1fr) auto auto 36px;
+          grid-template-columns: 36px 36px minmax(0, 1fr) 36px;
           gap: 8px;
           margin-bottom: 10px;
           align-items: center;
@@ -1153,22 +1163,35 @@ export default function ShopifyMenuItemsTree({
           border-color: #5f789c;
         }
         .treeSaveBtn {
+          width: 36px;
+          min-width: 36px;
           min-height: 36px;
           border-radius: 8px;
           border: 1px solid #168e69;
-          background: #0f8a64;
-          color: #f8fffc;
-          padding: 0 12px;
+          background: #0d7a57;
+          color: #dffff1;
+          padding: 0;
           font-weight: 600;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .treeSaveBtn svg {
+          fill: currentColor;
         }
         .treeUndoBtn {
+          width: 36px;
+          min-width: 36px;
           min-height: 36px;
           border-radius: 8px;
           border: 1px solid #415a7a;
           background: #12233d;
           color: #dce8fb;
-          padding: 0 12px;
+          padding: 0;
           font-weight: 600;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
         }
         .treeUndoBtn:disabled {
           opacity: 0.55;
@@ -1213,16 +1236,14 @@ export default function ShopifyMenuItemsTree({
           color: #9fb3cf;
           padding: 8px;
         }
-        .treeCanvas {
-          border: 1px solid #2a3547;
-          border-radius: 10px;
-          background: #0a1324;
-          padding: 12px 16px 10px 22px;
+        .treeContent {
+          padding: 2px 2px 10px 2px;
           flex: 1 1 auto;
           min-height: 0;
           height: 100%;
           overflow-y: auto;
           overflow-x: hidden;
+          scrollbar-gutter: stable;
         }
         .unmappedWrap {
           margin-top: 12px;
@@ -1375,11 +1396,11 @@ export default function ShopifyMenuItemsTree({
           --connector-node-top: -8px;
           --connector-mid-y: 21px;
           position: relative;
-          width: calc(100% - (var(--tree-depth, 0) * var(--indent-step)));
+          width: 100%;
           min-width: 0;
           max-width: 100%;
           box-sizing: border-box;
-          margin-left: calc(var(--tree-depth, 0) * var(--indent-step));
+          padding-left: calc(var(--tree-depth, 0) * var(--indent-step));
           padding-bottom: 8px;
         }
         :global(.treeNode.depth-2),
@@ -1392,7 +1413,7 @@ export default function ShopifyMenuItemsTree({
         }
         :global(.treeConnectorElbow) {
           position: absolute;
-          left: var(--connector-stem-left);
+          left: calc((var(--tree-depth, 0) * var(--indent-step)) + var(--connector-stem-left));
           top: var(--connector-node-top);
           width: var(--connector-elbow-width);
           height: calc(var(--connector-mid-y) - var(--connector-node-top) + 1px);
@@ -1403,7 +1424,7 @@ export default function ShopifyMenuItemsTree({
         }
         :global(.treeConnectorVertical) {
           position: absolute;
-          left: var(--connector-stem-left);
+          left: calc((var(--tree-depth, 0) * var(--indent-step)) + var(--connector-stem-left));
           top: calc(var(--connector-mid-y) - 1px);
           bottom: -8px;
           border-left: 1px solid #8aa2c4;
@@ -1881,16 +1902,10 @@ export default function ShopifyMenuItemsTree({
         }
         @media (max-width: 980px) {
           .treeSearchBar {
-            grid-template-columns: minmax(0, 1fr) 36px;
-          }
-          .treeUndoBtn {
-            grid-column: 1 / -1;
-          }
-          .treeSaveBtn {
-            grid-column: 1 / -1;
+            grid-template-columns: 36px 36px minmax(0, 1fr) 36px;
           }
         }
       `}</style>
-    </aside>
+    </div>
   );
 }

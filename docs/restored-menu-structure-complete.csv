@@ -1,0 +1,91 @@
+Root,Level,Key,Label,Parent Key,Sort Order,Link Type,Linked Collection / URL,Full Path
+MEN,0,men,MEN,,100,COLLECTION,men,MEN
+MEN,1,men/new-now,NEW & NOW,men,101,COLLECTION,men-new-now,MEN > NEW & NOW
+MEN,2,men/new-now/new-arrivals,NEW ARRIVALS,men/new-now,102,COLLECTION,new-arrivals,MEN > NEW & NOW > NEW ARRIVALS
+MEN,2,men/new-now/summer-sets,SUMMER SETS,men/new-now,103,COLLECTION,summer-sets-men,MEN > NEW & NOW > SUMMER SETS
+MEN,2,men/new-now/winter-sets,WINTER SETS,men/new-now,104,COLLECTION,winter-sets,MEN > NEW & NOW > WINTER SETS
+MEN,1,men/clothing,CLOTHING,men,110,COLLECTION,men-clothing,MEN > CLOTHING
+MEN,2,men/clothing/jeans,JEANS,men/clothing,111,COLLECTION,jeans-men,MEN > CLOTHING > JEANS
+MEN,2,men/clothing/baggy,BAGGY,men/clothing,112,COLLECTION,baggy-men,MEN > CLOTHING > BAGGY
+MEN,2,men/clothing/super-skinny-jeans,SUPER SKINNY JEANS,men/clothing,113,COLLECTION,super-skinny-jeans-men,MEN > CLOTHING > SUPER SKINNY JEANS
+MEN,2,men/clothing/skinny-jeans,SKINNY JEANS,men/clothing,114,COLLECTION,skinny-jeans,MEN > CLOTHING > SKINNY JEANS
+MEN,2,men/clothing/slim-jeans,SLIM JEANS,men/clothing,115,COLLECTION,slim-jeans-men,MEN > CLOTHING > SLIM JEANS
+MEN,2,men/clothing/shirts,SHIRTS,men/clothing,116,COLLECTION,shirts,MEN > CLOTHING > SHIRTS
+MEN,2,men/clothing/dress-shirt,DRESS SHIRT,men/clothing,117,COLLECTION,dress-shirt,MEN > CLOTHING > DRESS SHIRT
+MEN,2,men/clothing/denim-shirts,DENIM SHIRTS,men/clothing,118,COLLECTION,denim-shirts,MEN > CLOTHING > DENIM SHIRTS
+MEN,2,men/clothing/linen-shirts,LINEN SHIRTS,men/clothing,119,COLLECTION,linen-shirts,MEN > CLOTHING > LINEN SHIRTS
+MEN,2,men/clothing/graphic-t-shirts-summer,GRAPHIC T-SHIRTS (SUMMER),men/clothing,120,COLLECTION,short-sleeve-shirts,MEN > CLOTHING > GRAPHIC T-SHIRTS (SUMMER)
+MEN,2,men/clothing/graphic-t-shirts-winter,GRAPHIC T-SHIRTS (WINTER),men/clothing,121,COLLECTION,graphic-t-shirts-winter,MEN > CLOTHING > GRAPHIC T-SHIRTS (WINTER)
+MEN,2,men/clothing/t-shirts,T-SHIRTS,men/clothing,122,COLLECTION,t-shirts,MEN > CLOTHING > T-SHIRTS
+MEN,2,men/clothing/tank-tops,TANK TOPS,men/clothing,123,COLLECTION,tank-tops-men,MEN > CLOTHING > TANK TOPS
+MEN,2,men/clothing/tops,TOPS,men/clothing,124,COLLECTION,tops-men,MEN > CLOTHING > TOPS
+MEN,2,men/clothing/shorts,SHORTS,men/clothing,125,COLLECTION,shorts-1,MEN > CLOTHING > SHORTS
+MEN,2,men/clothing/pants,PANTS,men/clothing,126,COLLECTION,pants,MEN > CLOTHING > PANTS
+MEN,2,men/clothing/jackets-coats,JACKETS & COATS,men/clothing,127,COLLECTION,jackets-coats,MEN > CLOTHING > JACKETS & COATS
+MEN,2,men/clothing/tracksuits,TRACKSUITS,men/clothing,128,COLLECTION,tracksuits-1,MEN > CLOTHING > TRACKSUITS
+MEN,2,men/clothing/sweatpants,SWEATPANTS,men/clothing,129,COLLECTION,sweatpants-men,MEN > CLOTHING > SWEATPANTS
+MEN,2,men/clothing/sweatshirts-hoodies,SWEATSHIRTS & HOODIES,men/clothing,130,COLLECTION,matching-sets,MEN > CLOTHING > SWEATSHIRTS & HOODIES
+MEN,2,men/clothing/overalls,OVERALLS,men/clothing,131,COLLECTION,overalls,MEN > CLOTHING > OVERALLS
+MEN,2,men/clothing/swimwear,SWIMWEAR,men/clothing,132,COLLECTION,swimwear-1,MEN > CLOTHING > SWIMWEAR
+MEN,2,men/clothing/sweaters,SWEATERS,men/clothing,133,COLLECTION,sweaters-men,MEN > CLOTHING > SWEATERS
+MEN,2,men/clothing/polos,POLOS,men/clothing,134,COLLECTION,polos,MEN > CLOTHING > POLOS
+MEN,2,men/clothing/shirt-shop,SHIRT SHOP,men/clothing,135,COLLECTION,men-shirt-shop,MEN > CLOTHING > SHIRT SHOP
+MEN,1,men/accessories-shoes,ACCESSORIES & SHOES,men,140,COLLECTION,men-accessories-shoes,MEN > ACCESSORIES & SHOES
+MEN,2,men/accessories-shoes/jewelry,JEWELRY,men/accessories-shoes,141,COLLECTION,jewelry,MEN > ACCESSORIES & SHOES > JEWELRY
+MEN,2,men/accessories-shoes/sunglasses,SUNGLASSES,men/accessories-shoes,142,COLLECTION,sunglasses,MEN > ACCESSORIES & SHOES > SUNGLASSES
+MEN,2,men/accessories-shoes/belts,BELTS,men/accessories-shoes,143,COLLECTION,belts,MEN > ACCESSORIES & SHOES > BELTS
+MEN,2,men/accessories-shoes/hats,HATS,men/accessories-shoes,144,COLLECTION,hats-men,MEN > ACCESSORIES & SHOES > HATS
+MEN,2,men/accessories-shoes/shoes,SHOES,men/accessories-shoes,145,COLLECTION,shoes,MEN > ACCESSORIES & SHOES > SHOES
+MEN,2,men/accessories-shoes/fragrance-beauty,FRAGRANCE & BEAUTY,men/accessories-shoes,146,COLLECTION,fragrance-beauty,MEN > ACCESSORIES & SHOES > FRAGRANCE & BEAUTY
+MEN,2,men/accessories-shoes/socks-underwear,SOCKS & UNDERWEAR,men/accessories-shoes,147,COLLECTION,socks-underwear,MEN > ACCESSORIES & SHOES > SOCKS & UNDERWEAR
+MEN,2,men/accessories-shoes/ties,TIES,men/accessories-shoes,148,COLLECTION,ties,MEN > ACCESSORIES & SHOES > TIES
+MEN,2,men/accessories-shoes/all-accessories,ALL ACCESSORIES,men/accessories-shoes,149,COLLECTION,all-accessories,MEN > ACCESSORIES & SHOES > ALL ACCESSORIES
+WOMEN,0,women,WOMEN,,10,COLLECTION,women,WOMEN
+WOMEN,1,women/new-now,NEW & NOW,women,11,COLLECTION,women-new-now,WOMEN > NEW & NOW
+WOMEN,2,women/new-now/new-arrivals,NEW ARRIVALS,women/new-now,12,COLLECTION,new-arrivals-women,WOMEN > NEW & NOW > NEW ARRIVALS
+WOMEN,2,women/new-now/limited-edition,LIMITED EDITION,women/new-now,13,COLLECTION,limited-edition,WOMEN > NEW & NOW > LIMITED EDITION
+WOMEN,2,women/new-now/summer-sets,SUMMER SETS,women/new-now,14,COLLECTION,summer-sets,WOMEN > NEW & NOW > SUMMER SETS
+WOMEN,2,women/new-now/winter-sets,WINTER SETS,women/new-now,15,COLLECTION,winter-sets-women,WOMEN > NEW & NOW > WINTER SETS
+WOMEN,1,women/clothing,CLOTHING,women,20,COLLECTION,clothing-1,WOMEN > CLOTHING
+WOMEN,2,women/clothing/matching-sets,MATCHING SETS,women/clothing,21,COLLECTION,matching-sets-1,WOMEN > CLOTHING > MATCHING SETS
+WOMEN,2,women/clothing/dresses,DRESSES,women/clothing,22,COLLECTION,dresses,WOMEN > CLOTHING > DRESSES
+WOMEN,3,women/clothing/dresses/mini-dresses,MINI DRESSES,women/clothing/dresses,23,COLLECTION,mini-dresses,WOMEN > CLOTHING > DRESSES > MINI DRESSES
+WOMEN,3,women/clothing/dresses/midi-dresses,MIDI DRESSES,women/clothing/dresses,24,COLLECTION,midi-dresses-women,WOMEN > CLOTHING > DRESSES > MIDI DRESSES
+WOMEN,3,women/clothing/dresses/maxi-dresses,MAXI DRESSES,women/clothing/dresses,25,COLLECTION,maxi-dresses-women,WOMEN > CLOTHING > DRESSES > MAXI DRESSES
+WOMEN,3,women/clothing/dresses/night-dresses,NIGHT DRESSES,women/clothing/dresses,26,COLLECTION,night-dresses,WOMEN > CLOTHING > DRESSES > NIGHT DRESSES
+WOMEN,2,women/clothing/jeans,JEANS,women/clothing,27,COLLECTION,clothing-jeans,WOMEN > CLOTHING > JEANS
+WOMEN,2,women/clothing/shorts,SHORTS,women/clothing,28,COLLECTION,shorts,WOMEN > CLOTHING > SHORTS
+WOMEN,2,women/clothing/skirts,SKIRTS,women/clothing,29,COLLECTION,skirts,WOMEN > CLOTHING > SKIRTS
+WOMEN,2,women/clothing/tops,TOPS,women/clothing,30,COLLECTION,tops,WOMEN > CLOTHING > TOPS
+WOMEN,2,women/clothing/tank-tops,TANK TOPS,women/clothing,31,COLLECTION,tank-tops,WOMEN > CLOTHING > TANK TOPS
+WOMEN,2,women/clothing/t-shirts,T-SHIRTS,women/clothing,32,COLLECTION,t-shirts-women,WOMEN > CLOTHING > T-SHIRTS
+WOMEN,2,women/clothing/jumpsuits-rompers,JUMPSUITS & ROMPERS,women/clothing,33,COLLECTION,jumpsuits-rompers,WOMEN > CLOTHING > JUMPSUITS & ROMPERS
+WOMEN,2,women/clothing/jackets-coats,JACKETS & COATS,women/clothing,34,COLLECTION,jackets-coats-2,WOMEN > CLOTHING > JACKETS & COATS
+WOMEN,2,women/clothing/bodysuits,BODYSUITS,women/clothing,35,COLLECTION,bodysuits,WOMEN > CLOTHING > BODYSUITS
+WOMEN,2,women/clothing/tracksuits,TRACKSUITS,women/clothing,36,COLLECTION,tracksuits,WOMEN > CLOTHING > TRACKSUITS
+WOMEN,2,women/clothing/sweatpants,SWEATPANTS,women/clothing,37,COLLECTION,sweatpants,WOMEN > CLOTHING > SWEATPANTS
+WOMEN,2,women/clothing/pants-leggings,PANTS & LEGGINGS,women/clothing,38,COLLECTION,pants-women,WOMEN > CLOTHING > PANTS & LEGGINGS
+WOMEN,2,women/clothing/leggings,LEGGINGS,women/clothing,39,COLLECTION,women-clothing-leggings,WOMEN > CLOTHING > LEGGINGS
+WOMEN,2,women/clothing/sweatshirts-hoodies,SWEATSHIRTS & HOODIES,women/clothing,40,COLLECTION,sweatshirts-hoodies-women,WOMEN > CLOTHING > SWEATSHIRTS & HOODIES
+WOMEN,2,women/clothing/swimwear,SWIMWEAR,women/clothing,41,COLLECTION,swimsuit-women,WOMEN > CLOTHING > SWIMWEAR
+WOMEN,2,women/clothing/sweaters,SWEATERS,women/clothing,42,COLLECTION,sweaters-women,WOMEN > CLOTHING > SWEATERS
+WOMEN,1,women/accessories-shoes,ACCESSORIES & SHOES,women,50,COLLECTION,accessories-shoes-women,WOMEN > ACCESSORIES & SHOES
+WOMEN,2,women/accessories-shoes/jewelry,JEWELRY,women/accessories-shoes,51,COLLECTION,jewelry-women,WOMEN > ACCESSORIES & SHOES > JEWELRY
+WOMEN,2,women/accessories-shoes/sunglasses,SUNGLASSES,women/accessories-shoes,52,COLLECTION,sunglasses-women,WOMEN > ACCESSORIES & SHOES > SUNGLASSES
+WOMEN,2,women/accessories-shoes/belts,BELTS,women/accessories-shoes,53,COLLECTION,women-belts,WOMEN > ACCESSORIES & SHOES > BELTS
+WOMEN,2,women/accessories-shoes/hats,HATS,women/accessories-shoes,54,COLLECTION,hats,WOMEN > ACCESSORIES & SHOES > HATS
+WOMEN,2,women/accessories-shoes/shoes,SHOES,women/accessories-shoes,55,COLLECTION,shoes-women,WOMEN > ACCESSORIES & SHOES > SHOES
+WOMEN,2,women/accessories-shoes/fragrance-beauty,FRAGRANCE & BEAUTY,women/accessories-shoes,56,COLLECTION,fragrance-beauty-women,WOMEN > ACCESSORIES & SHOES > FRAGRANCE & BEAUTY
+WOMEN,2,women/accessories-shoes/all-accessories,ALL ACCESSORIES,women/accessories-shoes,57,COLLECTION,all-accessories-women,WOMEN > ACCESSORIES & SHOES > ALL ACCESSORIES
+JEANS,0,jeans,JEANS,,200,PAGE,/collections/all,JEANS
+JEANS,1,jeans/men,MEN,jeans,201,COLLECTION,jeans-men,JEANS > MEN
+JEANS,2,jeans/men/skinny-jeans,SKINNY JEANS,jeans/men,202,COLLECTION,skinny-jeans,JEANS > MEN > SKINNY JEANS
+JEANS,2,jeans/men/super-skinny-jeans,SUPER SKINNY JEANS,jeans/men,203,COLLECTION,super-skinny-jeans-men,JEANS > MEN > SUPER SKINNY JEANS
+JEANS,2,jeans/men/baggy,BAGGY,jeans/men,204,COLLECTION,baggy-men,JEANS > MEN > BAGGY
+JEANS,2,jeans/men/slim-jeans,SLIM JEANS,jeans/men,205,COLLECTION,slim-jeans-men,JEANS > MEN > SLIM JEANS
+JEANS,1,jeans/women,WOMEN,jeans,210,COLLECTION,clothing-jeans,JEANS > WOMEN
+JEANS,2,jeans/women/skinny-jeans,SKINNY JEANS,jeans/women,211,COLLECTION,skinny-jeans-women,JEANS > WOMEN > SKINNY JEANS
+JEANS,2,jeans/women/relaxed-jeans,RELAXED JEANS,jeans/women,212,COLLECTION,relaxed-women,JEANS > WOMEN > RELAXED JEANS
+JEANS,2,jeans/women/flare-wide-leg-jeans,FLARE & WIDE LEG JEANS,jeans/women,213,COLLECTION,jeans-women,JEANS > WOMEN > FLARE & WIDE LEG JEANS
+REWARDS,0,rewards,REWARDS,,300,PAGE,/pages/rewards,REWARDS
+BECOME AFFILIATE,0,become-affiliate,BECOME AFFILIATE,,310,PAGE,/pages/become-affiliate,BECOME AFFILIATE

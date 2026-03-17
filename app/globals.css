@@ -95,38 +95,20 @@ body {
   min-height: 100vh;
 }
 
-/* Route-level first-paint guards:
-   hide the global template layers before hydration to prevent flash/reflection. */
-body:has(.collection-mapping-route),
-body:has(.collection-mapping-loading),
-body:has(.seo-route),
-body:has(.seo-loading) {
+/* Standalone collection mapping page only:
+   hide global shell photo/fades and force local dark base. */
+body:has(.collection-mapping-standalone-route) {
   background: #0b1020;
 }
 
-body:has(.collection-mapping-route) .app-root-content,
-body:has(.collection-mapping-loading) .app-root-content,
-body:has(.seo-route) .app-root-content,
-body:has(.seo-loading) .app-root-content {
+body:has(.collection-mapping-standalone-route) .app-root-content {
   background: #0b1020;
 }
 
-body:has(.collection-mapping-route) .app-bg-photo,
-body:has(.collection-mapping-route) .app-bg-fade,
-body:has(.collection-mapping-route) .app-bg-top-photo,
-body:has(.collection-mapping-route) .app-bg-top-fade,
-body:has(.collection-mapping-loading) .app-bg-photo,
-body:has(.collection-mapping-loading) .app-bg-fade,
-body:has(.collection-mapping-loading) .app-bg-top-photo,
-body:has(.collection-mapping-loading) .app-bg-top-fade,
-body:has(.seo-route) .app-bg-photo,
-body:has(.seo-route) .app-bg-fade,
-body:has(.seo-route) .app-bg-top-photo,
-body:has(.seo-route) .app-bg-top-fade,
-body:has(.seo-loading) .app-bg-photo,
-body:has(.seo-loading) .app-bg-fade,
-body:has(.seo-loading) .app-bg-top-photo,
-body:has(.seo-loading) .app-bg-top-fade {
+body:has(.collection-mapping-standalone-route) .app-bg-photo,
+body:has(.collection-mapping-standalone-route) .app-bg-fade,
+body:has(.collection-mapping-standalone-route) .app-bg-top-photo,
+body:has(.collection-mapping-standalone-route) .app-bg-top-fade {
   display: none !important;
 }
 

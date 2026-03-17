@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ShopCarbon Mapping - Codex UI Proposal</title>
+  <style>
+    :root {
+      --bg: #070d18;
+      --panel: #0d1628;
+      --panel-2: #101d34;
+      --line: #25324a;
+      --line-2: #334764;
+      --text: #e7edf8;
+      --muted: #98a8c2;
+      --blue: #3b82f6;
+      --blue-2: #122e57;
+      --green: #16a34a;
+      --green-2: #103521;
+      --amber: #d97706;
+      --amber-2: #3a250f;
+      --red: #dc2626;
+      --red-2: #3f1418;
+      --violet: #8b5cf6;
+      --violet-2: #2a1f4b;
+      --shadow: 0 16px 36px rgba(0, 0, 0, 0.35);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: Inter, Segoe UI, Arial, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 12% 0%, rgba(37, 99, 235, 0.24), transparent 38%),
+        radial-gradient(circle at 90% 100%, rgba(14, 116, 144, 0.18), transparent 40%),
+        var(--bg);
+    }
+
+    button, input, select { font: inherit; }
+
+    .app {
+      height: 100vh;
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+      gap: 12px;
+      padding: 12px;
+    }
+
+    .top {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: linear-gradient(180deg, #0f1a30, #0b1425);
+      box-shadow: var(--shadow);
+      padding: 12px;
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+      gap: 12px;
+    }
+
+    .title h1 { margin: 0; font-size: 21px; }
+    .title p { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+    .meta { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .pill {
+      min-height: 28px;
+      border-radius: 999px;
+      border: 1px solid #32445f;
+      background: #0f1a31;
+      color: #d7e6ff;
+      padding: 0 10px;
+      display: inline-flex;
+      align-items: center;
+      font-size: 12px;
+    }
+
+    .sync-overview {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(110px, 1fr));
+      gap: 8px;
+    }
+
+    .sync-card {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px;
+      background: #0f1a31;
+    }
+    .sync-card .k { font-size: 11px; color: var(--muted); text-transform: uppercase; }
+    .sync-card .v { margin-top: 6px; font-size: 22px; font-weight: 700; }
+    .sync-card.review { border-color: var(--amber); background: var(--amber-2); }
+    .sync-card.remove { border-color: var(--red); background: var(--red-2); }
+    .sync-card.add { border-color: var(--blue); background: var(--blue-2); }
+    .sync-card.synced { border-color: var(--green); background: var(--green-2); }
+
+    .lanes {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #0c1528;
+      box-shadow: var(--shadow);
+      padding: 10px;
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.35fr);
+      gap: 10px;
+    }
+
+    .lane {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #0e1a30;
+      padding: 10px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .lane-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 8px;
+    }
+    .lane-head h3 {
+      margin: 0;
+      font-size: 12px;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: #dbe8ff;
+    }
+    .lane-head span { font-size: 11px; color: var(--muted); }
+
+    .discover-grid {
+      display: grid;
+      grid-template-columns: minmax(240px, 1fr) auto auto;
+      gap: 8px;
+      align-items: center;
+    }
+    .discover-grid input {
+      width: 100%;
+      min-height: 38px;
+      border-radius: 10px;
+      border: 1px solid var(--line-2);
+      background: #0d1730;
+      color: var(--text);
+      padding: 0 12px;
+    }
+    .discover-grid select {
+      min-height: 38px;
+      border-radius: 10px;
+      border: 1px solid var(--line-2);
+      background: #0d1730;
+      color: var(--text);
+      padding: 0 10px;
+    }
+
+    .ctx-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .chip {
+      min-height: 24px;
+      border-radius: 999px;
+      border: 1px solid #33517b;
+      background: #11243f;
+      color: #d5e8ff;
+      font-size: 11px;
+      display: inline-flex;
+      align-items: center;
+      padding: 0 10px;
+    }
+
+    .act-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .btn {
+      min-height: 36px;
+      border-radius: 10px;
+      border: 1px solid #355070;
+      background: linear-gradient(180deg, #132239, #0f1b2f);
+      color: var(--text);
+      padding: 0 12px;
+      cursor: pointer;
+    }
+    .btn.primary {
+      border-color: var(--blue);
+      background: linear-gradient(180deg, #1a3f7a, #173464);
+      color: #dbebff;
+    }
+    .btn.good {
+      border-color: var(--green);
+      background: linear-gradient(180deg, #155f34, #11482a);
+      color: #d9ffe6;
+    }
+    .btn.warn {
+      border-color: var(--amber);
+      background: linear-gradient(180deg, #5f3b16, #472b12);
+      color: #ffe7c2;
+    }
+    .btn.danger {
+      border-color: var(--red);
+      background: linear-gradient(180deg, #602028, #4b1820);
+      color: #ffd8db;
+    }
+
+    .workspace {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 12px;
+    }
+
+    /* Tree layout intentionally preserved conceptually */
+    .tree {
+      min-height: 0;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+      overflow: hidden;
+    }
+    .tree-head {
+      padding: 10px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .tree-head h3 { margin: 0; font-size: 14px; }
+    .tree-search {
+      padding: 10px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      gap: 8px;
+    }
+    .tree-search input {
+      width: 100%;
+      min-height: 36px;
+      border-radius: 10px;
+      border: 1px solid var(--line-2);
+      background: #0d1730;
+      color: var(--text);
+      padding: 0 10px;
+    }
+    .tree-body { overflow: auto; padding: 10px; }
+    .tree-section { margin-bottom: 14px; }
+    .tree-title {
+      margin: 0 0 8px;
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+    .tree-item {
+      width: 100%;
+      text-align: left;
+      border: 1px solid #33435f;
+      border-radius: 10px;
+      background: #10203b;
+      color: var(--text);
+      padding: 9px 10px;
+      margin-bottom: 8px;
+      cursor: pointer;
+    }
+    .tree-item.active { border-color: var(--blue); background: #15305b; }
+    .tree-item small { display: block; margin-top: 4px; color: var(--muted); }
+    .tree-foot {
+      border-top: 1px solid var(--line);
+      padding: 10px;
+      display: flex;
+      gap: 8px;
+    }
+
+    .content {
+      min-height: 0;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+      overflow: hidden;
+    }
+
+    .ops {
+      padding: 10px;
+      border-bottom: 1px solid var(--line);
+      display: grid;
+      gap: 10px;
+      background: #0d1830;
+    }
+    .ops-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .ops-head h3 {
+      margin: 0;
+      font-size: 13px;
+      color: #dbe8ff;
+    }
+    .ops-tabs { display: flex; gap: 8px; }
+    .ops-tab {
+      min-height: 30px;
+      border-radius: 999px;
+      border: 1px solid #365278;
+      background: #10213f;
+      color: #dbe8ff;
+      padding: 0 10px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .ops-tab.active { border-color: var(--blue); background: #153260; }
+    .ops-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .ops-metric {
+      border: 1px solid #2f4668;
+      border-radius: 10px;
+      background: #0f1e37;
+      color: #dbe8ff;
+      min-height: 28px;
+      padding: 0 9px;
+      display: inline-flex;
+      align-items: center;
+      font-size: 12px;
+    }
+
+    .table-wrap { min-height: 0; overflow: auto; }
+    table { width: 100%; min-width: 1720px; border-collapse: collapse; }
+    th, td {
+      border-bottom: 1px solid #1d2d44;
+      padding: 9px;
+      white-space: nowrap;
+      vertical-align: middle;
+      font-size: 12px;
+    }
+    thead .group th {
+      position: sticky;
+      top: 0;
+      z-index: 4;
+      background: #0b162d;
+      color: #9db0cc;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      text-align: center;
+    }
+    thead .cols th {
+      position: sticky;
+      top: 31px;
+      z-index: 3;
+      background: #0f1d36;
+      color: #d4deee;
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+    tbody tr:nth-child(even) { background: #0f1a31; }
+    tbody tr:hover { background: #132645; }
+    tbody tr.active { background: #17305a; }
+    tbody tr.review { box-shadow: inset 3px 0 0 var(--amber); }
+
+    .status {
+      min-height: 24px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      padding: 0 9px;
+      display: inline-flex;
+      align-items: center;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .02em;
+    }
+    .status.review { border-color: var(--amber); background: var(--amber-2); color: #ffd8a6; }
+    .status.remove { border-color: var(--red); background: var(--red-2); color: #ffc9ce; }
+    .status.add { border-color: var(--blue); background: var(--blue-2); color: #d7e8ff; }
+    .status.synced { border-color: var(--green); background: var(--green-2); color: #cbf9da; }
+    .status.manual { border-color: var(--violet); background: var(--violet-2); color: #e3d8ff; }
+
+    .sugg {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      max-width: 300px;
+    }
+    .s-chip {
+      min-height: 24px;
+      border-radius: 999px;
+      border: 1px solid #3a5276;
+      background: #10213f;
+      color: #dbe8ff;
+      padding: 0 9px;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .s-chip.selected { border-color: var(--blue); background: #173563; }
+    .s-chip.disabled { opacity: .5; text-decoration: line-through; cursor: not-allowed; }
+
+    .result {
+      display: grid;
+      gap: 3px;
+      min-width: 320px;
+    }
+    .muted { color: var(--muted); font-size: 11px; }
+    .expand {
+      min-height: 24px;
+      border-radius: 999px;
+      border: 1px solid #466088;
+      background: #10213f;
+      color: #e0ecff;
+      padding: 0 9px;
+      font-size: 11px;
+      cursor: pointer;
+    }
+
+    .details {
+      display: none;
+      background: #0f203a;
+    }
+    .details.open { display: table-row; }
+    .details-box {
+      padding: 10px;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(180px, 1fr));
+      gap: 8px;
+    }
+    .d-card {
+      border: 1px solid #304966;
+      border-radius: 10px;
+      background: #10213d;
+      padding: 8px;
+      display: grid;
+      gap: 4px;
+    }
+    .d-card b { font-size: 11px; color: #dce8ff; }
+    .d-card span { font-size: 11px; color: #aec0dc; }
+
+    .pager {
+      border-top: 1px solid var(--line);
+      background: #0d1830;
+      padding: 10px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .pager .sp { flex: 1; }
+
+    @media (max-width: 1360px) {
+      .top { grid-template-columns: 1fr; }
+      .lanes { grid-template-columns: 1fr; }
+      .discover-grid { grid-template-columns: 1fr; }
+      .workspace { grid-template-columns: 1fr; }
+      .details-box { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 900px) {
+      .details-box { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="top">
+      <div class="title">
+        <h1>Shopify Collection Mapping</h1>
+        <p>UPC-first worksheet. 1 UPC = 1 row = 1 mapping unit. Tree map stays unchanged.</p>
+        <div class="meta">
+          <span class="pill">Shop: shopcarbon.myshopify.com</span>
+          <span class="pill">Worksheet day key: 2026-03-16</span>
+          <span class="pill">Session cache: ON</span>
+          <span class="pill">Push idempotency guard: ON</span>
+        </div>
+      </div>
+      <div class="sync-overview">
+        <div class="sync-card review"><div class="k">REVIEW</div><div class="v">62</div></div>
+        <div class="sync-card remove"><div class="k">REMOVAL_PENDING</div><div class="v">134</div></div>
+        <div class="sync-card add"><div class="k">ADD_PENDING</div><div class="v">58</div></div>
+        <div class="sync-card synced"><div class="k">SYNCED</div><div class="v">500</div></div>
+      </div>
+    </header>
+
+    <section class="lanes">
+      <div class="lane">
+        <div class="lane-head">
+          <h3>Discover</h3>
+          <span>Search + filters</span>
+        </div>
+        <div class="discover-grid">
+          <input placeholder="Search title / UPC / representative SKU..." />
+          <select>
+            <option>All product types</option>
+            <option>Tops</option><option>Jeans</option><option>Dresses</option><option>Sweaters</option>
+          </select>
+          <button class="btn">Refresh</button>
+        </div>
+      </div>
+      <div class="lane">
+        <div class="lane-head">
+          <h3>Context</h3>
+          <span>Worksheet snapshot</span>
+        </div>
+        <div class="ctx-chips">
+          <span class="chip">Page 1 / 22</span>
+          <span class="chip">Per page: 50</span>
+          <span class="chip">Selected rows: 3</span>
+          <span class="chip">Mapped selections: 27</span>
+          <span class="chip">Unmapped selections: 2</span>
+        </div>
+      </div>
+      <div class="lane">
+        <div class="lane-head">
+          <h3>Actions</h3>
+          <span>Bulk + push</span>
+        </div>
+        <div class="act-row">
+          <button class="btn good">Apply Suggestions</button>
+          <button class="btn">Clear Staged</button>
+          <button class="btn primary">Push Selected</button>
+          <button class="btn">Push All Final</button>
+          <button class="btn warn">Assign Checked</button>
+          <button class="btn">Unassign Checked</button>
+          <button class="btn danger">Remove All Collections</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="workspace">
+      <aside class="tree">
+        <div class="tree-head">
+          <button class="btn" style="min-height:34px">☰</button>
+          <h3>Categories</h3>
+          <button class="btn" style="margin-left:auto;min-height:34px">Pinned</button>
+        </div>
+        <div class="tree-search">
+          <input placeholder="Search menu nodes..." />
+          <button class="btn">⟳</button>
+        </div>
+        <div class="tree-body">
+          <div class="tree-section">
+            <p class="tree-title">Menu Tree</p>
+            <button class="tree-item active"><b>WOMEN > CLOTHING > TOPS</b><small>57 mapped rows</small></button>
+            <button class="tree-item"><b>WOMEN > CLOTHING > DRESSES</b><small>28 mapped rows</small></button>
+            <button class="tree-item"><b>MEN > CLOTHING > JEANS</b><small>49 mapped rows</small></button>
+            <button class="tree-item"><b>JEANS > MEN</b><small>14 suggestion-ready rows</small></button>
+          </div>
+          <div class="tree-section">
+            <p class="tree-title">Unmapped Collections</p>
+            <button class="tree-item"><b>GRAPHIC T-SHIRTS (WINTER men)</b></button>
+            <button class="tree-item"><b>SUMMER FLARE JEANS</b></button>
+            <button class="tree-item"><b>LEGGINGS (women)</b></button>
+          </div>
+        </div>
+        <div class="tree-foot">
+          <button class="btn">Undo</button>
+          <button class="btn good" style="flex:1">Save Tree</button>
+        </div>
+      </aside>
+
+      <section class="content">
+        <div class="ops">
+          <div class="ops-head">
+            <h3>Operations Workspace</h3>
+            <div class="ops-tabs">
+              <button class="ops-tab active">Queue</button>
+              <button class="ops-tab">Reports</button>
+            </div>
+          </div>
+          <div class="ops-row">
+            <span class="ops-metric">queued: 1</span>
+            <span class="ops-metric">running: 0</span>
+            <span class="ops-metric">completed: 2</span>
+            <span class="ops-metric">failed: 0</span>
+            <button class="btn" style="margin-left:auto">Open Audit Modal</button>
+            <button class="btn primary">Export Selected Report</button>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr class="group">
+                <th colspan="4">Product Identity (UPC rows)</th>
+                <th colspan="2">Auto + Suggestions</th>
+                <th colspan="2">Decision / Sync</th>
+                <th>Current vs Final</th>
+              </tr>
+              <tr class="cols">
+                <th><input type="checkbox" /></th>
+                <th>Picture</th>
+                <th>Product</th>
+                <th>UPC / Rep SKU</th>
+                <th>Auto Paths</th>
+                <th>Suggested</th>
+                <th>Decision</th>
+                <th>Status</th>
+                <th>Result</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="active">
+                <td><input type="checkbox" checked /></td>
+                <td><div style="width:44px;height:62px;border-radius:10px;background:#e2e8f0;color:#334155;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;">ADA</div></td>
+                <td><b>ADA CROP TOP</b><div class="muted">Type: Tops</div></td>
+                <td>2541417<div class="muted">Rep SKU: C125414170701</div></td>
+                <td><div class="muted">WOMEN > CLOTHING > TOPS</div></td>
+                <td>
+                  <div class="sugg">
+                    <button class="s-chip selected">SUMMER SETS</button>
+                    <button class="s-chip">WINTER SETS</button>
+                    <button class="s-chip">MATCHING SETS</button>
+                  </div>
+                </td>
+                <td><span class="status manual">SUGGESTED</span></td>
+                <td><span class="status add">ADD_PENDING</span></td>
+                <td>
+                  <div class="result">
+                    <div class="muted"><b>Current</b>: WOMEN</div>
+                    <div class="muted"><b>Final</b>: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS</div>
+                    <div class="muted"><b>Manual</b>: +2 / -0</div>
+                    <button class="expand" onclick="toggleDetails('d1')">View details</button>
+                  </div>
+                </td>
+              </tr>
+              <tr class="details" id="d1">
+                <td colspan="9">
+                  <div class="details-box">
+                    <div class="d-card">
+                      <b>Current Paths</b>
+                      <span>WOMEN</span>
+                    </div>
+                    <div class="d-card">
+                      <b>Auto-Mapped Paths</b>
+                      <span>WOMEN > CLOTHING > TOPS</span>
+                    </div>
+                    <div class="d-card">
+                      <b>Final Paths</b>
+                      <span>WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS</span>
+                    </div>
+                    <div class="d-card">
+                      <b>Final Direct Collections</b>
+                      <span>tops-women</span>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+
+              <tr class="review">
+                <td><input type="checkbox" /></td>
+                <td><div style="width:44px;height:62px;border-radius:10px;background:#e2e8f0;color:#334155;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;">ANN</div></td>
+                <td><b>2 PIECES ANN SET</b><div class="muted">Type: Dresses</div></td>
+                <td>2581713<div class="muted">Rep SKU: C12581713A804</div></td>
+                <td><div class="muted">-</div></td>
+                <td><div class="muted">-</div></td>
+                <td><span class="status manual">MANUAL_REVIEW</span></td>
+                <td><span class="status review">REVIEW</span></td>
+                <td><div class="result"><div class="muted"><b>Current</b>: WOMEN</div><div class="muted"><b>Final</b>: -</div><div class="muted"><b>Manual</b>: +0 / -1</div></div></td>
+              </tr>
+
+              <tr>
+                <td><input type="checkbox" /></td>
+                <td><div style="width:44px;height:62px;border-radius:10px;background:#e2e8f0;color:#334155;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;">AAR</div></td>
+                <td><b>AARON JEANS</b><div class="muted">Type: Jeans</div></td>
+                <td>1123014<div class="muted">Rep SKU: 1123014C229</div></td>
+                <td><div class="muted">MEN > CLOTHING > JEANS, JEANS > MEN</div></td>
+                <td><button class="s-chip disabled">BAGGY</button></td>
+                <td><span class="status synced">AUTO_MAPPED</span></td>
+                <td><span class="status synced">SYNCED</span></td>
+                <td><div class="result"><div class="muted"><b>Current</b>: MEN, MEN > CLOTHING > JEANS</div><div class="muted"><b>Final</b>: MEN, MEN > CLOTHING > JEANS</div><div class="muted"><b>Manual</b>: +0 / -0</div></div></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="pager">
+          <button class="btn">&lt;&lt;</button>
+          <button class="btn">&lt;</button>
+          <span class="muted">Page 1 of 22</span>
+          <button class="btn">&gt;</button>
+          <button class="btn">&gt;&gt;</button>
+          <div class="sp"></div>
+          <span class="muted">Per page</span>
+          <select class="btn" style="padding:0 8px;min-height:34px;">
+            <option>20</option>
+            <option>50</option>
+            <option>100</option>
+          </select>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    function toggleDetails(id) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.classList.toggle("open");
+    }
+  </script>
+</body>
+</html>

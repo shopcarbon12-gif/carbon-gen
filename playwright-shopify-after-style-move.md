@@ -1,0 +1,57 @@
+- generic:
+  - generic [active]:
+    - generic [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - navigation [ref=e6]:
+            - button "previous" [disabled] [ref=e7]:
+              - img "previous" [ref=e8]
+            - generic [ref=e10]:
+              - generic [ref=e11]: 1/
+              - text: "1"
+            - button "next" [disabled] [ref=e12]:
+              - img "next" [ref=e13]
+          - img
+        - generic [ref=e15]:
+          - link "Next.js 16.1.6 (stale) Webpack" [ref=e16] [cursor=pointer]:
+            - /url: https://nextjs.org/docs/messages/version-staleness
+            - img [ref=e17]
+            - generic "There is a newer version (16.1.7) available, upgrade recommended!" [ref=e19]: Next.js 16.1.6 (stale)
+            - generic [ref=e20]: Webpack
+          - img
+      - dialog "Build Error" [ref=e22]:
+        - generic [ref=e25]:
+          - generic [ref=e26]:
+            - generic [ref=e27]:
+              - generic [ref=e29]: Build Error
+              - generic [ref=e30]:
+                - button "Copy Error Info" [ref=e31] [cursor=pointer]:
+                  - img [ref=e32]
+                - link "Go to related documentation" [ref=e34] [cursor=pointer]:
+                  - /url: https://nextjs.org/docs/messages/nested-styled-jsx-tags
+                  - img [ref=e35]
+                - button "Attach Node.js inspector" [ref=e37] [cursor=pointer]:
+                  - img [ref=e38]
+            - generic [ref=e47]: x Detected nested styled-jsx tag.
+          - generic [ref=e49]:
+            - generic [ref=e51]:
+              - img [ref=e53]
+              - generic [ref=e56]: ./components/shopify-collection-mapping.tsx
+              - button "Open in editor" [ref=e57] [cursor=pointer]:
+                - img [ref=e59]
+            - generic [ref=e63]:
+              - text: "Error: x Detected nested styled-jsx tag. | Read more:"
+              - link "https://nextjs.org/docs/messages/nested-styled-jsx-tags" [ref=e64] [cursor=pointer]:
+                - /url: https://nextjs.org/docs/messages/nested-styled-jsx-tags
+              - text: ",-[D:\\Projects\\My project\\carbon-gen\\components\\shopify-collection-mapping.tsx:3186:1] 3183 | </div> 3184 | 3185 | <main className=\"pageBody\"> 3186 | ,-> <style jsx global>{` 3187 | | .app-bg-photo, 3188 | | .app-bg-fade, 3189 | | .app-bg-top-photo, 3190 | | .app-bg-top-fade { 3191 | | display: none !important; 3192 | | } 3193 | | body { 3194 | | background: #0b1020 !important; 3195 | | } 3196 | | .page { 3197 | | --shell-content-top-offset: 100px; 3198 | | --notice-bar-height: 36px; 3199 | | --notice-gap-to-workspace: 2px; 3200 | | width: min(100%, calc(100vw - 24px)); 3201 | | max-width: 100%; 3202 | | box-sizing: border-box; 3203 | | min-width: 0; 3204 | | margin: 0 auto; 3205 | | padding: 0 14px 14px; 3206 | | color: #e2e8f0; 3207 | | font-family: ui-sans-serif, system-ui, Segoe UI, Arial; 3208 | | background: 3209 | | radial-gradient(circle at 10% 0%, rgba(37, 99, 235, 0.22), transparent 38%), 3210 | | radial-gradient(circle at 90% 100%, rgba(6, 182, 212, 0.16), transparent 40%), 3211 | | linear-gradient(180deg, #070d19 0%, #060c18 100%); 3212 | | display: flex; 3213 | | flex-direction: column; 3214 | | gap: 0; 3215 | | height: calc(100dvh - var(--shell-content-top-offset)); 3216 | | max-height: calc(100dvh - var(--shell-content-top-offset)); 3217 | | overflow-x: hidden; 3218 | | overflow-y: auto; 3219 | | } 3220 | | .page.pageExpanded { 3221 | | height: calc(100dvh - var(--shell-content-top-offset)); 3222 | | max-height: calc(100dvh - var(--shell-content-top-offset)); 3223 | | overflow-x: hidden; 3224 | | overflow-y: auto; 3225 | | } 3226 | | .pageBody { 3227 | | min-width: 0; 3228 | | min-height: 0; 3229 | | display: flex; 3230 | | flex-direction: column; 3231 | | gap: 0; 3232 | | flex: 1 1 auto; 3233 | | } 3234 | | .noticeStandalone { 3235 | | margin: 0; 3236 | | padding: 0; 3237 | | top: 0; 3238 | | display: flex; 3239 | | flex-direction: column; 3240 | | gap: 0; 3241 | | background: transparent; 3242 | | } 3243 | | .noticeSlot { 3244 | | min-height: calc(var(--notice-bar-height) + var(--notice-gap-to-workspace)); 3245 | | position: sticky; 3246 | | top: 0; 3247 | | z-index: 14; 3248 | | display: flex; 3249 | | align-items: stretch; 3250 | | padding-bottom: var(--notice-gap-to-workspace); 3251 | | } 3252 | | .noticeBar { 3253 | | border: 1px solid #2a3a56; 3254 | | border-radius: 9px; 3255 | | background: #0f1a2f; 3256 | | color: #dbe7f8; 3257 | | min-height: var(--notice-bar-height); 3258 | | height: var(--notice-bar-height); 3259 | | display: flex; 3260 | | align-items: center; 3261 | | gap: 10px; 3262 | | padding: 0 10px; 3263 | | position: relative; 3264 | | overflow: hidden; 3265 | | width: 100%; 3266 | | } 3267 | | .noticeText { 3268 | | font-size: 16px; 3269 | | line-height: 1; 3270 | | font-weight: 800; 3271 | | min-width: 0; 3272 | | overflow: hidden; 3273 | | text-overflow: ellipsis; 3274 | | white-space: nowrap; 3275 | | } 3276 | | .notice-warning { 3277 | | border-color: #f59e0b; 3278 | | background: #452d12; 3279 | | color: #fdcc88; 3280 | | } 3281 | | .notice-error { 3282 | | border-color: #ef4444; 3283 | | background: #431a1e; 3284 | | color: #fecaca; 3285 | | } 3286 | | .notice-progress { 3287 | | border-color: #3b82f6; 3288 | | background: #10213d; 3289 | | color: #dbeafe; 3290 | | } 3291 | | .noticeProgressTrack { 3292 | | flex: 0 0 58px; 3293 | | width: 58px; 3294 | | height: 4px; 3295 | | border-radius: 999px; 3296 | | background: rgba(59, 130, 246, 0.25); 3297 | | overflow: hidden; 3298 | | } 3299 | | .noticeProgressFill { 3300 | | display: block; 3301 | | width: 42%; 3302 | | height: 100%; 3303 | | border-radius: 999px; 3304 | | background: #60a5fa; 3305 | | animation: noticeProgressSlide 1.05s linear infinite; 3306 | | } 3307 | | .noticeCloseBtn { 3308 | | margin-left: auto; 3309 | | min-height: 22px; 3310 | | height: 22px; 3311 | | width: 22px; 3312 | | padding: 0; 3313 | | border-radius: 999px; 3314 | | border: 1px solid rgba(226, 232, 240, 0.4); 3315 | | background: rgba(15, 23, 42, 0.35); 3316 | | color: inherit; 3317 | | font-size: 11px; 3318 | | text-transform: uppercase; 3319 | | line-height: 1; 3320 | | } 3321 | | .noticeCloseBtn:hover:not(:disabled) { 3322 | | border-color: rgba(226, 232, 240, 0.68); 3323 | | background: rgba(15, 23, 42, 0.56); 3324 | | } 3325 | | @keyframes noticeProgressSlide { 3326 | | from { 3327 | | transform: translateX(-120%); 3328 | | } 3329 | | to { 3330 | | transform: translateX(240%); 3331 | | } 3332 | | } 3333 | | @media (max-width: 1200px) { 3334 | | .page { 3335 | | height: calc(100dvh - var(--shell-content-top-offset)); 3336 | | max-height: calc(100dvh - var(--shell-content-top-offset)); 3337 | | overflow-x: hidden; 3338 | | overflow-y: auto; 3339 | | } 3340 | | } 3341 | `-> `}</style> 3342 | {shellTopbarEl 3343 | ? createPortal( 3344 | <div className=\"mappingShellKpis\" aria-label=\"Collection mapping summary\"> `----"
+        - generic [ref=e65]: "1"
+        - generic [ref=e66]: "2"
+    - generic [ref=e71] [cursor=pointer]:
+      - button "Open Next.js Dev Tools" [ref=e72]:
+        - img [ref=e73]
+      - button "Open issues overlay" [ref=e77]:
+        - generic [ref=e78]:
+          - generic [ref=e79]: "0"
+          - generic [ref=e80]: "1"
+        - generic [ref=e81]: Issue
+  - alert [ref=e82]

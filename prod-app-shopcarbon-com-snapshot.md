@@ -1,0 +1,882 @@
+- generic [active] [ref=e1]:
+  - main [ref=e4]:
+    - generic [ref=e5]:
+      - heading "Shopify Collection Mapping" [level=1] [ref=e6]
+      - generic [ref=e7]:
+        - generic [ref=e8]: "Shop: 30e7d3.myshopify.com"
+        - generic [ref=e9]: Auto-parent logic ON
+        - generic [ref=e10]: Live Shopify sync ON
+        - button "Collection Audit Log" [ref=e11] [cursor=pointer]
+      - generic [ref=e12]:
+        - generic [ref=e13]:
+          - generic [ref=e14]: Total Loaded
+          - text: "20"
+        - generic [ref=e15]:
+          - generic [ref=e16]: Auto-Mapped
+          - text: "15"
+        - generic [ref=e17]:
+          - generic [ref=e18]: Review Needed
+          - text: "5"
+        - generic [ref=e19]:
+          - generic [ref=e20]: Add Pending
+          - text: "8"
+        - generic [ref=e21]:
+          - generic [ref=e22]: Removal Pending
+          - text: "0"
+        - generic [ref=e23]:
+          - generic [ref=e24]: Synced
+          - text: "7"
+      - generic [ref=e25]:
+        - generic [ref=e26]:
+          - generic [ref=e27]: "1"
+          - generic [ref=e28]: Pull / Detect
+        - generic [ref=e29]:
+          - generic [ref=e30]: "2"
+          - generic [ref=e31]: Auto Map
+        - generic [ref=e32]:
+          - generic [ref=e33]: "3"
+          - generic [ref=e34]: Suggestions
+        - generic [ref=e35]:
+          - generic [ref=e36]: "4"
+          - generic [ref=e37]: Manual Review
+        - generic [ref=e38]:
+          - generic [ref=e39]: "5"
+          - generic [ref=e40]: Ready to Push
+      - generic [ref=e41]:
+        - generic [ref=e42]: "Active Mapping Link:"
+        - generic [ref=e43]: Select a mapped collection in the tree to see its dynamic link.
+    - generic [ref=e44]:
+      - generic [ref=e45]:
+        - complementary [ref=e47]:
+          - generic [ref=e48]:
+            - textbox "Search menu tree" [ref=e49]:
+              - /placeholder: Search menu items...
+            - button "Undo recent tree actions" [disabled] [ref=e50]: ↶ Undo
+            - button "Save" [ref=e51] [cursor=pointer]
+            - button "Refresh menu tree" [ref=e52] [cursor=pointer]: ⟳
+          - generic [ref=e53]:
+            - generic [ref=e54]:
+              - button "Expand menu item MEN Men Hide this menu branch on live website (save required) Edit menu item Delete menu item" [ref=e171]:
+                - button "Move menu item" [ref=e172]:
+                  - img [ref=e173]
+                - button "Expand menu item" [ref=e180] [cursor=pointer]:
+                  - img [ref=e181]
+                - generic [ref=e183]:
+                  - generic [ref=e184]: MEN
+                  - generic [ref=e185]: Men
+                - generic [ref=e186]:
+                  - button "Hide this menu branch on live website (save required)" [ref=e187] [cursor=pointer]:
+                    - img [ref=e188]
+                  - button "Edit menu item" [ref=e190] [cursor=pointer]:
+                    - img [ref=e191]
+                  - button "Delete menu item" [ref=e193] [cursor=pointer]:
+                    - img [ref=e194]
+              - button "Expand menu item WOMEN Women Hide this menu branch on live website (save required) Edit menu item Delete menu item" [ref=e197]:
+                - button "Move menu item" [ref=e198]:
+                  - img [ref=e199]
+                - button "Expand menu item" [ref=e206] [cursor=pointer]:
+                  - img [ref=e207]
+                - generic [ref=e209]:
+                  - generic [ref=e210]: WOMEN
+                  - generic [ref=e211]: Women
+                - generic [ref=e212]:
+                  - button "Hide this menu branch on live website (save required)" [ref=e213] [cursor=pointer]:
+                    - img [ref=e214]
+                  - button "Edit menu item" [ref=e216] [cursor=pointer]:
+                    - img [ref=e217]
+                  - button "Delete menu item" [ref=e219] [cursor=pointer]:
+                    - img [ref=e220]
+              - button "Expand menu item JEANS jeans.html Hide this menu branch on live website (save required) Edit menu item Delete menu item" [ref=e223]:
+                - button "Move menu item" [ref=e224]:
+                  - img [ref=e225]
+                - button "Expand menu item" [ref=e232] [cursor=pointer]:
+                  - img [ref=e233]
+                - generic [ref=e235]:
+                  - generic [ref=e236]: JEANS
+                  - generic [ref=e237]: jeans.html
+                - generic [ref=e238]:
+                  - button "Hide this menu branch on live website (save required)" [ref=e239] [cursor=pointer]:
+                    - img [ref=e240]
+                  - button "Edit menu item" [ref=e242] [cursor=pointer]:
+                    - img [ref=e243]
+                  - button "Delete menu item" [ref=e245] [cursor=pointer]:
+                    - img [ref=e246]
+              - button "REWARDS rewards.html Hide this menu branch on live website (save required) Edit menu item Delete menu item" [ref=e249]:
+                - button "Move menu item" [ref=e250]:
+                  - img [ref=e251]
+                - generic [ref=e259]:
+                  - generic [ref=e260]: REWARDS
+                  - generic [ref=e261]: rewards.html
+                - generic [ref=e262]:
+                  - button "Hide this menu branch on live website (save required)" [ref=e263] [cursor=pointer]:
+                    - img [ref=e264]
+                  - button "Edit menu item" [ref=e266] [cursor=pointer]:
+                    - img [ref=e267]
+                  - button "Delete menu item" [ref=e269] [cursor=pointer]:
+                    - img [ref=e270]
+              - button "BECOME AFFILIATE become-affiliate.html Hide this menu branch on live website (save required) Edit menu item Delete menu item" [ref=e273]:
+                - button "Move menu item" [ref=e274]:
+                  - img [ref=e275]
+                - generic [ref=e283]:
+                  - generic [ref=e284]: BECOME AFFILIATE
+                  - generic [ref=e285]: become-affiliate.html
+                - generic [ref=e286]:
+                  - button "Hide this menu branch on live website (save required)" [ref=e287] [cursor=pointer]:
+                    - img [ref=e288]
+                  - button "Edit menu item" [ref=e290] [cursor=pointer]:
+                    - img [ref=e291]
+                  - button "Delete menu item" [ref=e293] [cursor=pointer]:
+                    - img [ref=e294]
+              - button "Add menu item" [ref=e56] [cursor=pointer]:
+                - img [ref=e58]
+                - generic [ref=e60]: Add menu item
+            - generic [ref=e61]:
+              - generic [ref=e63]:
+                - generic [ref=e64]: UNMAPPED COLLECTIONS
+                - generic [ref=e65]: "9"
+              - generic [ref=e66]:
+                - button "All Products (ChatGPT-AI) Edit collection name Delete unmapped collection card" [ref=e296] [cursor=pointer]:
+                  - button [ref=e298]:
+                    - img [ref=e299]
+                  - generic [ref=e306]: All Products (ChatGPT-AI)
+                  - generic [ref=e307]:
+                    - button "Edit collection name" [ref=e308]:
+                      - img [ref=e309]
+                    - button "Delete unmapped collection card" [ref=e311]:
+                      - img [ref=e312]
+                - button "GRAPHIC T-SHIRTS (WINTER men) Edit collection name Delete unmapped collection card" [ref=e314] [cursor=pointer]:
+                  - button [ref=e316]:
+                    - img [ref=e317]
+                  - generic [ref=e324]: GRAPHIC T-SHIRTS (WINTER men)
+                  - generic [ref=e325]:
+                    - button "Edit collection name" [ref=e326]:
+                      - img [ref=e327]
+                    - button "Delete unmapped collection card" [ref=e329]:
+                      - img [ref=e330]
+                - button "LEGGINGS (women) Edit collection name Delete unmapped collection card" [ref=e332] [cursor=pointer]:
+                  - button [ref=e334]:
+                    - img [ref=e335]
+                  - generic [ref=e342]: LEGGINGS (women)
+                  - generic [ref=e343]:
+                    - button "Edit collection name" [ref=e344]:
+                      - img [ref=e345]
+                    - button "Delete unmapped collection card" [ref=e347]:
+                      - img [ref=e348]
+                - button "Maxi dresses (women) Edit collection name Delete unmapped collection card" [ref=e350] [cursor=pointer]:
+                  - button [ref=e352]:
+                    - img [ref=e353]
+                  - generic [ref=e360]: Maxi dresses (women)
+                  - generic [ref=e361]:
+                    - button "Edit collection name" [ref=e362]:
+                      - img [ref=e363]
+                    - button "Delete unmapped collection card" [ref=e365]:
+                      - img [ref=e366]
+                - button "MEN JEANS Edit collection name Delete unmapped collection card" [ref=e368] [cursor=pointer]:
+                  - button [ref=e370]:
+                    - img [ref=e371]
+                  - generic [ref=e378]: MEN JEANS
+                  - generic [ref=e379]:
+                    - button "Edit collection name" [ref=e380]:
+                      - img [ref=e381]
+                    - button "Delete unmapped collection card" [ref=e383]:
+                      - img [ref=e384]
+                - button "Midi dresses (women) Edit collection name Delete unmapped collection card" [ref=e386] [cursor=pointer]:
+                  - button [ref=e388]:
+                    - img [ref=e389]
+                  - generic [ref=e396]: Midi dresses (women)
+                  - generic [ref=e397]:
+                    - button "Edit collection name" [ref=e398]:
+                      - img [ref=e399]
+                    - button "Delete unmapped collection card" [ref=e401]:
+                      - img [ref=e402]
+                - button "Mini dresses (women) Edit collection name Delete unmapped collection card" [ref=e404] [cursor=pointer]:
+                  - button [ref=e406]:
+                    - img [ref=e407]
+                  - generic [ref=e414]: Mini dresses (women)
+                  - generic [ref=e415]:
+                    - button "Edit collection name" [ref=e416]:
+                      - img [ref=e417]
+                    - button "Delete unmapped collection card" [ref=e419]:
+                      - img [ref=e420]
+                - button "NIGHT DRESSES Edit collection name Delete unmapped collection card" [ref=e422] [cursor=pointer]:
+                  - button [ref=e424]:
+                    - img [ref=e425]
+                  - generic [ref=e432]: NIGHT DRESSES
+                  - generic [ref=e433]:
+                    - button "Edit collection name" [ref=e434]:
+                      - img [ref=e435]
+                    - button "Delete unmapped collection card" [ref=e437]:
+                      - img [ref=e438]
+                - button "WOMEN JEANS Edit collection name Delete unmapped collection card" [ref=e440] [cursor=pointer]:
+                  - button [ref=e442]:
+                    - img [ref=e443]
+                  - generic [ref=e450]: WOMEN JEANS
+                  - generic [ref=e451]:
+                    - button "Edit collection name" [ref=e452]:
+                      - img [ref=e453]
+                    - button "Delete unmapped collection card" [ref=e455]:
+                      - img [ref=e456]
+          - status [ref=e68]
+        - button "Resize menu tree panel" [ref=e69]
+        - main [ref=e70]:
+          - generic [ref=e71]:
+            - textbox "Search products" [ref=e72]:
+              - /placeholder: Search products (title / sku / upc / type)
+            - 'button "Types: All types" [ref=e74] [cursor=pointer]'
+            - button "Refresh Products" [ref=e75] [cursor=pointer]
+          - generic [ref=e76]:
+            - generic [ref=e77]: "Selected Collections: 5"
+            - generic [ref=e78]: "Mapped Selected: 5"
+            - generic [ref=e79]: "Unmapped Selected: 0"
+            - generic [ref=e80]: Page 1 / 38
+            - button "Assign Checked Products" [ref=e81] [cursor=pointer]
+            - button "Unassign Checked Products" [ref=e82] [cursor=pointer]
+          - generic [ref=e83]:
+            - button "Apply Suggestions" [ref=e84] [cursor=pointer]
+            - button "Clear Staged Changes" [ref=e85] [cursor=pointer]
+            - button "Push Selected" [ref=e86] [cursor=pointer]
+            - button "Push All Final Changes" [ref=e87] [cursor=pointer]
+            - button "Remove All Collections" [ref=e88] [cursor=pointer]
+          - generic [ref=e89]:
+            - generic [ref=e90]:
+              - heading "Jobs / Queue" [level=3] [ref=e91]
+              - generic [ref=e92]:
+                - button "All (20)" [ref=e458] [cursor=pointer]:
+                  - text: All
+                  - generic [ref=e94]: (20)
+                - button "Ready to Auto Map (6)" [ref=e459] [cursor=pointer]:
+                  - text: Ready to Auto Map
+                  - generic [ref=e96]: (6)
+                - button "Suggestion Ready (9)" [ref=e460] [cursor=pointer]:
+                  - text: Suggestion Ready
+                  - generic [ref=e98]: (9)
+                - button "Manual Changes (0)" [ref=e99] [cursor=pointer]:
+                  - text: Manual Changes
+                  - generic [ref=e100]: (0)
+                - button "Ready to Push (8)" [ref=e461] [cursor=pointer]:
+                  - text: Ready to Push
+                  - generic [ref=e102]: (8)
+                - button "Push Failed (0)" [ref=e103] [cursor=pointer]:
+                  - text: Push Failed
+                  - generic [ref=e104]: (0)
+                - button "Needs Review (5)" [ref=e462] [cursor=pointer]:
+                  - text: Needs Review
+                  - generic [ref=e106]: (5)
+                - button "Legacy C-Code (7)" [ref=e463] [cursor=pointer]:
+                  - text: Legacy C-Code
+                  - generic [ref=e108]: (7)
+              - paragraph [ref=e109]: "Lifecycle scaffold: 0 queued / 0 running / 0 completed."
+              - generic [ref=e111]: No push jobs yet.
+            - generic [ref=e112]:
+              - heading "Reporting" [level=3] [ref=e113]
+              - generic [ref=e114]:
+                - button "Master Audit Report" [ref=e115] [cursor=pointer]
+                - button "Batch Summary Report" [ref=e116] [cursor=pointer]
+                - button "Errors & Review Report" [ref=e117] [cursor=pointer]
+                - button "Collection Sync Report" [ref=e118] [cursor=pointer]
+              - generic [ref=e119]:
+                - button "Open Audit Modal" [ref=e120] [cursor=pointer]
+                - button "Export CSV" [ref=e121] [cursor=pointer]
+                - button "Export Skipped Review" [ref=e122] [cursor=pointer]
+              - generic [ref=e123]:
+                - button "Push Summary Report" [ref=e124] [cursor=pointer]
+                - button "Push Failure Report" [ref=e125] [cursor=pointer]
+                - button "Collection Delta Report" [ref=e126] [cursor=pointer]
+          - table [ref=e128]:
+            - rowgroup [ref=e129]:
+              - row "Product Identity Parser / Rule Proof Auto + Suggestions Decision / Sync Current vs Final" [ref=e130]:
+                - columnheader "Product Identity" [ref=e131]
+                - columnheader "Parser / Rule Proof" [ref=e132]
+                - columnheader "Auto + Suggestions" [ref=e133]
+                - columnheader "Decision / Sync" [ref=e134]
+                - columnheader "Current vs Final" [ref=e135]
+              - row "Select all products Picture Sort by product name Sort by UPC Source Parser Routing Proof Auto-Mapped Menus Suggested Menus Mapping Decision Collection Sync Status Status Current Collections" [ref=e136]:
+                - columnheader "Select all products" [ref=e137]:
+                  - checkbox "Select all products" [ref=e138]
+                - columnheader "Picture" [ref=e139]
+                - columnheader "Sort by product name" [ref=e140]:
+                  - button "Sort by product name" [ref=e141] [cursor=pointer]:
+                    - text: Product Name
+                    - generic [ref=e142]: ▲
+                - columnheader "Sort by UPC" [ref=e143]:
+                  - button "Sort by UPC" [ref=e144] [cursor=pointer]:
+                    - text: UPC
+                    - generic [ref=e145]: ↕
+                - columnheader "Source Parser" [ref=e146]
+                - columnheader "Routing Proof" [ref=e147]
+                - columnheader "Auto-Mapped Menus" [ref=e148]
+                - columnheader "Suggested Menus" [ref=e149]
+                - columnheader "Mapping Decision" [ref=e150]
+                - columnheader "Collection Sync Status" [ref=e151]
+                - columnheader "Status" [ref=e152]
+                - columnheader "Current Collections" [ref=e153]
+            - rowgroup [ref=e154]:
+              - 'row "Open product image preview 2 PIECES ANN SET 2123561 NEW 21-5 (Women Summer / Digit 5) Intentional unresolved rule: IF SET: ERROR COLLECTION: all-products-chatgpt-ai-product-description - MANUAL_REVIEW REVIEW Processed Current: WOMEN, WOMEN > NEW & NOW, WOMEN > NEW & NOW > SUMMER SETS, WOMEN > CLOTHING, WOMEN > CLOTHING > MATCHING SETS Auto: - Final Paths: WOMEN, WOMEN > NEW & NOW, WOMEN > NEW & NOW > SUMMER SETS, WOMEN > CLOTHING, WOMEN > CLOTHING > MATCHING SETS Final Collections: all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e464]':
+                - cell [ref=e465]:
+                  - checkbox [ref=e466]
+                - cell "Open product image preview" [ref=e467]:
+                  - button "Open product image preview" [ref=e468] [cursor=pointer]:
+                    - img "2 PIECES ANN SET" [ref=e469]
+                - cell "2 PIECES ANN SET" [ref=e470]
+                - cell "2123561" [ref=e471]
+                - cell "NEW" [ref=e472]
+                - 'cell "21-5 (Women Summer / Digit 5) Intentional unresolved rule: IF SET: ERROR" [ref=e473]':
+                  - text: 21-5 (Women Summer / Digit 5)
+                  - generic [ref=e474]: "Intentional unresolved rule: IF SET: ERROR"
+                - 'cell "COLLECTION: all-products-chatgpt-ai-product-description" [ref=e475]'
+                - cell "-" [ref=e476]
+                - cell "MANUAL_REVIEW" [ref=e477]:
+                  - generic [ref=e478]: MANUAL_REVIEW
+                - cell "REVIEW" [ref=e479]:
+                  - generic [ref=e480]: REVIEW
+                - cell "Processed" [ref=e481]:
+                  - img "Processed" [ref=e482]
+                - 'cell "Current: WOMEN, WOMEN > NEW & NOW, WOMEN > NEW & NOW > SUMMER SETS, WOMEN > CLOTHING, WOMEN > CLOTHING > MATCHING SETS Auto: - Final Paths: WOMEN, WOMEN > NEW & NOW, WOMEN > NEW & NOW > SUMMER SETS, WOMEN > CLOTHING, WOMEN > CLOTHING > MATCHING SETS Final Collections: all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e483]':
+                  - generic [ref=e484]:
+                    - generic [ref=e485]: "Current: WOMEN, WOMEN > NEW & NOW, WOMEN > NEW & NOW > SUMMER SETS, WOMEN > CLOTHING, WOMEN > CLOTHING > MATCHING SETS"
+                    - generic [ref=e486]: "Auto: -"
+                    - generic [ref=e487]: "Final Paths: WOMEN, WOMEN > NEW & NOW, WOMEN > NEW & NOW > SUMMER SETS, WOMEN > CLOTHING, WOMEN > CLOTHING > MATCHING SETS"
+                    - generic [ref=e488]: "Final Collections: all-products-chatgpt-ai-product-description"
+                    - generic [ref=e489]: "Manual: +0 / -0"
+              - 'row "Open product image preview 2 PIECES GYDA TOP 2123526 NEW 21-5 (Women Summer / Digit 5) Intentional unresolved rule: IF SET: ERROR COLLECTION: all-products-chatgpt-ai-product-description - MANUAL_REVIEW REVIEW Processed Current: WOMEN, WOMEN > NEW & NOW, WOMEN > NEW & NOW > SUMMER SETS, WOMEN > CLOTHING, WOMEN > CLOTHING > MATCHING SETS Auto: - Final Paths: WOMEN, WOMEN > NEW & NOW, WOMEN > NEW & NOW > SUMMER SETS, WOMEN > CLOTHING, WOMEN > CLOTHING > MATCHING SETS Final Collections: all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e490]':
+                - cell [ref=e491]:
+                  - checkbox [ref=e492]
+                - cell "Open product image preview" [ref=e493]:
+                  - button "Open product image preview" [ref=e494] [cursor=pointer]:
+                    - img "2 PIECES GYDA TOP" [ref=e495]
+                - cell "2 PIECES GYDA TOP" [ref=e496]
+                - cell "2123526" [ref=e497]
+                - cell "NEW" [ref=e498]
+                - 'cell "21-5 (Women Summer / Digit 5) Intentional unresolved rule: IF SET: ERROR" [ref=e499]':
+                  - text: 21-5 (Women Summer / Digit 5)
+                  - generic [ref=e500]: "Intentional unresolved rule: IF SET: ERROR"
+                - 'cell "COLLECTION: all-products-chatgpt-ai-product-description" [ref=e501]'
+                - cell "-" [ref=e502]
+                - cell "MANUAL_REVIEW" [ref=e503]:
+                  - generic [ref=e504]: MANUAL_REVIEW
+                - cell "REVIEW" [ref=e505]:
+                  - generic [ref=e506]: REVIEW
+                - cell "Processed" [ref=e507]:
+                  - img "Processed" [ref=e508]
+                - 'cell "Current: WOMEN, WOMEN > NEW & NOW, WOMEN > NEW & NOW > SUMMER SETS, WOMEN > CLOTHING, WOMEN > CLOTHING > MATCHING SETS Auto: - Final Paths: WOMEN, WOMEN > NEW & NOW, WOMEN > NEW & NOW > SUMMER SETS, WOMEN > CLOTHING, WOMEN > CLOTHING > MATCHING SETS Final Collections: all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e509]':
+                  - generic [ref=e510]:
+                    - generic [ref=e511]: "Current: WOMEN, WOMEN > NEW & NOW, WOMEN > NEW & NOW > SUMMER SETS, WOMEN > CLOTHING, WOMEN > CLOTHING > MATCHING SETS"
+                    - generic [ref=e512]: "Auto: -"
+                    - generic [ref=e513]: "Final Paths: WOMEN, WOMEN > NEW & NOW, WOMEN > NEW & NOW > SUMMER SETS, WOMEN > CLOTHING, WOMEN > CLOTHING > MATCHING SETS"
+                    - generic [ref=e514]: "Final Collections: all-products-chatgpt-ai-product-description"
+                    - generic [ref=e515]: "Manual: +0 / -0"
+              - 'row "Open product image preview 2 PIECES RORRI DRESS 2122114 NEW 21-1 (Women Summer / Digit 1) Resolved via exact workbook row(s). Ancestor closure applied (+1 parent/root path(s)). WOMEN > CLOTHING > DRESSES, COLLECTION: all-products-chatgpt-ai-product-description COLLECTION: midi-dresses-women COLLECTION: maxi-dresses-women COLLECTION: mini-dresses COLLECTION: night-dresses AUTO_MAPPED ADD_PENDING - Current: WOMEN, WOMEN > NEW & NOW > SUMMER SETS, WOMEN > CLOTHING, WOMEN > CLOTHING > MATCHING SETS, WOMEN > CLOTHING > DRESSES Auto: WOMEN > CLOTHING > DRESSES Final Paths: WOMEN, WOMEN > NEW & NOW > SUMMER SETS, WOMEN > CLOTHING, WOMEN > CLOTHING > MATCHING SETS, WOMEN > CLOTHING > DRESSES, WOMEN > NEW & NOW Final Collections: all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e516]':
+                - cell [ref=e517]:
+                  - checkbox [ref=e518]
+                - cell "Open product image preview" [ref=e519]:
+                  - button "Open product image preview" [ref=e520] [cursor=pointer]:
+                    - img "2 PIECES RORRI DRESS" [ref=e521]
+                - cell "2 PIECES RORRI DRESS" [ref=e522]
+                - cell "2122114" [ref=e523]
+                - cell "NEW" [ref=e524]
+                - cell "21-1 (Women Summer / Digit 1) Resolved via exact workbook row(s). Ancestor closure applied (+1 parent/root path(s))." [ref=e525]:
+                  - text: 21-1 (Women Summer / Digit 1)
+                  - generic [ref=e526]: Resolved via exact workbook row(s). Ancestor closure applied (+1 parent/root path(s)).
+                - 'cell "WOMEN > CLOTHING > DRESSES, COLLECTION: all-products-chatgpt-ai-product-description" [ref=e527]'
+                - 'cell "COLLECTION: midi-dresses-women COLLECTION: maxi-dresses-women COLLECTION: mini-dresses COLLECTION: night-dresses" [ref=e528]':
+                  - generic [ref=e529]:
+                    - 'button "COLLECTION: midi-dresses-women" [ref=e530] [cursor=pointer]'
+                    - 'button "COLLECTION: maxi-dresses-women" [ref=e531] [cursor=pointer]'
+                    - 'button "COLLECTION: mini-dresses" [ref=e532] [cursor=pointer]'
+                    - 'button "COLLECTION: night-dresses" [ref=e533] [cursor=pointer]'
+                - cell "AUTO_MAPPED" [ref=e534]:
+                  - generic [ref=e535]: AUTO_MAPPED
+                - cell "ADD_PENDING" [ref=e536]:
+                  - generic [ref=e537]: ADD_PENDING
+                - cell "-" [ref=e538]
+                - 'cell "Current: WOMEN, WOMEN > NEW & NOW > SUMMER SETS, WOMEN > CLOTHING, WOMEN > CLOTHING > MATCHING SETS, WOMEN > CLOTHING > DRESSES Auto: WOMEN > CLOTHING > DRESSES Final Paths: WOMEN, WOMEN > NEW & NOW > SUMMER SETS, WOMEN > CLOTHING, WOMEN > CLOTHING > MATCHING SETS, WOMEN > CLOTHING > DRESSES, WOMEN > NEW & NOW Final Collections: all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e539]':
+                  - generic [ref=e540]:
+                    - generic [ref=e541]: "Current: WOMEN, WOMEN > NEW & NOW > SUMMER SETS, WOMEN > CLOTHING, WOMEN > CLOTHING > MATCHING SETS, WOMEN > CLOTHING > DRESSES"
+                    - generic [ref=e542]: "Auto: WOMEN > CLOTHING > DRESSES"
+                    - generic [ref=e543]: "Final Paths: WOMEN, WOMEN > NEW & NOW > SUMMER SETS, WOMEN > CLOTHING, WOMEN > CLOTHING > MATCHING SETS, WOMEN > CLOTHING > DRESSES, WOMEN > NEW & NOW"
+                    - generic [ref=e544]: "Final Collections: all-products-chatgpt-ai-product-description"
+                    - generic [ref=e545]: "Manual: +0 / -0"
+              - 'row "Open product image preview 3 PIECES TRACKSUITS 2222773 NEW 22-7 (Women Winter / Digit 7) Resolved via category ROMPER. Ancestor closure applied (+1 parent/root path(s)). WOMEN > CLOTHING > JUMPSUITS & ROMPERS, COLLECTION: all-products-chatgpt-ai-product-description - AUTO_MAPPED ADD_PENDING - Current: WOMEN, WOMEN > NEW & NOW > WINTER SETS, WOMEN > CLOTHING, WOMEN > CLOTHING > MATCHING SETS, WOMEN > CLOTHING > JUMPSUITS & ROMPERS, WOMEN > CLOTHING > TRACKSUITS Auto: WOMEN > CLOTHING > JUMPSUITS & ROMPERS Final Paths: WOMEN, WOMEN > NEW & NOW > WINTER SETS, WOMEN > CLOTHING, WOMEN > CLOTHING > MATCHING SETS, WOMEN > CLOTHING > JUMPSUITS & ROMPERS, WOMEN > CLOTHING > TRACKSUITS Final Collections: all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e546]':
+                - cell [ref=e547]:
+                  - checkbox [ref=e548]
+                - cell "Open product image preview" [ref=e549]:
+                  - button "Open product image preview" [ref=e550] [cursor=pointer]:
+                    - img "3 PIECES TRACKSUITS" [ref=e551]
+                - cell "3 PIECES TRACKSUITS" [ref=e552]
+                - cell "2222773" [ref=e553]
+                - cell "NEW" [ref=e554]
+                - cell "22-7 (Women Winter / Digit 7) Resolved via category ROMPER. Ancestor closure applied (+1 parent/root path(s))." [ref=e555]:
+                  - text: 22-7 (Women Winter / Digit 7)
+                  - generic [ref=e556]: Resolved via category ROMPER. Ancestor closure applied (+1 parent/root path(s)).
+                - 'cell "WOMEN > CLOTHING > JUMPSUITS & ROMPERS, COLLECTION: all-products-chatgpt-ai-product-description" [ref=e557]'
+                - cell "-" [ref=e558]
+                - cell "AUTO_MAPPED" [ref=e559]:
+                  - generic [ref=e560]: AUTO_MAPPED
+                - cell "ADD_PENDING" [ref=e561]:
+                  - generic [ref=e562]: ADD_PENDING
+                - cell "-" [ref=e563]
+                - 'cell "Current: WOMEN, WOMEN > NEW & NOW > WINTER SETS, WOMEN > CLOTHING, WOMEN > CLOTHING > MATCHING SETS, WOMEN > CLOTHING > JUMPSUITS & ROMPERS, WOMEN > CLOTHING > TRACKSUITS Auto: WOMEN > CLOTHING > JUMPSUITS & ROMPERS Final Paths: WOMEN, WOMEN > NEW & NOW > WINTER SETS, WOMEN > CLOTHING, WOMEN > CLOTHING > MATCHING SETS, WOMEN > CLOTHING > JUMPSUITS & ROMPERS, WOMEN > CLOTHING > TRACKSUITS Final Collections: all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e564]':
+                  - generic [ref=e565]:
+                    - generic [ref=e566]: "Current: WOMEN, WOMEN > NEW & NOW > WINTER SETS, WOMEN > CLOTHING, WOMEN > CLOTHING > MATCHING SETS, WOMEN > CLOTHING > JUMPSUITS & ROMPERS, WOMEN > CLOTHING > TRACKSUITS"
+                    - generic [ref=e567]: "Auto: WOMEN > CLOTHING > JUMPSUITS & ROMPERS"
+                    - generic [ref=e568]: "Final Paths: WOMEN, WOMEN > NEW & NOW > WINTER SETS, WOMEN > CLOTHING, WOMEN > CLOTHING > MATCHING SETS, WOMEN > CLOTHING > JUMPSUITS & ROMPERS, WOMEN > CLOTHING > TRACKSUITS"
+                    - generic [ref=e569]: "Final Collections: all-products-chatgpt-ai-product-description"
+                    - generic [ref=e570]: "Manual: +0 / -0"
+              - 'row "21 COLLEGE JACKET 1222353 NEW 12-3 (Men Winter / Digit 3) Ambiguous workbook rows matched multiple candidate categories with equal score. COLLECTION: all-products-chatgpt-ai-product-description - MANUAL_REVIEW REVIEW - Current: MEN, MEN > CLOTHING, MEN > CLOTHING > JACKETS & COATS Auto: - Final Paths: MEN, MEN > CLOTHING, MEN > CLOTHING > JACKETS & COATS Final Collections: all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e571]':
+                - cell [ref=e572]:
+                  - checkbox [ref=e573]
+                - cell [ref=e574]
+                - cell "21 COLLEGE JACKET" [ref=e576]
+                - cell "1222353" [ref=e577]
+                - cell "NEW" [ref=e578]
+                - cell "12-3 (Men Winter / Digit 3) Ambiguous workbook rows matched multiple candidate categories with equal score." [ref=e579]:
+                  - text: 12-3 (Men Winter / Digit 3)
+                  - generic [ref=e580]: Ambiguous workbook rows matched multiple candidate categories with equal score.
+                - 'cell "COLLECTION: all-products-chatgpt-ai-product-description" [ref=e581]'
+                - cell "-" [ref=e582]
+                - cell "MANUAL_REVIEW" [ref=e583]:
+                  - generic [ref=e584]: MANUAL_REVIEW
+                - cell "REVIEW" [ref=e585]:
+                  - generic [ref=e586]: REVIEW
+                - cell "-" [ref=e587]
+                - 'cell "Current: MEN, MEN > CLOTHING, MEN > CLOTHING > JACKETS & COATS Auto: - Final Paths: MEN, MEN > CLOTHING, MEN > CLOTHING > JACKETS & COATS Final Collections: all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e588]':
+                  - generic [ref=e589]:
+                    - generic [ref=e590]: "Current: MEN, MEN > CLOTHING, MEN > CLOTHING > JACKETS & COATS"
+                    - generic [ref=e591]: "Auto: -"
+                    - generic [ref=e592]: "Final Paths: MEN, MEN > CLOTHING, MEN > CLOTHING > JACKETS & COATS"
+                    - generic [ref=e593]: "Final Collections: all-products-chatgpt-ai-product-description"
+                    - generic [ref=e594]: "Manual: +0 / -0"
+              - 'row "Open product image preview 73 SHORTS SET 1125306 NEW 11-3 (Men Summer / Digit 3) Resolved via exact workbook row(s). Ancestor closure applied (+1 parent/root path(s)). MEN > CLOTHING > SHORTS, COLLECTION: all-products-chatgpt-ai-product-description - AUTO_MAPPED ADD_PENDING - Current: MEN, MEN > NEW & NOW > SUMMER SETS, MEN > CLOTHING, MEN > CLOTHING > SHORTS Auto: MEN > CLOTHING > SHORTS Final Paths: MEN, MEN > NEW & NOW > SUMMER SETS, MEN > CLOTHING, MEN > CLOTHING > SHORTS, MEN > NEW & NOW Final Collections: all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e595]':
+                - cell [ref=e596]:
+                  - checkbox [ref=e597]
+                - cell "Open product image preview" [ref=e598]:
+                  - button "Open product image preview" [ref=e599] [cursor=pointer]:
+                    - img "73 SHORTS SET" [ref=e600]
+                - cell "73 SHORTS SET" [ref=e601]
+                - cell "1125306" [ref=e602]
+                - cell "NEW" [ref=e603]
+                - cell "11-3 (Men Summer / Digit 3) Resolved via exact workbook row(s). Ancestor closure applied (+1 parent/root path(s))." [ref=e604]:
+                  - text: 11-3 (Men Summer / Digit 3)
+                  - generic [ref=e605]: Resolved via exact workbook row(s). Ancestor closure applied (+1 parent/root path(s)).
+                - 'cell "MEN > CLOTHING > SHORTS, COLLECTION: all-products-chatgpt-ai-product-description" [ref=e606]'
+                - cell "-" [ref=e607]
+                - cell "AUTO_MAPPED" [ref=e608]:
+                  - generic [ref=e609]: AUTO_MAPPED
+                - cell "ADD_PENDING" [ref=e610]:
+                  - generic [ref=e611]: ADD_PENDING
+                - cell "-" [ref=e612]
+                - 'cell "Current: MEN, MEN > NEW & NOW > SUMMER SETS, MEN > CLOTHING, MEN > CLOTHING > SHORTS Auto: MEN > CLOTHING > SHORTS Final Paths: MEN, MEN > NEW & NOW > SUMMER SETS, MEN > CLOTHING, MEN > CLOTHING > SHORTS, MEN > NEW & NOW Final Collections: all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e613]':
+                  - generic [ref=e614]:
+                    - generic [ref=e615]: "Current: MEN, MEN > NEW & NOW > SUMMER SETS, MEN > CLOTHING, MEN > CLOTHING > SHORTS"
+                    - generic [ref=e616]: "Auto: MEN > CLOTHING > SHORTS"
+                    - generic [ref=e617]: "Final Paths: MEN, MEN > NEW & NOW > SUMMER SETS, MEN > CLOTHING, MEN > CLOTHING > SHORTS, MEN > NEW & NOW"
+                    - generic [ref=e618]: "Final Collections: all-products-chatgpt-ai-product-description"
+                    - generic [ref=e619]: "Manual: +0 / -0"
+              - 'row "Open product image preview 73 T-SHIRT SET 1125406 NEW 11-4 (Men Summer / Digit 4) Resolved via category T-SHIRT. Ancestor closure applied (+1 parent/root path(s)). MEN > CLOTHING > T-SHIRTS, COLLECTION: all-products-chatgpt-ai-product-description - AUTO_MAPPED ADD_PENDING - Current: MEN, MEN > NEW & NOW > SUMMER SETS, MEN > CLOTHING, MEN > CLOTHING > TOPS, MEN > CLOTHING > T-SHIRTS, MEN > SHIRT SHOP Auto: MEN > CLOTHING > T-SHIRTS Final Paths: MEN, MEN > NEW & NOW > SUMMER SETS, MEN > CLOTHING, MEN > CLOTHING > TOPS, MEN > CLOTHING > T-SHIRTS, MEN > SHIRT SHOP Final Collections: all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e620]':
+                - cell [ref=e621]:
+                  - checkbox [ref=e622]
+                - cell "Open product image preview" [ref=e623]:
+                  - button "Open product image preview" [ref=e624] [cursor=pointer]:
+                    - img "73 T-SHIRT SET" [ref=e625]
+                - cell "73 T-SHIRT SET" [ref=e626]
+                - cell "1125406" [ref=e627]
+                - cell "NEW" [ref=e628]
+                - cell "11-4 (Men Summer / Digit 4) Resolved via category T-SHIRT. Ancestor closure applied (+1 parent/root path(s))." [ref=e629]:
+                  - text: 11-4 (Men Summer / Digit 4)
+                  - generic [ref=e630]: Resolved via category T-SHIRT. Ancestor closure applied (+1 parent/root path(s)).
+                - 'cell "MEN > CLOTHING > T-SHIRTS, COLLECTION: all-products-chatgpt-ai-product-description" [ref=e631]'
+                - cell "-" [ref=e632]
+                - cell "AUTO_MAPPED" [ref=e633]:
+                  - generic [ref=e634]: AUTO_MAPPED
+                - cell "ADD_PENDING" [ref=e635]:
+                  - generic [ref=e636]: ADD_PENDING
+                - cell "-" [ref=e637]
+                - 'cell "Current: MEN, MEN > NEW & NOW > SUMMER SETS, MEN > CLOTHING, MEN > CLOTHING > TOPS, MEN > CLOTHING > T-SHIRTS, MEN > SHIRT SHOP Auto: MEN > CLOTHING > T-SHIRTS Final Paths: MEN, MEN > NEW & NOW > SUMMER SETS, MEN > CLOTHING, MEN > CLOTHING > TOPS, MEN > CLOTHING > T-SHIRTS, MEN > SHIRT SHOP Final Collections: all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e638]':
+                  - generic [ref=e639]:
+                    - generic [ref=e640]: "Current: MEN, MEN > NEW & NOW > SUMMER SETS, MEN > CLOTHING, MEN > CLOTHING > TOPS, MEN > CLOTHING > T-SHIRTS, MEN > SHIRT SHOP"
+                    - generic [ref=e641]: "Auto: MEN > CLOTHING > T-SHIRTS"
+                    - generic [ref=e642]: "Final Paths: MEN, MEN > NEW & NOW > SUMMER SETS, MEN > CLOTHING, MEN > CLOTHING > TOPS, MEN > CLOTHING > T-SHIRTS, MEN > SHIRT SHOP"
+                    - generic [ref=e643]: "Final Collections: all-products-chatgpt-ai-product-description"
+                    - generic [ref=e644]: "Manual: +0 / -0"
+              - 'row "Open product image preview AARON JEANS 1123014 NEW 11-0 (Men Summer / Digit 0) Resolved via exact workbook row(s). Ancestor closure applied (+1 parent/root path(s)). MEN > CLOTHING > JEANS, JEANS > MEN +2 JEANS > MEN > BAGGY JEANS > MEN > SLIM JEANS AUTO_MAPPED ADD_PENDING - Current: MEN, MEN > CLOTHING, JEANS > MEN > SKINNY JEANS, JEANS > MEN > SUPER SKINNY JEANS Auto: MEN > CLOTHING > JEANS, JEANS > MEN Final Paths: MEN, MEN > CLOTHING, JEANS > MEN > SKINNY JEANS, JEANS > MEN > SUPER SKINNY JEANS, MEN > CLOTHING > JEANS, JEANS > MEN Final Collections: jeans-men, all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e645]':
+                - cell [ref=e646]:
+                  - checkbox [ref=e647]
+                - cell "Open product image preview" [ref=e648]:
+                  - button "Open product image preview" [ref=e649] [cursor=pointer]:
+                    - img "AARON JEANS" [ref=e650]
+                - cell "AARON JEANS" [ref=e651]
+                - cell "1123014" [ref=e652]
+                - cell "NEW" [ref=e653]
+                - cell "11-0 (Men Summer / Digit 0) Resolved via exact workbook row(s). Ancestor closure applied (+1 parent/root path(s))." [ref=e654]:
+                  - text: 11-0 (Men Summer / Digit 0)
+                  - generic [ref=e655]: Resolved via exact workbook row(s). Ancestor closure applied (+1 parent/root path(s)).
+                - cell "MEN > CLOTHING > JEANS, JEANS > MEN +2" [ref=e656]
+                - cell "JEANS > MEN > BAGGY JEANS > MEN > SLIM JEANS" [ref=e657]:
+                  - generic [ref=e658]:
+                    - button "JEANS > MEN > BAGGY" [ref=e659] [cursor=pointer]
+                    - button "JEANS > MEN > SLIM JEANS" [ref=e660] [cursor=pointer]
+                - cell "AUTO_MAPPED" [ref=e661]:
+                  - generic [ref=e662]: AUTO_MAPPED
+                - cell "ADD_PENDING" [ref=e663]:
+                  - generic [ref=e664]: ADD_PENDING
+                - cell "-" [ref=e665]
+                - 'cell "Current: MEN, MEN > CLOTHING, JEANS > MEN > SKINNY JEANS, JEANS > MEN > SUPER SKINNY JEANS Auto: MEN > CLOTHING > JEANS, JEANS > MEN Final Paths: MEN, MEN > CLOTHING, JEANS > MEN > SKINNY JEANS, JEANS > MEN > SUPER SKINNY JEANS, MEN > CLOTHING > JEANS, JEANS > MEN Final Collections: jeans-men, all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e666]':
+                  - generic [ref=e667]:
+                    - generic [ref=e668]: "Current: MEN, MEN > CLOTHING, JEANS > MEN > SKINNY JEANS, JEANS > MEN > SUPER SKINNY JEANS"
+                    - generic [ref=e669]: "Auto: MEN > CLOTHING > JEANS, JEANS > MEN"
+                    - generic [ref=e670]: "Final Paths: MEN, MEN > CLOTHING, JEANS > MEN > SKINNY JEANS, JEANS > MEN > SUPER SKINNY JEANS, MEN > CLOTHING > JEANS, JEANS > MEN"
+                    - generic [ref=e671]: "Final Collections: jeans-men, all-products-chatgpt-ai-product-description"
+                    - generic [ref=e672]: "Manual: +0 / -0"
+              - 'row "Open product image preview ACE JEANS 1171080 LEGACY 11-0 (Men Summer / Digit 0) Resolved via exact workbook row(s). Ancestor closure applied (+1 parent/root path(s)). MEN > CLOTHING > JEANS, JEANS > MEN +2 JEANS > MEN > SKINNY JEANS JEANS > MEN > BAGGY JEANS > MEN > SLIM JEANS AUTO_MAPPED ADD_PENDING - Current: MEN, MEN > CLOTHING, JEANS > MEN > SUPER SKINNY JEANS Auto: MEN > CLOTHING > JEANS, JEANS > MEN Final Paths: MEN, MEN > CLOTHING, JEANS > MEN > SUPER SKINNY JEANS, MEN > CLOTHING > JEANS, JEANS > MEN, JEANS Final Collections: jeans-men, all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e673]':
+                - cell [ref=e674]:
+                  - checkbox [ref=e675]
+                - cell "Open product image preview" [ref=e676]:
+                  - button "Open product image preview" [ref=e677] [cursor=pointer]:
+                    - img "ACE JEANS" [ref=e678]
+                - cell "ACE JEANS" [ref=e679]
+                - cell "1171080" [ref=e680]
+                - cell "LEGACY" [ref=e681]
+                - cell "11-0 (Men Summer / Digit 0) Resolved via exact workbook row(s). Ancestor closure applied (+1 parent/root path(s))." [ref=e682]:
+                  - text: 11-0 (Men Summer / Digit 0)
+                  - generic [ref=e683]: Resolved via exact workbook row(s). Ancestor closure applied (+1 parent/root path(s)).
+                - cell "MEN > CLOTHING > JEANS, JEANS > MEN +2" [ref=e684]
+                - cell "JEANS > MEN > SKINNY JEANS JEANS > MEN > BAGGY JEANS > MEN > SLIM JEANS" [ref=e685]:
+                  - generic [ref=e686]:
+                    - button "JEANS > MEN > SKINNY JEANS" [ref=e687] [cursor=pointer]
+                    - button "JEANS > MEN > BAGGY" [ref=e688] [cursor=pointer]
+                    - button "JEANS > MEN > SLIM JEANS" [ref=e689] [cursor=pointer]
+                - cell "AUTO_MAPPED" [ref=e690]:
+                  - generic [ref=e691]: AUTO_MAPPED
+                - cell "ADD_PENDING" [ref=e692]:
+                  - generic [ref=e693]: ADD_PENDING
+                - cell "-" [ref=e694]
+                - 'cell "Current: MEN, MEN > CLOTHING, JEANS > MEN > SUPER SKINNY JEANS Auto: MEN > CLOTHING > JEANS, JEANS > MEN Final Paths: MEN, MEN > CLOTHING, JEANS > MEN > SUPER SKINNY JEANS, MEN > CLOTHING > JEANS, JEANS > MEN, JEANS Final Collections: jeans-men, all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e695]':
+                  - generic [ref=e696]:
+                    - generic [ref=e697]: "Current: MEN, MEN > CLOTHING, JEANS > MEN > SUPER SKINNY JEANS"
+                    - generic [ref=e698]: "Auto: MEN > CLOTHING > JEANS, JEANS > MEN"
+                    - generic [ref=e699]: "Final Paths: MEN, MEN > CLOTHING, JEANS > MEN > SUPER SKINNY JEANS, MEN > CLOTHING > JEANS, JEANS > MEN, JEANS"
+                    - generic [ref=e700]: "Final Collections: jeans-men, all-products-chatgpt-ai-product-description"
+                    - generic [ref=e701]: "Manual: +0 / -0"
+              - 'row "Open product image preview ADA CROP TOP 2541417 LEGACY 21-4 (Women Summer / Digit 4) Resolved via category TOP. WOMEN > CLOTHING > TOPS, COLLECTION: all-products-chatgpt-ai-product-description WOMEN > NEW & NOW > SUMMER SETS WOMEN > NEW & NOW > WINTER SETS WOMEN > CLOTHING > MATCHING SETS AUTO_MAPPED SYNCED - Current: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > TANK TOPS Auto: WOMEN > CLOTHING > TOPS Final Paths: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > TANK TOPS Final Collections: all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e702]':
+                - cell [ref=e703]:
+                  - checkbox [ref=e704]
+                - cell "Open product image preview" [ref=e705]:
+                  - button "Open product image preview" [ref=e706] [cursor=pointer]:
+                    - img "ADA CROP TOP" [ref=e707]
+                - cell "ADA CROP TOP" [ref=e708]
+                - cell "2541417" [ref=e709]
+                - cell "LEGACY" [ref=e710]
+                - cell "21-4 (Women Summer / Digit 4) Resolved via category TOP." [ref=e711]:
+                  - text: 21-4 (Women Summer / Digit 4)
+                  - generic [ref=e712]: Resolved via category TOP.
+                - 'cell "WOMEN > CLOTHING > TOPS, COLLECTION: all-products-chatgpt-ai-product-description" [ref=e713]'
+                - cell "WOMEN > NEW & NOW > SUMMER SETS WOMEN > NEW & NOW > WINTER SETS WOMEN > CLOTHING > MATCHING SETS" [ref=e714]:
+                  - generic [ref=e715]:
+                    - button "WOMEN > NEW & NOW > SUMMER SETS" [ref=e716] [cursor=pointer]
+                    - button "WOMEN > NEW & NOW > WINTER SETS" [ref=e717] [cursor=pointer]
+                    - button "WOMEN > CLOTHING > MATCHING SETS" [ref=e718] [cursor=pointer]
+                - cell "AUTO_MAPPED" [ref=e719]:
+                  - generic [ref=e720]: AUTO_MAPPED
+                - cell "SYNCED" [ref=e721]:
+                  - generic [ref=e722]: SYNCED
+                - cell "-" [ref=e723]
+                - 'cell "Current: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > TANK TOPS Auto: WOMEN > CLOTHING > TOPS Final Paths: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > TANK TOPS Final Collections: all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e724]':
+                  - generic [ref=e725]:
+                    - generic [ref=e726]: "Current: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > TANK TOPS"
+                    - generic [ref=e727]: "Auto: WOMEN > CLOTHING > TOPS"
+                    - generic [ref=e728]: "Final Paths: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > TANK TOPS"
+                    - generic [ref=e729]: "Final Collections: all-products-chatgpt-ai-product-description"
+                    - generic [ref=e730]: "Manual: +0 / -0"
+              - 'row "ADALYN SEQUIN DRESS 2531109 LEGACY 21-1 (Women Summer / Digit 1) Resolved via exact workbook row(s). WOMEN > CLOTHING > DRESSES, COLLECTION: night-dresses +1 COLLECTION: midi-dresses-women COLLECTION: maxi-dresses-women COLLECTION: mini-dresses COLLECTION: night-dresses AUTO_MAPPED SYNCED - Current: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > DRESSES Auto: WOMEN > CLOTHING > DRESSES Final Paths: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > DRESSES Final Collections: night-dresses, all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e731]':
+                - cell [ref=e732]:
+                  - checkbox [ref=e733]
+                - cell [ref=e734]
+                - cell "ADALYN SEQUIN DRESS" [ref=e736]
+                - cell "2531109" [ref=e737]
+                - cell "LEGACY" [ref=e738]
+                - cell "21-1 (Women Summer / Digit 1) Resolved via exact workbook row(s)." [ref=e739]:
+                  - text: 21-1 (Women Summer / Digit 1)
+                  - generic [ref=e740]: Resolved via exact workbook row(s).
+                - 'cell "WOMEN > CLOTHING > DRESSES, COLLECTION: night-dresses +1" [ref=e741]'
+                - 'cell "COLLECTION: midi-dresses-women COLLECTION: maxi-dresses-women COLLECTION: mini-dresses COLLECTION: night-dresses" [ref=e742]':
+                  - generic [ref=e743]:
+                    - 'button "COLLECTION: midi-dresses-women" [ref=e744] [cursor=pointer]'
+                    - 'button "COLLECTION: maxi-dresses-women" [ref=e745] [cursor=pointer]'
+                    - 'button "COLLECTION: mini-dresses" [ref=e746] [cursor=pointer]'
+                    - 'button "COLLECTION: night-dresses" [ref=e747] [cursor=pointer]'
+                - cell "AUTO_MAPPED" [ref=e748]:
+                  - generic [ref=e749]: AUTO_MAPPED
+                - cell "SYNCED" [ref=e750]:
+                  - generic [ref=e751]: SYNCED
+                - cell "-" [ref=e752]
+                - 'cell "Current: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > DRESSES Auto: WOMEN > CLOTHING > DRESSES Final Paths: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > DRESSES Final Collections: night-dresses, all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e753]':
+                  - generic [ref=e754]:
+                    - generic [ref=e755]: "Current: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > DRESSES"
+                    - generic [ref=e756]: "Auto: WOMEN > CLOTHING > DRESSES"
+                    - generic [ref=e757]: "Final Paths: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > DRESSES"
+                    - generic [ref=e758]: "Final Collections: night-dresses, all-products-chatgpt-ai-product-description"
+                    - generic [ref=e759]: "Manual: +0 / -0"
+              - 'row "ADAM SUNGLASSES 1721909 LEGACY 11-9 (Men Summer / Digit 9) Resolved via category ACCESSORIES. Ancestor closure applied (+2 parent/root path(s)). MEN > ACCESSORIES & SHOES > ALL ACCESSORIES, COLLECTION: all-products-chatgpt-ai-product-description - AUTO_MAPPED ADD_PENDING - Current: - Auto: MEN > ACCESSORIES & SHOES > ALL ACCESSORIES Final Paths: MEN > ACCESSORIES & SHOES > ALL ACCESSORIES, MEN > ACCESSORIES & SHOES, MEN Final Collections: all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e760]':
+                - cell [ref=e761]:
+                  - checkbox [ref=e762]
+                - cell [ref=e763]
+                - cell "ADAM SUNGLASSES" [ref=e765]
+                - cell "1721909" [ref=e766]
+                - cell "LEGACY" [ref=e767]
+                - cell "11-9 (Men Summer / Digit 9) Resolved via category ACCESSORIES. Ancestor closure applied (+2 parent/root path(s))." [ref=e768]:
+                  - text: 11-9 (Men Summer / Digit 9)
+                  - generic [ref=e769]: Resolved via category ACCESSORIES. Ancestor closure applied (+2 parent/root path(s)).
+                - 'cell "MEN > ACCESSORIES & SHOES > ALL ACCESSORIES, COLLECTION: all-products-chatgpt-ai-product-description" [ref=e770]'
+                - cell "-" [ref=e771]
+                - cell "AUTO_MAPPED" [ref=e772]:
+                  - generic [ref=e773]: AUTO_MAPPED
+                - cell "ADD_PENDING" [ref=e774]:
+                  - generic [ref=e775]: ADD_PENDING
+                - cell "-" [ref=e776]
+                - 'cell "Current: - Auto: MEN > ACCESSORIES & SHOES > ALL ACCESSORIES Final Paths: MEN > ACCESSORIES & SHOES > ALL ACCESSORIES, MEN > ACCESSORIES & SHOES, MEN Final Collections: all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e777]':
+                  - generic [ref=e778]:
+                    - generic [ref=e779]: "Current: -"
+                    - generic [ref=e780]: "Auto: MEN > ACCESSORIES & SHOES > ALL ACCESSORIES"
+                    - generic [ref=e781]: "Final Paths: MEN > ACCESSORIES & SHOES > ALL ACCESSORIES, MEN > ACCESSORIES & SHOES, MEN"
+                    - generic [ref=e782]: "Final Collections: all-products-chatgpt-ai-product-description"
+                    - generic [ref=e783]: "Manual: +0 / -0"
+              - 'row "Open product image preview ADJUSTABLE FACE MASK 1991945 LEGACY 11-9 (Men Summer / Digit 9) Ambiguous workbook rows exist, but no candidate category matched product tokens. COLLECTION: all-products-chatgpt-ai-product-description - MANUAL_REVIEW REVIEW - Current: MEN, MEN > ACCESSORIES & SHOES, MEN > ACCESSORIES & SHOES > ALL ACCESSORIES, WOMEN, WOMEN > ACCESSORIES & SHOES, WOMEN > ACCESSORIES & SHOES > ALL ACCESSORIES Auto: - Final Paths: MEN, MEN > ACCESSORIES & SHOES, MEN > ACCESSORIES & SHOES > ALL ACCESSORIES, WOMEN, WOMEN > ACCESSORIES & SHOES, WOMEN > ACCESSORIES & SHOES > ALL ACCESSORIES Final Collections: all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e784]':
+                - cell [ref=e785]:
+                  - checkbox [ref=e786]
+                - cell "Open product image preview" [ref=e787]:
+                  - button "Open product image preview" [ref=e788] [cursor=pointer]:
+                    - img "ADJUSTABLE FACE MASK" [ref=e789]
+                - cell "ADJUSTABLE FACE MASK" [ref=e790]
+                - cell "1991945" [ref=e791]
+                - cell "LEGACY" [ref=e792]
+                - cell "11-9 (Men Summer / Digit 9) Ambiguous workbook rows exist, but no candidate category matched product tokens." [ref=e793]:
+                  - text: 11-9 (Men Summer / Digit 9)
+                  - generic [ref=e794]: Ambiguous workbook rows exist, but no candidate category matched product tokens.
+                - 'cell "COLLECTION: all-products-chatgpt-ai-product-description" [ref=e795]'
+                - cell "-" [ref=e796]
+                - cell "MANUAL_REVIEW" [ref=e797]:
+                  - generic [ref=e798]: MANUAL_REVIEW
+                - cell "REVIEW" [ref=e799]:
+                  - generic [ref=e800]: REVIEW
+                - cell "-" [ref=e801]
+                - 'cell "Current: MEN, MEN > ACCESSORIES & SHOES, MEN > ACCESSORIES & SHOES > ALL ACCESSORIES, WOMEN, WOMEN > ACCESSORIES & SHOES, WOMEN > ACCESSORIES & SHOES > ALL ACCESSORIES Auto: - Final Paths: MEN, MEN > ACCESSORIES & SHOES, MEN > ACCESSORIES & SHOES > ALL ACCESSORIES, WOMEN, WOMEN > ACCESSORIES & SHOES, WOMEN > ACCESSORIES & SHOES > ALL ACCESSORIES Final Collections: all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e802]':
+                  - generic [ref=e803]:
+                    - generic [ref=e804]: "Current: MEN, MEN > ACCESSORIES & SHOES, MEN > ACCESSORIES & SHOES > ALL ACCESSORIES, WOMEN, WOMEN > ACCESSORIES & SHOES, WOMEN > ACCESSORIES & SHOES > ALL ACCESSORIES"
+                    - generic [ref=e805]: "Auto: -"
+                    - generic [ref=e806]: "Final Paths: MEN, MEN > ACCESSORIES & SHOES, MEN > ACCESSORIES & SHOES > ALL ACCESSORIES, WOMEN, WOMEN > ACCESSORIES & SHOES, WOMEN > ACCESSORIES & SHOES > ALL ACCESSORIES"
+                    - generic [ref=e807]: "Final Collections: all-products-chatgpt-ai-product-description"
+                    - generic [ref=e808]: "Manual: +0 / -0"
+              - 'row "Open product image preview ADOREYOU HOODIE 2222362 NEW 22-3 (Women Winter / Digit 3) Resolved via category HOODIE. WOMEN > CLOTHING > SWEATSHIRTS & HOODIES, COLLECTION: all-products-chatgpt-ai-product-description - AUTO_MAPPED SYNCED - Current: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > JACKETS & COATS, WOMEN > CLOTHING > SWEATSHIRTS & HOODIES Auto: WOMEN > CLOTHING > SWEATSHIRTS & HOODIES Final Paths: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > JACKETS & COATS, WOMEN > CLOTHING > SWEATSHIRTS & HOODIES Final Collections: all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e809]':
+                - cell [ref=e810]:
+                  - checkbox [ref=e811]
+                - cell "Open product image preview" [ref=e812]:
+                  - button "Open product image preview" [ref=e813] [cursor=pointer]:
+                    - img "ADOREYOU HOODIE" [ref=e814]
+                - cell "ADOREYOU HOODIE" [ref=e815]
+                - cell "2222362" [ref=e816]
+                - cell "NEW" [ref=e817]
+                - cell "22-3 (Women Winter / Digit 3) Resolved via category HOODIE." [ref=e818]:
+                  - text: 22-3 (Women Winter / Digit 3)
+                  - generic [ref=e819]: Resolved via category HOODIE.
+                - 'cell "WOMEN > CLOTHING > SWEATSHIRTS & HOODIES, COLLECTION: all-products-chatgpt-ai-product-description" [ref=e820]'
+                - cell "-" [ref=e821]
+                - cell "AUTO_MAPPED" [ref=e822]:
+                  - generic [ref=e823]: AUTO_MAPPED
+                - cell "SYNCED" [ref=e824]:
+                  - generic [ref=e825]: SYNCED
+                - cell "-" [ref=e826]
+                - 'cell "Current: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > JACKETS & COATS, WOMEN > CLOTHING > SWEATSHIRTS & HOODIES Auto: WOMEN > CLOTHING > SWEATSHIRTS & HOODIES Final Paths: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > JACKETS & COATS, WOMEN > CLOTHING > SWEATSHIRTS & HOODIES Final Collections: all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e827]':
+                  - generic [ref=e828]:
+                    - generic [ref=e829]: "Current: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > JACKETS & COATS, WOMEN > CLOTHING > SWEATSHIRTS & HOODIES"
+                    - generic [ref=e830]: "Auto: WOMEN > CLOTHING > SWEATSHIRTS & HOODIES"
+                    - generic [ref=e831]: "Final Paths: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > JACKETS & COATS, WOMEN > CLOTHING > SWEATSHIRTS & HOODIES"
+                    - generic [ref=e832]: "Final Collections: all-products-chatgpt-ai-product-description"
+                    - generic [ref=e833]: "Manual: +0 / -0"
+              - 'row "Open product image preview ADRIAN CARGO PANTS 1223802 NEW 12-8 (Men Winter / Digit 8) Resolved via exact workbook row(s). MEN > CLOTHING > SWEATPANTS, COLLECTION: all-products-chatgpt-ai-product-description - AUTO_MAPPED ADD_PENDING - Current: MEN, MEN > CLOTHING, MEN > CLOTHING > PANTS Auto: MEN > CLOTHING > SWEATPANTS Final Paths: MEN, MEN > CLOTHING, MEN > CLOTHING > PANTS, MEN > CLOTHING > SWEATPANTS Final Collections: all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e834]':
+                - cell [ref=e835]:
+                  - checkbox [ref=e836]
+                - cell "Open product image preview" [ref=e837]:
+                  - button "Open product image preview" [ref=e838] [cursor=pointer]:
+                    - img "ADRIAN CARGO PANTS" [ref=e839]
+                - cell "ADRIAN CARGO PANTS" [ref=e840]
+                - cell "1223802" [ref=e841]
+                - cell "NEW" [ref=e842]
+                - cell "12-8 (Men Winter / Digit 8) Resolved via exact workbook row(s)." [ref=e843]:
+                  - text: 12-8 (Men Winter / Digit 8)
+                  - generic [ref=e844]: Resolved via exact workbook row(s).
+                - 'cell "MEN > CLOTHING > SWEATPANTS, COLLECTION: all-products-chatgpt-ai-product-description" [ref=e845]'
+                - cell "-" [ref=e846]
+                - cell "AUTO_MAPPED" [ref=e847]:
+                  - generic [ref=e848]: AUTO_MAPPED
+                - cell "ADD_PENDING" [ref=e849]:
+                  - generic [ref=e850]: ADD_PENDING
+                - cell "-" [ref=e851]
+                - 'cell "Current: MEN, MEN > CLOTHING, MEN > CLOTHING > PANTS Auto: MEN > CLOTHING > SWEATPANTS Final Paths: MEN, MEN > CLOTHING, MEN > CLOTHING > PANTS, MEN > CLOTHING > SWEATPANTS Final Collections: all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e852]':
+                  - generic [ref=e853]:
+                    - generic [ref=e854]: "Current: MEN, MEN > CLOTHING, MEN > CLOTHING > PANTS"
+                    - generic [ref=e855]: "Auto: MEN > CLOTHING > SWEATPANTS"
+                    - generic [ref=e856]: "Final Paths: MEN, MEN > CLOTHING, MEN > CLOTHING > PANTS, MEN > CLOTHING > SWEATPANTS"
+                    - generic [ref=e857]: "Final Collections: all-products-chatgpt-ai-product-description"
+                    - generic [ref=e858]: "Manual: +0 / -0"
+              - 'row "Open product image preview ADRIANA SWEATER 2222415 NEW 22-4 (Women Winter / Digit 4) Resolved via category TOP. WOMEN > CLOTHING > TOPS, COLLECTION: all-products-chatgpt-ai-product-description WOMEN > NEW & NOW > SUMMER SETS WOMEN > NEW & NOW > WINTER SETS WOMEN > CLOTHING > MATCHING SETS AUTO_MAPPED SYNCED - Current: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > SWEATERS Auto: WOMEN > CLOTHING > TOPS Final Paths: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > SWEATERS Final Collections: all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e859]':
+                - cell [ref=e860]:
+                  - checkbox [ref=e861]
+                - cell "Open product image preview" [ref=e862]:
+                  - button "Open product image preview" [ref=e863] [cursor=pointer]:
+                    - img "ADRIANA SWEATER" [ref=e864]
+                - cell "ADRIANA SWEATER" [ref=e865]
+                - cell "2222415" [ref=e866]
+                - cell "NEW" [ref=e867]
+                - cell "22-4 (Women Winter / Digit 4) Resolved via category TOP." [ref=e868]:
+                  - text: 22-4 (Women Winter / Digit 4)
+                  - generic [ref=e869]: Resolved via category TOP.
+                - 'cell "WOMEN > CLOTHING > TOPS, COLLECTION: all-products-chatgpt-ai-product-description" [ref=e870]'
+                - cell "WOMEN > NEW & NOW > SUMMER SETS WOMEN > NEW & NOW > WINTER SETS WOMEN > CLOTHING > MATCHING SETS" [ref=e871]:
+                  - generic [ref=e872]:
+                    - button "WOMEN > NEW & NOW > SUMMER SETS" [ref=e873] [cursor=pointer]
+                    - button "WOMEN > NEW & NOW > WINTER SETS" [ref=e874] [cursor=pointer]
+                    - button "WOMEN > CLOTHING > MATCHING SETS" [ref=e875] [cursor=pointer]
+                - cell "AUTO_MAPPED" [ref=e876]:
+                  - generic [ref=e877]: AUTO_MAPPED
+                - cell "SYNCED" [ref=e878]:
+                  - generic [ref=e879]: SYNCED
+                - cell "-" [ref=e880]
+                - 'cell "Current: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > SWEATERS Auto: WOMEN > CLOTHING > TOPS Final Paths: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > SWEATERS Final Collections: all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e881]':
+                  - generic [ref=e882]:
+                    - generic [ref=e883]: "Current: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > SWEATERS"
+                    - generic [ref=e884]: "Auto: WOMEN > CLOTHING > TOPS"
+                    - generic [ref=e885]: "Final Paths: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > SWEATERS"
+                    - generic [ref=e886]: "Final Collections: all-products-chatgpt-ai-product-description"
+                    - generic [ref=e887]: "Manual: +0 / -0"
+              - 'row "Open product image preview ALEENA KNOT T-SHIRT 2521417 LEGACY 21-4 (Women Summer / Digit 4) Resolved via category TOP. WOMEN > CLOTHING > TOPS, COLLECTION: all-products-chatgpt-ai-product-description WOMEN > NEW & NOW > SUMMER SETS WOMEN > NEW & NOW > WINTER SETS WOMEN > CLOTHING > MATCHING SETS WOMEN > CLOTHING > T-SHIRTS AUTO_MAPPED SYNCED - Current: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > TANK TOPS Auto: WOMEN > CLOTHING > TOPS Final Paths: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > TANK TOPS Final Collections: all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e888]':
+                - cell [ref=e889]:
+                  - checkbox [ref=e890]
+                - cell "Open product image preview" [ref=e891]:
+                  - button "Open product image preview" [ref=e892] [cursor=pointer]:
+                    - img "ALEENA KNOT T-SHIRT" [ref=e893]
+                - cell "ALEENA KNOT T-SHIRT" [ref=e894]
+                - cell "2521417" [ref=e895]
+                - cell "LEGACY" [ref=e896]
+                - cell "21-4 (Women Summer / Digit 4) Resolved via category TOP." [ref=e897]:
+                  - text: 21-4 (Women Summer / Digit 4)
+                  - generic [ref=e898]: Resolved via category TOP.
+                - 'cell "WOMEN > CLOTHING > TOPS, COLLECTION: all-products-chatgpt-ai-product-description" [ref=e899]'
+                - cell "WOMEN > NEW & NOW > SUMMER SETS WOMEN > NEW & NOW > WINTER SETS WOMEN > CLOTHING > MATCHING SETS WOMEN > CLOTHING > T-SHIRTS" [ref=e900]:
+                  - generic [ref=e901]:
+                    - button "WOMEN > NEW & NOW > SUMMER SETS" [ref=e902] [cursor=pointer]
+                    - button "WOMEN > NEW & NOW > WINTER SETS" [ref=e903] [cursor=pointer]
+                    - button "WOMEN > CLOTHING > MATCHING SETS" [ref=e904] [cursor=pointer]
+                    - button "WOMEN > CLOTHING > T-SHIRTS" [ref=e905] [cursor=pointer]
+                - cell "AUTO_MAPPED" [ref=e906]:
+                  - generic [ref=e907]: AUTO_MAPPED
+                - cell "SYNCED" [ref=e908]:
+                  - generic [ref=e909]: SYNCED
+                - cell "-" [ref=e910]
+                - 'cell "Current: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > TANK TOPS Auto: WOMEN > CLOTHING > TOPS Final Paths: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > TANK TOPS Final Collections: all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e911]':
+                  - generic [ref=e912]:
+                    - generic [ref=e913]: "Current: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > TANK TOPS"
+                    - generic [ref=e914]: "Auto: WOMEN > CLOTHING > TOPS"
+                    - generic [ref=e915]: "Final Paths: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > TANK TOPS"
+                    - generic [ref=e916]: "Final Collections: all-products-chatgpt-ai-product-description"
+                    - generic [ref=e917]: "Manual: +0 / -0"
+              - 'row "Open product image preview ALEXIA TOP 2541409 LEGACY 21-4 (Women Summer / Digit 4) Resolved via category TOP. WOMEN > CLOTHING > TOPS, COLLECTION: all-products-chatgpt-ai-product-description WOMEN > NEW & NOW > SUMMER SETS WOMEN > NEW & NOW > WINTER SETS WOMEN > CLOTHING > MATCHING SETS AUTO_MAPPED SYNCED - Current: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > TANK TOPS Auto: WOMEN > CLOTHING > TOPS Final Paths: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > TANK TOPS Final Collections: all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e918]':
+                - cell [ref=e919]:
+                  - checkbox [ref=e920]
+                - cell "Open product image preview" [ref=e921]:
+                  - button "Open product image preview" [ref=e922] [cursor=pointer]:
+                    - img "ALEXIA TOP" [ref=e923]
+                - cell "ALEXIA TOP" [ref=e924]
+                - cell "2541409" [ref=e925]
+                - cell "LEGACY" [ref=e926]
+                - cell "21-4 (Women Summer / Digit 4) Resolved via category TOP." [ref=e927]:
+                  - text: 21-4 (Women Summer / Digit 4)
+                  - generic [ref=e928]: Resolved via category TOP.
+                - 'cell "WOMEN > CLOTHING > TOPS, COLLECTION: all-products-chatgpt-ai-product-description" [ref=e929]'
+                - cell "WOMEN > NEW & NOW > SUMMER SETS WOMEN > NEW & NOW > WINTER SETS WOMEN > CLOTHING > MATCHING SETS" [ref=e930]:
+                  - generic [ref=e931]:
+                    - button "WOMEN > NEW & NOW > SUMMER SETS" [ref=e932] [cursor=pointer]
+                    - button "WOMEN > NEW & NOW > WINTER SETS" [ref=e933] [cursor=pointer]
+                    - button "WOMEN > CLOTHING > MATCHING SETS" [ref=e934] [cursor=pointer]
+                - cell "AUTO_MAPPED" [ref=e935]:
+                  - generic [ref=e936]: AUTO_MAPPED
+                - cell "SYNCED" [ref=e937]:
+                  - generic [ref=e938]: SYNCED
+                - cell "-" [ref=e939]
+                - 'cell "Current: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > TANK TOPS Auto: WOMEN > CLOTHING > TOPS Final Paths: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > TANK TOPS Final Collections: all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e940]':
+                  - generic [ref=e941]:
+                    - generic [ref=e942]: "Current: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > TANK TOPS"
+                    - generic [ref=e943]: "Auto: WOMEN > CLOTHING > TOPS"
+                    - generic [ref=e944]: "Final Paths: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > TANK TOPS"
+                    - generic [ref=e945]: "Final Collections: all-products-chatgpt-ai-product-description"
+                    - generic [ref=e946]: "Manual: +0 / -0"
+              - 'row "Open product image preview ALEXIS SWEATER 2222429 NEW 22-4 (Women Winter / Digit 4) Resolved via category TOP. WOMEN > CLOTHING > TOPS, COLLECTION: all-products-chatgpt-ai-product-description WOMEN > NEW & NOW > SUMMER SETS WOMEN > NEW & NOW > WINTER SETS WOMEN > CLOTHING > MATCHING SETS AUTO_MAPPED SYNCED - Current: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > SWEATERS Auto: WOMEN > CLOTHING > TOPS Final Paths: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > SWEATERS Final Collections: all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e947]':
+                - cell [ref=e948]:
+                  - checkbox [ref=e949]
+                - cell "Open product image preview" [ref=e950]:
+                  - button "Open product image preview" [ref=e951] [cursor=pointer]:
+                    - img "ALEXIS SWEATER" [ref=e952]
+                - cell "ALEXIS SWEATER" [ref=e953]
+                - cell "2222429" [ref=e954]
+                - cell "NEW" [ref=e955]
+                - cell "22-4 (Women Winter / Digit 4) Resolved via category TOP." [ref=e956]:
+                  - text: 22-4 (Women Winter / Digit 4)
+                  - generic [ref=e957]: Resolved via category TOP.
+                - 'cell "WOMEN > CLOTHING > TOPS, COLLECTION: all-products-chatgpt-ai-product-description" [ref=e958]'
+                - cell "WOMEN > NEW & NOW > SUMMER SETS WOMEN > NEW & NOW > WINTER SETS WOMEN > CLOTHING > MATCHING SETS" [ref=e959]:
+                  - generic [ref=e960]:
+                    - button "WOMEN > NEW & NOW > SUMMER SETS" [ref=e961] [cursor=pointer]
+                    - button "WOMEN > NEW & NOW > WINTER SETS" [ref=e962] [cursor=pointer]
+                    - button "WOMEN > CLOTHING > MATCHING SETS" [ref=e963] [cursor=pointer]
+                - cell "AUTO_MAPPED" [ref=e964]:
+                  - generic [ref=e965]: AUTO_MAPPED
+                - cell "SYNCED" [ref=e966]:
+                  - generic [ref=e967]: SYNCED
+                - cell "-" [ref=e968]
+                - 'cell "Current: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > SWEATERS Auto: WOMEN > CLOTHING > TOPS Final Paths: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > SWEATERS Final Collections: all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e969]':
+                  - generic [ref=e970]:
+                    - generic [ref=e971]: "Current: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > SWEATERS"
+                    - generic [ref=e972]: "Auto: WOMEN > CLOTHING > TOPS"
+                    - generic [ref=e973]: "Final Paths: WOMEN, WOMEN > CLOTHING, WOMEN > CLOTHING > TOPS, WOMEN > CLOTHING > SWEATERS"
+                    - generic [ref=e974]: "Final Collections: all-products-chatgpt-ai-product-description"
+                    - generic [ref=e975]: "Manual: +0 / -0"
+              - 'row "ALFRED CARGO PANTS 1124856 NEW 11-8 (Men Summer / Digit 8) Ambiguous workbook rows matched multiple candidate categories with equal score. COLLECTION: all-products-chatgpt-ai-product-description - MANUAL_REVIEW REVIEW - Current: MEN, MEN > CLOTHING, MEN > CLOTHING > PANTS Auto: - Final Paths: MEN, MEN > CLOTHING, MEN > CLOTHING > PANTS Final Collections: all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e976]':
+                - cell [ref=e977]:
+                  - checkbox [ref=e978]
+                - cell [ref=e979]
+                - cell "ALFRED CARGO PANTS" [ref=e981]
+                - cell "1124856" [ref=e982]
+                - cell "NEW" [ref=e983]
+                - cell "11-8 (Men Summer / Digit 8) Ambiguous workbook rows matched multiple candidate categories with equal score." [ref=e984]:
+                  - text: 11-8 (Men Summer / Digit 8)
+                  - generic [ref=e985]: Ambiguous workbook rows matched multiple candidate categories with equal score.
+                - 'cell "COLLECTION: all-products-chatgpt-ai-product-description" [ref=e986]'
+                - cell "-" [ref=e987]
+                - cell "MANUAL_REVIEW" [ref=e988]:
+                  - generic [ref=e989]: MANUAL_REVIEW
+                - cell "REVIEW" [ref=e990]:
+                  - generic [ref=e991]: REVIEW
+                - cell "-" [ref=e992]
+                - 'cell "Current: MEN, MEN > CLOTHING, MEN > CLOTHING > PANTS Auto: - Final Paths: MEN, MEN > CLOTHING, MEN > CLOTHING > PANTS Final Collections: all-products-chatgpt-ai-product-description Manual: +0 / -0" [ref=e993]':
+                  - generic [ref=e994]:
+                    - generic [ref=e995]: "Current: MEN, MEN > CLOTHING, MEN > CLOTHING > PANTS"
+                    - generic [ref=e996]: "Auto: -"
+                    - generic [ref=e997]: "Final Paths: MEN, MEN > CLOTHING, MEN > CLOTHING > PANTS"
+                    - generic [ref=e998]: "Final Collections: all-products-chatgpt-ai-product-description"
+                    - generic [ref=e999]: "Manual: +0 / -0"
+          - generic [ref=e157]:
+            - generic [ref=e158]:
+              - button "<<" [disabled] [ref=e159]
+              - button "<" [disabled] [ref=e160]
+              - generic [ref=e161]: Page 1 of 38
+              - button ">" [ref=e162] [cursor=pointer]
+              - button ">>" [ref=e163] [cursor=pointer]
+            - generic "Products per page" [ref=e164]:
+              - generic [ref=e165]: Per page
+              - combobox "Products per page" [ref=e166]:
+                - option "20" [selected]
+                - option "50"
+                - option "100"
+                - option "200"
+                - option "500"
+      - button "Resize workspace height" [ref=e167]
+  - alert [ref=e169]

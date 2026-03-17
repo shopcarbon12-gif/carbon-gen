@@ -1,0 +1,199 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - button "Open menu" [ref=e5] [cursor=pointer]
+      - generic [ref=e6]:
+        - img "Carbon" [ref=e8]
+        - generic [ref=e193]: /
+        - generic [ref=e194]: Collection Mapping
+      - generic "Collection mapping summary" [ref=e195]:
+        - generic [ref=e196]:
+          - generic [ref=e197]: LOADED
+          - generic [ref=e198]: "0"
+        - generic [ref=e199]:
+          - generic [ref=e200]: REVIEW
+          - generic [ref=e201]: "0"
+        - generic [ref=e202]:
+          - generic [ref=e203]: PENDING
+          - generic [ref=e204]: "0"
+        - generic [ref=e205]:
+          - generic [ref=e206]: SYNCED
+          - generic [ref=e207]: "0"
+    - complementary:
+      - navigation "Carbon menu":
+        - generic: MENU
+        - generic:
+          - generic:
+            - button "Pictures Generator":
+              - generic: Pictures Generator
+              - generic:
+                - img
+            - button "SEO Manager"
+            - button "RFID Price Tag"
+            - button "Lightspeed Catalog"
+            - button "Shopify Mapping Inventory"
+            - button "Collection Mapping"
+            - button "Create New Items"
+            - button "Social Ads & Meta"
+            - button "Ops Inventory"
+            - button "Workspace Dashboard"
+          - region "Shopify Mapping Inventory submenu":
+            - button "Back to main menu":
+              - img
+            - generic:
+              - button "Shopify Mapping Inventory"
+              - button "Workset"
+              - button "Sales"
+              - button "Inventory"
+              - button "Carts Inventory"
+              - button "Configurations":
+                - generic: Configurations
+                - generic:
+                  - img
+        - generic:
+          - button "SETTINGS"
+          - generic:
+            - button "LOGOUT"
+            - button "Pin menu":
+              - img
+    - main [ref=e52]:
+      - generic [ref=e53]:
+        - status [ref=e57]:
+          - generic [ref=e58]: Loading...
+          - button "Dismiss notice" [ref=e59] [cursor=pointer]: x
+        - main [ref=e60]:
+          - generic [ref=e62]:
+            - generic [ref=e63]:
+              - generic [ref=e65]:
+                - generic [ref=e66]:
+                  - button "refresh" [ref=e67] [cursor=pointer]: ⟳
+                  - button "undo" [disabled] [ref=e68]: ↶
+                  - textbox "Search menu tree" [ref=e69]:
+                    - /placeholder: Search menu items...
+                  - button "Save menu tree" [ref=e70] [cursor=pointer]:
+                    - img [ref=e71]
+                - generic [ref=e73]:
+                  - button "Add menu item" [ref=e76] [cursor=pointer]:
+                    - img [ref=e78]
+                    - generic [ref=e210]: Add menu item
+                  - generic [ref=e80]:
+                    - generic [ref=e81]:
+                      - generic [ref=e212]: UNMAPPED COLLECTIONS
+                      - generic [ref=e213]: "0"
+                    - generic [ref=e83]: No unmapped collections.
+                - status [ref=e214]
+              - button "Resize menu tree panel" [ref=e84]
+              - main [ref=e85]:
+                - generic [ref=e86]:
+                  - textbox "Search products" [ref=e87]:
+                    - /placeholder: Search products (title / sku / upc / type)
+                  - 'button "Types: All types" [ref=e89] [cursor=pointer]'
+                  - button "Refresh Products" [disabled] [ref=e90]
+                - generic [ref=e91]:
+                  - generic [ref=e92]: "Selected Collections: 0"
+                  - generic [ref=e93]: "Mapped Selected: 0"
+                  - generic [ref=e94]: "Unmapped Selected: 0"
+                  - generic [ref=e95]: Page 1 / 1
+                  - button "Assign Checked Products" [disabled] [ref=e96]
+                  - button "Unassign Checked Products" [disabled] [ref=e97]
+                - generic [ref=e98]:
+                  - button "Apply Suggestions" [disabled] [ref=e99]
+                  - button "Clear Staged Changes" [disabled] [ref=e100]
+                  - button "Push Selected" [disabled] [ref=e101]
+                  - button "Push All Final Changes" [disabled] [ref=e102]
+                  - button "Remove All Collections" [disabled] [ref=e103]
+                - generic [ref=e104]:
+                  - generic [ref=e105]:
+                    - heading "Jobs / Queue" [level=3] [ref=e106]
+                    - generic [ref=e107]:
+                      - button "All (0)" [ref=e108] [cursor=pointer]:
+                        - text: All
+                        - generic [ref=e109]: (0)
+                      - button "Ready to Auto Map (0)" [ref=e110] [cursor=pointer]:
+                        - text: Ready to Auto Map
+                        - generic [ref=e111]: (0)
+                      - button "Suggestion Ready (0)" [ref=e112] [cursor=pointer]:
+                        - text: Suggestion Ready
+                        - generic [ref=e113]: (0)
+                      - button "Manual Changes (0)" [ref=e114] [cursor=pointer]:
+                        - text: Manual Changes
+                        - generic [ref=e115]: (0)
+                      - button "Ready to Push (0)" [ref=e116] [cursor=pointer]:
+                        - text: Ready to Push
+                        - generic [ref=e117]: (0)
+                      - button "Push Failed (0)" [ref=e118] [cursor=pointer]:
+                        - text: Push Failed
+                        - generic [ref=e119]: (0)
+                      - button "Needs Review (0)" [ref=e120] [cursor=pointer]:
+                        - text: Needs Review
+                        - generic [ref=e121]: (0)
+                      - button "Legacy C-Code (0)" [ref=e122] [cursor=pointer]:
+                        - text: Legacy C-Code
+                        - generic [ref=e123]: (0)
+                    - paragraph [ref=e124]: "Lifecycle scaffold: 0 queued / 0 running / 0 completed."
+                    - generic [ref=e126]: No push jobs yet.
+                  - generic [ref=e127]:
+                    - heading "Reporting" [level=3] [ref=e128]
+                    - generic [ref=e129]:
+                      - button "Master Audit Report" [ref=e130] [cursor=pointer]
+                      - button "Batch Summary Report" [ref=e131] [cursor=pointer]
+                      - button "Errors & Review Report" [ref=e132] [cursor=pointer]
+                      - button "Collection Sync Report" [ref=e133] [cursor=pointer]
+                    - generic [ref=e134]:
+                      - button "Open Audit Modal" [disabled] [ref=e135]
+                      - button "Export CSV" [ref=e136] [cursor=pointer]
+                      - button "Export Skipped Review" [ref=e137] [cursor=pointer]
+                    - generic [ref=e138]:
+                      - button "Push Summary Report" [ref=e139] [cursor=pointer]
+                      - button "Push Failure Report" [ref=e140] [cursor=pointer]
+                      - button "Collection Delta Report" [ref=e141] [cursor=pointer]
+                - table [ref=e143]:
+                  - rowgroup [ref=e144]:
+                    - row "Product Identity Parser / Rule Proof Auto + Suggestions Decision / Sync Current vs Final" [ref=e145]:
+                      - columnheader "Product Identity" [ref=e146]
+                      - columnheader "Parser / Rule Proof" [ref=e147]
+                      - columnheader "Auto + Suggestions" [ref=e148]
+                      - columnheader "Decision / Sync" [ref=e149]
+                      - columnheader "Current vs Final" [ref=e150]
+                    - row "Select all products Picture Sort by product name Sort by UPC Source Parser Routing Proof Auto-Mapped Menus Suggested Menus Mapping Decision Collection Sync Status Status Current Collections" [ref=e151]:
+                      - columnheader "Select all products" [ref=e152]:
+                        - checkbox "Select all products" [ref=e153]
+                      - columnheader "Picture" [ref=e154]
+                      - columnheader "Sort by product name" [ref=e155]:
+                        - button "Sort by product name" [ref=e156] [cursor=pointer]:
+                          - text: Product Name
+                          - generic [ref=e215]: ▲
+                      - columnheader "Sort by UPC" [ref=e157]:
+                        - button "Sort by UPC" [ref=e158] [cursor=pointer]:
+                          - text: UPC
+                          - generic [ref=e216]: ↕
+                      - columnheader "Source Parser" [ref=e159]
+                      - columnheader "Routing Proof" [ref=e160]
+                      - columnheader "Auto-Mapped Menus" [ref=e161]
+                      - columnheader "Suggested Menus" [ref=e162]
+                      - columnheader "Mapping Decision" [ref=e163]
+                      - columnheader "Collection Sync Status" [ref=e164]
+                      - columnheader "Status" [ref=e165]
+                      - columnheader "Current Collections" [ref=e166]
+                  - rowgroup [ref=e167]:
+                    - row "Loading Shopify products..." [ref=e168]:
+                      - cell "Loading Shopify products..." [ref=e169]
+                - generic [ref=e170]:
+                  - generic [ref=e171]:
+                    - button "<<" [disabled] [ref=e172]
+                    - button "<" [disabled] [ref=e173]
+                    - generic [ref=e174]: Page 1 of 1
+                    - button ">" [disabled] [ref=e175]
+                    - button ">>" [disabled] [ref=e176]
+                  - generic "Products per page" [ref=e177]:
+                    - generic [ref=e217]: Per page
+                    - combobox "Products per page" [ref=e178]:
+                      - option "20" [selected]
+                      - option "50"
+                      - option "100"
+                      - option "200"
+                      - option "500"
+            - button "Resize workspace height" [ref=e179]
+  - button "Open Next.js Dev Tools" [ref=e185] [cursor=pointer]:
+    - img [ref=e186]
+  - alert [ref=e219]

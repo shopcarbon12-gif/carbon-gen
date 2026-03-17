@@ -218,11 +218,10 @@ type UndoEntry = {
   afterNodes: MenuNode[];
   createdAt: number;
 };
-const TREE_PANEL_MIN_WIDTH = 340;
+const TREE_PANEL_MIN_WIDTH = 220;
 const TREE_PANEL_MAX_WIDTH = 1600;
 const TREE_PANEL_DEFAULT_WIDTH = 400;
-const TREE_PANEL_MAX_AUTO_WIDTH = 900;
-const TREE_PANEL_LABEL_GUTTER = 56;
+const WORKSPACE_DEFAULT_HEIGHT = 800;
 const WORKSPACE_MIN_HEIGHT = 420;
 const WORKSPACE_MAX_HEIGHT = 5000;
 type MoveDropTarget = { targetKey: string; position: DropPosition } | null;
@@ -358,13 +357,19 @@ export default function ShopifyCollectionMapping() {
   const [undoConfirmOpen, setUndoConfirmOpen] = useState(false);
   const [undoResult, setUndoResult] = useState<{ ok: boolean; title: string; details: string[] } | null>(null);
   const [treePanelWidth, setTreePanelWidth] = useState(TREE_PANEL_DEFAULT_WIDTH);
-  const [autoTreeWidthArmed, setAutoTreeWidthArmed] = useState(false);
+  const [treePanelMinWidth, setTreePanelMinWidth] = useState(TREE_PANEL_MIN_WIDTH);
   const [resizingPanes, setResizingPanes] = useState(false);
   const [resizingWorkspaceHeight, setResizingWorkspaceHeight] = useState(false);
-  const [workspaceHeight, setWorkspaceHeight] = useState<number | null>(null);
-  const paneResizeStart = useRef<{ x: number; width: number } | null>(null);
-  const workspaceResizeStart = useRef<{ pageY: number; height: number } | null>(null);
+  const [workspaceHeight, setWorkspaceHeight] = useState<number | null>(WORKSPACE_DEFAULT_HEIGHT);
+  const [workspaceBaseHeight, setWorkspaceBaseHeight] = useState<number | null>(null);
+  const [noticeHidden, setNoticeHidden] = useState(false);
+  const [progressLingerUntil, setProgressLingerUntil] = useState(0);
+  const paneResizeStart = useRef<{ x: number; width: number; minWidth: number; pointerId: number | null } | null>(null);
+  const workspaceResizeStart = useRef<{ clientY: number; height: number } | null>(null);
   const workspaceResizePointerClientY = useRef(0);
+  const wasProgressBusyRef = useRef(false);
+  const workspaceUserResizedRef = useRef(false);
+  const treePaneUserResizedRef = useRef(false);
   const pageScrollRef = useRef<HTMLElement | null>(null);
   const workspaceGridRef = useRef<HTMLDivElement | null>(null);
   const treePanelAutoWidthRef = useRef<HTMLDivElement | null>(null);
@@ -379,6 +384,46 @@ export default function ShopifyCollectionMapping() {
     const normalized = normalizeShopDomain(shop);
     return isValidShopDomain(normalized) ? normalized : "";
   }, [shop]);
+
+  const isBusy = loading || saving || auditOpening;
+
+  useEffect(() => {
+    if (isBusy) {
+      wasProgressBusyRef.current = true;
+      setProgressLingerUntil(0);
+      return;
+    }
+    if (!wasProgressBusyRef.current) return;
+    wasProgressBusyRef.current = false;
+    setProgressLingerUntil(Date.now() + 5000);
+  }, [isBusy]);
+
+  useEffect(() => {
+    if (progressLingerUntil <= 0) return;
+    const remaining = progressLingerUntil - Date.now();
+    if (remaining <= 0) {
+      setProgressLingerUntil(0);
+      return;
+    }
+    const timer = window.setTimeout(() => setProgressLingerUntil(0), remaining + 20);
+    return () => window.clearTimeout(timer);
+  }, [progressLingerUntil]);
+
+  const noticeState = useMemo(() => {
+    if (error) return { tone: "error" as const, message: error };
+    if (warning) return { tone: "warning" as const, message: warning };
+    if (loading) return { tone: "progress" as const, message: "Loading..." };
+    if (saving) return { tone: "progress" as const, message: "Saving changes..." };
+    if (auditOpening) return { tone: "progress" as const, message: "Refreshing audit report..." };
+    if (progressLingerUntil > Date.now()) return { tone: "progress" as const, message: "Loaded successfully." };
+    return null;
+  }, [error, warning, loading, saving, auditOpening, progressLingerUntil]);
+
+  useEffect(() => {
+    if (noticeState) setNoticeHidden(false);
+  }, [noticeState?.tone, noticeState?.message]);
+
+  const noticeWorkspaceOffset = noticeState && !noticeHidden ? 38 : 0;
 
   function withShopContext(input: Record<string, unknown>) {
     if (!activeShop) return input;
@@ -1006,20 +1051,6 @@ export default function ShopifyCollectionMapping() {
       });
   }, [collectionAudit.unmapped, unmappedCollectionOrder, dismissedUnmappedCollectionIds]);
 
-  // Requirement 2: Dynamic Linking Behavior
-  // Generate a live link based on the actively selected node in the tree.
-  const activeDynamicLink = useMemo(() => {
-    if (mappedSelectedNodeKeys.length !== 1) return null;
-    const nodeId = mappedSelectedNodeKeys[0];
-    const node = nodeByKey.get(nodeId);
-    if (!node || !node.linkedTargetUrl) return null;
-
-    // Construct a friendly display URL or use the raw one
-    // Assuming linkedTargetUrl is relative or absolute, we present it clearly.
-    // If your app has a specific shop domain context, prepending it would happen here.
-    return node.linkedTargetUrl;
-  }, [mappedSelectedNodeKeys, nodeByKey]);
-
   const menuEditorAssetOptions = useMemo(() => {
     if (menuEditorLinkType === "COLLECTION") return menuLinkTargets.collections;
     if (menuEditorLinkType === "PRODUCT") return menuLinkTargets.products;
@@ -1494,15 +1525,22 @@ export default function ShopifyCollectionMapping() {
   }, []);
 
   useEffect(() => {
-    if (!activeShop) return;
-    const params = new URLSearchParams(window.location.search);
-    const currentShop = normalizeShopDomain(params.get("shop") || "");
-    if (currentShop === activeShop) return;
-    params.set("shop", activeShop);
-    const nextQuery = params.toString();
-    const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}${window.location.hash || ""}`;
+    if (window.location.search.length < 1) return;
+    const nextUrl = `${window.location.pathname}${window.location.hash || ""}`;
     window.history.replaceState(null, "", nextUrl);
   }, [activeShop]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const prevRestoration = window.history.scrollRestoration;
+    window.history.scrollRestoration = "manual";
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    const pageEl = pageScrollRef.current;
+    if (pageEl) pageEl.scrollTop = 0;
+    return () => {
+      window.history.scrollRestoration = prevRestoration;
+    };
+  }, []);
 
   useEffect(() => {
     setSelectedProducts({});
@@ -1637,13 +1675,19 @@ export default function ShopifyCollectionMapping() {
 
   useEffect(() => {
     if (!resizingPanes) return;
-    const onMouseMove = (event: MouseEvent) => {
+    const onPointerMove = (event: PointerEvent) => {
       if (!paneResizeStart.current) return;
+      if (
+        paneResizeStart.current.pointerId !== null &&
+        event.pointerId !== paneResizeStart.current.pointerId
+      ) {
+        return;
+      }
       const deltaX = event.clientX - paneResizeStart.current.x;
-      const nextWidth = Math.min(
+      const nextWidth = Math.round(Math.min(
         TREE_PANEL_MAX_WIDTH,
-        Math.max(TREE_PANEL_MIN_WIDTH, paneResizeStart.current.width + deltaX)
-      );
+        Math.max(paneResizeStart.current.minWidth, paneResizeStart.current.width + deltaX)
+      ));
       setTreePanelWidth(nextWidth);
     };
     const stopResize = () => {
@@ -1654,13 +1698,15 @@ export default function ShopifyCollectionMapping() {
     const priorUserSelect = document.body.style.userSelect;
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", stopResize);
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", stopResize);
+    window.addEventListener("pointercancel", stopResize);
     return () => {
       document.body.style.cursor = priorCursor;
       document.body.style.userSelect = priorUserSelect;
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", stopResize);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", stopResize);
+      window.removeEventListener("pointercancel", stopResize);
     };
   }, [resizingPanes]);
 
@@ -1672,24 +1718,29 @@ export default function ShopifyCollectionMapping() {
     const tick = () => {
       const start = workspaceResizeStart.current;
       if (!start) return;
-
-      const currentPageY = workspaceResizePointerClientY.current + window.scrollY;
-      const deltaY = currentPageY - start.pageY;
+      const pageEl = pageScrollRef.current;
+      const deltaY = workspaceResizePointerClientY.current - start.clientY;
+      const minWorkspaceHeight = Math.max(WORKSPACE_DEFAULT_HEIGHT, workspaceBaseHeight || WORKSPACE_MIN_HEIGHT);
       const nextHeight = Math.min(
         WORKSPACE_MAX_HEIGHT,
-        Math.max(WORKSPACE_MIN_HEIGHT, start.height + deltaY)
+        Math.max(minWorkspaceHeight, start.height + deltaY)
       );
       setWorkspaceHeight(nextHeight);
 
       const clientY = workspaceResizePointerClientY.current;
       if (clientY > window.innerHeight - EDGE_THRESHOLD) {
-        window.scrollBy({ top: SCROLL_STEP, behavior: "auto" });
+        if (pageEl) {
+          pageEl.scrollTop = Math.min(pageEl.scrollHeight, pageEl.scrollTop + SCROLL_STEP);
+        } else {
+          window.scrollBy({ top: SCROLL_STEP, behavior: "auto" });
+        }
       } else if (clientY < EDGE_THRESHOLD) {
-        window.scrollBy({ top: -SCROLL_STEP, behavior: "auto" });
+        if (pageEl) {
+          pageEl.scrollTop = Math.max(0, pageEl.scrollTop - SCROLL_STEP);
+        } else {
+          window.scrollBy({ top: -SCROLL_STEP, behavior: "auto" });
+        }
       }
-
-      const pageEl = pageScrollRef.current;
-      if (pageEl) pageEl.scrollTop = pageEl.scrollHeight;
       rafId = window.requestAnimationFrame(tick);
     };
     const onMouseMove = (event: MouseEvent) => {
@@ -1713,35 +1764,176 @@ export default function ShopifyCollectionMapping() {
       window.removeEventListener("mouseup", stopResize);
       if (rafId) window.cancelAnimationFrame(rafId);
     };
-  }, [resizingWorkspaceHeight]);
+  }, [resizingWorkspaceHeight, workspaceBaseHeight]);
+
+  function measureTreePanelMinWidth(host: HTMLElement) {
+    const panelWidth = host.clientWidth;
+    const treeContent =
+      host.querySelector<HTMLElement>(".treeContent") ||
+      host.querySelector<HTMLElement>(".treeCanvas");
+    const contentWidth = treeContent?.clientWidth || panelWidth;
+    const chromeWidth = Math.max(0, panelWidth - contentWidth);
+    let maxInnerRequired = 0;
+
+    const treeRows = host.querySelectorAll<HTMLElement>(".treeRow");
+    treeRows.forEach((row) => {
+      if (row.offsetParent === null) return;
+      const node = row.closest<HTMLElement>(".treeNode");
+      const textWrap = row.querySelector<HTMLElement>(".treeText");
+      const label = row.querySelector<HTMLElement>(".treeLabel");
+      const target = row.querySelector<HTMLElement>(".treeTargetLabel");
+      if (!textWrap || !label) return;
+      const depthOffset = node
+        ? (() => {
+            const cs = window.getComputedStyle(node);
+            const marginLeft = parseFloat(cs.marginLeft || "0") || 0;
+            const paddingLeft = parseFloat(cs.paddingLeft || "0") || 0;
+            const depth = Number(node.dataset.depth || "0") || 0;
+            const indentStep = parseFloat(cs.getPropertyValue("--indent-step") || "36") || 36;
+            return Math.max(marginLeft, paddingLeft, depth * indentStep);
+          })()
+        : 0;
+      const textRequired = Math.max(label.scrollWidth, target?.scrollWidth || 0);
+      const fixedWidth = row.offsetWidth - textWrap.clientWidth;
+      maxInnerRequired = Math.max(maxInnerRequired, depthOffset + fixedWidth + textRequired);
+    });
+
+    const addButtons = host.querySelectorAll<HTMLElement>(".treeAddBtn, .treeAddChildBtn");
+    addButtons.forEach((btn) => {
+      if (btn.offsetParent === null) return;
+      const text = btn.querySelector<HTMLElement>("span:last-child");
+      if (!text) return;
+      const node = btn.closest<HTMLElement>(".treeNode");
+      const depthOffset = node
+        ? (() => {
+            const cs = window.getComputedStyle(node);
+            const marginLeft = parseFloat(cs.marginLeft || "0") || 0;
+            const paddingLeft = parseFloat(cs.paddingLeft || "0") || 0;
+            const depth = Number(node.dataset.depth || "0") || 0;
+            const indentStep = parseFloat(cs.getPropertyValue("--indent-step") || "36") || 36;
+            return Math.max(marginLeft, paddingLeft, depth * indentStep);
+          })()
+        : 0;
+      const fixedWidth = btn.offsetWidth - text.clientWidth;
+      maxInnerRequired = Math.max(maxInnerRequired, depthOffset + fixedWidth + text.scrollWidth);
+    });
+
+    const unmappedCards = host.querySelectorAll<HTMLElement>(".unmappedCard");
+    unmappedCards.forEach((card) => {
+      if (card.offsetParent === null) return;
+      const label = card.querySelector<HTMLElement>(".unmappedCardLabel");
+      if (!label) return;
+      const fixedWidth = card.offsetWidth - label.clientWidth;
+      maxInnerRequired = Math.max(maxInnerRequired, fixedWidth + label.scrollWidth);
+    });
+
+    return Math.min(TREE_PANEL_MAX_WIDTH, Math.max(TREE_PANEL_MIN_WIDTH, Math.ceil(maxInnerRequired + chromeWidth + 8)));
+  }
+
+  function measureWorkspaceBaseHeightFromTree() {
+    const treeHost = treePanelAutoWidthRef.current;
+    if (!treeHost) return 0;
+    const treeRoot = treeHost.querySelector<HTMLElement>(".gemTreePanel");
+    const toolbar = treeHost.querySelector<HTMLElement>(".treeSearchBar");
+    const treeContent = treeHost.querySelector<HTMLElement>(".treeContent");
+
+    let total = 0;
+    if (treeRoot) {
+      const cs = window.getComputedStyle(treeRoot);
+      total +=
+        (parseFloat(cs.paddingTop) || 0) +
+        (parseFloat(cs.paddingBottom) || 0) +
+        (parseFloat(cs.borderTopWidth) || 0) +
+        (parseFloat(cs.borderBottomWidth) || 0);
+    }
+    if (toolbar) {
+      const cs = window.getComputedStyle(toolbar);
+      total +=
+        toolbar.getBoundingClientRect().height +
+        (parseFloat(cs.marginTop) || 0) +
+        (parseFloat(cs.marginBottom) || 0);
+    }
+    if (treeContent) {
+      const contentRect = treeContent.getBoundingClientRect();
+      let deepestBottom = 0;
+      const cards = treeHost.querySelectorAll<HTMLElement>(
+        ".treeRow, .unmappedCard, .treeAddBtn, .treeAddChildBtn, .treeRenderMore"
+      );
+      cards.forEach((card) => {
+        if (card.offsetParent === null) return;
+        const rect = card.getBoundingClientRect();
+        const bottomInsideContent = rect.bottom - contentRect.top + treeContent.scrollTop;
+        deepestBottom = Math.max(deepestBottom, bottomInsideContent);
+      });
+      const contentNeeded = Math.ceil(deepestBottom);
+      total += contentNeeded;
+    } else if (treeRoot) {
+      total += treeRoot.scrollHeight;
+    }
+
+    return Math.ceil(Math.max(WORKSPACE_MIN_HEIGHT, total + 35));
+  }
 
   useEffect(() => {
-    if (!autoTreeWidthArmed) return;
+    const host = treePanelAutoWidthRef.current;
+    if (!host) return;
+    let rafId = 0;
+    const sync = () => {
+      if (rafId) window.cancelAnimationFrame(rafId);
+      rafId = window.requestAnimationFrame(() => {
+        const measured = measureWorkspaceBaseHeightFromTree();
+        if (measured <= 0) return;
+        setWorkspaceBaseHeight((prev) => {
+          if (prev !== null && Math.abs(prev - measured) <= 1) return prev;
+          return measured;
+        });
+        setWorkspaceHeight((prev) => {
+          if (workspaceUserResizedRef.current) return prev === null ? measured : prev;
+          return Math.max(WORKSPACE_DEFAULT_HEIGHT, measured);
+        });
+      });
+    };
+
+    sync();
+    const resizeObserver = new ResizeObserver(() => sync());
+    resizeObserver.observe(host);
+    const treeContent = host.querySelector<HTMLElement>(".treeContent");
+    if (treeContent) resizeObserver.observe(treeContent);
+
+    const mutationObserver = new MutationObserver(() => sync());
+    mutationObserver.observe(host, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+
+    const intervalId = window.setInterval(() => {
+      if (!workspaceUserResizedRef.current) sync();
+    }, 280);
+
+    return () => {
+      if (rafId) window.cancelAnimationFrame(rafId);
+      window.clearInterval(intervalId);
+      resizeObserver.disconnect();
+      mutationObserver.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
     if (resizingPanes) return;
     const host = treePanelAutoWidthRef.current;
-    if (!host) {
-      setAutoTreeWidthArmed(false);
-      return;
-    }
+    if (!host) return;
     const raf = window.requestAnimationFrame(() => {
-      const labels = host.querySelectorAll<HTMLElement>(".treeLabel, .treeTargetLabel, .unmappedCardLabel");
-      let maxLabelWidth = 0;
-      labels.forEach((label) => {
-        if (label.offsetParent === null) return;
-        maxLabelWidth = Math.max(maxLabelWidth, label.scrollWidth);
-      });
-      const next = Math.min(
-        TREE_PANEL_MAX_AUTO_WIDTH,
-        Math.max(TREE_PANEL_DEFAULT_WIDTH, Math.ceil(maxLabelWidth + TREE_PANEL_LABEL_GUTTER))
-      );
+      const measuredMin = measureTreePanelMinWidth(host);
+      setTreePanelMinWidth((prev) => (Math.abs(prev - measuredMin) <= 2 ? prev : measuredMin));
       setTreePanelWidth((prev) => {
-        if (Math.abs(prev - next) <= 2) return prev;
-        return next;
+        if (!treePaneUserResizedRef.current) return measuredMin;
+        if (prev < measuredMin) return measuredMin;
+        return Math.min(TREE_PANEL_MAX_WIDTH, prev);
       });
-      setAutoTreeWidthArmed(false);
     });
     return () => window.cancelAnimationFrame(raf);
-  }, [nodes, orderedUnmappedCollections, expandedNodes, treeSearch, resizingPanes, autoTreeWidthArmed]);
+  }, [nodes, orderedUnmappedCollections, expandedNodes, treeSearch, resizingPanes]);
 
   async function moveMenuNode(nodeKey: string, nextDropTarget: MoveDropTarget) {
     if (!nodeKey || !nextDropTarget) return;
@@ -2082,7 +2274,6 @@ export default function ShopifyCollectionMapping() {
   }
 
   function toggleNodeExpansion(nodeKey: string) {
-    setAutoTreeWidthArmed(true);
     setExpandedNodes((prev) => ({
       ...prev,
       [nodeKey]: prev[nodeKey] === false ? true : false,
@@ -2900,106 +3091,59 @@ export default function ShopifyCollectionMapping() {
   }
 
   return (
-    <main className={`page${workspaceHeight ? " pageExpanded" : ""}`} ref={pageScrollRef}>
-      <style jsx global>{`
-        .app-bg-photo,
-        .app-bg-fade,
-        .app-bg-top-photo,
-        .app-bg-top-fade {
-          display: none !important;
-        }
-        body {
-          background: #0b1020 !important;
-        }
-      `}</style>
+    <>
+      <div className="pageNoticeFrame">
+        <div className="noticeStandalone">
+          <div className="noticeSlot">
+            {noticeState && !noticeHidden ? (
+              <div
+                className={`noticeBar notice-${noticeState.tone}`}
+                role={noticeState.tone === "error" ? "alert" : "status"}
+                aria-live={noticeState.tone === "error" ? "assertive" : "polite"}
+              >
+                {noticeState.tone === "progress" ? (
+                  <span className="noticeProgressTrack" aria-hidden="true">
+                    <span className="noticeProgressFill" />
+                  </span>
+                ) : null}
+                <div className="noticeText">{noticeState.message}</div>
+                <button
+                  type="button"
+                  className="noticeCloseBtn"
+                  aria-label="Dismiss notice"
+                  onClick={() => setNoticeHidden(true)}
+                >
+                  x
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
 
-      <section className="card workspaceCard">
-        <h1>Shopify Collection Mapping</h1>
-        <div className="topbar" style={{ marginTop: 10 }}>
-          <span className="pill">{activeShop ? `Shop: ${activeShop}` : "Shop: not selected"}</span>
-          <span className="pill">Auto-parent logic ON</span>
-          <span className="pill">Live Shopify sync ON</span>
-          <button type="button" onClick={() => void openAuditReport()} disabled={auditOpening || saving || loading}>
-            {auditOpening ? "Refreshing Audit..." : "Collection Audit Log"}
-          </button>
-        </div>
-        <div className="kpi stage4SummaryGrid" style={{ marginTop: 10 }}>
-          <div className="k kTotal">
-            <div className="muted">Total Loaded</div>
-            <b>{moduleSummary.totalLoaded}</b>
-          </div>
-          <div className="k kAutoMapped">
-            <div className="muted">Auto-Mapped</div>
-            <b>{moduleSummary.autoMapped}</b>
-          </div>
-          <div className="k kReview">
-            <div className="muted">Review Needed</div>
-            <b>{moduleSummary.reviewNeeded}</b>
-          </div>
-          <div className="k kAddPending">
-            <div className="muted">Add Pending</div>
-            <b>{moduleSummary.addPending}</b>
-          </div>
-          <div className="k kRemovalPending">
-            <div className="muted">Removal Pending</div>
-            <b>{moduleSummary.removalPending}</b>
-          </div>
-          <div className="k kSynced">
-            <div className="muted">Synced</div>
-            <b>{moduleSummary.synced}</b>
-          </div>
-        </div>
-        <div className="workflowRail">
-          {[
-            { id: "pull-detect", label: "Pull / Detect" },
-            { id: "auto-map", label: "Auto Map" },
-            { id: "suggestions", label: "Suggestions" },
-            { id: "manual-review", label: "Manual Review" },
-            { id: "ready-push", label: "Ready to Push" },
-          ].map((step, index) => (
-            <div key={step.id} className="workflowStep">
-              <span className="workflowIndex">{index + 1}</span>
-              <span>{step.label}</span>
-            </div>
-          ))}
-        </div>
-        
-        {/* Requirement 2: Dynamic Link Display */}
-        <div style={{ 
-          marginTop: 12, 
-          padding: "10px 14px", 
-          background: "rgba(0,0,0,0.2)", 
-          borderRadius: "8px",
-          border: "1px solid rgba(255,255,255,0.08)",
-          display: "flex",
-          alignItems: "center",
-          gap: "10px"
-        }}>
-          <span className="muted" style={{ fontWeight: 600 }}>Active Mapping Link:</span>
-          {activeDynamicLink ? (
-            <a href={activeDynamicLink} target="_blank" rel="noreferrer" style={{ color: "#34d399", textDecoration: "none", fontFamily: "monospace" }}>
-              {activeDynamicLink}
-            </a>
-          ) : (
-            <span className="muted" style={{ fontStyle: "italic", opacity: 0.7 }}>Select a mapped collection in the tree to see its dynamic link.</span>
-          )}
-        </div>
-
-        {warning ? <p className="warning">{warning}</p> : null}
-        {error ? <p className="error">{error}</p> : null}
-      </section>
-
-      <section className="card">
+      <main
+        className={`page${workspaceHeight ? " pageExpanded" : ""}`}
+        ref={pageScrollRef}
+        style={{
+          height: `calc(100dvh - var(--shell-content-top-offset) - ${noticeWorkspaceOffset}px)`,
+          maxHeight: `calc(100dvh - var(--shell-content-top-offset) - ${noticeWorkspaceOffset}px)`,
+        }}
+      >
+      <div className="pageBody">
+      <section
+        className={`card workspaceSection${workspaceHeight ? " workspaceSectionExpanded" : ""}`}
+        style={workspaceHeight ? { height: "100%" } : undefined}
+      >
         <div
           ref={workspaceGridRef}
-          className="grid2"
+          className="grid2 workspaceGridHost"
           style={{
             gridTemplateColumns: `${treePanelWidth}px 18px minmax(0, 1fr)`,
-            height: workspaceHeight ? `${workspaceHeight}px` : "100%",
+            height: workspaceHeight ? `${Math.max(0, workspaceHeight - noticeWorkspaceOffset)}px` : "100%",
             transition: resizingPanes ? "none" : "grid-template-columns 220ms cubic-bezier(0.22, 1, 0.36, 1)",
           }}
         >
-          <div ref={treePanelAutoWidthRef} className="treePaneHost">
+          <div ref={treePanelAutoWidthRef} className="card panel treePaneHost treeWorkspacePanel">
             <ShopifyMenuItemsTree
               menuTitle={menuMeta.title}
               menuHandle={menuMeta.handle}
@@ -3007,8 +3151,8 @@ export default function ShopifyCollectionMapping() {
               onTreeSearchChange={setTreeSearch}
               onTreeSearchSubmit={expandTreeForSearchResults}
               onRefreshTree={() => {
-                setTreePanelWidth(TREE_PANEL_DEFAULT_WIDTH);
-                setAutoTreeWidthArmed(false);
+                treePaneUserResizedRef.current = false;
+                setTreePanelWidth(treePanelMinWidth);
                 void refreshMenuTreeSection();
               }}
               undoEntries={undoHistory}
@@ -3051,9 +3195,18 @@ export default function ShopifyCollectionMapping() {
             type="button"
             className={`paneDivider ${resizingPanes ? "resizing" : ""}`}
             aria-label="Resize menu tree panel"
-            onMouseDown={(event) => {
+            onPointerDown={(event) => {
+              try {
+                (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+              } catch {}
+              treePaneUserResizedRef.current = true;
               setResizingPanes(true);
-              paneResizeStart.current = { x: event.clientX, width: treePanelWidth };
+              paneResizeStart.current = {
+                x: event.clientX,
+                width: treePanelWidth,
+                minWidth: treePanelMinWidth,
+                pointerId: event.pointerId,
+              };
             }}
           >
             <span className="paneDividerGrip" />
@@ -3472,13 +3625,14 @@ export default function ShopifyCollectionMapping() {
           className={`workspaceHeightDivider ${resizingWorkspaceHeight ? "resizing" : ""}`}
           aria-label="Resize workspace height"
           onMouseDown={(event) => {
+            workspaceUserResizedRef.current = true;
             const currentHeight =
               workspaceGridRef.current?.getBoundingClientRect().height ||
               workspaceHeight ||
               560;
             workspaceResizeStart.current = {
-              pageY: event.pageY,
-              height: Math.max(WORKSPACE_MIN_HEIGHT, currentHeight),
+              clientY: event.clientY,
+              height: Math.max(Math.max(WORKSPACE_DEFAULT_HEIGHT, workspaceBaseHeight || WORKSPACE_MIN_HEIGHT), currentHeight),
             };
             workspaceResizePointerClientY.current = event.clientY;
             setResizingWorkspaceHeight(true);
@@ -3855,37 +4009,88 @@ export default function ShopifyCollectionMapping() {
           </div>
         </div>
       ) : null}
+      </div>
+      </main>
 
       <style jsx>{`
         .page {
+          --shell-content-top-offset: 100px;
+          --notice-bar-height: 36px;
+          --notice-gap-to-workspace: 2px;
           width: min(100%, calc(100vw - 24px));
           max-width: 100%;
           box-sizing: border-box;
           min-width: 0;
           margin: 0 auto;
-          padding: 12px;
-          display: grid;
-          grid-template-rows: auto minmax(0, 1fr);
-          gap: 12px;
-          height: 100vh;
-          height: 100dvh;
-          max-height: 100vh;
-          max-height: 100dvh;
+          padding: 0 14px 14px;
+          display: flex;
+          flex-direction: column;
+          gap: 0;
+          height: calc(100dvh - var(--shell-content-top-offset));
+          max-height: calc(100dvh - var(--shell-content-top-offset));
           overflow-x: hidden;
-          overflow-y: auto;
+          overflow-y: hidden;
+          color: #e5e7eb;
+          font-family: Inter, Arial, sans-serif;
+        }
+        .pageNoticeFrame {
+          --notice-bar-height: 36px;
+          --notice-gap-to-workspace: 2px;
+          width: min(100%, calc(100vw - 24px));
+          max-width: 100%;
+          box-sizing: border-box;
+          min-width: 0;
+          margin: 0 auto;
+          padding: 0 14px;
           color: #e5e7eb;
           font-family: ui-sans-serif, system-ui, Segoe UI, Arial;
         }
         .page.pageExpanded {
-          grid-template-rows: auto auto;
-          height: auto;
-          max-height: none;
-          overflow: visible;
+          height: calc(100dvh - var(--shell-content-top-offset));
+          max-height: calc(100dvh - var(--shell-content-top-offset));
+          overflow-x: hidden;
+          overflow-y: hidden;
+        }
+        .pageBody {
+          min-width: 0;
+          min-height: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 0;
+          flex: 1 1 auto;
+          overflow: hidden;
+        }
+        .page :is(h1, h2, h3, h4, h5, h6, p, span, label, th, td, a, button, input, select, textarea, small, b) {
+          font-family: Inter, Arial, sans-serif;
+        }
+        .noticeStandalone {
+          margin: 0;
+          padding: 0;
+          top: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 0;
+          background: transparent;
+        }
+        .workspaceSection {
+          display: flex;
+          flex-direction: column;
+          flex: 1 1 auto;
+          min-height: 0;
+          overflow: hidden;
+        }
+        .workspaceSection.workspaceSectionExpanded {
+          flex: 1 1 auto;
+        }
+        .workspaceGridHost {
+          flex: 1 1 auto;
+          min-height: 0;
         }
         .card {
-          background: #111827;
-          border: 1px solid #2a3547;
-          border-radius: 12px;
+          background: linear-gradient(180deg, #111c32, #0d1628);
+          border: 1px solid #2a3a56;
+          border-radius: 18px;
+          box-shadow: 0 14px 34px rgba(0, 0, 0, 0.38);
           padding: 12px;
         }
         h1,
@@ -3897,9 +4102,139 @@ export default function ShopifyCollectionMapping() {
         .muted {
           color: #94a3b8;
           font-size: 12px;
+          font-weight: 500;
         }
         .small {
+          font-size: 12px;
+        }
+        .noticeSlot {
+          min-height: calc(var(--notice-bar-height) + var(--notice-gap-to-workspace));
+          position: sticky;
+          top: 0;
+          z-index: 14;
+          display: flex;
+          align-items: stretch;
+          padding-bottom: var(--notice-gap-to-workspace);
+          background: transparent;
+        }
+        .noticeBar {
+          border: 1px solid #2a3a56;
+          border-radius: 9px;
+          background: #0f1a2f;
+          color: #dbe7f8;
+          min-height: var(--notice-bar-height);
+          height: var(--notice-bar-height);
+          width: 100%;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 0 10px;
+          position: relative;
+          overflow: hidden;
+        }
+        .notice-warning {
+          border-color: #f59e0b;
+          background: #452d12;
+          color: #fdcc88;
+        }
+        .notice-error {
+          border-color: #ef4444;
+          background: #431a1e;
+          color: #fecaca;
+        }
+        .notice-progress {
+          border-color: #3b82f6;
+          background: #10213d;
+          color: #dbeafe;
+        }
+        .noticeText {
+          font-size: 16px;
+          line-height: 1;
+          font-weight: 800;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .noticeProgressTrack {
+          flex: 0 0 58px;
+          width: 58px;
+          height: 4px;
+          border-radius: 999px;
+          background: rgba(59, 130, 246, 0.25);
+          overflow: hidden;
+        }
+        .noticeProgressFill {
+          display: block;
+          width: 42%;
+          height: 100%;
+          border-radius: 999px;
+          background: #60a5fa;
+          animation: noticeProgressSlide 1.05s linear infinite;
+        }
+        .noticeCloseBtn {
+          margin-left: auto;
+          min-height: 22px;
+          height: 22px;
+          width: 22px;
+          min-width: 22px;
+          border-radius: 999px;
+          border: 1px solid rgba(226, 232, 240, 0.4);
+          background: rgba(15, 23, 42, 0.35);
+          color: #cbd5e1;
+          padding: 0;
           font-size: 11px;
+          text-transform: uppercase;
+          line-height: 1;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .noticeCloseBtn:hover:not(:disabled) {
+          border-color: rgba(226, 232, 240, 0.68);
+          background: rgba(15, 23, 42, 0.56);
+        }
+        @keyframes noticeProgressSlide {
+          from {
+            transform: translateX(-120%);
+          }
+          to {
+            transform: translateX(240%);
+          }
+        }
+        h1 {
+          font-size: 20px;
+          font-weight: 700;
+          letter-spacing: 0.01em;
+        }
+        h2 {
+          font-size: 16px;
+          font-weight: 700;
+        }
+        h3 {
+          font-size: 13px;
+          font-weight: 700;
+          letter-spacing: 0.01em;
+        }
+        input,
+        select,
+        button {
+          font-size: 12px;
+          font-weight: 600;
+        }
+        input::placeholder {
+          font-size: 12px;
+          font-weight: 500;
+        }
+        table th {
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+        }
+        table td {
+          font-size: 11px;
+          font-weight: 600;
         }
         .topbar {
           display: flex;
@@ -3910,44 +4245,52 @@ export default function ShopifyCollectionMapping() {
         input,
         select,
         button {
-          min-height: 36px;
-          border-radius: 8px;
-          border: 1px solid #2a3547;
-          background: #0a1324;
-          color: #e5e7eb;
-          padding: 0 10px;
+          min-height: 38px;
+          border-radius: 10px;
+          border: 1px solid #3c4f70;
+          background: #122038;
+          color: #e5edf9;
+          padding: 0 12px;
         }
         button {
           cursor: pointer;
+        }
+        button:hover:not(:disabled) {
+          border-color: #5f789c;
+          background: #13233d;
         }
         button:disabled {
           opacity: 0.6;
           cursor: not-allowed;
         }
         .primary {
-          border-color: #166534;
-          background: #14532d;
-          color: #dcfce7;
+          border-color: #22c55e;
+          background: #164029;
+          color: #d8ffe8;
         }
         .pill {
           display: inline-flex;
           align-items: center;
+          min-height: 28px;
           gap: 6px;
-          padding: 2px 8px;
+          padding: 0 10px;
           border-radius: 999px;
-          border: 1px solid #166534;
-          background: #052e16;
-          color: #86efac;
-          font-size: 11px;
+          border: 1px solid #395071;
+          background: #12213a;
+          color: #dcebff;
+          font-size: 12px;
         }
         .chip {
           display: inline-flex;
-          padding: 1px 7px;
+          align-items: center;
+          min-height: 36px;
+          padding: 0 12px;
           border-radius: 999px;
-          border: 1px solid #1d4ed8;
-          background: #0a1d33;
-          color: #bfdbfe;
-          font-size: 10px;
+          border: 1px solid #3c4f70;
+          background: #152848;
+          color: #d9e8ff;
+          font-size: 12px;
+          font-weight: 600;
         }
         .kpi {
           display: flex;
@@ -4033,6 +4376,10 @@ export default function ShopifyCollectionMapping() {
           overflow: hidden;
           display: flex;
           flex-direction: column;
+          padding: 10px;
+        }
+        .treeWorkspacePanel {
+          min-height: 0;
         }
         .grid2 > .card.panel {
           height: 100%;
@@ -4104,66 +4451,86 @@ export default function ShopifyCollectionMapping() {
         }
         .productPanel {
           min-height: 0;
+          background: linear-gradient(180deg, #111c32, #0d1628);
+          border: 1px solid #2a3a56;
+          border-radius: 18px;
+          padding: 0;
+          box-shadow: 0 14px 34px rgba(0, 0, 0, 0.38);
         }
         .productControls {
-          /* Requirement 1: Grid for strict alignment */
           display: grid;
           grid-template-columns: 1fr auto auto;
           gap: 8px;
           align-items: center;
-          margin-bottom: 10px;
+          margin-bottom: 0;
           width: 100%;
+          padding: 12px;
+          border-bottom: 1px solid #2a3a56;
+          background: #0f1a2f;
         }
         .stage4BulkToolbar {
-          margin-top: 10px;
+          margin-top: 0;
           display: flex;
           gap: 8px;
           flex-wrap: wrap;
           align-items: center;
+          padding: 10px 12px;
+          border-bottom: 1px solid #2a3a56;
+          background: #0d182c;
         }
         .dangerBtn {
-          border-color: #7f1d1d;
-          color: #fecaca;
-          background: #2f1414;
+          border-color: #ef4444;
+          color: #ffd7dc;
+          background: #3f181d;
         }
         .stage4ScaffoldGrid {
-          margin-top: 10px;
+          margin-top: 0;
           display: grid;
           gap: 10px;
           grid-template-columns: 1fr 1fr;
+          padding: 12px;
+          background: #0d1628;
         }
         .stage4Panel {
-          border: 1px solid #2a3547;
-          border-radius: 10px;
-          background: #0a1324;
+          border: 1px solid #2a3a56;
+          border-radius: 12px;
+          background: #111f36;
           padding: 10px;
           display: grid;
           gap: 8px;
         }
         .stage4Panel h3 {
-          font-size: 13px;
+          font-size: 14px;
+          font-weight: 700;
           color: #e2e8f0;
         }
         .stage4TabRow {
           display: flex;
           gap: 6px;
           flex-wrap: wrap;
+          margin-bottom: 2px;
         }
         .stage4Tab {
           min-height: 30px;
           height: 30px;
-          font-size: 11px;
-          padding: 0 9px;
+          font-size: 12px;
+          font-weight: 600;
+          padding: 0 10px;
           border-radius: 999px;
+          border: 1px solid #3b5073;
+          background: #11203a;
+          color: #d7e5fb;
         }
         .stage4Tab.active {
-          border-color: #1d4ed8;
-          background: #112a4a;
-          color: #bfdbfe;
+          border-color: #3b82f6;
+          background: #1a3f73;
+          color: #ffffff;
         }
         .productSearchInput {
           min-width: 320px;
           width: 100%;
+          border-color: #3a4f72;
+          background: #101c33;
         }
         .typesDropdown {
           position: relative;
@@ -4176,6 +4543,30 @@ export default function ShopifyCollectionMapping() {
         .typesDropdownBtn {
           min-width: 170px;
           justify-content: flex-start;
+        }
+        .productRefreshBtn,
+        .typesDropdownBtn,
+        .topbar button:not(.primary):not(.dangerBtn),
+        .pagerBar > button,
+        .pagerNav > button {
+          border-color: #3c4f70;
+          background: #152848;
+          color: #e5edf9;
+        }
+        .productRefreshBtn:hover:not(:disabled),
+        .typesDropdownBtn:hover:not(:disabled),
+        .topbar button:not(.primary):not(.dangerBtn):hover:not(:disabled),
+        .pagerBar > button:hover:not(:disabled),
+        .pagerNav > button:hover:not(:disabled) {
+          border-color: #5f789c;
+          background: #1b3f73;
+        }
+        .topbar button:not(.primary):not(.dangerBtn) {
+          min-height: 36px;
+          border-radius: 999px;
+          padding: 0 12px;
+          font-size: 12px;
+          font-weight: 600;
         }
         .treeRefreshBtn {
           width: 36px;
@@ -4207,10 +4598,10 @@ export default function ShopifyCollectionMapping() {
           width: 280px;
           max-width: min(90vw, 280px);
           z-index: 20;
-          border: 1px solid #2a3547;
-          border-radius: 10px;
-          background: #0a1324;
-          box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+          border: 1px solid #2a3a56;
+          border-radius: 12px;
+          background: #0f172a;
+          box-shadow: 0 14px 34px rgba(0, 0, 0, 0.38);
           padding: 8px;
         }
         .typesResetBtn {
@@ -4362,9 +4753,12 @@ export default function ShopifyCollectionMapping() {
           flex: 1 1 auto;
           min-height: 0;
           overflow: auto;
-          border: 1px solid #2a3547;
-          border-radius: 10px;
-          background: #0a1324;
+          border-top: 1px solid #2a3a56;
+          border-bottom: 1px solid #2a3a56;
+          border-left: 0;
+          border-right: 0;
+          border-radius: 0;
+          background: transparent;
           max-height: none;
         }
         table {
@@ -4374,10 +4768,11 @@ export default function ShopifyCollectionMapping() {
         }
         th,
         td {
-          border-bottom: 1px solid #1f2937;
-          padding: 7px 8px;
+          border-bottom: 1px solid #24354e;
+          padding: 10px;
           white-space: nowrap;
           font-size: 12px;
+          vertical-align: middle;
         }
         tbody td {
           height: 96px;
@@ -4387,8 +4782,8 @@ export default function ShopifyCollectionMapping() {
         th {
           position: sticky;
           top: var(--group-head-height);
-          background: #0b1322;
-          color: #cbd5e1;
+          background: #111f36;
+          color: #d7e1ef;
           text-transform: uppercase;
           font-size: 11px;
           z-index: 2;
@@ -4396,16 +4791,25 @@ export default function ShopifyCollectionMapping() {
         .groupHead th {
           top: 0;
           z-index: 4;
-          background: #0f172a;
-          color: #94a3b8;
+          background: #0d1931;
+          color: #9fb4d0;
           font-size: 10px;
-          letter-spacing: 0.04em;
-          border-bottom: 1px solid #334155;
+          letter-spacing: 0.05em;
+          border-bottom: 1px solid #24354e;
           text-transform: uppercase;
           text-align: center;
           height: var(--group-head-height);
           padding-top: 0;
           padding-bottom: 0;
+        }
+        tbody tr:hover {
+          background: #132543;
+        }
+        tbody tr.activeProductRow {
+          background: #17315a;
+        }
+        tbody tr.manualReviewRow {
+          box-shadow: inset 3px 0 0 #f59e0b;
         }
         .sortHead {
           padding: 0;
@@ -4421,9 +4825,10 @@ export default function ShopifyCollectionMapping() {
           justify-content: center;
           gap: 5px;
           text-transform: uppercase;
-          font-size: 11px;
-          color: #cbd5e1;
-          padding: 7px 8px;
+          font-size: 12px;
+          font-weight: 700;
+          color: #d7e1ef;
+          padding: 10px;
         }
         .sortArrow {
           font-size: 10px;
@@ -4439,6 +4844,9 @@ export default function ShopifyCollectionMapping() {
           justify-content: space-between;
           gap: 10px;
           flex-wrap: nowrap;
+          padding: 10px 12px;
+          border-top: 1px solid #2a3a56;
+          background: #0f1a2f;
         }
         .pagerNav {
           display: inline-flex;
@@ -4524,56 +4932,47 @@ export default function ShopifyCollectionMapping() {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          min-height: 22px;
+          min-height: 24px;
           padding: 0 8px;
           border-radius: 999px;
-          border: 1px solid #334155;
-          font-size: 10px;
-          letter-spacing: 0.03em;
-          text-transform: uppercase;
-          color: #cbd5e1;
-          background: #0b1322;
+          border: 1px solid transparent;
+          font-size: 12px;
+          font-weight: 700;
         }
         .decision-auto_mapped {
-          border-color: #0f766e;
-          color: #99f6e4;
-          background: #0f2e2f;
+          background: #123522;
+          border-color: #22c55e;
+          color: #bbf7d0;
         }
         .decision-suggested {
-          border-color: #475569;
-          color: #dbeafe;
-          background: #1e293b;
+          background: #163966;
+          border-color: #3b82f6;
+          color: #bfdbfe;
         }
         .decision-manual_review {
-          border-color: #7c2d12;
-          color: #fdba74;
-          background: #2f1e14;
+          background: #452d12;
+          border-color: #f59e0b;
+          color: #fdcc88;
         }
         .sync-synced {
-          border-color: #14532d;
-          color: #86efac;
-          background: #12291f;
+          background: #123522;
+          border-color: #22c55e;
+          color: #bbf7d0;
         }
         .sync-add-pending {
-          border-color: #92400e;
-          color: #fcd34d;
-          background: #2f2415;
+          background: #163966;
+          border-color: #3b82f6;
+          color: #bfdbfe;
         }
         .sync-removal-pending {
-          border-color: #7f1d1d;
+          background: #431a1e;
+          border-color: #ef4444;
           color: #fecaca;
-          background: #2f1414;
         }
         .sync-review {
-          border-color: #475569;
-          color: #cbd5e1;
-          background: #1e293b;
-        }
-        .activeProductRow {
-          background: rgba(30, 64, 175, 0.16);
-        }
-        .manualReviewRow {
-          box-shadow: inset 3px 0 0 #f97316;
+          background: #452d12;
+          border-color: #f59e0b;
+          color: #fdcc88;
         }
         .tiny {
           font-size: 10px;
@@ -4588,18 +4987,18 @@ export default function ShopifyCollectionMapping() {
           gap: 4px;
         }
         .suggestionChip {
-          border: 1px solid #334155;
-          background: #0b1322;
-          color: #cbd5e1;
+          border: 1px solid #46628b;
+          background: #142845;
+          color: #d9e8ff;
           border-radius: 999px;
-          font-size: 10px;
-          padding: 2px 8px;
+          font-size: 12px;
+          padding: 3px 8px;
           cursor: pointer;
         }
         .suggestionChip.selected {
-          border-color: #0f766e;
-          color: #99f6e4;
-          background: #0f2e2f;
+          border-color: #3b82f6;
+          color: #dbeafe;
+          background: #1b3f73;
         }
         .suggestionChip:disabled {
           cursor: not-allowed;
@@ -4782,6 +5181,6 @@ export default function ShopifyCollectionMapping() {
           }
         }
       `}</style>
-    </main>
+    </>
   );
 }
