@@ -122,6 +122,10 @@ type PushPreviewModalState = {
   rows: PushPlannerRow[];
 };
 
+type ShopifyCollectionMappingProps = {
+  showHeaderKpis?: boolean;
+};
+
 type MappingResponse = {
   ok: boolean;
   error?: string;
@@ -293,7 +297,7 @@ function dedupeCollectionHandles(values: string[]) {
   return out;
 }
 
-export default function ShopifyCollectionMapping() {
+export default function ShopifyCollectionMapping({ showHeaderKpis = false }: ShopifyCollectionMappingProps) {
   const [shop, setShop] = useState("");
   const [nodes, setNodes] = useState<MenuNode[]>([]);
   const [lastSyncedNodes, setLastSyncedNodes] = useState<MenuNode[]>([]);
@@ -3127,6 +3131,26 @@ export default function ShopifyCollectionMapping() {
             ) : null}
           </div>
         </div>
+        {showHeaderKpis ? (
+          <div className="kpi headerKpiBoxes pageHeaderKpis">
+            <div className="k">
+              <div className="muted">Total Products</div>
+              <b>{productCount}</b>
+            </div>
+            <div className="k">
+              <div className="muted">Collections</div>
+              <b>{collectionCount}</b>
+            </div>
+            <div className="k">
+              <div className="muted">Mapped Selected</div>
+              <b>{mappedSelectedNodeKeys.length}</b>
+            </div>
+            <div className="k">
+              <div className="muted">Unmapped Selected</div>
+              <b>{selectedDirectCollectionIds.length}</b>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <main
@@ -4310,6 +4334,13 @@ export default function ShopifyCollectionMapping() {
           display: flex;
           gap: 8px;
           flex-wrap: wrap;
+        }
+        .headerKpiBoxes .k {
+          min-width: 140px;
+        }
+        .pageHeaderKpis {
+          margin-top: 8px;
+          padding: 0 0 8px;
         }
         .stage4SummaryGrid .k {
           min-width: 150px;
