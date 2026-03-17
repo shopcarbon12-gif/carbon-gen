@@ -10,7 +10,13 @@ export default function ShopifyCollectionMappingPage() {
   }
 
   return (
-    <div className="collection-mapping-route collection-mapping-standalone-route">
+    <div
+      className="collection-mapping-route collection-mapping-standalone-route"
+      style={{
+        ["--collection-mapping-shell-content-top-offset" as "--collection-mapping-shell-content-top-offset"]: "70px",
+        marginTop: "-30px",
+      }}
+    >
       <ShopifyCollectionMapping />
     </div>
   );

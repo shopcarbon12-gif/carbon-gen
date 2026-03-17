@@ -3132,7 +3132,7 @@ export default function ShopifyCollectionMapping() {
       <div className="pageBody">
       <section
         className={`card workspaceSection${workspaceHeight ? " workspaceSectionExpanded" : ""}`}
-        style={workspaceHeight ? { height: "100%" } : undefined}
+        style={workspaceHeight ? { height: `${Math.max(0, workspaceHeight)}px` } : undefined}
       >
         <div
           ref={workspaceGridRef}
@@ -4014,9 +4014,9 @@ export default function ShopifyCollectionMapping() {
 
       <style jsx>{`
         .page {
-          --shell-content-top-offset: 100px;
+          --shell-content-top-offset: var(--collection-mapping-shell-content-top-offset, 100px);
           --notice-bar-height: 36px;
-          --notice-gap-to-workspace: 2px;
+          --notice-gap-to-workspace: 0px;
           width: min(100%, calc(100vw - 24px));
           max-width: 100%;
           box-sizing: border-box;
@@ -4029,13 +4029,13 @@ export default function ShopifyCollectionMapping() {
           height: calc(100dvh - var(--shell-content-top-offset));
           max-height: calc(100dvh - var(--shell-content-top-offset));
           overflow-x: hidden;
-          overflow-y: hidden;
+          overflow-y: auto;
           color: #e5e7eb;
           font-family: Inter, Arial, sans-serif;
         }
         .pageNoticeFrame {
           --notice-bar-height: 36px;
-          --notice-gap-to-workspace: 2px;
+          --notice-gap-to-workspace: 0px;
           width: min(100%, calc(100vw - 24px));
           max-width: 100%;
           box-sizing: border-box;
@@ -4049,7 +4049,7 @@ export default function ShopifyCollectionMapping() {
           height: calc(100dvh - var(--shell-content-top-offset));
           max-height: calc(100dvh - var(--shell-content-top-offset));
           overflow-x: hidden;
-          overflow-y: hidden;
+          overflow-y: auto;
         }
         .pageBody {
           min-width: 0;
