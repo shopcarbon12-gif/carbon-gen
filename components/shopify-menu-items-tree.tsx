@@ -1189,10 +1189,10 @@ export default function ShopifyMenuItemsTree({
         }
         .treeSearchBar {
           display: grid;
-          grid-template-columns: 36px 36px 36px minmax(0, 1fr) 36px;
+          grid-template-columns: 38px 38px 38px minmax(0, 1fr) 38px;
           gap: 8px;
-          min-height: 36px;
-          height: 36px;
+          min-height: 38px;
+          height: 38px;
           margin-bottom: 10px;
           align-items: center;
           position: relative;
@@ -1204,10 +1204,10 @@ export default function ShopifyMenuItemsTree({
             margin 920ms cubic-bezier(0.12, 0.9, 0.22, 1);
         }
         .treeCollapseBtn {
-          width: 36px;
-          height: 36px;
-          min-width: 36px;
-          min-height: 36px;
+          width: 38px;
+          height: 38px;
+          min-width: 38px;
+          min-height: 38px;
           padding: 0;
           border: 1px solid rgba(255, 255, 255, 0.5);
           border-radius: 8px;
@@ -1229,12 +1229,12 @@ export default function ShopifyMenuItemsTree({
           transform: rotate(-90deg);
         }
         .gemTreePanel.collapsed .treeSearchBar {
-          grid-template-columns: 36px 0 0 0 0;
+          grid-template-columns: 38px 0 0 0 0;
           gap: 0;
           margin-bottom: 0;
           margin-top: 0;
           margin-left: 0;
-          width: 36px;
+          width: 38px;
         }
         .gemTreePanel.collapsed .treeRefreshBtn,
         .gemTreePanel.collapsed .treeUndoBtn,
@@ -1267,11 +1267,14 @@ export default function ShopifyMenuItemsTree({
         .treeRefreshBtn,
         .treeUndoBtn,
         .treeSaveBtn {
-          max-width: 36px;
+          max-width: 38px;
         }
         .treeSearchInput {
           width: 100%;
           max-width: 100%;
+          min-height: 38px;
+          height: 38px;
+          align-self: center;
         }
         .gemTreePanel.collapsed .treeContent,
         .gemTreePanel.collapsed .unmappedWrap {
@@ -1298,9 +1301,10 @@ export default function ShopifyMenuItemsTree({
           min-width: 0;
         }
         .treeRefreshBtn {
-          width: 36px;
-          min-width: 36px;
-          min-height: 36px;
+          width: 38px;
+          min-width: 38px;
+          height: 38px;
+          min-height: 38px;
           padding: 0;
           border: 1px solid #44556f;
           border-radius: 8px;
@@ -1317,9 +1321,10 @@ export default function ShopifyMenuItemsTree({
           border-color: #5f789c;
         }
         .treeSaveBtn {
-          width: 36px;
-          min-width: 36px;
-          min-height: 36px;
+          width: 38px;
+          min-width: 38px;
+          height: 38px;
+          min-height: 38px;
           border-radius: 8px;
           border: 1px solid #168e69;
           background: #0d7a57;
@@ -1334,9 +1339,10 @@ export default function ShopifyMenuItemsTree({
           fill: currentColor;
         }
         .treeUndoBtn {
-          width: 36px;
-          min-width: 36px;
-          min-height: 36px;
+          width: 38px;
+          min-width: 38px;
+          height: 38px;
+          min-height: 38px;
           border-radius: 8px;
           border: 1px solid #415a7a;
           background: #12233d;
