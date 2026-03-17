@@ -366,7 +366,7 @@ export default function ShopifyCollectionMapping() {
   const [noticeHidden, setNoticeHidden] = useState(false);
   const [progressLingerUntil, setProgressLingerUntil] = useState(0);
   const paneResizeStart = useRef<{ x: number; width: number; minWidth: number; pointerId: number | null } | null>(null);
-  const workspaceResizeStart = useRef<{ clientY: number; height: number } | null>(null);
+  const workspaceResizeStart = useRef<{ clientY: number; height: number; pointerId: number | null } | null>(null);
   const workspaceResizePointerClientY = useRef(0);
   const wasProgressBusyRef = useRef(false);
   const workspaceUserResizedRef = useRef(false);
@@ -1744,7 +1744,13 @@ export default function ShopifyCollectionMapping() {
       }
       rafId = window.requestAnimationFrame(tick);
     };
-    const onMouseMove = (event: MouseEvent) => {
+    const onPointerMove = (event: PointerEvent) => {
+      if (
+        workspaceResizeStart.current?.pointerId !== null &&
+        event.pointerId !== workspaceResizeStart.current.pointerId
+      ) {
+        return;
+      }
       workspaceResizePointerClientY.current = event.clientY;
     };
     const stopResize = () => {
@@ -1755,14 +1761,16 @@ export default function ShopifyCollectionMapping() {
     const priorUserSelect = document.body.style.userSelect;
     document.body.style.cursor = "row-resize";
     document.body.style.userSelect = "none";
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", stopResize);
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", stopResize);
+    window.addEventListener("pointercancel", stopResize);
     rafId = window.requestAnimationFrame(tick);
     return () => {
       document.body.style.cursor = priorCursor;
       document.body.style.userSelect = priorUserSelect;
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", stopResize);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", stopResize);
+      window.removeEventListener("pointercancel", stopResize);
       if (rafId) window.cancelAnimationFrame(rafId);
     };
   }, [resizingWorkspaceHeight, workspaceBaseHeight]);
@@ -3625,7 +3633,10 @@ export default function ShopifyCollectionMapping() {
           type="button"
           className={`workspaceHeightDivider ${resizingWorkspaceHeight ? "resizing" : ""}`}
           aria-label="Resize workspace height"
-          onMouseDown={(event) => {
+          onPointerDown={(event) => {
+            try {
+              (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+            } catch {}
             workspaceUserResizedRef.current = true;
             const currentHeight =
               workspaceGridRef.current?.getBoundingClientRect().height ||
@@ -3634,6 +3645,7 @@ export default function ShopifyCollectionMapping() {
             workspaceResizeStart.current = {
               clientY: event.clientY,
               height: Math.max(Math.max(WORKSPACE_DEFAULT_HEIGHT, workspaceBaseHeight || WORKSPACE_MIN_HEIGHT), currentHeight),
+              pointerId: event.pointerId,
             };
             workspaceResizePointerClientY.current = event.clientY;
             setResizingWorkspaceHeight(true);
