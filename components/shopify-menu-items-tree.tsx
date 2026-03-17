@@ -74,6 +74,8 @@ type ShopifyMenuItemsTreeProps = {
   menuTitle: string;
   menuHandle: string;
   treeSearch: string;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
   onTreeSearchChange: (value: string) => void;
   onTreeSearchSubmit: (value: string) => void;
   onRefreshTree: () => void;
@@ -534,6 +536,8 @@ export default function ShopifyMenuItemsTree({
   menuTitle,
   menuHandle,
   treeSearch,
+  collapsed,
+  onToggleCollapse,
   onTreeSearchChange,
   onTreeSearchSubmit,
   onRefreshTree,
@@ -857,8 +861,46 @@ export default function ShopifyMenuItemsTree({
     renderTracker.count >= renderNodeLimit && visibleNodeKeys.length > renderTracker.count;
 
   return (
-    <div className="gemTreePanel">
+    <div className={`gemTreePanel${collapsed ? " collapsed" : ""}`}>
       <div className="treeSearchBar">
+        <button
+          type="button"
+          className="treeCollapseBtn"
+          aria-label="Collapse tree menu"
+          title="Collapse tree menu"
+          onClick={onToggleCollapse}
+          disabled={saving}
+        >
+          <svg
+            className="treeCollapseBtnIcon"
+            viewBox="0 0 24 24"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true"
+          >
+            <path
+              d="M6 18L18 6"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M12 6H18V12"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M6 12V18H12"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
         <button
           type="button"
           className="treeRefreshBtn"
@@ -1131,14 +1173,126 @@ export default function ShopifyMenuItemsTree({
           min-height: 0;
           height: 100%;
           overflow: hidden;
+          transform-origin: left top;
+          transition:
+            padding 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
+            width 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
+            height 920ms cubic-bezier(0.12, 0.9, 0.22, 1);
+        }
+        .gemTreePanel.collapsed {
+          padding: 0;
+          width: 100%;
+          height: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
         }
         .treeSearchBar {
           display: grid;
-          grid-template-columns: 36px 36px minmax(0, 1fr) 36px;
+          grid-template-columns: 36px 36px 36px minmax(0, 1fr) 36px;
           gap: 8px;
+          min-height: 36px;
+          height: 36px;
           margin-bottom: 10px;
           align-items: center;
           position: relative;
+          transform-origin: left top;
+          transition:
+            grid-template-columns 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
+            gap 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
+            width 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
+            margin 920ms cubic-bezier(0.12, 0.9, 0.22, 1);
+        }
+        .treeCollapseBtn {
+          width: 36px;
+          height: 36px;
+          min-width: 36px;
+          min-height: 36px;
+          padding: 0;
+          border: 1px solid rgba(255, 255, 255, 0.5);
+          border-radius: 8px;
+          background: rgba(255, 255, 255, 0.14);
+          color: rgba(255, 255, 255, 0.95);
+          display: grid;
+          place-items: center;
+          line-height: 1;
+        }
+        .treeCollapseBtn:hover {
+          background: rgba(255, 255, 255, 0.72);
+          border-color: rgba(255, 255, 255, 0.72);
+          color: #16122b;
+        }
+        .treeCollapseBtnIcon {
+          width: 16px;
+          height: 16px;
+          display: block;
+          transform: rotate(-90deg);
+        }
+        .gemTreePanel.collapsed .treeSearchBar {
+          grid-template-columns: 36px 0 0 0 0;
+          gap: 0;
+          margin-bottom: 0;
+          margin-top: 0;
+          margin-left: 0;
+          width: 36px;
+        }
+        .gemTreePanel.collapsed .treeRefreshBtn,
+        .gemTreePanel.collapsed .treeUndoBtn,
+        .gemTreePanel.collapsed .treeSearchInput,
+        .gemTreePanel.collapsed .treeSaveBtn,
+        .gemTreePanel.collapsed .treeContent,
+        .gemTreePanel.collapsed .unmappedWrap {
+          opacity: 1;
+          pointer-events: none;
+          overflow: hidden;
+          transform: translate3d(0, 0, 0) scale(1);
+        }
+        .treeRefreshBtn,
+        .treeUndoBtn,
+        .treeSearchInput,
+        .treeSaveBtn,
+        .treeContent,
+        .unmappedWrap {
+          transform-origin: left top;
+          transition:
+            width 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
+            min-width 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
+            max-width 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
+            max-height 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
+            margin 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
+            padding 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
+            border-width 920ms cubic-bezier(0.12, 0.9, 0.22, 1);
+          transform: none;
+        }
+        .treeRefreshBtn,
+        .treeUndoBtn,
+        .treeSaveBtn {
+          max-width: 36px;
+        }
+        .treeSearchInput {
+          width: 100%;
+          max-width: 100%;
+        }
+        .gemTreePanel.collapsed .treeContent,
+        .gemTreePanel.collapsed .unmappedWrap {
+          flex: 0 0 auto;
+        }
+        .gemTreePanel.collapsed .treeRefreshBtn,
+        .gemTreePanel.collapsed .treeUndoBtn,
+        .gemTreePanel.collapsed .treeSaveBtn {
+          width: 0;
+          min-width: 0;
+          max-width: 0;
+          padding: 0;
+          border-width: 0;
+        }
+        .gemTreePanel.collapsed .treeSearchInput {
+          width: 0;
+          min-width: 0;
+          max-width: 0;
+          padding-left: 0;
+          padding-right: 0;
+          border-width: 0;
         }
         .treeSearchInput {
           min-width: 0;
@@ -1241,15 +1395,33 @@ export default function ShopifyMenuItemsTree({
           flex: 1 1 auto;
           min-height: 0;
           height: 100%;
+          max-height: 2000px;
           overflow-y: auto;
           overflow-x: hidden;
           scrollbar-gutter: stable;
+          scrollbar-width: none;
+        }
+        .treeContent::-webkit-scrollbar {
+          width: 0;
+          height: 0;
+          display: none;
         }
         .unmappedWrap {
           margin-top: 12px;
           min-height: 0;
+          max-height: 600px;
           display: grid;
           gap: 8px;
+        }
+        .gemTreePanel.collapsed .treeContent {
+          height: 0;
+          max-height: 0;
+          padding-top: 0;
+          padding-bottom: 0;
+        }
+        .gemTreePanel.collapsed .unmappedWrap {
+          max-height: 0;
+          margin-top: 0;
         }
         .unmappedDivider {
           border-top: 1px solid #2a3547;
@@ -1468,15 +1640,18 @@ export default function ShopifyMenuItemsTree({
           display: grid;
           gap: 2px;
           align-items: center;
+          padding-top: 2px;
         }
         :global(.treeRow.editing .treeText) {
           width: 100%;
           min-width: 0;
+          padding-top: 0;
         }
         :global(.treeLabel) {
           color: #e6edf7;
           font-size: 13px;
           font-weight: 600;
+          line-height: 1.15;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -1484,6 +1659,7 @@ export default function ShopifyMenuItemsTree({
         :global(.treeTargetLabel) {
           color: #8fa6c4;
           font-size: 11px;
+          line-height: 1.1;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;

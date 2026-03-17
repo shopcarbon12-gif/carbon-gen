@@ -20,7 +20,7 @@ export default function ShopifyCollectionMappingPage() {
       className="collection-mapping-route collection-mapping-standalone-route"
       style={standaloneRouteStyle}
     >
-      <ShopifyCollectionMapping showHeaderKpis />
+      <ShopifyCollectionMapping />
     </div>
   );
 }

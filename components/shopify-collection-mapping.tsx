@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ShopifyMenuItemsTree from "@/components/shopify-menu-items-tree";
 import { normalizeMenuPath } from "@/lib/shopifyCollectionSkuParser";
@@ -122,10 +123,6 @@ type PushPreviewModalState = {
   rows: PushPlannerRow[];
 };
 
-type ShopifyCollectionMappingProps = {
-  showHeaderKpis?: boolean;
-};
-
 type MappingResponse = {
   ok: boolean;
   error?: string;
@@ -145,6 +142,16 @@ type MappingResponse = {
     totalProducts?: number;
   };
 };
+
+async function readJsonResponse<T>(resp: Response): Promise<T> {
+  const text = await resp.text();
+  if (!text) return {} as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return { ok: false, error: "Received malformed JSON response." } as T;
+  }
+}
 
 type MenuLinkTargetOption = {
   id: string;
@@ -222,13 +229,15 @@ type UndoEntry = {
   afterNodes: MenuNode[];
   createdAt: number;
 };
-const TREE_PANEL_MIN_WIDTH = 220;
+const TREE_PANEL_MIN_WIDTH = 363;
 const TREE_PANEL_MAX_WIDTH = 1600;
-const TREE_PANEL_DEFAULT_WIDTH = 400;
-const WORKSPACE_DEFAULT_HEIGHT = 800;
-const WORKSPACE_MIN_HEIGHT = 420;
+const TREE_PANEL_DEFAULT_WIDTH = 363;
+const TREE_PANEL_COLLAPSED_WIDTH = 60;
+const WORKSPACE_DEFAULT_HEIGHT = 850;
+const WORKSPACE_MIN_HEIGHT = 850;
 const WORKSPACE_TOP_ANCHOR_OFFSET = 37;
 const WORKSPACE_MAX_HEIGHT = 5000;
+const WORKSPACE_RESIZE_HANDLE_SPACE = 24;
 type MoveDropTarget = { targetKey: string; position: DropPosition } | null;
 const MENU_LINK_TYPE_OPTIONS: Array<{ value: MenuLinkType; label: string }> = [
   { value: "COLLECTION", label: "Collection" },
@@ -297,7 +306,9 @@ function dedupeCollectionHandles(values: string[]) {
   return out;
 }
 
-export default function ShopifyCollectionMapping({ showHeaderKpis = false }: ShopifyCollectionMappingProps) {
+export default function ShopifyCollectionMapping() {
+  const pathname = usePathname();
+  const isStandaloneCollectionMappingRoute = pathname === "/shopify-collection-mapping";
   const [shop, setShop] = useState("");
   const [nodes, setNodes] = useState<MenuNode[]>([]);
   const [lastSyncedNodes, setLastSyncedNodes] = useState<MenuNode[]>([]);
@@ -363,6 +374,7 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
   const [undoResult, setUndoResult] = useState<{ ok: boolean; title: string; details: string[] } | null>(null);
   const [treePanelWidth, setTreePanelWidth] = useState(TREE_PANEL_DEFAULT_WIDTH);
   const [treePanelMinWidth, setTreePanelMinWidth] = useState(TREE_PANEL_MIN_WIDTH);
+  const [treePaneCollapsed, setTreePaneCollapsed] = useState(false);
   const [resizingPanes, setResizingPanes] = useState(false);
   const [resizingWorkspaceHeight, setResizingWorkspaceHeight] = useState(false);
   const [workspaceHeight, setWorkspaceHeight] = useState<number | null>(WORKSPACE_DEFAULT_HEIGHT);
@@ -370,7 +382,13 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
   const [noticeHidden, setNoticeHidden] = useState(false);
   const [progressLingerUntil, setProgressLingerUntil] = useState(0);
   const paneResizeStart = useRef<{ x: number; width: number; minWidth: number; pointerId: number | null } | null>(null);
-  const workspaceResizeStart = useRef<{ clientY: number; height: number; pointerId: number | null } | null>(null);
+  const paneResizePointerClientX = useRef(0);
+  const workspaceResizeStart = useRef<{
+    clientY: number;
+    height: number;
+    scrollTop: number;
+    pointerId: number | null;
+  } | null>(null);
   const workspaceResizePointerClientY = useRef(0);
   const wasProgressBusyRef = useRef(false);
   const workspaceUserResizedRef = useRef(false);
@@ -1127,7 +1145,7 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
         cache: "no-store",
         signal: controller.signal,
       });
-      const json = (await resp.json()) as MappingResponse;
+      const json = await readJsonResponse<MappingResponse>(resp);
       if (requestId !== loadDataReqIdRef.current) return false;
       if (!resp.ok || !json.ok) {
         throw new Error(json.error || "Failed to load Shopify collection mapping.");
@@ -1224,7 +1242,7 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
           linkType,
         })),
       });
-      const json = (await resp.json()) as MappingResponse;
+      const json = await readJsonResponse<MappingResponse>(resp);
       if (!resp.ok || !json.ok) {
         throw new Error(json.error || "Failed to load Shopify assets.");
       }
@@ -1325,7 +1343,7 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
           })
         ),
       });
-      const json = (await resp.json()) as MappingResponse;
+      const json = await readJsonResponse<MappingResponse>(resp);
       if (!resp.ok || !json.ok) {
         throw new Error(json.error || "Failed to rename collection.");
       }
@@ -1680,6 +1698,26 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
 
   useEffect(() => {
     if (!resizingPanes) return;
+    let rafId = 0;
+    const getTargetWidth = () => {
+      const start = paneResizeStart.current;
+      if (!start) return null;
+      const deltaX = paneResizePointerClientX.current - start.x;
+      return Math.round(
+        Math.min(TREE_PANEL_MAX_WIDTH, Math.max(start.minWidth, start.width + deltaX))
+      );
+    };
+    const tick = () => {
+      const targetWidth = getTargetWidth();
+      if (targetWidth === null) return;
+      setTreePanelWidth((prev) => {
+        const delta = targetWidth - prev;
+        if (Math.abs(delta) <= 1) return targetWidth;
+        const easing = delta < 0 ? 0.2 : 0.3;
+        return Math.round(prev + delta * easing);
+      });
+      rafId = window.requestAnimationFrame(tick);
+    };
     const onPointerMove = (event: PointerEvent) => {
       if (!paneResizeStart.current) return;
       if (
@@ -1688,81 +1726,17 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
       ) {
         return;
       }
-      const deltaX = event.clientX - paneResizeStart.current.x;
-      const nextWidth = Math.round(Math.min(
-        TREE_PANEL_MAX_WIDTH,
-        Math.max(paneResizeStart.current.minWidth, paneResizeStart.current.width + deltaX)
-      ));
-      setTreePanelWidth(nextWidth);
+      paneResizePointerClientX.current = event.clientX;
     };
     const stopResize = () => {
+      const targetWidth = getTargetWidth();
+      if (targetWidth !== null) setTreePanelWidth(targetWidth);
       setResizingPanes(false);
       paneResizeStart.current = null;
     };
     const priorCursor = document.body.style.cursor;
     const priorUserSelect = document.body.style.userSelect;
     document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", stopResize);
-    window.addEventListener("pointercancel", stopResize);
-    return () => {
-      document.body.style.cursor = priorCursor;
-      document.body.style.userSelect = priorUserSelect;
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", stopResize);
-      window.removeEventListener("pointercancel", stopResize);
-    };
-  }, [resizingPanes]);
-
-  useEffect(() => {
-    if (!resizingWorkspaceHeight) return;
-    let rafId = 0;
-    const EDGE_THRESHOLD = 36;
-    const SCROLL_STEP = 18;
-    const tick = () => {
-      const start = workspaceResizeStart.current;
-      if (!start) return;
-      const pageEl = pageScrollRef.current;
-      const deltaY = workspaceResizePointerClientY.current - start.clientY;
-      const minWorkspaceHeight = Math.max(WORKSPACE_DEFAULT_HEIGHT, workspaceBaseHeight || WORKSPACE_MIN_HEIGHT);
-      const nextHeight = Math.min(
-        WORKSPACE_MAX_HEIGHT,
-        Math.max(minWorkspaceHeight, start.height + deltaY)
-      );
-      setWorkspaceHeight(nextHeight);
-
-      const clientY = workspaceResizePointerClientY.current;
-      if (clientY > window.innerHeight - EDGE_THRESHOLD) {
-        if (pageEl) {
-          pageEl.scrollTop = Math.min(pageEl.scrollHeight, pageEl.scrollTop + SCROLL_STEP);
-        } else {
-          window.scrollBy({ top: SCROLL_STEP, behavior: "auto" });
-        }
-      } else if (clientY < EDGE_THRESHOLD) {
-        if (pageEl) {
-          pageEl.scrollTop = Math.max(0, pageEl.scrollTop - SCROLL_STEP);
-        } else {
-          window.scrollBy({ top: -SCROLL_STEP, behavior: "auto" });
-        }
-      }
-      rafId = window.requestAnimationFrame(tick);
-    };
-    const onPointerMove = (event: PointerEvent) => {
-      const start = workspaceResizeStart.current;
-      if (!start) return;
-      if (start.pointerId !== null && event.pointerId !== start.pointerId) {
-        return;
-      }
-      workspaceResizePointerClientY.current = event.clientY;
-    };
-    const stopResize = () => {
-      setResizingWorkspaceHeight(false);
-      workspaceResizeStart.current = null;
-    };
-    const priorCursor = document.body.style.cursor;
-    const priorUserSelect = document.body.style.userSelect;
-    document.body.style.cursor = "row-resize";
     document.body.style.userSelect = "none";
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", stopResize);
@@ -1776,7 +1750,89 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
       window.removeEventListener("pointercancel", stopResize);
       if (rafId) window.cancelAnimationFrame(rafId);
     };
-  }, [resizingWorkspaceHeight, workspaceBaseHeight]);
+  }, [resizingPanes]);
+
+  useEffect(() => {
+    if (!resizingWorkspaceHeight) return;
+    let rafId = 0;
+    const EDGE_THRESHOLD = 48;
+    const applyHeightFromPointer = () => {
+      const start = workspaceResizeStart.current;
+      if (!start) return;
+      const pageEl = pageScrollRef.current;
+      const currentScrollTop =
+        pageEl?.scrollTop ??
+        window.scrollY ??
+        document.documentElement.scrollTop ??
+        document.body.scrollTop ??
+        0;
+      const deltaY =
+        workspaceResizePointerClientY.current -
+        start.clientY +
+        (currentScrollTop - start.scrollTop);
+      const nextHeight = Math.min(
+        WORKSPACE_MAX_HEIGHT,
+        Math.max(WORKSPACE_MIN_HEIGHT, Math.round(start.height + deltaY))
+      );
+      setWorkspaceHeight((prev) => (prev === nextHeight ? prev : nextHeight));
+    };
+    const tick = () => {
+      const start = workspaceResizeStart.current;
+      if (!start) return;
+      const pageEl = pageScrollRef.current;
+      const clientY = workspaceResizePointerClientY.current;
+      if (clientY > window.innerHeight - EDGE_THRESHOLD) {
+        const distance = clientY - (window.innerHeight - EDGE_THRESHOLD);
+        const scrollStep = Math.max(16, Math.min(42, Math.round(distance * 0.85)));
+        if (pageEl) {
+          pageEl.scrollTop = Math.min(pageEl.scrollHeight, pageEl.scrollTop + scrollStep);
+        } else {
+          window.scrollBy({ top: scrollStep, behavior: "auto" });
+        }
+        applyHeightFromPointer();
+      } else if (clientY < EDGE_THRESHOLD) {
+        const distance = EDGE_THRESHOLD - clientY;
+        const scrollStep = Math.max(16, Math.min(42, Math.round(distance * 0.85)));
+        if (pageEl) {
+          pageEl.scrollTop = Math.max(0, pageEl.scrollTop - scrollStep);
+        } else {
+          window.scrollBy({ top: -scrollStep, behavior: "auto" });
+        }
+        applyHeightFromPointer();
+      }
+      rafId = window.requestAnimationFrame(tick);
+    };
+    const onPointerMove = (event: PointerEvent) => {
+      const start = workspaceResizeStart.current;
+      if (!start) return;
+      if (start.pointerId !== null && event.pointerId !== start.pointerId) {
+        return;
+      }
+      workspaceResizePointerClientY.current = event.clientY;
+      applyHeightFromPointer();
+    };
+    const stopResize = () => {
+      setResizingWorkspaceHeight(false);
+      workspaceResizeStart.current = null;
+    };
+    const priorCursor = document.body.style.cursor;
+    const priorUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", stopResize);
+    window.addEventListener("pointercancel", stopResize);
+    applyHeightFromPointer();
+    rafId = window.requestAnimationFrame(tick);
+    return () => {
+      document.body.style.cursor = priorCursor;
+      document.body.style.userSelect = priorUserSelect;
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", stopResize);
+      window.removeEventListener("pointercancel", stopResize);
+      if (rafId) window.cancelAnimationFrame(rafId);
+    };
+  }, [resizingWorkspaceHeight]);
 
   function measureTreePanelMinWidth(host: HTMLElement) {
     const panelWidth = host.clientWidth;
@@ -1899,10 +1955,6 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
           if (prev !== null && Math.abs(prev - measured) <= 1) return prev;
           return measured;
         });
-        setWorkspaceHeight((prev) => {
-          if (workspaceUserResizedRef.current) return prev === null ? measured : prev;
-          return Math.max(WORKSPACE_DEFAULT_HEIGHT, measured);
-        });
       });
     };
 
@@ -1937,11 +1989,13 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
     if (!host) return;
     const raf = window.requestAnimationFrame(() => {
       const measuredMin = measureTreePanelMinWidth(host);
-      setTreePanelMinWidth((prev) => (Math.abs(prev - measuredMin) <= 2 ? prev : measuredMin));
+      setTreePanelMinWidth((prev) => (prev === TREE_PANEL_MIN_WIDTH ? prev : TREE_PANEL_MIN_WIDTH));
       setTreePanelWidth((prev) => {
-        if (!treePaneUserResizedRef.current) return measuredMin;
-        if (prev < measuredMin) return measuredMin;
-        return Math.min(TREE_PANEL_MAX_WIDTH, prev);
+        const clampedPrev = Math.min(TREE_PANEL_MAX_WIDTH, prev);
+        if (!treePaneUserResizedRef.current) {
+          return TREE_PANEL_DEFAULT_WIDTH;
+        }
+        return Math.max(TREE_PANEL_MIN_WIDTH, clampedPrev);
       });
     });
     return () => window.cancelAnimationFrame(raf);
@@ -2048,7 +2102,7 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(withShopContext(payload)),
         });
-        const json = (await resp.json()) as MappingResponse;
+        const json = await readJsonResponse<MappingResponse>(resp);
         // #region agent log
         debugIngest({
             sessionId: "9da838",
@@ -2158,7 +2212,7 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(withShopContext(payload)),
         });
-        const json = (await resp.json()) as MappingResponse & { createdNodeKey?: string };
+        const json = await readJsonResponse<MappingResponse & { createdNodeKey?: string }>(resp);
         // #region agent log
         debugIngest({
             sessionId: "9da838",
@@ -2561,7 +2615,7 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
           checked,
         })),
       });
-      const json = (await resp.json()) as ToggleResponse;
+      const json = await readJsonResponse<ToggleResponse>(resp);
       if (!resp.ok || !json.ok) {
         throw new Error(json.error || "Assign/unassign failed.");
       }
@@ -2611,7 +2665,7 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
           checked,
         })),
       });
-      const json = (await resp.json()) as ToggleResponse;
+      const json = await readJsonResponse<ToggleResponse>(resp);
       if (!resp.ok || !json.ok) {
         throw new Error(json.error || "Bulk assign/unassign failed.");
       }
@@ -2992,7 +3046,7 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(withShopContext({ action: "refresh-menu", menuHandle: currentMenuHandle })),
       });
-      const json = (await resp.json()) as MappingResponse;
+      const json = await readJsonResponse<MappingResponse>(resp);
       if (!resp.ok || !json.ok) {
         throw new Error(json.error || "Menu refresh failed.");
       }
@@ -3104,6 +3158,26 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
 
   return (
     <>
+      {isStandaloneCollectionMappingRoute ? (
+        <div className="headerKpiOverlay" aria-label="Collection mapping summary">
+          <div className="headerKpiCard headerKpiCardLoaded">
+            <div className="headerKpiLabel">Loaded</div>
+            <div className="headerKpiValue">{moduleSummary.totalLoaded}</div>
+          </div>
+          <div className="headerKpiCard headerKpiCardReview">
+            <div className="headerKpiLabel">Review</div>
+            <div className="headerKpiValue">{moduleSummary.reviewNeeded}</div>
+          </div>
+          <div className="headerKpiCard headerKpiCardPending">
+            <div className="headerKpiLabel">Pending</div>
+            <div className="headerKpiValue">{moduleSummary.readyToPush}</div>
+          </div>
+          <div className="headerKpiCard headerKpiCardSynced">
+            <div className="headerKpiLabel">Synced</div>
+            <div className="headerKpiValue">{moduleSummary.synced}</div>
+          </div>
+        </div>
+      ) : null}
       <div className="pageNoticeFrame">
         <div className="noticeStandalone">
           <div className="noticeSlot">
@@ -3131,26 +3205,6 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
             ) : null}
           </div>
         </div>
-        {showHeaderKpis ? (
-          <div className="kpi headerKpiBoxes pageHeaderKpis">
-            <div className="k">
-              <div className="muted">Total Products</div>
-              <b>{productCount}</b>
-            </div>
-            <div className="k">
-              <div className="muted">Collections</div>
-              <b>{collectionCount}</b>
-            </div>
-            <div className="k">
-              <div className="muted">Mapped Selected</div>
-              <b>{mappedSelectedNodeKeys.length}</b>
-            </div>
-            <div className="k">
-              <div className="muted">Unmapped Selected</div>
-              <b>{selectedDirectCollectionIds.length}</b>
-            </div>
-          </div>
-        ) : null}
       </div>
 
       <main
@@ -3164,27 +3218,45 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
       <div className="pageBody">
       <section
         className={`card workspaceSection${workspaceHeight ? " workspaceSectionExpanded" : ""}`}
-        style={workspaceHeight ? { height: `${Math.max(0, workspaceHeight)}px` } : undefined}
+        style={
+          workspaceHeight
+            ? { height: `${Math.max(0, workspaceHeight + WORKSPACE_RESIZE_HANDLE_SPACE)}px` }
+            : undefined
+        }
       >
         <div
           ref={workspaceGridRef}
           className="grid2 workspaceGridHost"
           style={{
-            gridTemplateColumns: `${treePanelWidth}px 18px minmax(0, 1fr)`,
-            height: workspaceHeight ? `${Math.max(0, workspaceHeight - noticeWorkspaceOffset)}px` : "100%",
-            transition: resizingPanes ? "none" : "grid-template-columns 220ms cubic-bezier(0.22, 1, 0.36, 1)",
+            gridTemplateColumns: `${treePaneCollapsed ? TREE_PANEL_COLLAPSED_WIDTH : treePanelWidth}px ${treePaneCollapsed ? 0 : 10}px minmax(0, 1fr)`,
+            gap: treePaneCollapsed ? "12px" : "2px",
+            height: workspaceHeight ? `${Math.max(0, workspaceHeight)}px` : "100%",
+            transition: resizingPanes
+              ? "none"
+              : "grid-template-columns 920ms cubic-bezier(0.12, 0.9, 0.22, 1), gap 920ms cubic-bezier(0.12, 0.9, 0.22, 1)",
           }}
         >
-          <div ref={treePanelAutoWidthRef} className="card panel treePaneHost treeWorkspacePanel">
+          <div
+            ref={treePanelAutoWidthRef}
+            className={`card panel treePaneHost treeWorkspacePanel${treePaneCollapsed ? " treePaneHostCollapsed" : ""}`}
+            style={{
+              width: `${treePaneCollapsed ? TREE_PANEL_COLLAPSED_WIDTH : treePanelWidth}px`,
+              minWidth: `${treePaneCollapsed ? TREE_PANEL_COLLAPSED_WIDTH : treePanelWidth}px`,
+              maxWidth: `${treePaneCollapsed ? TREE_PANEL_COLLAPSED_WIDTH : treePanelWidth}px`,
+            }}
+          >
             <ShopifyMenuItemsTree
               menuTitle={menuMeta.title}
               menuHandle={menuMeta.handle}
               treeSearch={treeSearch}
+              collapsed={treePaneCollapsed}
+              onToggleCollapse={() => setTreePaneCollapsed((prev) => !prev)}
               onTreeSearchChange={setTreeSearch}
               onTreeSearchSubmit={expandTreeForSearchResults}
               onRefreshTree={() => {
                 treePaneUserResizedRef.current = false;
-                setTreePanelWidth(treePanelMinWidth);
+                setTreePanelWidth(TREE_PANEL_DEFAULT_WIDTH);
+                setTreePaneCollapsed(false);
                 void refreshMenuTreeSection();
               }}
               undoEntries={undoHistory}
@@ -3219,20 +3291,22 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
               }}
               onToggleUnmappedCollection={toggleUnmappedCollectionSelection}
               onReorderUnmappedCollections={reorderUnmappedCollection}
-            onEditUnmappedCollection={editUnmappedCollection}
-            onDeleteUnmappedCollection={deleteUnmappedCollectionCard}
+              onEditUnmappedCollection={editUnmappedCollection}
+              onDeleteUnmappedCollection={deleteUnmappedCollectionCard}
             />
           </div>
           <button
             type="button"
-            className={`paneDivider ${resizingPanes ? "resizing" : ""}`}
+            className={`paneDivider ${resizingPanes ? "resizing" : ""}${treePaneCollapsed ? " paneDividerCollapsed" : ""}`}
             aria-label="Resize menu tree panel"
             onPointerDown={(event) => {
+              if (treePaneCollapsed) return;
               try {
                 (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
               } catch {}
               treePaneUserResizedRef.current = true;
               setResizingPanes(true);
+              paneResizePointerClientX.current = event.clientX;
               paneResizeStart.current = {
                 x: event.clientX,
                 width: treePanelWidth,
@@ -3243,7 +3317,7 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
           >
             <span className="paneDividerGrip" />
           </button>
-          <main className="card panel productPanel">
+          <main className={`card panel productPanel${treePaneCollapsed ? " treePaneCollapsed" : ""}`}>
             <div className="productControls">
               <input
                 value={search}
@@ -3664,10 +3738,16 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
             const currentHeight =
               workspaceGridRef.current?.getBoundingClientRect().height ||
               workspaceHeight ||
-              560;
+              WORKSPACE_DEFAULT_HEIGHT;
             workspaceResizeStart.current = {
               clientY: event.clientY,
-              height: Math.max(Math.max(WORKSPACE_DEFAULT_HEIGHT, workspaceBaseHeight || WORKSPACE_MIN_HEIGHT), currentHeight),
+              height: Math.max(WORKSPACE_MIN_HEIGHT, currentHeight),
+              scrollTop:
+                pageScrollRef.current?.scrollTop ??
+                window.scrollY ??
+                document.documentElement.scrollTop ??
+                document.body.scrollTop ??
+                0,
               pointerId: event.pointerId,
             };
             workspaceResizePointerClientY.current = event.clientY;
@@ -4066,8 +4146,110 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
           max-height: calc(100dvh - var(--shell-content-top-offset));
           overflow-x: hidden;
           overflow-y: auto;
+          scrollbar-width: auto;
+          scrollbar-color: #3c4f70 #0b1322;
           color: #e5e7eb;
           font-family: Inter, Arial, sans-serif;
+        }
+        .page::-webkit-scrollbar {
+          width: 12px;
+          height: 12px;
+        }
+        .page::-webkit-scrollbar-track {
+          background: #0b1322;
+        }
+        .page::-webkit-scrollbar-thumb {
+          background: #3c4f70;
+          border-radius: 10px;
+          border: 2px solid #0b1322;
+        }
+        .page::-webkit-scrollbar-thumb:hover {
+          background: #5f789c;
+        }
+        .headerKpiOverlay {
+          position: fixed;
+          top: 35px;
+          right: 28px;
+          transform: translateY(-50%);
+          z-index: 57;
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+          align-items: center;
+          pointer-events: none;
+        }
+        .headerKpiCard {
+          min-width: 84px;
+          padding: 4px 10px;
+          border-radius: 12px;
+          border: 1px solid #2a3a56;
+          background: linear-gradient(180deg, #111c32, #0d1628);
+          box-shadow:
+            0 10px 24px rgba(0, 0, 0, 0.3),
+            inset 0 1px 0 rgba(255, 255, 255, 0.05);
+          backdrop-filter: blur(14px) saturate(1.12);
+          -webkit-backdrop-filter: blur(14px) saturate(1.12);
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+        }
+        .headerKpiLabel {
+          font-size: 11px;
+          color: #98a9c4;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          line-height: 1.1;
+          margin-top: 0;
+          transform: translateY(2px);
+        }
+        .headerKpiValue {
+          margin-top: 6px;
+          font-size: 25px;
+          font-weight: 650;
+          line-height: 1;
+          color: #e8eef8;
+          align-self: flex-start;
+        }
+        .headerKpiCardLoaded {
+          border-color: #2a3a56;
+          background: linear-gradient(180deg, #111c32, #0f1a2f);
+        }
+        .headerKpiCardPending {
+          border-color: #3b82f6;
+          background: linear-gradient(180deg, rgba(22, 57, 102, 0.92), rgba(15, 36, 68, 0.92));
+          box-shadow:
+            0 10px 24px rgba(0, 0, 0, 0.3),
+            inset 0 1px 0 rgba(191, 219, 254, 0.12),
+            0 0 0 1px rgba(59, 130, 246, 0.08);
+        }
+        .headerKpiCardReview {
+          border-color: #f59e0b;
+          background: linear-gradient(180deg, rgba(69, 45, 18, 0.94), rgba(49, 31, 12, 0.94));
+          box-shadow:
+            0 10px 24px rgba(0, 0, 0, 0.3),
+            inset 0 1px 0 rgba(253, 204, 136, 0.1),
+            0 0 0 1px rgba(245, 158, 11, 0.08);
+        }
+        .headerKpiCardSynced {
+          border-color: #22c55e;
+          background: linear-gradient(180deg, rgba(17, 52, 33, 0.94), rgba(12, 38, 24, 0.94));
+          box-shadow:
+            0 10px 24px rgba(0, 0, 0, 0.3),
+            inset 0 1px 0 rgba(187, 247, 208, 0.1),
+            0 0 0 1px rgba(34, 197, 94, 0.08);
+        }
+        .headerKpiCardPending .headerKpiLabel,
+        .headerKpiCardPending .headerKpiValue {
+          color: #dbeafe;
+        }
+        .headerKpiCardReview .headerKpiLabel,
+        .headerKpiCardReview .headerKpiValue {
+          color: #fdcc88;
+        }
+        .headerKpiCardSynced .headerKpiLabel,
+        .headerKpiCardSynced .headerKpiValue {
+          color: #bbf7d0;
         }
         .pageNoticeFrame {
           --notice-bar-height: 37px;
@@ -4086,6 +4268,8 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
           max-height: calc(100dvh - var(--shell-content-top-offset));
           overflow-x: hidden;
           overflow-y: auto;
+          scrollbar-width: auto;
+          scrollbar-color: #3c4f70 #0b1322;
         }
         .pageBody {
           min-width: 0;
@@ -4093,8 +4277,8 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
           display: flex;
           flex-direction: column;
           gap: 0;
-          flex: 1 1 auto;
-          overflow: hidden;
+          flex: 0 0 auto;
+          overflow: visible;
         }
         .page :is(h1, h2, h3, h4, h5, h6, p, span, label, th, td, a, button, input, select, textarea, small, b) {
           font-family: Inter, Arial, sans-serif;
@@ -4109,17 +4293,18 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
           background: transparent;
         }
         .workspaceSection {
+          position: relative;
           display: flex;
           flex-direction: column;
-          flex: 1 1 auto;
+          flex: 0 0 auto;
           min-height: 0;
-          overflow: hidden;
+          overflow: visible;
         }
         .workspaceSection.workspaceSectionExpanded {
-          flex: 1 1 auto;
+          flex: 0 0 auto;
         }
         .workspaceGridHost {
-          flex: 1 1 auto;
+          flex: 0 0 auto;
           min-height: 0;
         }
         .card {
@@ -4279,6 +4464,7 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
           gap: 8px;
           flex-wrap: wrap;
           align-items: center;
+          padding-left: 12px;
         }
         input,
         select,
@@ -4312,7 +4498,7 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
           min-height: 28px;
           gap: 6px;
           padding: 0 10px;
-          border-radius: 999px;
+          border-radius: 10px;
           border: 1px solid #395071;
           background: #12213a;
           color: #dcebff;
@@ -4323,7 +4509,7 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
           align-items: center;
           min-height: 36px;
           padding: 0 12px;
-          border-radius: 999px;
+          border-radius: 10px;
           border: 1px solid #3c4f70;
           background: #152848;
           color: #d9e8ff;
@@ -4334,13 +4520,6 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
           display: flex;
           gap: 8px;
           flex-wrap: wrap;
-        }
-        .headerKpiBoxes .k {
-          min-width: 140px;
-        }
-        .pageHeaderKpis {
-          margin-top: 8px;
-          padding: 0 0 8px;
         }
         .stage4SummaryGrid .k {
           min-width: 150px;
@@ -4403,8 +4582,8 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
         }
         .grid2 {
           display: grid;
-          grid-template-columns: 300px 18px minmax(0, 1fr);
-          gap: 12px;
+          grid-template-columns: 300px 10px minmax(0, 1fr);
+          gap: 2px;
           align-items: stretch;
           height: 100%;
           min-height: 0;
@@ -4416,15 +4595,75 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
           flex-direction: column;
         }
         .treePaneHost {
+          box-sizing: border-box;
           min-height: 0;
           height: 100%;
           overflow: hidden;
           display: flex;
           flex-direction: column;
-          padding: 10px;
+          padding: 0 !important;
+          transform-origin: left top;
+          transition:
+            width 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
+            min-width 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
+            max-width 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
+            height 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
+            min-height 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
+            max-height 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
+            padding 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
+            border-color 220ms ease;
         }
         .treeWorkspacePanel {
           min-height: 0;
+        }
+        .treePaneHost :global(.gemTreePanel) {
+          opacity: 1;
+          transform: none;
+        }
+        .treePaneHost.treePaneHostCollapsed {
+          flex: 0 0 auto;
+          justify-content: flex-start;
+          align-items: flex-start;
+          align-self: start;
+          position: relative;
+          z-index: 12;
+          width: 60px !important;
+          min-width: 60px !important;
+          max-width: 60px !important;
+          height: 74px;
+          min-height: 74px;
+          max-height: 74px;
+          padding: 0 !important;
+        }
+        .grid2 > .card.panel.treePaneHost.treePaneHostCollapsed {
+          height: 74px !important;
+          min-height: 74px !important;
+          max-height: 74px !important;
+          width: 60px !important;
+          min-width: 60px !important;
+          max-width: 60px !important;
+          align-self: start;
+          overflow: hidden;
+          padding: 0 !important;
+          position: relative;
+          z-index: 12;
+        }
+        .treePaneHost.treePaneHostCollapsed :global(.gemTreePanel) {
+          opacity: 1;
+          position: relative;
+          z-index: 13;
+          transform: none;
+        }
+        .treePaneHost :global(.treeContent),
+        .treePaneHost :global(.unmappedWrap) {
+          opacity: 1;
+          transform: none;
+        }
+        .treePaneHost.treePaneHostCollapsed :global(.treeContent),
+        .treePaneHost.treePaneHostCollapsed :global(.unmappedWrap) {
+          opacity: 1;
+          transform: none;
+          pointer-events: none;
         }
         .grid2 > .card.panel {
           height: 100%;
@@ -4436,16 +4675,29 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
         }
         .paneDivider {
           display: flex;
-          align-items: stretch;
+          align-items: center;
           justify-content: center;
-          width: 18px;
+          width: 10px;
+          min-width: 10px;
+          max-width: 10px;
           justify-self: center;
           cursor: col-resize;
           border-radius: 999px;
           outline: none;
+          overflow: hidden;
+          box-sizing: border-box;
+          padding: 0;
+          border: 0;
+          background: transparent;
+          transition:
+            width 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
+            opacity 920ms cubic-bezier(0.12, 0.9, 0.22, 1);
         }
         .paneDividerGrip {
-          width: 4px;
+          width: 10px;
+          min-width: 10px;
+          height: clamp(96px, 22%, 160px);
+          min-height: 96px;
           border-radius: 999px;
           background: #33506e;
           transition: background-color 120ms ease, box-shadow 120ms ease;
@@ -4459,6 +4711,11 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
         .paneDivider:focus-visible {
           box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.4);
           border-radius: 999px;
+        }
+        .paneDivider.paneDividerCollapsed {
+          width: 0;
+          opacity: 0;
+          pointer-events: none;
         }
         .workspaceHeightDivider {
           margin-top: 8px;
@@ -4495,14 +4752,36 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
           padding: 10px;
         }
         .productPanel {
+          position: relative;
           min-height: 0;
           background: linear-gradient(180deg, #111c32, #0d1628);
           border: 1px solid #2a3a56;
           border-radius: 18px;
           padding: 0;
           box-shadow: 0 14px 34px rgba(0, 0, 0, 0.38);
+          transform-origin: left top;
+          transition:
+            margin-left 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
+            box-shadow 920ms cubic-bezier(0.12, 0.9, 0.22, 1);
+        }
+        .productPanel.treePaneCollapsed {
+          margin-left: -84px;
+        }
+        .productPanel.treePaneCollapsed::before {
+          content: "";
+          position: absolute;
+          top: 1px;
+          left: 1px;
+          width: 72px;
+          height: 74px;
+          background: linear-gradient(180deg, #111c32, #0d1628);
+          border-top-left-radius: 17px;
+          pointer-events: none;
+          z-index: 3;
         }
         .productControls {
+          position: relative;
+          z-index: 4;
           display: grid;
           grid-template-columns: 1fr auto auto;
           gap: 8px;
@@ -4512,6 +4791,14 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
           padding: 12px;
           border-bottom: 1px solid #2a3a56;
           background: #0f1a2f;
+          transition:
+            width 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
+            margin-left 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
+            padding-left 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
+            border-radius 920ms cubic-bezier(0.12, 0.9, 0.22, 1);
+        }
+        .productPanel.treePaneCollapsed .productControls {
+          padding-left: 72px;
         }
         .stage4BulkToolbar {
           margin-top: 0;
@@ -4561,7 +4848,7 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
           font-size: 12px;
           font-weight: 600;
           padding: 0 10px;
-          border-radius: 999px;
+          border-radius: 10px;
           border: 1px solid #3b5073;
           background: #11203a;
           color: #d7e5fb;
@@ -4608,7 +4895,7 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
         }
         .topbar button:not(.primary):not(.dangerBtn) {
           min-height: 36px;
-          border-radius: 999px;
+          border-radius: 10px;
           padding: 0 12px;
           font-size: 12px;
           font-weight: 600;
@@ -4625,15 +4912,13 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
           line-height: 1;
         }
         .treeSearchBar {
-          margin-top: 8px;
-          /* Requirement 1: Grid for strict alignment */
+          margin-top: 0;
           display: grid;
-          grid-template-columns: 1fr 36px;
+          grid-template-columns: 36px 36px 36px minmax(0, 1fr) 36px;
           align-items: center;
           gap: 8px;
         }
         .treeSearchInput {
-          flex: 1 1 auto;
           min-width: 0;
         }
         .typesDropdownMenu {
@@ -4819,10 +5104,18 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
           font-size: 12px;
           vertical-align: middle;
         }
+        tbody tr {
+          height: 120px;
+          min-height: 120px;
+          max-height: 120px;
+        }
         tbody td {
-          height: 96px;
+          height: 120px;
+          min-height: 120px;
+          max-height: 120px;
           box-sizing: border-box;
           vertical-align: middle;
+          overflow: hidden;
         }
         th {
           position: sticky;
@@ -5195,6 +5488,20 @@ export default function ShopifyCollectionMapping({ showHeaderKpis = false }: Sho
           text-align: center;
         }
         @media (max-width: 1200px) {
+          .headerKpiOverlay {
+            right: 18px;
+            gap: 6px;
+          }
+          .headerKpiCard {
+            min-width: 72px;
+            padding: 4px 8px;
+          }
+          .headerKpiLabel {
+            font-size: 10px;
+          }
+          .headerKpiValue {
+            font-size: 22px;
+          }
           .page {
             height: auto;
             max-height: none;
