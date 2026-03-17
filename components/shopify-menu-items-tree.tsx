@@ -500,7 +500,7 @@ function SortableTreeRow({
           <>
             <button
               type="button"
-              className={enabled ? "iconBtn" : "iconBtn danger"}
+              className={enabled ? "iconBtn eye-active" : "iconBtn danger"}
               onClick={onToggleVisibility}
               aria-label={enabled ? "Hide this menu branch on live website (save required)" : "Show this menu branch on live website (save required)"}
               title={enabled ? "Visible on website (click to hide, then Save)" : "Hidden from website (click to show, then Save)"}
@@ -522,7 +522,7 @@ function SortableTreeRow({
             </button>
           </>
         )}
-        <button type="button" className="iconBtn danger" onClick={onDelete} aria-label="Delete menu item">
+        <button type="button" className="iconBtn deleteBtn" onClick={onDelete} aria-label="Delete menu item">
           <svg viewBox="0 0 16 16" width="14" height="14">
             <path d="M6 2.5h4l.5 1.5H13v1H3v-1h2.5L6 2.5zm-1 3h6l-.5 7H5.5L5 5.5z" />
           </svg>
@@ -914,10 +914,10 @@ export default function ShopifyMenuItemsTree({
         <button
           type="button"
           className="treeUndoBtn"
-          aria-label="undo"
-          title="undo"
-          onClick={onUndoMenuToggle}
-          disabled={undoEntries.length < 1 || saving}
+          aria-label={undoEntries.length < 1 ? "Collapse tree cards" : "Undo history"}
+          title={undoEntries.length < 1 ? "Collapse tree cards" : "Undo history"}
+          onClick={undoEntries.length < 1 ? onToggleCollapse : onUndoMenuToggle}
+          disabled={saving}
         >
           ↶
         </button>
@@ -935,22 +935,28 @@ export default function ShopifyMenuItemsTree({
         />
         {undoMenuOpen ? (
           <div className="treeUndoMenu" role="menu" aria-label="Undo action history">
-            {undoEntries.length < 1 ? (
-              <div className="treeUndoEmpty">No actions yet.</div>
-            ) : (
-              undoEntries.map((entry, index) => (
-                <button
-                  key={entry.id}
-                  type="button"
-                  className="treeUndoOption"
-                  onClick={() => onUndoEntrySelect(entry.id)}
-                  role="menuitem"
-                >
-                  <span className="treeUndoTask">Task {index + 1}</span>
-                  <span className="treeUndoTitle">{entry.title}</span>
-                </button>
-              ))
-            )}
+            {undoEntries.map((entry, index) => (
+              <button
+                key={entry.id}
+                type="button"
+                className="treeUndoOption"
+                onClick={() => onUndoEntrySelect(entry.id)}
+                role="menuitem"
+              >
+                <span className="treeUndoTask">Task {index + 1}</span>
+                <span className="treeUndoTitle">{entry.title}</span>
+              </button>
+            ))}
+            <div className="treeUndoMenuDivider" role="separator" />
+            <button
+              type="button"
+              className="treeUndoOption treeUndoCollapseOption"
+              onClick={() => { onUndoMenuToggle(); onToggleCollapse(); }}
+              role="menuitem"
+            >
+              <span className="treeUndoTask">Menu</span>
+              <span className="treeUndoTitle">Collapse tree cards</span>
+            </button>
           </div>
         ) : null}
         <button
@@ -1140,7 +1146,7 @@ export default function ShopifyMenuItemsTree({
                             </button>
                             <button
                               type="button"
-                              className="iconBtn danger"
+                              className="iconBtn deleteBtn"
                               onClick={(event) => {
                                 event.stopPropagation();
                                 onDeleteUnmappedCollection(row.id);
@@ -1171,6 +1177,8 @@ export default function ShopifyMenuItemsTree({
           display: flex;
           flex-direction: column;
           min-height: 0;
+          min-width: 0;
+          width: 100%;
           height: 100%;
           overflow: hidden;
           transform-origin: left top;
@@ -1411,10 +1419,23 @@ export default function ShopifyMenuItemsTree({
           color: #9fb3cf;
           padding: 8px;
         }
+        .treeUndoMenuDivider {
+          height: 1px;
+          background: #2a3547;
+          margin: 4px 0;
+        }
+        .treeUndoCollapseOption .treeUndoTitle {
+          color: #b8d4f3;
+        }
+        .treeUndoCollapseOption .treeUndoTask {
+          color: #7090b4;
+        }
         .treeContent {
           padding: 2px 2px 10px 2px;
           flex: 1 1 auto;
           min-height: 0;
+          min-width: 0;
+          width: 100%;
           height: 100%;
           max-height: 2000px;
           margin-top: 23px;
@@ -1431,9 +1452,12 @@ export default function ShopifyMenuItemsTree({
         .unmappedWrap {
           margin-top: 12px;
           min-height: 0;
+          min-width: 0;
+          width: 100%;
           max-height: 600px;
           display: grid;
           gap: 8px;
+          overflow-x: hidden;
         }
         .gemTreePanel.collapsed .treeContent {
           height: 0;
@@ -2044,10 +2068,26 @@ export default function ShopifyMenuItemsTree({
           border-color: #1db783;
           background: #11372d;
         }
-        :global(.iconBtn.danger:hover) {
-          border-color: #8b2d2d;
-          color: #ffb4b4;
+        :global(.iconBtn.danger) {
+          border-color: #7f2d2d;
+          color: #fca5a5;
           background: #2a1518;
+        }
+        :global(.iconBtn.danger:hover) {
+          border-color: #c53030;
+          color: #ffb4b4;
+          background: #3d1a1e;
+        }
+        :global(.iconBtn.eye-active:hover) {
+          border-color: #c53030;
+          color: #ffb4b4;
+          background: #3d1a1e;
+        }
+        :global(.iconBtn.deleteBtn:hover),
+        :global(.iconBtn.deleteBtn:active) {
+          border-color: #c53030;
+          color: #ffb4b4;
+          background: #3d1a1e;
         }
         :global(.treeAddRoot) {
           margin-top: 0;

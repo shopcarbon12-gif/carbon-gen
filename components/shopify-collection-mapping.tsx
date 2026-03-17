@@ -229,9 +229,9 @@ type UndoEntry = {
   afterNodes: MenuNode[];
   createdAt: number;
 };
-const TREE_PANEL_MIN_WIDTH = 363;
+const TREE_PANEL_MIN_WIDTH = 338;
 const TREE_PANEL_MAX_WIDTH = 1600;
-const TREE_PANEL_DEFAULT_WIDTH = 363;
+const TREE_PANEL_DEFAULT_WIDTH = 338;
 const TREE_PANEL_COLLAPSED_WIDTH = 60;
 const WORKSPACE_DEFAULT_HEIGHT = 850;
 const WORKSPACE_MIN_HEIGHT = 850;
@@ -328,6 +328,8 @@ export default function ShopifyCollectionMapping() {
   const [typeOptions, setTypeOptions] = useState<string[]>([]);
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [showTypesDropdown, setShowTypesDropdown] = useState(false);
+  const [showCommitMenu, setShowCommitMenu] = useState(false);
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
   const [activeQueueTab, setActiveQueueTab] = useState("all");
   const [activeReportTab, setActiveReportTab] = useState("master-audit");
   const [queueJobs, setQueueJobs] = useState<QueueJob[]>([]);
@@ -390,6 +392,7 @@ export default function ShopifyCollectionMapping() {
     pointerId: number | null;
   } | null>(null);
   const workspaceResizePointerClientY = useRef(0);
+  const workspaceResizeCurrentRef = useRef<number | null>(null);
   const wasProgressBusyRef = useRef(false);
   const workspaceUserResizedRef = useRef(false);
   const treePaneUserResizedRef = useRef(false);
@@ -399,6 +402,7 @@ export default function ShopifyCollectionMapping() {
   const tempNodeCounterRef = useRef(0);
   const undoCounterRef = useRef(0);
   const typesDropdownRef = useRef<HTMLDivElement | null>(null);
+  const commitMenuRef = useRef<HTMLDivElement | null>(null);
   const menuEditorComboboxRef = useRef<HTMLDivElement | null>(null);
   const loadDataAbortRef = useRef<AbortController | null>(null);
   const loadDataReqIdRef = useRef(0);
@@ -816,6 +820,8 @@ export default function ShopifyCollectionMapping() {
   }, [selectedUnmappedCollectionIds]);
 
   const hasSelectedAssignTargets = mappedSelectedNodeKeys.length > 0 || selectedDirectCollectionIds.length > 0;
+  const hasSelectedProducts = Object.values(selectedProducts).some(Boolean);
+  const selectedProductCount = Object.values(selectedProducts).filter(Boolean).length;
 
   const moduleSummary = useMemo(() => {
     let autoMapped = 0;
@@ -1202,9 +1208,10 @@ export default function ShopifyCollectionMapping() {
       }
       setWarning(String(json.warning || "").trim());
       setSelectedProducts((prev) => {
+        const nextIds = new Set((json.rows || []).map((r: { id: string }) => String(r.id)));
         const out: Record<string, boolean> = {};
         for (const key of Object.keys(prev)) {
-          if (prev[key]) out[key] = true;
+          if (prev[key] && nextIds.has(key)) out[key] = prev[key];
         }
         return out;
       });
@@ -1669,6 +1676,18 @@ export default function ShopifyCollectionMapping() {
   }, [showTypesDropdown]);
 
   useEffect(() => {
+    if (!showCommitMenu) return;
+    const onMouseDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (commitMenuRef.current?.contains(target)) return;
+      setShowCommitMenu(false);
+    };
+    window.addEventListener("mousedown", onMouseDown);
+    return () => window.removeEventListener("mousedown", onMouseDown);
+  }, [showCommitMenu]);
+
+  useEffect(() => {
     if (!showTypesDropdown) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setShowTypesDropdown(false);
@@ -1713,8 +1732,12 @@ export default function ShopifyCollectionMapping() {
       setTreePanelWidth((prev) => {
         const delta = targetWidth - prev;
         if (Math.abs(delta) <= 1) return targetWidth;
-        const easing = delta < 0 ? 0.2 : 0.3;
-        return Math.round(prev + delta * easing);
+        if (delta < 0) {
+          // shrink: follow mouse more closely — cap at 12px/frame for smoothness
+          return Math.round(prev + Math.max(delta, -12));
+        }
+        // expand: smooth ease-in lerp
+        return Math.round(prev + delta * 0.22);
       });
       rafId = window.requestAnimationFrame(tick);
     };
@@ -1756,9 +1779,9 @@ export default function ShopifyCollectionMapping() {
     if (!resizingWorkspaceHeight) return;
     let rafId = 0;
     const EDGE_THRESHOLD = 48;
-    const applyHeightFromPointer = () => {
+    const getTargetHeight = () => {
       const start = workspaceResizeStart.current;
-      if (!start) return;
+      if (!start) return null;
       const pageEl = pageScrollRef.current;
       const currentScrollTop =
         pageEl?.scrollTop ??
@@ -1770,11 +1793,10 @@ export default function ShopifyCollectionMapping() {
         workspaceResizePointerClientY.current -
         start.clientY +
         (currentScrollTop - start.scrollTop);
-      const nextHeight = Math.min(
+      return Math.min(
         WORKSPACE_MAX_HEIGHT,
         Math.max(WORKSPACE_MIN_HEIGHT, Math.round(start.height + deltaY))
       );
-      setWorkspaceHeight((prev) => (prev === nextHeight ? prev : nextHeight));
     };
     const tick = () => {
       const start = workspaceResizeStart.current;
@@ -1789,7 +1811,6 @@ export default function ShopifyCollectionMapping() {
         } else {
           window.scrollBy({ top: scrollStep, behavior: "auto" });
         }
-        applyHeightFromPointer();
       } else if (clientY < EDGE_THRESHOLD) {
         const distance = EDGE_THRESHOLD - clientY;
         const scrollStep = Math.max(16, Math.min(42, Math.round(distance * 0.85)));
@@ -1798,7 +1819,28 @@ export default function ShopifyCollectionMapping() {
         } else {
           window.scrollBy({ top: -scrollStep, behavior: "auto" });
         }
-        applyHeightFromPointer();
+      }
+      const targetHeight = getTargetHeight();
+      if (targetHeight !== null && Number.isFinite(targetHeight)) {
+        const prev = workspaceResizeCurrentRef.current ?? targetHeight;
+        if (workspaceResizeCurrentRef.current === null) workspaceResizeCurrentRef.current = prev;
+        const safePrev = Number.isFinite(prev) ? prev : targetHeight;
+        const delta = targetHeight - safePrev;
+        if (Math.abs(delta) <= 1) {
+          const clamped = Math.min(WORKSPACE_MAX_HEIGHT, Math.max(WORKSPACE_MIN_HEIGHT, targetHeight));
+          workspaceResizeCurrentRef.current = clamped;
+          setWorkspaceHeight(clamped);
+        } else {
+          const raw =
+            delta < 0
+              ? Math.round(safePrev + Math.max(delta, -3))
+              : Math.round(safePrev + delta * 0.15);
+          const next = Math.min(WORKSPACE_MAX_HEIGHT, Math.max(WORKSPACE_MIN_HEIGHT, raw));
+          if (Number.isFinite(next)) {
+            workspaceResizeCurrentRef.current = next;
+            setWorkspaceHeight(next);
+          }
+        }
       }
       rafId = window.requestAnimationFrame(tick);
     };
@@ -1809,9 +1851,14 @@ export default function ShopifyCollectionMapping() {
         return;
       }
       workspaceResizePointerClientY.current = event.clientY;
-      applyHeightFromPointer();
     };
     const stopResize = () => {
+      const targetHeight = getTargetHeight();
+      if (targetHeight !== null && Number.isFinite(targetHeight)) {
+        const clamped = Math.min(WORKSPACE_MAX_HEIGHT, Math.max(WORKSPACE_MIN_HEIGHT, targetHeight));
+        setWorkspaceHeight(clamped);
+      }
+      workspaceResizeCurrentRef.current = null;
       setResizingWorkspaceHeight(false);
       workspaceResizeStart.current = null;
     };
@@ -1822,7 +1869,12 @@ export default function ShopifyCollectionMapping() {
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", stopResize);
     window.addEventListener("pointercancel", stopResize);
-    applyHeightFromPointer();
+    const targetHeight = getTargetHeight();
+    if (targetHeight !== null && Number.isFinite(targetHeight)) {
+      const clamped = Math.min(WORKSPACE_MAX_HEIGHT, Math.max(WORKSPACE_MIN_HEIGHT, targetHeight));
+      workspaceResizeCurrentRef.current = clamped;
+      setWorkspaceHeight(clamped);
+    }
     rafId = window.requestAnimationFrame(tick);
     return () => {
       document.body.style.cursor = priorCursor;
@@ -3219,7 +3271,7 @@ export default function ShopifyCollectionMapping() {
       <section
         className={`card workspaceSection${workspaceHeight ? " workspaceSectionExpanded" : ""}`}
         style={
-          workspaceHeight
+          workspaceHeight != null && Number.isFinite(workspaceHeight)
             ? { height: `${Math.max(0, workspaceHeight + WORKSPACE_RESIZE_HANDLE_SPACE)}px` }
             : undefined
         }
@@ -3228,9 +3280,9 @@ export default function ShopifyCollectionMapping() {
           ref={workspaceGridRef}
           className="grid2 workspaceGridHost"
           style={{
-            gridTemplateColumns: `${treePaneCollapsed ? TREE_PANEL_COLLAPSED_WIDTH : treePanelWidth}px ${treePaneCollapsed ? 0 : 10}px minmax(0, 1fr)`,
-            gap: treePaneCollapsed ? "12px" : "2px",
-            height: workspaceHeight ? `${Math.max(0, workspaceHeight)}px` : "100%",
+            gridTemplateColumns: `${treePaneCollapsed ? TREE_PANEL_COLLAPSED_WIDTH : treePanelWidth}px ${treePaneCollapsed ? 0 : 11}px minmax(0, 1fr)`,
+            gap: treePaneCollapsed ? "12px" : "0",
+            height: workspaceHeight != null && Number.isFinite(workspaceHeight) ? `${Math.max(0, workspaceHeight)}px` : "100%",
             transition: resizingPanes
               ? "none"
               : "grid-template-columns 920ms cubic-bezier(0.12, 0.9, 0.22, 1), gap 920ms cubic-bezier(0.12, 0.9, 0.22, 1)",
@@ -3380,48 +3432,89 @@ export default function ShopifyCollectionMapping() {
                 Refresh Products
               </button>
             </div>
+            {hasSelectedProducts && (
+              <div className="topbar contextualBulkBar">
+                <span className="chip">
+                  {selectedProductCount} row{selectedProductCount !== 1 ? "s" : ""} selected
+                </span>
+                <button
+                  className="primary"
+                  type="button"
+                  onClick={() => void bulkAssign(true)}
+                  disabled={saving || !hasSelectedAssignTargets}
+                >
+                  Assign
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void bulkAssign(false)}
+                  disabled={saving || !hasSelectedAssignTargets}
+                >
+                  Unassign
+                </button>
+                <button type="button" className="primary" onClick={applySuggestionsForTargets} disabled={saving || loading}>
+                  Apply Suggestions
+                </button>
+                <button type="button" onClick={clearStagedChangesForTargets} disabled={saving || loading || executionBusy}>
+                  Clear Staged
+                </button>
+              </div>
+            )}
             <div className="topbar">
               <span className="chip">Selected Collections: {selectedNodeKeysWithParents.length + selectedDirectCollectionIds.length}</span>
               <span className="chip">Mapped Selected: {mappedSelectedNodeKeys.length}</span>
               <span className="chip">Unmapped Selected: {selectedDirectCollectionIds.length}</span>
               <span className="chip">Page {page} / {totalPages}</span>
-              <button
-                className="primary"
-                type="button"
-                onClick={() => void bulkAssign(true)}
-                disabled={saving || !hasSelectedAssignTargets}
-              >
-                Assign Checked Products
-              </button>
-              <button
-                type="button"
-                onClick={() => void bulkAssign(false)}
-                disabled={saving || !hasSelectedAssignTargets}
-              >
-                Unassign Checked Products
-              </button>
-            </div>
-            <div className="stage4BulkToolbar">
-              <button type="button" className="primary" onClick={applySuggestionsForTargets} disabled={saving || loading}>
-                Apply Suggestions
-              </button>
-              <button type="button" onClick={clearStagedChangesForTargets} disabled={saving || loading || executionBusy}>
-                Clear Staged Changes
-              </button>
-              <button type="button" onClick={pushSelectedScaffold} disabled={saving || loading || executionBusy}>
-                Push Selected
-              </button>
-              <button type="button" onClick={pushAllFinalChangesScaffold} disabled={saving || loading || executionBusy}>
-                Push All Final Changes
-              </button>
-              <button
-                type="button"
-                className="dangerBtn"
-                onClick={removeAllCollectionsScaffold}
-                disabled={saving || loading || executionBusy}
-              >
-                Remove All Collections
-              </button>
+              <div className="commitMenuWrap" ref={commitMenuRef}>
+                <button
+                  type="button"
+                  className="commitMenuTrigger"
+                  disabled={saving || loading || executionBusy}
+                  onClick={() => setShowCommitMenu((prev) => !prev)}
+                >
+                  Commit changes
+                  <span className="commitMenuArrow">{showCommitMenu ? "▲" : "▼"}</span>
+                </button>
+                {showCommitMenu && (
+                  <div className="commitMenu" role="menu">
+                    <div className="commitMenuSection">SAFE ACTIONS</div>
+                    <div className="commitMenuSafeActions">
+                      <button
+                        type="button"
+                        className="commitMenuItem"
+                        role="menuitem"
+                        onClick={() => { setShowCommitMenu(false); pushSelectedScaffold(); }}
+                        disabled={saving || loading || executionBusy}
+                      >
+                        <span className="commitMenuItemTitle">Push selected ({selectedProductCount})</span>
+                        <span className="commitMenuItemSub">Push only ready-to-push items</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="commitMenuItem"
+                        role="menuitem"
+                        onClick={() => { setShowCommitMenu(false); pushAllFinalChangesScaffold(); }}
+                        disabled={saving || loading || executionBusy}
+                      >
+                        <span className="commitMenuItemTitle">Push all final changes</span>
+                        <span className="commitMenuItemSub">All {rows.length} products will be updated</span>
+                      </button>
+                    </div>
+                    <div className="commitMenuDivider" />
+                    <div className="commitMenuSection">DESTRUCTIVE</div>
+                    <button
+                      type="button"
+                      className="commitMenuItem commitMenuDanger"
+                      role="menuitem"
+                      onClick={() => { setShowCommitMenu(false); setShowRemoveConfirm(true); }}
+                      disabled={saving || loading || executionBusy}
+                    >
+                      <span className="commitMenuItemTitle">⚠ Remove all collections</span>
+                      <span className="commitMenuItemSub">Clears all {rows.length} product assignments</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
             <div className="stage4ScaffoldGrid">
               <section className="stage4Panel">
@@ -3751,6 +3844,7 @@ export default function ShopifyCollectionMapping() {
               pointerId: event.pointerId,
             };
             workspaceResizePointerClientY.current = event.clientY;
+            workspaceResizeCurrentRef.current = Math.max(WORKSPACE_MIN_HEIGHT, currentHeight);
             setResizingWorkspaceHeight(true);
           }}
         >
@@ -4121,6 +4215,26 @@ export default function ShopifyCollectionMapping() {
             </div>
             <div className="topbar" style={{ justifyContent: "flex-end", marginTop: 12 }}>
               <button type="button" className="primary" onClick={() => setUndoResult(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {showRemoveConfirm ? (
+        <div className="previewOverlay" onClick={() => setShowRemoveConfirm(false)} role="dialog" aria-label="Confirm remove all collections">
+          <div className="editorModal" onClick={(event) => event.stopPropagation()}>
+            <h3 style={{ color: "#fca5a5" }}>⚠ Remove all collections?</h3>
+            <p className="muted" style={{ marginTop: 8 }}>
+              This will clear collection assignments for all <strong style={{ color: "#e2e8f0" }}>{rows.length} products</strong>. This action cannot be undone without a manual re-sync.
+            </p>
+            <div className="topbar" style={{ justifyContent: "flex-end", marginTop: 16, gap: 8 }}>
+              <button type="button" onClick={() => setShowRemoveConfirm(false)}>Cancel</button>
+              <button
+                type="button"
+                className="dangerBtn"
+                onClick={() => { setShowRemoveConfirm(false); removeAllCollectionsScaffold(); }}
+              >
+                Yes, Remove All
+              </button>
             </div>
           </div>
         </div>
@@ -4584,8 +4698,8 @@ export default function ShopifyCollectionMapping() {
         }
         .grid2 {
           display: grid;
-          grid-template-columns: 300px 10px minmax(0, 1fr);
-          gap: 2px;
+          grid-template-columns: 338px 11px minmax(0, 1fr);
+          gap: 0;
           align-items: stretch;
           height: 100%;
           min-height: 0;
@@ -4601,6 +4715,7 @@ export default function ShopifyCollectionMapping() {
           min-height: 0;
           height: 100%;
           overflow: hidden;
+          min-width: 0;
           display: flex;
           flex-direction: column;
           padding: 0 !important;
@@ -4660,6 +4775,7 @@ export default function ShopifyCollectionMapping() {
         .treePaneHost :global(.unmappedWrap) {
           opacity: 1;
           transform: none;
+          overflow-x: hidden;
         }
         .treePaneHost.treePaneHostCollapsed :global(.treeContent),
         .treePaneHost.treePaneHostCollapsed :global(.unmappedWrap) {
@@ -4679,9 +4795,10 @@ export default function ShopifyCollectionMapping() {
           display: flex;
           align-items: center;
           justify-content: center;
-          width: 10px;
-          min-width: 10px;
-          max-width: 10px;
+          width: 5px;
+          min-width: 5px;
+          max-width: 5px;
+          margin: 0 3px;
           justify-self: center;
           cursor: col-resize;
           border-radius: 999px;
@@ -4696,8 +4813,8 @@ export default function ShopifyCollectionMapping() {
             opacity 920ms cubic-bezier(0.12, 0.9, 0.22, 1);
         }
         .paneDividerGrip {
-          width: 10px;
-          min-width: 10px;
+          width: 5px;
+          min-width: 5px;
           height: clamp(96px, 22%, 160px);
           min-height: 96px;
           border-radius: 999px;
@@ -4716,6 +4833,9 @@ export default function ShopifyCollectionMapping() {
         }
         .paneDivider.paneDividerCollapsed {
           width: 0;
+          min-width: 0;
+          max-width: 0;
+          margin: 0;
           opacity: 0;
           pointer-events: none;
         }
@@ -4811,6 +4931,123 @@ export default function ShopifyCollectionMapping() {
           padding: 10px 12px;
           border-bottom: 1px solid #2a3a56;
           background: #0d182c;
+        }
+        .contextualBulkBar {
+          background: #0f1e38;
+          border-bottom: 1px solid #2a3a56;
+          padding: 8px 12px;
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+          align-items: center;
+          animation: bulkBarIn 0.18s ease;
+        }
+        @keyframes bulkBarIn {
+          from { opacity: 0; transform: translateY(-4px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .commitMenuWrap {
+          position: relative;
+        }
+        .commitMenuTrigger {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          min-height: 36px;
+          padding: 0 14px;
+          border-radius: 10px;
+          border: 1px solid #22c55e;
+          background: #166534;
+          color: #dcfce7;
+          font-weight: 700;
+          font-size: 12px;
+          cursor: pointer;
+          transition: background 0.15s;
+        }
+        .commitMenuTrigger:hover:not(:disabled) {
+          background: #15803d;
+        }
+        .commitMenuTrigger:disabled {
+          opacity: 1;
+          cursor: not-allowed;
+          border-color: #22c55e;
+          background: #166534;
+          color: #dcfce7;
+        }
+        .commitMenuArrow {
+          font-size: 10px;
+          opacity: 0.7;
+        }
+        .commitMenu {
+          position: absolute;
+          top: calc(100% + 6px);
+          left: 0;
+          min-width: 280px;
+          z-index: 50;
+          border: 1px solid #2a3a56;
+          border-radius: 12px;
+          background: #0d1628;
+          box-shadow: 0 14px 34px rgba(0,0,0,0.5);
+          padding: 8px;
+          display: flex;
+          flex-direction: column;
+          gap: 0;
+        }
+        .commitMenuSection {
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.06em;
+          color: #5a7a9e;
+          text-transform: uppercase;
+          padding: 6px 8px 2px;
+        }
+        .commitMenuSafeActions {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+        .commitMenuItem {
+          width: 100%;
+          text-align: left;
+          min-height: 44px;
+          height: 44px;
+          padding: 0 12px;
+          border-radius: 8px;
+          border: 0;
+          background: #13233d;
+          cursor: pointer;
+          display: grid;
+          grid-template-rows: auto auto;
+          align-content: center;
+          gap: 2px;
+          transition: background 0.13s;
+        }
+        .commitMenuItem:hover:not(:disabled) {
+          background: #1a3050;
+        }
+        .commitMenuItem:disabled {
+          opacity: 0.45;
+          cursor: not-allowed;
+        }
+        .commitMenuItemTitle {
+          font-size: 13px;
+          font-weight: 700;
+          color: #e2e8f0;
+        }
+        .commitMenuItemSub {
+          font-size: 11px;
+          color: #7a96b8;
+        }
+        .commitMenuDivider {
+          height: 1px;
+          background: #1e3050;
+          margin: 4px 0;
+        }
+        .commitMenuDanger .commitMenuItemTitle {
+          color: #fca5a5;
+        }
+        .commitMenuDanger:hover:not(:disabled) {
+          background: #2a1518;
         }
         .dangerBtn {
           border-color: #ef4444;
