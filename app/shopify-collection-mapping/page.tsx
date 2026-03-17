@@ -1,5 +1,6 @@
 import ShopifyCollectionMapping from "@/components/shopify-collection-mapping";
 import { notFound } from "next/navigation";
+import type { CSSProperties } from "react";
 
 export default function ShopifyCollectionMappingPage() {
   const disabledByEnv =
@@ -9,13 +10,15 @@ export default function ShopifyCollectionMappingPage() {
     notFound();
   }
 
+  const standaloneRouteStyle = {
+    "--collection-mapping-shell-content-top-offset": "70px",
+    marginTop: "-30px",
+  } as CSSProperties;
+
   return (
     <div
       className="collection-mapping-route collection-mapping-standalone-route"
-      style={{
-        ["--collection-mapping-shell-content-top-offset" as "--collection-mapping-shell-content-top-offset"]: "70px",
-        marginTop: "-30px",
-      }}
+      style={standaloneRouteStyle}
     >
       <ShopifyCollectionMapping />
     </div>

@@ -1745,10 +1745,9 @@ export default function ShopifyCollectionMapping() {
       rafId = window.requestAnimationFrame(tick);
     };
     const onPointerMove = (event: PointerEvent) => {
-      if (
-        workspaceResizeStart.current?.pointerId !== null &&
-        event.pointerId !== workspaceResizeStart.current.pointerId
-      ) {
+      const start = workspaceResizeStart.current;
+      if (!start) return;
+      if (start.pointerId !== null && event.pointerId !== start.pointerId) {
         return;
       }
       workspaceResizePointerClientY.current = event.clientY;
