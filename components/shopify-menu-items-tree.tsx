@@ -1180,12 +1180,12 @@ export default function ShopifyMenuItemsTree({
             height 920ms cubic-bezier(0.12, 0.9, 0.22, 1);
         }
         .gemTreePanel.collapsed {
-          padding: 0;
+          padding: 12px 10px 0 12px;
           width: 100%;
           height: 100%;
           display: flex;
-          align-items: center;
-          justify-content: center;
+          align-items: flex-start;
+          justify-content: flex-start;
         }
         .treeSearchBar {
           display: grid;
@@ -1203,6 +1203,17 @@ export default function ShopifyMenuItemsTree({
             width 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
             margin 920ms cubic-bezier(0.12, 0.9, 0.22, 1);
         }
+        .treeSearchBar > .treeCollapseBtn,
+        .treeSearchBar > .treeRefreshBtn,
+        .treeSearchBar > .treeUndoBtn,
+        .treeSearchBar > .treeSaveBtn,
+        .treeSearchBar > .treeSearchInput {
+          align-self: center;
+          justify-self: center;
+        }
+        .treeSearchBar > .treeSearchInput {
+          justify-self: stretch;
+        }
         .treeCollapseBtn {
           width: 38px;
           height: 38px;
@@ -1216,6 +1227,10 @@ export default function ShopifyMenuItemsTree({
           display: grid;
           place-items: center;
           line-height: 1;
+          opacity: 1 !important;
+          visibility: visible !important;
+          position: relative;
+          z-index: 5;
         }
         .treeCollapseBtn:hover {
           background: rgba(255, 255, 255, 0.72);
@@ -1402,6 +1417,7 @@ export default function ShopifyMenuItemsTree({
           min-height: 0;
           height: 100%;
           max-height: 2000px;
+          margin-top: 23px;
           overflow-y: auto;
           overflow-x: hidden;
           scrollbar-gutter: stable;
@@ -1422,6 +1438,7 @@ export default function ShopifyMenuItemsTree({
         .gemTreePanel.collapsed .treeContent {
           height: 0;
           max-height: 0;
+          margin-top: 0;
           padding-top: 0;
           padding-bottom: 0;
         }
@@ -1444,7 +1461,7 @@ export default function ShopifyMenuItemsTree({
         }
         .unmappedCount {
           border: 1px solid #3a4b61;
-          border-radius: 999px;
+          border-radius: 8px;
           padding: 1px 7px;
           color: #aec3de;
           font-size: 11px;
@@ -1459,28 +1476,29 @@ export default function ShopifyMenuItemsTree({
           width: 100%;
           min-height: 38px;
           border-radius: 8px;
-          border: 1px solid #44556f;
-          background: #0f1a2e;
-          color: #d6e3f4;
+          border: 1px solid #315f92;
+          background: linear-gradient(180deg, #10284b 0%, #0c1d39 100%);
+          color: #e6f0ff;
           text-align: left;
           padding: 0 10px;
           display: inline-flex;
           align-items: center;
           gap: 8px;
           cursor: pointer;
-          box-shadow: 0 1px 0 rgba(15, 23, 42, 0.24), 0 6px 16px rgba(2, 6, 23, 0.28);
+          box-shadow: 0 1px 0 rgba(8, 17, 33, 0.25), 0 8px 18px rgba(2, 6, 23, 0.3);
         }
         .unmappedCard.editing {
           min-height: 38px;
           height: 38px;
         }
         .unmappedCard:hover {
-          background: #13233d;
-          border-color: #5f789c;
+          background: linear-gradient(180deg, #153765 0%, #112c55 100%);
+          border-color: #5f9ed7;
         }
         .unmappedCard.selected {
-          border-color: #87a8da;
-          box-shadow: inset 0 0 0 1px rgba(120, 153, 210, 0.38);
+          border-color: #7ec0ff;
+          background: linear-gradient(180deg, #1c4f87 0%, #153f71 100%);
+          box-shadow: inset 0 0 0 1px rgba(149, 202, 255, 0.45);
         }
         .unmappedDragHandle {
           color: #7a889f;
@@ -1614,16 +1632,16 @@ export default function ShopifyMenuItemsTree({
           z-index: 10;
           width: 100%;
           box-sizing: border-box;
-          background: #0f1a2e;
-          border: 1px solid #44556f;
-          border-right: 1px solid #44556f !important;
+          background: linear-gradient(180deg, #10284b 0%, #0c1d39 100%);
+          border: 1px solid #315f92;
+          border-right: 1px solid #315f92 !important;
           border-radius: 8px;
           min-height: 42px;
           padding: 0 10px;
           display: flex;
           align-items: center;
           gap: 10px;
-          box-shadow: 0 1px 0 rgba(15, 23, 42, 0.24), 0 6px 16px rgba(2, 6, 23, 0.28);
+          box-shadow: 0 1px 0 rgba(8, 17, 33, 0.25), 0 8px 18px rgba(2, 6, 23, 0.3);
         }
         :global(.treeRow.editing) {
           min-height: 100px;
@@ -1654,7 +1672,7 @@ export default function ShopifyMenuItemsTree({
           padding-top: 0;
         }
         :global(.treeLabel) {
-          color: #e6edf7;
+          color: #f0f7ff;
           font-size: 13px;
           font-weight: 600;
           line-height: 1.15;
@@ -1663,7 +1681,7 @@ export default function ShopifyMenuItemsTree({
           text-overflow: ellipsis;
         }
         :global(.treeTargetLabel) {
-          color: #8fa6c4;
+          color: #b8d4f3;
           font-size: 11px;
           line-height: 1.1;
           white-space: nowrap;
@@ -1894,12 +1912,13 @@ export default function ShopifyMenuItemsTree({
           min-width: 0 !important;
         }
         :global(.treeRow:hover) {
-          background: #13233d;
-          border-color: #5f789c;
+          background: linear-gradient(180deg, #153765 0%, #112c55 100%);
+          border-color: #5f9ed7;
         }
         :global(.treeRow.active) {
-          border-color: #87a8da;
-          box-shadow: inset 0 0 0 1px rgba(120, 153, 210, 0.38);
+          border-color: #7ec0ff;
+          background: linear-gradient(180deg, #1c4f87 0%, #153f71 100%);
+          box-shadow: inset 0 0 0 1px rgba(149, 202, 255, 0.45);
         }
         :global(.treeRow.hidden-node) {
           opacity: 0.72;
@@ -1958,7 +1977,7 @@ export default function ShopifyMenuItemsTree({
           border: 0;
           padding: 0;
           background: transparent;
-          color: #c2d2e8;
+          color: #b8d7f8;
           display: inline-flex;
           align-items: center;
           justify-content: center;
@@ -1972,7 +1991,7 @@ export default function ShopifyMenuItemsTree({
           flex: 0 0 auto;
         }
         :global(.dragHandle) {
-          color: #7a889f;
+          color: #9bc0e8;
           cursor: grab;
         }
         :global(.dragHandle svg circle) {
@@ -2002,10 +2021,10 @@ export default function ShopifyMenuItemsTree({
           height: 24px;
           min-height: 24px;
           padding: 0;
-          border: 1px solid #44556f;
+          border: 1px solid #4d78a8;
           border-radius: 8px;
-          background: #0f1a2e;
-          color: #c7d3e4;
+          background: #112a4c;
+          color: #d6e7fb;
           display: inline-flex;
           align-items: center;
           justify-content: center;
@@ -2014,8 +2033,8 @@ export default function ShopifyMenuItemsTree({
           fill: currentColor;
         }
         :global(.iconBtn:hover) {
-          border-color: #5f789c;
-          background: #13233d;
+          border-color: #74afdf;
+          background: #19406f;
         }
         :global(.iconBtn.success) {
           border-color: #168e69;
@@ -2041,28 +2060,28 @@ export default function ShopifyMenuItemsTree({
         :global(.treeCard) {
           width: 100%;
           box-sizing: border-box;
-          border-right: 1px solid #44556f !important;
+          border-right: 1px solid #315f92 !important;
         }
         :global(.treeAddBtn),
         :global(.treeAddChildBtn) {
           width: 100%;
           min-height: 42px;
           border-radius: 8px;
-          border: 1px solid #44556f;
-          background: #0f1a2e;
-          color: #9ac0ff;
+          border: 1px solid #315f92;
+          background: linear-gradient(180deg, #10284b 0%, #0c1d39 100%);
+          color: #b8d7f8;
           display: inline-flex;
           align-items: center;
           gap: 8px;
           justify-content: flex-start;
           padding: 0 10px;
           font-size: 13px;
-          box-shadow: 0 1px 0 rgba(15, 23, 42, 0.24), 0 6px 16px rgba(2, 6, 23, 0.28);
+          box-shadow: 0 1px 0 rgba(8, 17, 33, 0.25), 0 8px 18px rgba(2, 6, 23, 0.3);
         }
         :global(.treeAddBtn:hover),
         :global(.treeAddChildBtn:hover) {
-          background: #13233d;
-          border-color: #5f789c;
+          background: linear-gradient(180deg, #153765 0%, #112c55 100%);
+          border-color: #5f9ed7;
         }
         :global(.treeAddIcon) {
           width: 20px;
@@ -2070,7 +2089,7 @@ export default function ShopifyMenuItemsTree({
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          color: #7fb2ff;
+          color: #a6cdff;
           line-height: 1;
         }
         :global(.treeAddIcon svg) {

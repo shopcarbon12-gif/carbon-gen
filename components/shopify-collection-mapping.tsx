@@ -4350,7 +4350,7 @@ export default function ShopifyCollectionMapping() {
           width: 100%;
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: 8px;
           padding: 0 10px;
           position: relative;
           overflow: hidden;
@@ -4371,12 +4371,11 @@ export default function ShopifyCollectionMapping() {
           color: #dbeafe;
         }
         .noticeText {
-          font-size: 16px;
-          line-height: 1;
-          font-weight: 800;
+          flex: 1 1 auto;
+          font-size: clamp(11px, 1.05vw, 14px);
+          line-height: 1.1;
+          font-weight: 700;
           min-width: 0;
-          overflow: hidden;
-          text-overflow: ellipsis;
           white-space: nowrap;
         }
         .noticeProgressTrack {
@@ -4396,12 +4395,12 @@ export default function ShopifyCollectionMapping() {
           animation: noticeProgressSlide 1.05s linear infinite;
         }
         .noticeCloseBtn {
-          margin-left: auto;
+          margin-left: 6px;
           min-height: 22px;
           height: 22px;
           width: 22px;
           min-width: 22px;
-          border-radius: 999px;
+          border-radius: 8px;
           border: 1px solid rgba(226, 232, 240, 0.4);
           background: rgba(15, 23, 42, 0.35);
           color: #cbd5e1;
@@ -4465,6 +4464,9 @@ export default function ShopifyCollectionMapping() {
           flex-wrap: wrap;
           align-items: center;
           padding-left: 12px;
+        }
+        .productControls + .topbar {
+          margin-top: 10px;
         }
         input,
         select,
@@ -5105,14 +5107,14 @@ export default function ShopifyCollectionMapping() {
           vertical-align: middle;
         }
         tbody tr {
-          height: 120px;
-          min-height: 120px;
-          max-height: 120px;
+          height: 100px;
+          min-height: 100px;
+          max-height: 100px;
         }
         tbody td {
-          height: 120px;
-          min-height: 120px;
-          max-height: 120px;
+          height: 100px;
+          min-height: 100px;
+          max-height: 100px;
           box-sizing: border-box;
           vertical-align: middle;
           overflow: hidden;
@@ -5272,7 +5274,7 @@ export default function ShopifyCollectionMapping() {
           justify-content: center;
           min-height: 24px;
           padding: 0 8px;
-          border-radius: 999px;
+          border-radius: 8px;
           border: 1px solid transparent;
           font-size: 12px;
           font-weight: 700;
@@ -5328,7 +5330,7 @@ export default function ShopifyCollectionMapping() {
           border: 1px solid #46628b;
           background: #142845;
           color: #d9e8ff;
-          border-radius: 999px;
+          border-radius: 8px;
           font-size: 12px;
           padding: 3px 8px;
           cursor: pointer;
@@ -5404,7 +5406,7 @@ export default function ShopifyCollectionMapping() {
           width: 30px;
           height: 30px;
           min-height: 30px;
-          border-radius: 999px;
+          border-radius: 8px;
           border: 1px solid #3b4b63;
           background: #0f1a2f;
           color: #e5e7eb;
@@ -5460,7 +5462,7 @@ export default function ShopifyCollectionMapping() {
           width: 34px;
           height: 34px;
           min-height: 0;
-          border-radius: 999px;
+          border-radius: 8px;
           border: 2px solid rgba(255, 255, 255, 0.7);
           background: rgba(0, 0, 0, 0.72);
           color: #fff;
