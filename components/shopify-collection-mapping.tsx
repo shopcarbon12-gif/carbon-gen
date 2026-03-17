@@ -223,6 +223,7 @@ const TREE_PANEL_MAX_WIDTH = 1600;
 const TREE_PANEL_DEFAULT_WIDTH = 400;
 const WORKSPACE_DEFAULT_HEIGHT = 800;
 const WORKSPACE_MIN_HEIGHT = 420;
+const WORKSPACE_TOP_ANCHOR_OFFSET = 37;
 const WORKSPACE_MAX_HEIGHT = 5000;
 type MoveDropTarget = { targetKey: string; position: DropPosition } | null;
 const MENU_LINK_TYPE_OPTIONS: Array<{ value: MenuLinkType; label: string }> = [
@@ -423,7 +424,7 @@ export default function ShopifyCollectionMapping() {
     if (noticeState) setNoticeHidden(false);
   }, [noticeState?.tone, noticeState?.message]);
 
-  const noticeWorkspaceOffset = noticeState && !noticeHidden ? 38 : 0;
+  const noticeWorkspaceOffset = WORKSPACE_TOP_ANCHOR_OFFSET;
 
   function withShopContext(input: Record<string, unknown>) {
     if (!activeShop) return input;
@@ -4015,7 +4016,7 @@ export default function ShopifyCollectionMapping() {
       <style jsx>{`
         .page {
           --shell-content-top-offset: var(--collection-mapping-shell-content-top-offset, 100px);
-          --notice-bar-height: 36px;
+          --notice-bar-height: 37px;
           --notice-gap-to-workspace: 0px;
           width: min(100%, calc(100vw - 24px));
           max-width: 100%;
@@ -4034,7 +4035,7 @@ export default function ShopifyCollectionMapping() {
           font-family: Inter, Arial, sans-serif;
         }
         .pageNoticeFrame {
-          --notice-bar-height: 36px;
+          --notice-bar-height: 37px;
           --notice-gap-to-workspace: 0px;
           width: min(100%, calc(100vw - 24px));
           max-width: 100%;
@@ -4108,14 +4109,15 @@ export default function ShopifyCollectionMapping() {
           font-size: 12px;
         }
         .noticeSlot {
-          min-height: calc(var(--notice-bar-height) + var(--notice-gap-to-workspace));
-          position: sticky;
-          top: 0;
+          min-height: var(--notice-bar-height);
+          height: var(--notice-bar-height);
+          position: relative;
           z-index: 14;
           display: flex;
           align-items: stretch;
-          padding-bottom: var(--notice-gap-to-workspace);
+          padding-bottom: 0;
           background: transparent;
+          overflow: hidden;
         }
         .noticeBar {
           border: 1px solid #2a3a56;
@@ -4124,6 +4126,7 @@ export default function ShopifyCollectionMapping() {
           color: #dbe7f8;
           min-height: var(--notice-bar-height);
           height: var(--notice-bar-height);
+          box-sizing: border-box;
           width: 100%;
           display: flex;
           align-items: center;
