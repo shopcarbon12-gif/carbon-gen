@@ -229,9 +229,9 @@ type UndoEntry = {
   afterNodes: MenuNode[];
   createdAt: number;
 };
-const TREE_PANEL_MIN_WIDTH = 338;
+const TREE_PANEL_MIN_WIDTH = 339;
 const TREE_PANEL_MAX_WIDTH = 1600;
-const TREE_PANEL_DEFAULT_WIDTH = 338;
+const TREE_PANEL_DEFAULT_WIDTH = 339;
 const TREE_PANEL_COLLAPSED_WIDTH = 60;
 const WORKSPACE_DEFAULT_HEIGHT = 850;
 const WORKSPACE_MIN_HEIGHT = 850;
@@ -1733,8 +1733,8 @@ export default function ShopifyCollectionMapping() {
         const delta = targetWidth - prev;
         if (Math.abs(delta) <= 1) return targetWidth;
         if (delta < 0) {
-          // shrink: follow mouse more closely — cap at 12px/frame for smoothness
-          return Math.round(prev + Math.max(delta, -12));
+          // shrink: faster follow — cap at 18px/frame
+          return Math.round(prev + Math.max(delta, -18));
         }
         // expand: smooth ease-in lerp
         return Math.round(prev + delta * 0.22);
@@ -2396,6 +2396,11 @@ export default function ShopifyCollectionMapping() {
       ...prev,
       [nodeKey]: prev[nodeKey] === false ? true : false,
     }));
+  }
+
+  function collapseAllTreeCards() {
+    // Collapse all opened category drawers without collapsing the whole tree panel.
+    setExpandedNodes({});
   }
 
   function toggleNodeVisibility(nodeKey: string) {
@@ -3303,6 +3308,7 @@ export default function ShopifyCollectionMapping() {
               treeSearch={treeSearch}
               collapsed={treePaneCollapsed}
               onToggleCollapse={() => setTreePaneCollapsed((prev) => !prev)}
+              onCollapseTreeCards={collapseAllTreeCards}
               onTreeSearchChange={setTreeSearch}
               onTreeSearchSubmit={expandTreeForSearchResults}
               onRefreshTree={() => {
@@ -4698,7 +4704,7 @@ export default function ShopifyCollectionMapping() {
         }
         .grid2 {
           display: grid;
-          grid-template-columns: 338px 11px minmax(0, 1fr);
+          grid-template-columns: 339px 11px minmax(0, 1fr);
           gap: 0;
           align-items: stretch;
           height: 100%;
@@ -4719,6 +4725,8 @@ export default function ShopifyCollectionMapping() {
           display: flex;
           flex-direction: column;
           padding: 0 !important;
+          position: relative;
+          z-index: 40;
           transform-origin: left top;
           transition:
             width 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
@@ -4736,6 +4744,16 @@ export default function ShopifyCollectionMapping() {
         .treePaneHost :global(.gemTreePanel) {
           opacity: 1;
           transform: none;
+          padding-left: 13px !important;
+          padding-right: 13px !important;
+        }
+        .treePaneHost :global(.treeSearchBar),
+        .treePaneHost :global(.treeContent),
+        .treePaneHost :global(.unmappedWrap) {
+          box-sizing: border-box !important;
+          width: 100% !important;
+          max-width: 100% !important;
+          min-width: 0 !important;
         }
         .treePaneHost.treePaneHostCollapsed {
           flex: 0 0 auto;
@@ -4776,6 +4794,42 @@ export default function ShopifyCollectionMapping() {
           opacity: 1;
           transform: none;
           overflow-x: hidden;
+          padding-left: 0 !important;
+          padding-right: 0 !important;
+          scrollbar-gutter: auto !important;
+        }
+        .treePaneHost :global(.unmappedList) {
+          margin: 0 !important;
+          list-style: none !important;
+          padding-left: 0 !important;
+          padding-right: 0 !important;
+          width: 100% !important;
+          max-width: 100% !important;
+          min-width: 0 !important;
+          box-sizing: border-box !important;
+        }
+        .treePaneHost :global(.unmappedCard) {
+          inline-size: 100% !important;
+          width: 100% !important;
+          max-width: 100% !important;
+          min-width: 0 !important;
+          justify-self: stretch !important;
+          box-sizing: border-box !important;
+        }
+        .treePaneHost :global(.treeRow),
+        .treePaneHost :global(.treeAddBtn),
+        .treePaneHost :global(.unmappedCard) {
+          box-sizing: border-box !important;
+          width: 100% !important;
+          max-width: 100% !important;
+        }
+        .treePaneHost :global(.unmappedHead) {
+          margin: 0 !important;
+          padding-left: 0 !important;
+          padding-right: 0 !important;
+        }
+        .treePaneHost :global(.unmappedCount) {
+          margin-right: 0 !important;
         }
         .treePaneHost.treePaneHostCollapsed :global(.treeContent),
         .treePaneHost.treePaneHostCollapsed :global(.unmappedWrap) {
@@ -4791,6 +4845,18 @@ export default function ShopifyCollectionMapping() {
           flex-direction: column;
           overflow: hidden;
         }
+        .grid2 > .card.panel.treePaneHost:not(.treePaneHostCollapsed) {
+          border: 0 !important;
+          outline: 1px solid #2a3a56;
+          outline-offset: -1px;
+          box-sizing: border-box;
+          position: relative;
+          z-index: 40;
+        }
+        .grid2 > .card.panel.productPanel {
+          position: relative;
+          z-index: 10;
+        }
         .paneDivider {
           display: flex;
           align-items: center;
@@ -4801,6 +4867,8 @@ export default function ShopifyCollectionMapping() {
           margin: 0 3px;
           justify-self: center;
           cursor: col-resize;
+          position: relative;
+          z-index: 45;
           border-radius: 999px;
           outline: none;
           overflow: hidden;
@@ -4956,9 +5024,9 @@ export default function ShopifyCollectionMapping() {
           min-height: 36px;
           padding: 0 14px;
           border-radius: 10px;
-          border: 1px solid #22c55e;
-          background: #166534;
-          color: #dcfce7;
+          border: 1px solid #22c55e !important;
+          background: #166534 !important;
+          color: #dcfce7 !important;
           font-weight: 700;
           font-size: 12px;
           cursor: pointer;
@@ -4970,9 +5038,9 @@ export default function ShopifyCollectionMapping() {
         .commitMenuTrigger:disabled {
           opacity: 1;
           cursor: not-allowed;
-          border-color: #22c55e;
-          background: #166534;
-          color: #dcfce7;
+          border-color: #22c55e !important;
+          background: #166534 !important;
+          color: #dcfce7 !important;
         }
         .commitMenuArrow {
           font-size: 10px;
@@ -5004,7 +5072,7 @@ export default function ShopifyCollectionMapping() {
         .commitMenuSafeActions {
           display: flex;
           flex-direction: column;
-          gap: 6px;
+          gap: 8px;
         }
         .commitMenuItem {
           width: 100%;
@@ -5041,13 +5109,21 @@ export default function ShopifyCollectionMapping() {
         .commitMenuDivider {
           height: 1px;
           background: #1e3050;
-          margin: 4px 0;
+          margin: 8px 0;
+        }
+        .commitMenuDanger {
+          background: #3f181d;
+          border: 1px solid #7f1d1d;
         }
         .commitMenuDanger .commitMenuItemTitle {
-          color: #fca5a5;
+          color: #f87171;
+        }
+        .commitMenuDanger .commitMenuItemSub {
+          color: #7a96b8;
         }
         .commitMenuDanger:hover:not(:disabled) {
-          background: #2a1518;
+          background: #4c1d1d;
+          border-color: #991b1b;
         }
         .dangerBtn {
           border-color: #ef4444;
@@ -5117,7 +5193,7 @@ export default function ShopifyCollectionMapping() {
         }
         .productRefreshBtn,
         .typesDropdownBtn,
-        .topbar button:not(.primary):not(.dangerBtn),
+        .topbar button:not(.primary):not(.dangerBtn):not(.commitMenuTrigger),
         .pagerBar > button,
         .pagerNav > button {
           border-color: #3c4f70;
@@ -5126,13 +5202,13 @@ export default function ShopifyCollectionMapping() {
         }
         .productRefreshBtn:hover:not(:disabled),
         .typesDropdownBtn:hover:not(:disabled),
-        .topbar button:not(.primary):not(.dangerBtn):hover:not(:disabled),
+        .topbar button:not(.primary):not(.dangerBtn):not(.commitMenuTrigger):hover:not(:disabled),
         .pagerBar > button:hover:not(:disabled),
         .pagerNav > button:hover:not(:disabled) {
           border-color: #5f789c;
           background: #1b3f73;
         }
-        .topbar button:not(.primary):not(.dangerBtn) {
+        .topbar button:not(.primary):not(.dangerBtn):not(.commitMenuTrigger) {
           min-height: 36px;
           border-radius: 10px;
           padding: 0 12px;

@@ -76,6 +76,7 @@ type ShopifyMenuItemsTreeProps = {
   treeSearch: string;
   collapsed: boolean;
   onToggleCollapse: () => void;
+  onCollapseTreeCards: () => void;
   onTreeSearchChange: (value: string) => void;
   onTreeSearchSubmit: (value: string) => void;
   onRefreshTree: () => void;
@@ -538,6 +539,7 @@ export default function ShopifyMenuItemsTree({
   treeSearch,
   collapsed,
   onToggleCollapse,
+  onCollapseTreeCards,
   onTreeSearchChange,
   onTreeSearchSubmit,
   onRefreshTree,
@@ -916,7 +918,7 @@ export default function ShopifyMenuItemsTree({
           className="treeUndoBtn"
           aria-label={undoEntries.length < 1 ? "Collapse tree cards" : "Undo history"}
           title={undoEntries.length < 1 ? "Collapse tree cards" : "Undo history"}
-          onClick={undoEntries.length < 1 ? onToggleCollapse : onUndoMenuToggle}
+          onClick={undoEntries.length < 1 ? onCollapseTreeCards : onUndoMenuToggle}
           disabled={saving}
         >
           ↶
@@ -951,7 +953,7 @@ export default function ShopifyMenuItemsTree({
             <button
               type="button"
               className="treeUndoOption treeUndoCollapseOption"
-              onClick={() => { onUndoMenuToggle(); onToggleCollapse(); }}
+              onClick={() => { onUndoMenuToggle(); onCollapseTreeCards(); }}
               role="menuitem"
             >
               <span className="treeUndoTask">Menu</span>
