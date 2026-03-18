@@ -1482,7 +1482,7 @@ export default function ShopifyCollectionMapping() {
     }
     const exists = rows.some((row) => row.id === activeRowId);
     if (!exists) {
-      setActiveRowId(rows[0].id);
+      setActiveRowId("");
     }
   }, [rows, activeRowId]);
 
@@ -2396,6 +2396,19 @@ export default function ShopifyCollectionMapping() {
       ...prev,
       [nodeKey]: prev[nodeKey] === false ? true : false,
     }));
+  }
+
+  function toggleRowSelectionFromRowClick(rowId: string) {
+    const isSelected = Boolean(selectedProducts[rowId]);
+    setSelectedProducts((prev) => ({
+      ...prev,
+      [rowId]: !isSelected,
+    }));
+    if (isSelected) {
+      if (activeRowId === rowId) setActiveRowId("");
+      return;
+    }
+    setActiveRowId(rowId);
   }
 
   function collapseAllTreeCards() {
@@ -3698,13 +3711,23 @@ export default function ShopifyCollectionMapping() {
                         <tr
                           key={row.id}
                           className={`${isActiveRow ? "activeProductRow" : ""}${isManualReviewRow ? " manualReviewRow" : ""}`}
-                          onClick={() => setActiveRowId(row.id)}
+                          onClick={() => toggleRowSelectionFromRowClick(row.id)}
                         >
                           <td className="center">
                             <input
                               type="checkbox"
                               checked={Boolean(selectedProducts[row.id])}
-                              onChange={(event) => setSelectedProducts((prev) => ({ ...prev, [row.id]: event.target.checked }))}
+                              onClick={(event) => event.stopPropagation()}
+                              onChange={(event) => {
+                                event.stopPropagation();
+                                const checked = event.target.checked;
+                                setSelectedProducts((prev) => ({ ...prev, [row.id]: checked }));
+                                if (checked) {
+                                  setActiveRowId(row.id);
+                                } else if (activeRowId === row.id) {
+                                  setActiveRowId("");
+                                }
+                              }}
                             />
                           </td>
                           <td className="center imgCell">
