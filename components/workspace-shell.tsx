@@ -61,6 +61,7 @@ const picturesGenSubItems: NavItem[] = [
 
 const navItems: NavItem[] = [
   { href: "/studio/seo", label: "SEO Manager" },
+  { href: "/accessibility", label: "Accessibility" },
   { href: "/studio/rfid-price-tag", label: "RFID Price Tag" },
   { href: "/studio/lightspeed-catalog", label: "Lightspeed Catalog" },
   { href: SHOPIFY_MAPPING_INVENTORY_ROOT, label: "Shopify Mapping Inventory" },

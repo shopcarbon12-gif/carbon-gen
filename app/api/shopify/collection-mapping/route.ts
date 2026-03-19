@@ -67,6 +67,11 @@ type UpcWorksheetEntry = {
   barcodeLabel: string;
   mappingDecision: "AUTO_MAPPED" | "SUGGESTED" | "MANUAL_REVIEW";
   reviewReason: string;
+  autoMapSucceeded: boolean;
+  autoMapFailureCode: string;
+  autoMapFailureReason: string;
+  autoMapFailureDetails: string[];
+  reviewReasons: string[];
   autoMappedPaths: string[];
   directCollectionsToAssign: string[];
   suggestedPaths: string[];
@@ -821,6 +826,11 @@ function pickRepresentativeSkuOnce(
     barcodeLabel: "Unknown route",
     mappingDecision: "MANUAL_REVIEW",
     reviewReason: "",
+    autoMapSucceeded: false,
+    autoMapFailureCode: "PARSE_FAILED",
+    autoMapFailureReason: "We could not read this product code in a way that supports automatic mapping.",
+    autoMapFailureDetails: [],
+    reviewReasons: [],
     autoMappedPaths: [],
     directCollectionsToAssign: [],
     suggestedPaths: [],
@@ -2406,6 +2416,11 @@ function mapUpcRowToResponse(
       barcodeLabel: computed.barcodeLabel,
       mappingDecision: computed.mappingDecision,
       reviewReason: computed.reviewReason,
+      autoMapSucceeded: computed.autoMapSucceeded,
+      autoMapFailureCode: computed.autoMapFailureCode,
+      autoMapFailureReason: computed.autoMapFailureReason,
+      autoMapFailureDetails: computed.autoMapFailureDetails,
+      reviewReasons: computed.reviewReasons,
       autoMappedPaths: computed.autoMappedPaths,
       directCollectionsToAssign: computed.directCollectionsToAssign,
       suggestedPaths: computed.suggestedPaths,
@@ -2455,6 +2470,11 @@ function mapUpcRowToResponse(
     barcodeLabel: autoMap.barcodeLabel,
     mappingDecision: autoMap.mappingDecision,
     reviewReason: autoMap.reviewReason,
+    autoMapSucceeded: autoMap.autoMapSucceeded,
+    autoMapFailureCode: autoMap.autoMapFailureCode,
+    autoMapFailureReason: autoMap.autoMapFailureReason,
+    autoMapFailureDetails: autoMap.autoMapFailureDetails,
+    reviewReasons: autoMap.reviewReasons,
     autoMappedPaths: autoMap.autoMappedPaths,
     directCollectionsToAssign: autoMap.directCollectionsToAssign,
     suggestedPaths: autoMap.suggestedPaths,

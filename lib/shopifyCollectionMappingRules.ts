@@ -56,6 +56,14 @@ type RuleBucket = {
   ambiguousRows: CompiledRuleRow[];
 };
 
+type ScoredAmbiguousRow = {
+  row: CompiledRuleRow;
+  score: number;
+  coverage: number;
+};
+
+type BucketTieBreakerKeywords = Record<string, string[]>;
+
 const WORKBOOK_RULE_ROWS: WorkbookRuleRow[] = [
   // Route 11 (Men Summer)
   { routeKey: "11", digit: "0", targetCells: ["MEN > CLOTHING > JEANS", "JEANS > MEN", "COLLECTION: jeans-men"] },
@@ -249,6 +257,54 @@ function compileWorkbookRows(rows: WorkbookRuleRow[]) {
 
 const COMPILED_WORKBOOK_RULES = compileWorkbookRows(WORKBOOK_RULE_ROWS);
 
+const BUCKET_TIE_BREAKER_KEYWORDS: Record<string, BucketTieBreakerKeywords> = {
+  "11::7": {
+    "DENIM SHIRT": ["DENIM"],
+    "BUTTON SHIRT": ["BUTTON", "BUTTON-DOWN", "BUTTONDOWN"],
+  },
+  "12::7": {
+    "DENIM SHIRT": ["DENIM"],
+    "BUTTON SHIRT": ["BUTTON", "BUTTON-DOWN", "BUTTONDOWN"],
+  },
+  "21::4": {
+    BLOUSE: ["BLOUSE"],
+    TEES: ["TEE", "TEES", "T-SHIRT", "TSHIRT"],
+    TOP: ["TOP", "TOPS"],
+  },
+  "22::4": {
+    BLOUSE: ["BLOUSE"],
+    TEES: ["TEE", "TEES", "T-SHIRT", "TSHIRT"],
+    TOP: ["TOP", "TOPS"],
+  },
+  "21::7": {
+    BODYSUIT: ["BODYSUIT"],
+    ROMPER: ["ROMPER"],
+    JUMPSUIT: ["JUMPSUIT"],
+  },
+  "22::7": {
+    BODYSUIT: ["BODYSUIT"],
+    ROMPER: ["ROMPER"],
+    JUMPSUIT: ["JUMPSUIT"],
+  },
+  "21::8": {
+    LEGGINGS: ["LEGGINGS"],
+    PANTS: ["PANTS", "PANT"],
+  },
+  "22::8": {
+    LEGGINGS: ["LEGGINGS"],
+    SWEATPANTS: ["SWEATPANTS", "JOGGER", "JOGGERS"],
+    PANTS: ["PANTS", "PANT"],
+  },
+  "11::9": {
+    SWIMWEAR: ["SWIM", "SWIMWEAR", "SWIMSUIT", "BIKINI", "TRUNKS"],
+    ACCESSORIES: ["ACCESSORY", "ACCESSORIES", "BELT", "BAG", "HAT", "SCARF", "SOCK", "SOCKS", "GLOVE", "GLOVES"],
+  },
+  "21::9": {
+    SWIMSUIT: ["SWIM", "SWIMWEAR", "SWIMSUIT", "BIKINI", "TRUNKS"],
+    ACCESSORIES: ["ACCESSORY", "ACCESSORIES", "BELT", "BAG", "HAT", "SCARF", "SOCK", "SOCKS", "GLOVE", "GLOVES"],
+  },
+};
+
 function buildProductTokens(input: MappingRuleInput) {
   const rawTokens = [
     ...tokenizeCandidateText(input.itemType || ""),
@@ -319,18 +375,56 @@ function evaluateRuleRow(row: CompiledRuleRow, productTokens: Set<string>): Mapp
   };
 }
 
-function pickAmbiguousRow(rows: CompiledRuleRow[], productTokens: Set<string>) {
+function resolveBucketSiblingTie(
+  bucketKey: string,
+  tiedRows: ScoredAmbiguousRow[],
+  productTokens: Set<string>
+) {
+  const bucketRules = BUCKET_TIE_BREAKER_KEYWORDS[bucketKey];
+  if (!bucketRules || tiedRows.length < 2) return null;
+  const tokenSet = new Set(Array.from(productTokens).map((token) => normalizeUpper(token)));
+  const byCategory = new Map(
+    tiedRows.map((entry) => [normalizeUpper(entry.row.category), entry.row] as const)
+  );
+  const scoredByCategory = Object.entries(bucketRules)
+    .map(([category, keywords]) => {
+      const normalizedCategory = normalizeUpper(category);
+      if (!byCategory.has(normalizedCategory)) return null;
+      const hitCount = new Set(
+        keywords.map((keyword) => normalizeUpper(keyword)).filter((keyword) => tokenSet.has(keyword))
+      ).size;
+      return {
+        category: normalizedCategory,
+        hitCount,
+      };
+    })
+    .filter((entry): entry is { category: string; hitCount: number } => Boolean(entry));
+  if (scoredByCategory.length < 1) return null;
+  const maxHits = Math.max(...scoredByCategory.map((entry) => entry.hitCount));
+  if (maxHits < 1) return null;
+  const winners = scoredByCategory.filter((entry) => entry.hitCount === maxHits);
+  if (winners.length !== 1) return null;
+  return byCategory.get(winners[0].category) || null;
+}
+
+function pickAmbiguousRow(rows: CompiledRuleRow[], productTokens: Set<string>, bucketKey: string) {
   const scored = rows
     .map((row) => {
       const categoryTokens = tokenizeCandidateText(row.category).map((token) => normalizeUpper(token));
       const matches = categoryTokens.filter((token) => productTokens.has(token));
+      const coverage = categoryTokens.length > 0 ? matches.length / categoryTokens.length : 0;
       return {
         row,
         score: matches.length,
+        coverage,
       };
     })
     .filter((entry) => entry.score > 0)
-    .sort((left, right) => right.score - left.score);
+    .sort((left, right) => {
+      if (right.score !== left.score) return right.score - left.score;
+      if (right.coverage !== left.coverage) return right.coverage - left.coverage;
+      return 0;
+    });
 
   if (scored.length < 1) {
     return {
@@ -340,6 +434,24 @@ function pickAmbiguousRow(rows: CompiledRuleRow[], productTokens: Set<string>) {
   }
 
   if (scored.length > 1 && scored[0].score === scored[1].score) {
+    if (scored[0].coverage > scored[1].coverage) {
+      return {
+        row: scored[0].row,
+        reason: "",
+      };
+    }
+    if (scored[0].coverage === scored[1].coverage) {
+      const topTiedRows = scored.filter(
+        (entry) => entry.score === scored[0].score && entry.coverage === scored[0].coverage
+      );
+      const siblingWinner = resolveBucketSiblingTie(bucketKey, topTiedRows, productTokens);
+      if (siblingWinner) {
+        return {
+          row: siblingWinner,
+          reason: "",
+        };
+      }
+    }
     return {
       row: null as CompiledRuleRow | null,
       reason: "Ambiguous workbook rows matched multiple candidate categories with equal score.",
@@ -395,7 +507,7 @@ export function resolveCollectionMappingRules(input: MappingRuleInput): MappingR
   }
 
   if (bucket.ambiguousRows.length > 0) {
-    const picked = pickAmbiguousRow(bucket.ambiguousRows, productTokens);
+    const picked = pickAmbiguousRow(bucket.ambiguousRows, productTokens, `${routeKey}::${digit}`);
     if (!picked.row) {
       return {
         menuPathsToAssign: [],
