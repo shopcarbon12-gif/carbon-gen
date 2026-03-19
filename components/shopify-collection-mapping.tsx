@@ -865,16 +865,20 @@ export default function ShopifyCollectionMapping() {
           (staging?.manualAddedPaths.length || 0) +
           (staging?.manualRemovedPaths.length || 0) >
         0;
+      const isLegacy = String(row.parserType || "") === "LEGACY";
+      const isReadyToAutoMap = String(row.actionStatus || "") !== "PROCESSED" && syncStatus !== "REVIEW" && !hasSuggestions;
+      const needsReview = decision === "MANUAL_REVIEW" || syncStatus === "REVIEW" || isLegacy || isReadyToAutoMap;
       if (decision === "AUTO_MAPPED") autoMapped += 1;
-      if (decision === "MANUAL_REVIEW" || syncStatus === "REVIEW") reviewNeeded += 1;
+      // KPI-only behavior: Needs Review card includes review + suggestion-ready + manual-changes rows.
+      if (needsReview || hasSuggestions || hasManualChanges) reviewNeeded += 1;
       if (syncStatus === "ADD_PENDING") addPending += 1;
       if (syncStatus === "REMOVAL_PENDING") removalPending += 1;
       if (syncStatus === "SYNCED") synced += 1;
       if (hasSuggestions) suggestionReady += 1;
       if (hasManualChanges) manualChanges += 1;
       if (syncStatus === "ADD_PENDING" || syncStatus === "REMOVAL_PENDING") readyToPush += 1;
-      if (String(row.parserType || "") === "LEGACY") legacyCCode += 1;
-      if (String(row.actionStatus || "") !== "PROCESSED" && syncStatus !== "REVIEW" && !hasSuggestions) readyToAutoMap += 1;
+      if (isLegacy) legacyCCode += 1;
+      if (isReadyToAutoMap) readyToAutoMap += 1;
       if (String(row.actionStatus || "").toUpperCase() === "FAILED") pushFailed += 1;
     }
     pushFailed += queueJobs.filter((job) => job.state === "failed").length;
