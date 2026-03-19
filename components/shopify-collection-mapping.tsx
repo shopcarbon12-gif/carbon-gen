@@ -232,12 +232,12 @@ type UndoEntry = {
 const TREE_PANEL_MIN_WIDTH = 339;
 const TREE_PANEL_MAX_WIDTH = 1600;
 const TREE_PANEL_DEFAULT_WIDTH = 339;
-const TREE_PANEL_COLLAPSED_WIDTH = 60;
+const TREE_PANEL_COLLAPSED_WIDTH = 66;
 const WORKSPACE_DEFAULT_HEIGHT = 850;
 const WORKSPACE_MIN_HEIGHT = 850;
 const WORKSPACE_TOP_ANCHOR_OFFSET = 37;
 const WORKSPACE_MAX_HEIGHT = 5000;
-const WORKSPACE_RESIZE_HANDLE_SPACE = 24;
+const WORKSPACE_RESIZE_HANDLE_SPACE = 0;
 type MoveDropTarget = { targetKey: string; position: DropPosition } | null;
 const MENU_LINK_TYPE_OPTIONS: Array<{ value: MenuLinkType; label: string }> = [
   { value: "COLLECTION", label: "Collection" },
@@ -330,8 +330,10 @@ export default function ShopifyCollectionMapping() {
   const [showTypesDropdown, setShowTypesDropdown] = useState(false);
   const [showCommitMenu, setShowCommitMenu] = useState(false);
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
-  const [activeQueueTab, setActiveQueueTab] = useState("all");
-  const [activeReportTab, setActiveReportTab] = useState("master-audit");
+  // Queue tabs are now the primary workflow filter, defaulting to Needs Review.
+  const [activeQueueTab, setActiveQueueTab] = useState("needs-review");
+  // Reports are consolidated behind a single modal trigger to reduce canvas clutter.
+  const [showReportsModal, setShowReportsModal] = useState(false);
   const [queueJobs, setQueueJobs] = useState<QueueJob[]>([]);
   const [executionBusy, setExecutionBusy] = useState(false);
   const [pushPreviewModal, setPushPreviewModal] = useState<PushPreviewModalState | null>(null);
@@ -377,6 +379,7 @@ export default function ShopifyCollectionMapping() {
   const [treePanelWidth, setTreePanelWidth] = useState(TREE_PANEL_DEFAULT_WIDTH);
   const [treePanelMinWidth, setTreePanelMinWidth] = useState(TREE_PANEL_MIN_WIDTH);
   const [treePaneCollapsed, setTreePaneCollapsed] = useState(false);
+  const [pageDockRightInset, setPageDockRightInset] = useState(0);
   const [resizingPanes, setResizingPanes] = useState(false);
   const [resizingWorkspaceHeight, setResizingWorkspaceHeight] = useState(false);
   const [workspaceHeight, setWorkspaceHeight] = useState<number | null>(WORKSPACE_DEFAULT_HEIGHT);
@@ -403,6 +406,11 @@ export default function ShopifyCollectionMapping() {
   const undoCounterRef = useRef(0);
   const typesDropdownRef = useRef<HTMLDivElement | null>(null);
   const commitMenuRef = useRef<HTMLDivElement | null>(null);
+  const tableWrapRef = useRef<HTMLDivElement | null>(null);
+  const tableScrollDockWrapRef = useRef<HTMLDivElement | null>(null);
+  const tableScrollDockRef = useRef<HTMLDivElement | null>(null);
+  const tableScrollSpacerRef = useRef<HTMLDivElement | null>(null);
+  const syncingTableScrollRef = useRef<"table" | "dock" | null>(null);
   const menuEditorComboboxRef = useRef<HTMLDivElement | null>(null);
   const loadDataAbortRef = useRef<AbortController | null>(null);
   const loadDataReqIdRef = useRef(0);
@@ -449,8 +457,6 @@ export default function ShopifyCollectionMapping() {
   useEffect(() => {
     if (noticeState) setNoticeHidden(false);
   }, [noticeState?.tone, noticeState?.message]);
-
-  const noticeWorkspaceOffset = WORKSPACE_TOP_ANCHOR_OFFSET;
 
   function withShopContext(input: Record<string, unknown>) {
     if (!activeShop) return input;
@@ -875,32 +881,155 @@ export default function ShopifyCollectionMapping() {
     };
   }, [rows, rowStagingById, queueJobs]);
 
-  const queueTabs = useMemo(
-    () => [
-      { id: "all", label: "All", count: moduleSummary.totalLoaded },
-      { id: "ready-auto", label: "Ready to Auto Map", count: moduleSummary.readyToAutoMap },
-      { id: "suggestion-ready", label: "Suggestion Ready", count: moduleSummary.suggestionReady },
-      { id: "manual-changes", label: "Manual Changes", count: moduleSummary.manualChanges },
-      { id: "ready-push", label: "Ready to Push", count: moduleSummary.readyToPush },
-      { id: "push-failed", label: "Push Failed", count: moduleSummary.pushFailed },
-      { id: "needs-review", label: "Needs Review", count: moduleSummary.reviewNeeded },
-      { id: "legacy-c", label: "Legacy C-Code", count: moduleSummary.legacyCCode },
-    ],
-    [moduleSummary]
-  );
-
-  const visibleQueueJobs = useMemo(() => {
-    if (activeQueueTab === "all") return queueJobs;
-    if (activeQueueTab === "push-failed") return queueJobs.filter((job) => job.state === "failed");
-    if (activeQueueTab === "ready-push") {
-      return queueJobs.filter((job) =>
-        ["push_suggestions", "push_manual_changes", "push_all_final_changes", "remove_all_collections"].includes(job.type)
-      );
+  // Build a single per-row workflow signature so tabs can filter rows and compute live badge counts.
+  const rowWorkflowById = useMemo(() => {
+    const out = new Map<
+      string,
+      {
+        needsReview: boolean;
+        suggestionReady: boolean;
+        manualChanges: boolean;
+        readyToPush: boolean;
+        pushFailed: boolean;
+        synced: boolean;
+      }
+    >();
+    for (const row of rows) {
+      const staging = rowStagingById.get(row.id);
+      const decision = staging?.mappingDecision || row.mappingDecision || "MANUAL_REVIEW";
+      const syncStatus = staging?.collectionSyncStatus || "REVIEW";
+      const hasSuggestions = (staging?.suggestionOptions || []).some((option) => !option.disabled);
+      const hasManualChanges =
+        (staging?.selectedSuggestionPaths.length || 0) +
+          (staging?.selectedSuggestionDirectCollections.length || 0) +
+          (staging?.manualAddedPaths.length || 0) +
+          (staging?.manualRemovedPaths.length || 0) >
+        0;
+      const isLegacy = String(row.parserType || "") === "LEGACY";
+      const isReadyToAutoMap = String(row.actionStatus || "") !== "PROCESSED" && syncStatus !== "REVIEW" && !hasSuggestions;
+      const needsReview = decision === "MANUAL_REVIEW" || syncStatus === "REVIEW" || isLegacy || isReadyToAutoMap;
+      out.set(row.id, {
+        needsReview,
+        suggestionReady: hasSuggestions,
+        manualChanges: hasManualChanges,
+        readyToPush: syncStatus === "ADD_PENDING" || syncStatus === "REMOVAL_PENDING",
+        pushFailed: String(row.actionStatus || "").toUpperCase() === "FAILED",
+        synced: syncStatus === "SYNCED",
+      });
     }
-    if (activeQueueTab === "ready-auto") return queueJobs.filter((job) => job.type === "auto_map");
-    if (activeQueueTab === "manual-changes") return queueJobs.filter((job) => job.type === "push_manual_changes");
-    return queueJobs;
-  }, [queueJobs, activeQueueTab]);
+    return out;
+  }, [rows, rowStagingById]);
+
+  // Queue tabs now represent the primary table filter with live counts.
+  const queueTabs = useMemo(() => {
+    const counts = {
+      all: rows.length,
+      "needs-review": 0,
+      "suggestion-ready": 0,
+      "manual-changes": 0,
+      "ready-push": 0,
+      "push-failed": 0,
+      synced: 0,
+    };
+    for (const row of rows) {
+      const workflow = rowWorkflowById.get(row.id);
+      if (!workflow) continue;
+      if (workflow.needsReview) counts["needs-review"] += 1;
+      if (workflow.suggestionReady) counts["suggestion-ready"] += 1;
+      if (workflow.manualChanges) counts["manual-changes"] += 1;
+      if (workflow.readyToPush) counts["ready-push"] += 1;
+      if (workflow.pushFailed) counts["push-failed"] += 1;
+      if (workflow.synced) counts.synced += 1;
+    }
+    return [
+      { id: "all", label: "All", count: counts.all },
+      { id: "needs-review", label: "Needs Review", count: counts["needs-review"] },
+      { id: "suggestion-ready", label: "Suggestion Ready", count: counts["suggestion-ready"] },
+      { id: "manual-changes", label: "Manual Changes", count: counts["manual-changes"] },
+      { id: "ready-push", label: "Ready to Push", count: counts["ready-push"] },
+      { id: "push-failed", label: "Push Failed", count: counts["push-failed"] },
+      // Synced is a read-only confirmation view so users can verify finalized rows without taking actions.
+      { id: "synced", label: "Synced", count: counts.synced },
+    ];
+  }, [rows, rowWorkflowById]);
+
+  // Apply the active queue tab directly to table rows.
+  const filteredRows = useMemo(() => {
+    if (activeQueueTab === "all") return rows;
+    return rows.filter((row) => {
+      const workflow = rowWorkflowById.get(row.id);
+      if (!workflow) return false;
+      if (activeQueueTab === "needs-review") return workflow.needsReview;
+      if (activeQueueTab === "suggestion-ready") return workflow.suggestionReady;
+      if (activeQueueTab === "manual-changes") return workflow.manualChanges;
+      if (activeQueueTab === "ready-push") return workflow.readyToPush;
+      if (activeQueueTab === "push-failed") return workflow.pushFailed;
+      if (activeQueueTab === "synced") return workflow.synced;
+      return true;
+    });
+  }, [activeQueueTab, rows, rowWorkflowById]);
+
+  useEffect(() => {
+    const tableWrap = tableWrapRef.current;
+    const dock = tableScrollDockRef.current;
+    const spacer = tableScrollSpacerRef.current;
+    if (!tableWrap || !dock || !spacer) return;
+    const table = tableWrap.querySelector("table");
+    if (!(table instanceof HTMLElement)) return;
+
+    const syncSpacerWidth = () => {
+      spacer.style.width = `${table.scrollWidth}px`;
+    };
+
+    const syncFromTable = () => {
+      if (syncingTableScrollRef.current === "dock") return;
+      syncingTableScrollRef.current = "table";
+      dock.scrollLeft = tableWrap.scrollLeft;
+      syncingTableScrollRef.current = null;
+    };
+
+    const syncFromDock = () => {
+      if (syncingTableScrollRef.current === "table") return;
+      syncingTableScrollRef.current = "dock";
+      tableWrap.scrollLeft = dock.scrollLeft;
+      syncingTableScrollRef.current = null;
+    };
+
+    syncSpacerWidth();
+    dock.scrollLeft = tableWrap.scrollLeft;
+    tableWrap.addEventListener("scroll", syncFromTable, { passive: true });
+    dock.addEventListener("scroll", syncFromDock, { passive: true });
+    const resizeObserver = new ResizeObserver(syncSpacerWidth);
+    resizeObserver.observe(tableWrap);
+    resizeObserver.observe(table);
+    window.addEventListener("resize", syncSpacerWidth);
+
+    return () => {
+      tableWrap.removeEventListener("scroll", syncFromTable);
+      dock.removeEventListener("scroll", syncFromDock);
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", syncSpacerWidth);
+    };
+  }, [rows.length, activeQueueTab, treePaneCollapsed, workspaceHeight]);
+
+  useEffect(() => {
+    const pageEl = pageScrollRef.current;
+    if (!pageEl) return;
+    const syncPageDockInset = () => {
+      const scrollbarWidth = Math.max(0, pageEl.offsetWidth - pageEl.clientWidth);
+      setPageDockRightInset((prev) => (prev === scrollbarWidth ? prev : scrollbarWidth));
+    };
+    syncPageDockInset();
+    const resizeObserver = new ResizeObserver(syncPageDockInset);
+    resizeObserver.observe(pageEl);
+    window.addEventListener("resize", syncPageDockInset);
+    window.addEventListener("scroll", syncPageDockInset, { passive: true });
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", syncPageDockInset);
+      window.removeEventListener("scroll", syncPageDockInset);
+    };
+  }, [rows.length, treePaneCollapsed, workspaceHeight, activeQueueTab]);
 
   const rowById = useMemo(() => {
     return new Map(rows.map((row) => [row.id, row]));
@@ -974,9 +1103,9 @@ export default function ShopifyCollectionMapping() {
   }, [rows, rowStagingById, nodePathByKey]);
 
   const allSelectedOnPage = useMemo(() => {
-    if (rows.length < 1) return false;
-    return rows.every((row) => Boolean(selectedProducts[row.id]));
-  }, [rows, selectedProducts]);
+    if (filteredRows.length < 1) return false;
+    return filteredRows.every((row) => Boolean(selectedProducts[row.id]));
+  }, [filteredRows, selectedProducts]);
 
   const selectedTypesLabel = useMemo(() => {
     if (selectedTypes.length < 1) return "All types";
@@ -2392,9 +2521,10 @@ export default function ShopifyCollectionMapping() {
   }
 
   function toggleNodeExpansion(nodeKey: string) {
+    // Expand/collapse must toggle true/false from current value.
     setExpandedNodes((prev) => ({
       ...prev,
-      [nodeKey]: prev[nodeKey] === false ? true : false,
+      [nodeKey]: !Boolean(prev[nodeKey]),
     }));
   }
 
@@ -2412,8 +2542,11 @@ export default function ShopifyCollectionMapping() {
   }
 
   function collapseAllTreeCards() {
-    // Collapse all opened category drawers without collapsing the whole tree panel.
+    // Collapse all drawers and restore tree container to the default visible frame.
     setExpandedNodes({});
+    setTreePaneCollapsed(false);
+    setTreePanelWidth(TREE_PANEL_DEFAULT_WIDTH);
+    treePaneUserResizedRef.current = false;
   }
 
   function toggleNodeVisibility(nodeKey: string) {
@@ -3230,19 +3363,93 @@ export default function ShopifyCollectionMapping() {
     <>
       {isStandaloneCollectionMappingRoute ? (
         <div className="headerKpiOverlay" aria-label="Collection mapping summary">
-          <div className="headerKpiCard headerKpiCardLoaded">
+          <div
+            className={`headerKpiCard headerKpiCardLoaded${activeQueueTab === "all" ? " headerKpiCardActive" : ""}`}
+            role="button"
+            tabIndex={0}
+            onClick={() => setActiveQueueTab("all")}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                setActiveQueueTab("all");
+              }
+            }}
+          >
             <div className="headerKpiLabel">Loaded</div>
             <div className="headerKpiValue">{moduleSummary.totalLoaded}</div>
           </div>
-          <div className="headerKpiCard headerKpiCardReview">
-            <div className="headerKpiLabel">Review</div>
+          <div
+            className={`headerKpiCard headerKpiCardReview${activeQueueTab === "needs-review" ? " headerKpiCardActive" : ""}`}
+            role="button"
+            tabIndex={0}
+            onClick={() => setActiveQueueTab("needs-review")}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                setActiveQueueTab("needs-review");
+              }
+            }}
+          >
+            <div className="headerKpiLabel">Needs Review</div>
             <div className="headerKpiValue">{moduleSummary.reviewNeeded}</div>
           </div>
-          <div className="headerKpiCard headerKpiCardPending">
-            <div className="headerKpiLabel">Pending</div>
+          <div
+            className={`headerKpiCard headerKpiCardSuggestion${activeQueueTab === "suggestion-ready" ? " headerKpiCardActive" : ""}`}
+            role="button"
+            tabIndex={0}
+            onClick={() => setActiveQueueTab("suggestion-ready")}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                setActiveQueueTab("suggestion-ready");
+              }
+            }}
+          >
+            <div className="headerKpiLabel">Suggestion Ready</div>
+            <div className="headerKpiValue">{moduleSummary.suggestionReady}</div>
+          </div>
+          <div
+            className={`headerKpiCard headerKpiCardPending${activeQueueTab === "ready-push" ? " headerKpiCardActive" : ""}`}
+            role="button"
+            tabIndex={0}
+            onClick={() => setActiveQueueTab("ready-push")}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                setActiveQueueTab("ready-push");
+              }
+            }}
+          >
+            <div className="headerKpiLabel">Pending Push</div>
             <div className="headerKpiValue">{moduleSummary.readyToPush}</div>
           </div>
-          <div className="headerKpiCard headerKpiCardSynced">
+          <div
+            className={`headerKpiCard headerKpiCardPushFailed${activeQueueTab === "push-failed" ? " headerKpiCardActive" : ""}`}
+            role="button"
+            tabIndex={0}
+            onClick={() => setActiveQueueTab("push-failed")}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                setActiveQueueTab("push-failed");
+              }
+            }}
+          >
+            <div className="headerKpiLabel">Push Failed</div>
+            <div className="headerKpiValue">{moduleSummary.pushFailed}</div>
+          </div>
+          <div
+            className={`headerKpiCard headerKpiCardSynced${activeQueueTab === "synced" ? " headerKpiCardActive" : ""}`}
+            role="button"
+            tabIndex={0}
+            onClick={() => setActiveQueueTab("synced")}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                setActiveQueueTab("synced");
+              }
+            }}
+          >
             <div className="headerKpiLabel">Synced</div>
             <div className="headerKpiValue">{moduleSummary.synced}</div>
           </div>
@@ -3280,17 +3487,13 @@ export default function ShopifyCollectionMapping() {
       <main
         className={`page${workspaceHeight ? " pageExpanded" : ""}`}
         ref={pageScrollRef}
-        style={{
-          height: `calc(100dvh - var(--shell-content-top-offset) - ${noticeWorkspaceOffset}px)`,
-          maxHeight: `calc(100dvh - var(--shell-content-top-offset) - ${noticeWorkspaceOffset}px)`,
-        }}
       >
       <div className="pageBody">
       <section
         className={`card workspaceSection${workspaceHeight ? " workspaceSectionExpanded" : ""}`}
         style={
           workspaceHeight != null && Number.isFinite(workspaceHeight)
-            ? { height: `${Math.max(0, workspaceHeight + WORKSPACE_RESIZE_HANDLE_SPACE)}px` }
+            ? { minHeight: `${Math.max(0, workspaceHeight + WORKSPACE_RESIZE_HANDLE_SPACE)}px` }
             : undefined
         }
       >
@@ -3299,11 +3502,11 @@ export default function ShopifyCollectionMapping() {
           className="grid2 workspaceGridHost"
           style={{
             gridTemplateColumns: `${treePaneCollapsed ? TREE_PANEL_COLLAPSED_WIDTH : treePanelWidth}px ${treePaneCollapsed ? 0 : 11}px minmax(0, 1fr)`,
-            gap: treePaneCollapsed ? "12px" : "0",
-            height: workspaceHeight != null && Number.isFinite(workspaceHeight) ? `${Math.max(0, workspaceHeight)}px` : "100%",
+            gap: "0",
+            minHeight: workspaceHeight != null && Number.isFinite(workspaceHeight) ? `${Math.max(0, workspaceHeight)}px` : "100%",
             transition: resizingPanes
               ? "none"
-              : "grid-template-columns 920ms cubic-bezier(0.12, 0.9, 0.22, 1), gap 920ms cubic-bezier(0.12, 0.9, 0.22, 1)",
+              : "grid-template-columns 1100ms cubic-bezier(0.22, 0.61, 0.36, 1), gap 1100ms cubic-bezier(0.22, 0.61, 0.36, 1)",
           }}
         >
           <div
@@ -3484,6 +3687,15 @@ export default function ShopifyCollectionMapping() {
               <span className="chip">Mapped Selected: {mappedSelectedNodeKeys.length}</span>
               <span className="chip">Unmapped Selected: {selectedDirectCollectionIds.length}</span>
               <span className="chip">Page {page} / {totalPages}</span>
+              {/* Consolidate all report/export entry points into one modal trigger on the right side. */}
+              <button
+                type="button"
+                className="reportsTriggerBtn"
+                onClick={() => setShowReportsModal(true)}
+                disabled={loading || saving || auditOpening}
+              >
+                ↗ Reports
+              </button>
               <div className="commitMenuWrap" ref={commitMenuRef}>
                 <button
                   type="button"
@@ -3535,95 +3747,26 @@ export default function ShopifyCollectionMapping() {
                 )}
               </div>
             </div>
-            <div className="stage4ScaffoldGrid">
-              <section className="stage4Panel">
-                <h3>Jobs / Queue</h3>
-                <div className="stage4TabRow">
-                  {queueTabs.map((tab) => (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      className={`stage4Tab${activeQueueTab === tab.id ? " active" : ""}`}
-                      onClick={() => setActiveQueueTab(tab.id)}
-                    >
-                      {tab.label} <span className="muted">({tab.count})</span>
-                    </button>
-                  ))}
-                </div>
-                <p className="muted small">
-                  Lifecycle scaffold: {queueJobs.filter((job) => job.state === "queued").length} queued /{" "}
-                  {queueJobs.filter((job) => job.state === "running").length} running /{" "}
-                  {queueJobs.filter((job) => job.state === "completed").length} completed.
-                </p>
-                <div className="reportList" style={{ marginTop: 10, maxHeight: 220 }}>
-                  {visibleQueueJobs.length < 1 ? (
-                    <div className="empty">No push jobs yet.</div>
-                  ) : (
-                    visibleQueueJobs.slice(0, 10).map((job) => (
-                      <div className="reportRow" key={job.id}>
-                        <span>
-                          <b>{job.type}</b> - {job.state}
-                        </span>
-                        <span className="muted small">
-                          rows {job.completedRows}/{job.totalRows} | skipped {job.skippedRows}
-                        </span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </section>
-              <section className="stage4Panel">
-                <h3>Reporting</h3>
-                <div className="stage4TabRow">
-                  {[
-                    { id: "master-audit", label: "Master Audit Report" },
-                    { id: "batch-summary", label: "Batch Summary Report" },
-                    { id: "errors-review", label: "Errors & Review Report" },
-                    { id: "collection-sync", label: "Collection Sync Report" },
-                  ].map((report) => (
-                    <button
-                      key={report.id}
-                      type="button"
-                      className={`stage4Tab${activeReportTab === report.id ? " active" : ""}`}
-                      onClick={() => setActiveReportTab(report.id)}
-                    >
-                      {report.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="topbar">
-                  <button type="button" onClick={() => void openAuditReport()} disabled={auditOpening || saving || loading}>
-                    Open Audit Modal
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (activeReportTab === "master-audit") downloadAuditCsv();
-                      if (activeReportTab === "batch-summary") exportPushSummaryReport();
-                      if (activeReportTab === "errors-review") exportPushFailureReport();
-                      if (activeReportTab === "collection-sync") exportCollectionDeltaReport();
-                    }}
-                  >
-                    Export CSV
-                  </button>
-                  <button type="button" onClick={exportSkippedReviewReport}>
-                    Export Skipped Review
-                  </button>
-                </div>
-                <div className="topbar" style={{ marginTop: 8 }}>
-                  <button type="button" onClick={exportPushSummaryReport}>Push Summary Report</button>
-                  <button type="button" onClick={exportPushFailureReport}>Push Failure Report</button>
-                  <button type="button" onClick={exportCollectionDeltaReport}>Collection Delta Report</button>
-                </div>
-              </section>
-            </div>
 
-            <div className="tableWrap" style={{ marginTop: 10 }}>
+            <div className="tableWrap" ref={tableWrapRef} style={{ marginTop: 10 }}>
+              {/* Queue tabs sit directly above the table and now actively filter rows by workflow state. */}
+              <div className="queueFilterRow">
+                {queueTabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    className={`queueFilterTab${activeQueueTab === tab.id ? " active" : ""}`}
+                    onClick={() => setActiveQueueTab(tab.id)}
+                  >
+                    <span>{tab.label}</span>
+                    <span className={`queueFilterCount${tab.id === "synced" ? " queueFilterCountSynced" : ""}`}>{tab.count}</span>
+                  </button>
+                ))}
+              </div>
               <table>
                 <thead>
                   <tr className="groupHead">
-                    <th colSpan={4}>Product Identity</th>
-                    <th colSpan={2}>Parser / Rule Proof</th>
+                    <th colSpan={3}>Product Identity</th>
                     <th colSpan={2}>Auto + Suggestions</th>
                     <th colSpan={2}>Decision / Sync</th>
                     <th colSpan={2}>Current vs Final</th>
@@ -3637,7 +3780,7 @@ export default function ShopifyCollectionMapping() {
                           const checked = event.target.checked;
                           setSelectedProducts((prev) => {
                             const next = { ...prev };
-                            for (const row of rows) next[row.id] = checked;
+                            for (const row of filteredRows) next[row.id] = checked;
                             return next;
                           });
                         }}
@@ -3655,18 +3798,6 @@ export default function ShopifyCollectionMapping() {
                         Product Name <span className="sortArrow">{getHeaderArrow("title")}</span>
                       </button>
                     </th>
-                    <th className="upcCol sortHead">
-                      <button
-                        type="button"
-                        className="sortHeadBtn"
-                        onClick={() => toggleHeaderSort("upc")}
-                        aria-label="Sort by UPC"
-                      >
-                        UPC <span className="sortArrow">{getHeaderArrow("upc")}</span>
-                      </button>
-                    </th>
-                    <th className="sourceParserCol">Source Parser</th>
-                    <th className="routingProofCol">Routing Proof</th>
                     <th className="autoMappedCol">Auto-Mapped Menus</th>
                     <th className="suggestedCol">Suggested Menus</th>
                     <th className="mappingDecisionCol">Mapping Decision</th>
@@ -3678,14 +3809,14 @@ export default function ShopifyCollectionMapping() {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={12} className="empty">Loading Shopify products...</td>
+                      <td colSpan={9} className="empty">Loading Shopify products...</td>
                     </tr>
-                  ) : rows.length < 1 ? (
+                  ) : filteredRows.length < 1 ? (
                     <tr>
-                      <td colSpan={12} className="empty">No products found.</td>
+                      <td colSpan={9} className="empty">No products match this queue filter.</td>
                     </tr>
                   ) : (
-                    rows.map((row) => {
+                    filteredRows.map((row) => {
                       const staging = rowStagingById.get(row.id);
                       const currentCollections = dedupeNormalizedPaths(
                         row.checkedNodeKeys.map((key) => nodePathByKey.get(key) || nodeLabelByKey.get(key) || key)
@@ -3694,9 +3825,6 @@ export default function ShopifyCollectionMapping() {
                         .join(", ");
                       const finalCollections = (staging?.finalMenuPaths || []).slice(0, 6).join(", ");
                       const finalDirectCollections = (staging?.finalDirectCollections || []).join(", ");
-                      const parserSource = row.parserType || "-";
-                      const routingProof =
-                        row.routeKey && row.digit ? `${row.routeKey}-${row.digit} (${row.barcodeLabel || ""})` : row.barcodeLabel || "-";
                       const autoMappedMenus = formatListPreview([
                         ...(staging?.autoMappedPaths || []),
                         ...((staging?.finalDirectCollections || []).map((handle) => `COLLECTION: ${handle}`)),
@@ -3704,7 +3832,6 @@ export default function ShopifyCollectionMapping() {
                       const mappingDecision = staging?.mappingDecision || row.mappingDecision || "MANUAL_REVIEW";
                       const syncStatus = staging?.collectionSyncStatus || "REVIEW";
                       const syncStatusClass = syncStatus.toLowerCase().replace(/_/g, "-");
-                      const reasoning = staging?.reviewReason || row.reviewReason || "-";
                       const isActiveRow = row.id === activeRowId;
                       const isManualReviewRow = mappingDecision === "MANUAL_REVIEW";
                       return (
@@ -3744,12 +3871,9 @@ export default function ShopifyCollectionMapping() {
                               <span className="thumbPlaceholder" aria-hidden="true" />
                             )}
                           </td>
-                          <td className="productNameCol">{row.title}</td>
-                          <td className="upcCol">{row.upc || "-"}</td>
-                          <td className="sourceParserCol"><span className="muted small">{parserSource}</span></td>
-                          <td className="routingProofCol">
-                            <span className="muted small" title={reasoning}>{routingProof}</span>
-                            <div className="muted tiny">{reasoning}</div>
+                          <td className="productNameCol">
+                            <div>{row.title}</div>
+                            <div className="muted tiny">UPC: {row.upc || "-"}</div>
                           </td>
                           <td className="autoMappedCol">
                             <span className="muted small">{autoMappedMenus}</span>
@@ -3848,38 +3972,64 @@ export default function ShopifyCollectionMapping() {
             </div>
           </main>
         </div>
-        <button
-          type="button"
-          className={`workspaceHeightDivider ${resizingWorkspaceHeight ? "resizing" : ""}`}
-          aria-label="Resize workspace height"
-          onPointerDown={(event) => {
-            try {
-              (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
-            } catch {}
-            workspaceUserResizedRef.current = true;
-            const currentHeight =
-              workspaceGridRef.current?.getBoundingClientRect().height ||
-              workspaceHeight ||
-              WORKSPACE_DEFAULT_HEIGHT;
-            workspaceResizeStart.current = {
-              clientY: event.clientY,
-              height: Math.max(WORKSPACE_MIN_HEIGHT, currentHeight),
-              scrollTop:
-                pageScrollRef.current?.scrollTop ??
-                window.scrollY ??
-                document.documentElement.scrollTop ??
-                document.body.scrollTop ??
-                0,
-              pointerId: event.pointerId,
-            };
-            workspaceResizePointerClientY.current = event.clientY;
-            workspaceResizeCurrentRef.current = Math.max(WORKSPACE_MIN_HEIGHT, currentHeight);
-            setResizingWorkspaceHeight(true);
-          }}
-        >
-          <span className="workspaceHeightGrip" />
-        </button>
       </section>
+      {/* Consolidated reports modal centralizes all report/export actions and removes inline report links from the canvas. */}
+      {showReportsModal ? (
+        <div className="previewOverlay" onClick={() => setShowReportsModal(false)} role="dialog" aria-label="Reports">
+          <div className="reportHubModal" onClick={(event) => event.stopPropagation()}>
+            <button type="button" className="reportClose" onClick={() => setShowReportsModal(false)} aria-label="Close reports">
+              X
+            </button>
+            <h3>Reports</h3>
+            <div className="reportHubSection">
+              <h4>Audit reports</h4>
+              <div className="reportHubGrid">
+                <button type="button" className="reportHubCard" onClick={() => void openAuditReport()}>
+                  <span className="reportHubCardTitle">Master Audit</span>
+                  <span className="reportHubCardDesc">Open the full collection audit modal with unmapped and duplicate findings.</span>
+                </button>
+                <button type="button" className="reportHubCard" onClick={exportPushSummaryReport}>
+                  <span className="reportHubCardTitle">Batch Summary</span>
+                  <span className="reportHubCardDesc">Export a rollup summary for the current push and staging lifecycle.</span>
+                </button>
+                <button type="button" className="reportHubCard" onClick={exportPushFailureReport}>
+                  <span className="reportHubCardTitle">Errors & Review</span>
+                  <span className="reportHubCardDesc">Export failed and skipped rows that need manual review attention.</span>
+                </button>
+                <button type="button" className="reportHubCard" onClick={exportCollectionDeltaReport}>
+                  <span className="reportHubCardTitle">Collection Sync</span>
+                  <span className="reportHubCardDesc">Export current vs final collection deltas for verification and QA.</span>
+                </button>
+              </div>
+            </div>
+            <div className="reportHubSection">
+              <h4>Push reports</h4>
+              <div className="reportHubGrid">
+                <button type="button" className="reportHubCard" onClick={exportPushSummaryReport}>
+                  <span className="reportHubCardTitle">Push Summary</span>
+                  <span className="reportHubCardDesc">Download successful and skipped totals for the latest push run.</span>
+                </button>
+                <button type="button" className="reportHubCard" onClick={exportPushFailureReport}>
+                  <span className="reportHubCardTitle">Push Failures</span>
+                  <span className="reportHubCardDesc">Download failed push rows with failure details for debugging.</span>
+                </button>
+                <button type="button" className="reportHubCard" onClick={exportCollectionDeltaReport}>
+                  <span className="reportHubCardTitle">Collection Delta</span>
+                  <span className="reportHubCardDesc">Download add/remove deltas between current and final collection sets.</span>
+                </button>
+              </div>
+            </div>
+            <div className="reportHubFooter">
+              <button type="button" onClick={downloadAuditCsv}>
+                ⤓ Export CSV
+              </button>
+              <button type="button" onClick={exportSkippedReviewReport}>
+                ⤓ Export skipped review
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {previewImage ? (
         <div className="previewOverlay" onClick={() => setPreviewImage(null)} role="dialog" aria-label="Product image preview">
@@ -4270,23 +4420,41 @@ export default function ShopifyCollectionMapping() {
       ) : null}
       </div>
       </main>
+      <div
+        className="tableScrollDockWrap"
+        ref={tableScrollDockWrapRef}
+        aria-hidden="true"
+        style={{ left: "0px", right: `${pageDockRightInset}px` }}
+      >
+        <div className="tableScrollDock" ref={tableScrollDockRef}>
+          <div className="tableScrollDockSpacer" ref={tableScrollSpacerRef} />
+        </div>
+      </div>
 
       <style jsx>{`
+        :global(html),
+        :global(body) {
+          height: 100%;
+          overflow: hidden !important;
+        }
         .page {
           --shell-content-top-offset: var(--collection-mapping-shell-content-top-offset, 100px);
           --notice-bar-height: 37px;
+          --bottom-dock-lane-height: 12px;
+          --bottom-dock-offset: 2px;
+          --workspace-sticky-top: 8px;
           --notice-gap-to-workspace: 0px;
           width: min(100%, calc(100vw - 24px));
           max-width: 100%;
           box-sizing: border-box;
           min-width: 0;
           margin: 0 auto;
-          padding: 0 14px 14px;
+          padding: 0 14px 54px;
           display: flex;
           flex-direction: column;
           gap: 0;
-          height: calc(100dvh - var(--shell-content-top-offset));
-          max-height: calc(100dvh - var(--shell-content-top-offset));
+          height: calc(100dvh - var(--shell-content-top-offset) - var(--notice-bar-height) - var(--bottom-dock-lane-height) - var(--bottom-dock-offset));
+          max-height: calc(100dvh - var(--shell-content-top-offset) - var(--notice-bar-height) - var(--bottom-dock-lane-height) - var(--bottom-dock-offset));
           overflow-x: hidden;
           overflow-y: auto;
           scrollbar-width: auto;
@@ -4336,6 +4504,18 @@ export default function ShopifyCollectionMapping() {
           display: flex;
           flex-direction: column;
           justify-content: space-between;
+          pointer-events: auto;
+          cursor: pointer;
+          transition: transform 0.12s ease, box-shadow 0.12s ease;
+        }
+        .headerKpiCard:hover {
+          transform: translateY(-1px);
+        }
+        .headerKpiCardActive {
+          box-shadow:
+            0 10px 24px rgba(0, 0, 0, 0.3),
+            inset 0 1px 0 rgba(255, 255, 255, 0.08),
+            0 0 0 2px rgba(148, 163, 184, 0.26);
         }
         .headerKpiLabel {
           font-size: 11px;
@@ -4355,8 +4535,12 @@ export default function ShopifyCollectionMapping() {
           align-self: flex-start;
         }
         .headerKpiCardLoaded {
-          border-color: #2a3a56;
-          background: linear-gradient(180deg, #111c32, #0f1a2f);
+          border-color: #3b82f6;
+          background: linear-gradient(180deg, rgba(22, 57, 102, 0.92), rgba(15, 36, 68, 0.92));
+          box-shadow:
+            0 10px 24px rgba(0, 0, 0, 0.3),
+            inset 0 1px 0 rgba(191, 219, 254, 0.12),
+            0 0 0 1px rgba(59, 130, 246, 0.08);
         }
         .headerKpiCardPending {
           border-color: #3b82f6;
@@ -4374,6 +4558,22 @@ export default function ShopifyCollectionMapping() {
             inset 0 1px 0 rgba(253, 204, 136, 0.1),
             0 0 0 1px rgba(245, 158, 11, 0.08);
         }
+        .headerKpiCardSuggestion {
+          border-color: #3b82f6;
+          background: linear-gradient(180deg, rgba(22, 57, 102, 0.92), rgba(15, 36, 68, 0.92));
+          box-shadow:
+            0 10px 24px rgba(0, 0, 0, 0.3),
+            inset 0 1px 0 rgba(191, 219, 254, 0.12),
+            0 0 0 1px rgba(59, 130, 246, 0.08);
+        }
+        .headerKpiCardPushFailed {
+          border-color: #ef4444;
+          background: linear-gradient(180deg, rgba(67, 26, 30, 0.94), rgba(54, 20, 24, 0.94));
+          box-shadow:
+            0 10px 24px rgba(0, 0, 0, 0.3),
+            inset 0 1px 0 rgba(254, 202, 202, 0.1),
+            0 0 0 1px rgba(239, 68, 68, 0.08);
+        }
         .headerKpiCardSynced {
           border-color: #22c55e;
           background: linear-gradient(180deg, rgba(17, 52, 33, 0.94), rgba(12, 38, 24, 0.94));
@@ -4386,9 +4586,21 @@ export default function ShopifyCollectionMapping() {
         .headerKpiCardPending .headerKpiValue {
           color: #dbeafe;
         }
+        .headerKpiCardLoaded .headerKpiLabel,
+        .headerKpiCardLoaded .headerKpiValue {
+          color: #dbeafe;
+        }
         .headerKpiCardReview .headerKpiLabel,
         .headerKpiCardReview .headerKpiValue {
           color: #fdcc88;
+        }
+        .headerKpiCardSuggestion .headerKpiLabel,
+        .headerKpiCardSuggestion .headerKpiValue {
+          color: #dbeafe;
+        }
+        .headerKpiCardPushFailed .headerKpiLabel,
+        .headerKpiCardPushFailed .headerKpiValue {
+          color: #fecaca;
         }
         .headerKpiCardSynced .headerKpiLabel,
         .headerKpiCardSynced .headerKpiValue {
@@ -4407,8 +4619,8 @@ export default function ShopifyCollectionMapping() {
           font-family: ui-sans-serif, system-ui, Segoe UI, Arial;
         }
         .page.pageExpanded {
-          height: calc(100dvh - var(--shell-content-top-offset));
-          max-height: calc(100dvh - var(--shell-content-top-offset));
+          height: calc(100dvh - var(--shell-content-top-offset) - var(--notice-bar-height) - var(--bottom-dock-lane-height) - var(--bottom-dock-offset));
+          max-height: calc(100dvh - var(--shell-content-top-offset) - var(--notice-bar-height) - var(--bottom-dock-lane-height) - var(--bottom-dock-offset));
           overflow-x: hidden;
           overflow-y: auto;
           scrollbar-width: auto;
@@ -4422,6 +4634,7 @@ export default function ShopifyCollectionMapping() {
           gap: 0;
           flex: 0 0 auto;
           overflow: visible;
+          padding-bottom: 8px;
         }
         .page :is(h1, h2, h3, h4, h5, h6, p, span, label, th, td, a, button, input, select, textarea, small, b) {
           font-family: Inter, Arial, sans-serif;
@@ -4729,7 +4942,7 @@ export default function ShopifyCollectionMapping() {
           display: grid;
           grid-template-columns: 339px 11px minmax(0, 1fr);
           gap: 0;
-          align-items: stretch;
+          align-items: start;
           height: 100%;
           min-height: 0;
         }
@@ -4742,27 +4955,29 @@ export default function ShopifyCollectionMapping() {
         .treePaneHost {
           box-sizing: border-box;
           min-height: 0;
-          height: 100%;
-          overflow: hidden;
+          height: auto;
+          overflow: visible;
           min-width: 0;
           display: flex;
           flex-direction: column;
           padding: 0 !important;
-          position: relative;
+          align-self: start;
+          position: sticky;
+          top: var(--workspace-sticky-top);
           z-index: 40;
           transform-origin: left top;
           transition:
-            width 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
-            min-width 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
-            max-width 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
-            height 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
-            min-height 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
-            max-height 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
-            padding 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
-            border-color 220ms ease;
+            width 1100ms cubic-bezier(0.22, 0.61, 0.36, 1),
+            min-width 1100ms cubic-bezier(0.22, 0.61, 0.36, 1),
+            max-width 1100ms cubic-bezier(0.22, 0.61, 0.36, 1),
+            height 1100ms cubic-bezier(0.22, 0.61, 0.36, 1),
+            min-height 1100ms cubic-bezier(0.22, 0.61, 0.36, 1),
+            max-height 1100ms cubic-bezier(0.22, 0.61, 0.36, 1),
+            padding 1100ms cubic-bezier(0.22, 0.61, 0.36, 1);
         }
         .treeWorkspacePanel {
           min-height: 0;
+          height: auto;
         }
         .treePaneHost :global(.gemTreePanel) {
           opacity: 1;
@@ -4784,27 +4999,37 @@ export default function ShopifyCollectionMapping() {
           align-items: flex-start;
           align-self: start;
           position: relative;
+          top: 1px;
           z-index: 12;
-          width: 60px !important;
-          min-width: 60px !important;
-          max-width: 60px !important;
-          height: 74px;
-          min-height: 74px;
-          max-height: 74px;
+          border: 0 !important;
+          outline: 1px solid #2a3a56;
+          outline-offset: -1px;
+          box-shadow: none !important;
+          width: 66px !important;
+          min-width: 66px !important;
+          max-width: 66px !important;
+          height: 76px;
+          min-height: 76px;
+          max-height: 76px;
           padding: 0 !important;
         }
         .grid2 > .card.panel.treePaneHost.treePaneHostCollapsed {
-          height: 74px !important;
-          min-height: 74px !important;
-          max-height: 74px !important;
-          width: 60px !important;
-          min-width: 60px !important;
-          max-width: 60px !important;
+          height: 76px !important;
+          min-height: 76px !important;
+          max-height: 76px !important;
+          width: 66px !important;
+          min-width: 66px !important;
+          max-width: 66px !important;
           align-self: start;
           overflow: hidden;
           padding: 0 !important;
           position: relative;
+          top: 1px;
           z-index: 12;
+          border: 0 !important;
+          outline: 1px solid #2a3a56;
+          outline-offset: -1px;
+          box-shadow: none !important;
         }
         .treePaneHost.treePaneHostCollapsed :global(.gemTreePanel) {
           opacity: 1;
@@ -4817,6 +5042,8 @@ export default function ShopifyCollectionMapping() {
           opacity: 1;
           transform: none;
           overflow-x: hidden;
+          overflow-y: visible !important;
+          max-height: none !important;
           padding-left: 0 !important;
           padding-right: 0 !important;
           scrollbar-gutter: auto !important;
@@ -4873,12 +5100,19 @@ export default function ShopifyCollectionMapping() {
           outline: 1px solid #2a3a56;
           outline-offset: -1px;
           box-sizing: border-box;
-          position: relative;
+          height: auto;
+          max-height: none;
+          overflow: visible;
+          position: sticky;
+          top: var(--workspace-sticky-top);
           z-index: 40;
         }
         .grid2 > .card.panel.productPanel {
           position: relative;
           z-index: 10;
+          overflow: visible;
+          height: auto;
+          max-height: none;
         }
         .paneDivider {
           display: flex;
@@ -4890,7 +5124,12 @@ export default function ShopifyCollectionMapping() {
           margin: 0 3px;
           justify-self: center;
           cursor: col-resize;
-          position: relative;
+          position: sticky;
+          top: var(--workspace-sticky-top);
+          align-self: start;
+          height: 800px;
+          min-height: 800px;
+          max-height: 800px;
           z-index: 45;
           border-radius: 999px;
           outline: none;
@@ -4900,14 +5139,15 @@ export default function ShopifyCollectionMapping() {
           border: 0;
           background: transparent;
           transition:
-            width 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
-            opacity 920ms cubic-bezier(0.12, 0.9, 0.22, 1);
+            width 1100ms cubic-bezier(0.22, 0.61, 0.36, 1),
+            opacity 1100ms cubic-bezier(0.22, 0.61, 0.36, 1);
         }
         .paneDividerGrip {
           width: 5px;
           min-width: 5px;
-          height: clamp(96px, 22%, 160px);
-          min-height: 96px;
+          height: 800px;
+          min-height: 800px;
+          max-height: 800px;
           border-radius: 999px;
           background: #33506e;
           transition: background-color 120ms ease, box-shadow 120ms ease;
@@ -4967,6 +5207,7 @@ export default function ShopifyCollectionMapping() {
         .productPanel {
           position: relative;
           min-height: 0;
+          overflow: visible;
           background: linear-gradient(180deg, #111c32, #0d1628);
           border: 1px solid #2a3a56;
           border-radius: 18px;
@@ -4974,11 +5215,11 @@ export default function ShopifyCollectionMapping() {
           box-shadow: 0 14px 34px rgba(0, 0, 0, 0.38);
           transform-origin: left top;
           transition:
-            margin-left 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
-            box-shadow 920ms cubic-bezier(0.12, 0.9, 0.22, 1);
+            margin-left 1100ms cubic-bezier(0.22, 0.61, 0.36, 1),
+            box-shadow 1100ms cubic-bezier(0.22, 0.61, 0.36, 1);
         }
         .productPanel.treePaneCollapsed {
-          margin-left: -84px;
+          margin-left: -67px;
         }
         .productPanel.treePaneCollapsed::before {
           content: "";
@@ -5005,10 +5246,10 @@ export default function ShopifyCollectionMapping() {
           border-bottom: 1px solid #2a3a56;
           background: #0f1a2f;
           transition:
-            width 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
-            margin-left 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
-            padding-left 920ms cubic-bezier(0.12, 0.9, 0.22, 1),
-            border-radius 920ms cubic-bezier(0.12, 0.9, 0.22, 1);
+            width 1100ms cubic-bezier(0.22, 0.61, 0.36, 1),
+            margin-left 1100ms cubic-bezier(0.22, 0.61, 0.36, 1),
+            padding-left 1100ms cubic-bezier(0.22, 0.61, 0.36, 1),
+            border-radius 1100ms cubic-bezier(0.22, 0.61, 0.36, 1);
         }
         .productPanel.treePaneCollapsed .productControls {
           padding-left: 72px;
@@ -5153,48 +5394,51 @@ export default function ShopifyCollectionMapping() {
           color: #ffd7dc;
           background: #3f181d;
         }
-        .stage4ScaffoldGrid {
-          margin-top: 0;
-          display: grid;
-          gap: 10px;
-          grid-template-columns: 1fr 1fr;
-          padding: 12px;
-          background: #0d1628;
-        }
-        .stage4Panel {
-          border: 1px solid #2a3a56;
-          border-radius: 12px;
-          background: #111f36;
-          padding: 10px;
-          display: grid;
-          gap: 8px;
-        }
-        .stage4Panel h3 {
-          font-size: 14px;
-          font-weight: 700;
-          color: #e2e8f0;
-        }
-        .stage4TabRow {
+        /* Queue tabs are promoted to primary workflow filters directly above the table. */
+        .queueFilterRow {
           display: flex;
-          gap: 6px;
           flex-wrap: wrap;
-          margin-bottom: 2px;
+          gap: 8px;
+          margin-bottom: 10px;
         }
-        .stage4Tab {
-          min-height: 30px;
-          height: 30px;
-          font-size: 12px;
-          font-weight: 600;
+        .queueFilterTab {
+          min-height: 32px;
+          height: 32px;
           padding: 0 10px;
-          border-radius: 10px;
           border: 1px solid #3b5073;
+          border-radius: 10px;
           background: #11203a;
           color: #d7e5fb;
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 12px;
+          font-weight: 600;
         }
-        .stage4Tab.active {
-          border-color: #3b82f6;
-          background: #1a3f73;
+        .queueFilterTab.active {
+          border-color: #5f789c;
+          border-bottom-color: #3b82f6;
+          box-shadow: inset 0 -2px 0 #3b82f6;
           color: #ffffff;
+        }
+        .queueFilterCount {
+          min-width: 18px;
+          padding: 0 6px;
+          height: 18px;
+          border-radius: 999px;
+          border: 1px solid #3c4f70;
+          background: #152848;
+          color: #cfe0fb;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 11px;
+          line-height: 1;
+        }
+        .queueFilterCountSynced {
+          background: #113025;
+          border-color: #22c55e;
+          color: #bbf7d0;
         }
         .productSearchInput {
           min-width: 320px;
@@ -5209,6 +5453,9 @@ export default function ShopifyCollectionMapping() {
         .productRefreshBtn {
           min-width: 150px;
           justify-self: end;
+        }
+        .reportsTriggerBtn {
+          margin-left: auto;
         }
         .typesDropdownBtn {
           min-width: 170px;
@@ -5420,7 +5667,8 @@ export default function ShopifyCollectionMapping() {
           --group-head-height: 30px;
           flex: 1 1 auto;
           min-height: 0;
-          overflow: auto;
+          overflow-x: hidden;
+          overflow-y: hidden;
           border-top: 1px solid #2a3a56;
           border-bottom: 1px solid #2a3a56;
           border-left: 0;
@@ -5428,6 +5676,53 @@ export default function ShopifyCollectionMapping() {
           border-radius: 0;
           background: transparent;
           max-height: none;
+        }
+        .tableScrollDockWrap {
+          position: fixed;
+          left: 0;
+          right: 0;
+          bottom: var(--bottom-dock-offset);
+          z-index: 2147483000;
+          pointer-events: none;
+          height: 12px;
+          min-height: 12px;
+          max-height: 12px;
+          padding: 0;
+          background: #0b1322;
+          isolation: isolate;
+          transform: translateZ(0);
+        }
+        .tableScrollDock {
+          position: relative;
+          z-index: 2147483001;
+          width: 100%;
+          overflow-x: auto;
+          overflow-y: hidden;
+          height: 12px;
+          min-height: 12px;
+          max-height: 12px;
+          pointer-events: auto;
+          scrollbar-width: auto;
+          scrollbar-color: #3c4f70 #0b1322;
+          background: #0b1322;
+          border-top: 1px solid #2a3a56;
+          padding: 0;
+        }
+        .tableScrollDock::-webkit-scrollbar {
+          height: 12px;
+        }
+        .tableScrollDock::-webkit-scrollbar-track {
+          background: #0b1322;
+          border: 0;
+        }
+        .tableScrollDock::-webkit-scrollbar-thumb {
+          background: #3c4f70;
+          border-radius: 10px;
+          border: 0;
+        }
+        .tableScrollDockSpacer {
+          height: 1px;
+          min-width: 100%;
         }
         table {
           border-collapse: collapse;
@@ -5735,6 +6030,63 @@ export default function ShopifyCollectionMapping() {
           padding: 14px;
           box-shadow: 0 14px 42px rgba(0, 0, 0, 0.6);
         }
+        /* Reports hub modal groups report actions into a single focused overlay. */
+        .reportHubModal {
+          position: relative;
+          width: min(920px, 92vw);
+          max-height: 90vh;
+          overflow: auto;
+          border-radius: 12px;
+          border: 1px solid #2a3547;
+          background: #0a1324;
+          padding: 14px;
+          box-shadow: 0 14px 42px rgba(0, 0, 0, 0.6);
+          display: grid;
+          gap: 12px;
+        }
+        .reportHubSection h4 {
+          margin: 0 0 8px 0;
+          font-size: 13px;
+          color: #e2e8f0;
+        }
+        .reportHubGrid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 8px;
+        }
+        .reportHubCard {
+          min-height: 68px;
+          border: 1px solid #2f4261;
+          border-radius: 10px;
+          background: #0f1a2f;
+          color: #d8e6ff;
+          text-align: left;
+          padding: 10px;
+          display: grid;
+          gap: 4px;
+          cursor: pointer;
+        }
+        .reportHubCard:hover {
+          border-color: #5f789c;
+          background: #15233a;
+        }
+        .reportHubCardTitle {
+          font-size: 13px;
+          font-weight: 700;
+          line-height: 1.2;
+          color: #eaf2ff;
+        }
+        .reportHubCardDesc {
+          font-size: 11px;
+          line-height: 1.35;
+          color: #93a8c7;
+        }
+        .reportHubFooter {
+          display: flex;
+          justify-content: flex-end;
+          gap: 8px;
+          padding-top: 4px;
+        }
         .reportClose {
           position: absolute;
           top: 10px;
@@ -5866,7 +6218,7 @@ export default function ShopifyCollectionMapping() {
             gap: 10px;
           }
           .workflowRail,
-          .stage4ScaffoldGrid {
+          .reportHubGrid {
             grid-template-columns: 1fr;
           }
         }
