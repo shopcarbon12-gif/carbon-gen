@@ -868,13 +868,13 @@ export default function ShopifyMenuItemsTree({
         <button
           type="button"
           className="treeCollapseBtn"
-          aria-label="Collapse tree menu"
-          title="Collapse tree menu"
+          aria-label={collapsed ? "Expand tree menu" : "Collapse tree menu"}
+          title={collapsed ? "Expand tree menu" : "Collapse tree menu"}
           onClick={onToggleCollapse}
           disabled={saving}
         >
           <svg
-            className="treeCollapseBtnIcon"
+            className={`treeCollapseBtnIcon${collapsed ? " collapsed" : ""}`}
             viewBox="0 0 24 24"
             fill="none"
             xmlns="http://www.w3.org/2000/svg"
@@ -1184,10 +1184,15 @@ export default function ShopifyMenuItemsTree({
           height: 100%;
           overflow: hidden;
           transform-origin: left top;
+          transform: translate3d(0, 0, 0) scale(1);
+          opacity: 1;
+          will-change: padding, width, height, transform, opacity;
           transition:
             padding 1100ms cubic-bezier(0.22, 0.61, 0.36, 1),
             width 1100ms cubic-bezier(0.22, 0.61, 0.36, 1),
-            height 1100ms cubic-bezier(0.22, 0.61, 0.36, 1);
+            height 1100ms cubic-bezier(0.22, 0.61, 0.36, 1),
+            transform 1100ms cubic-bezier(0.22, 0.61, 0.36, 1),
+            opacity 520ms ease;
         }
         .gemTreePanel.collapsed {
           padding: 12px 10px 0 12px;
@@ -1196,6 +1201,7 @@ export default function ShopifyMenuItemsTree({
           display: flex;
           align-items: flex-start;
           justify-content: flex-start;
+          transform: translate3d(0, 0, 0) scale(1);
         }
         .treeSearchBar {
           display: grid;
@@ -1205,13 +1211,21 @@ export default function ShopifyMenuItemsTree({
           height: 38px;
           margin-bottom: 10px;
           align-items: center;
-          position: relative;
+          position: sticky;
+          top: 0;
+          z-index: 8;
+          background: linear-gradient(180deg, rgba(15, 26, 46, 0.98), rgba(15, 26, 46, 0.94));
+          box-shadow: 0 1px 0 rgba(42, 58, 86, 0.9);
           transform-origin: left top;
+          transform: translate3d(0, 0, 0);
+          opacity: 1;
           transition:
             grid-template-columns 1100ms cubic-bezier(0.22, 0.61, 0.36, 1),
             gap 1100ms cubic-bezier(0.22, 0.61, 0.36, 1),
             width 1100ms cubic-bezier(0.22, 0.61, 0.36, 1),
-            margin 1100ms cubic-bezier(0.22, 0.61, 0.36, 1);
+            margin 1100ms cubic-bezier(0.22, 0.61, 0.36, 1),
+            transform 1100ms cubic-bezier(0.22, 0.61, 0.36, 1),
+            opacity 520ms ease;
         }
         .treeSearchBar > .treeCollapseBtn,
         .treeSearchBar > .treeRefreshBtn,
@@ -1242,6 +1256,12 @@ export default function ShopifyMenuItemsTree({
           position: relative;
           z-index: 5;
           -webkit-tap-highlight-color: transparent;
+          transform: translate3d(0, 0, 0);
+          transition:
+            transform 1100ms cubic-bezier(0.22, 0.61, 0.36, 1),
+            border-color 140ms ease,
+            background 140ms ease,
+            color 140ms ease;
         }
         .treeCollapseBtn:hover {
           background: rgba(255, 255, 255, 0.14);
@@ -1262,6 +1282,10 @@ export default function ShopifyMenuItemsTree({
           height: 16px;
           display: block;
           transform: rotate(-90deg);
+          transition: transform 1100ms cubic-bezier(0.22, 0.61, 0.36, 1);
+        }
+        .treeCollapseBtnIcon.collapsed {
+          transform: rotate(0deg);
         }
         .gemTreePanel.collapsed .treeSearchBar {
           grid-template-columns: 38px 0 0 0 0;
@@ -1270,6 +1294,7 @@ export default function ShopifyMenuItemsTree({
           margin-top: 0;
           margin-left: 0;
           width: 38px;
+          transform: translate3d(0, 0, 0);
         }
         .gemTreePanel.collapsed .treeRefreshBtn,
         .gemTreePanel.collapsed .treeUndoBtn,
@@ -1277,10 +1302,10 @@ export default function ShopifyMenuItemsTree({
         .gemTreePanel.collapsed .treeSaveBtn,
         .gemTreePanel.collapsed .treeContent,
         .gemTreePanel.collapsed .unmappedWrap {
-          opacity: 1;
+          opacity: 0;
           pointer-events: none;
           overflow: hidden;
-          transform: translate3d(0, 0, 0) scale(1);
+          transform: translate3d(-18px, -10px, 0) scale(0.94);
         }
         .treeRefreshBtn,
         .treeUndoBtn,
@@ -1289,6 +1314,7 @@ export default function ShopifyMenuItemsTree({
         .treeContent,
         .unmappedWrap {
           transform-origin: left top;
+          opacity: 1;
           transition:
             width 1100ms cubic-bezier(0.22, 0.61, 0.36, 1),
             min-width 1100ms cubic-bezier(0.22, 0.61, 0.36, 1),
@@ -1296,8 +1322,10 @@ export default function ShopifyMenuItemsTree({
             max-height 1100ms cubic-bezier(0.22, 0.61, 0.36, 1),
             margin 1100ms cubic-bezier(0.22, 0.61, 0.36, 1),
             padding 1100ms cubic-bezier(0.22, 0.61, 0.36, 1),
-            border-width 1100ms cubic-bezier(0.22, 0.61, 0.36, 1);
-          transform: none;
+            border-width 1100ms cubic-bezier(0.22, 0.61, 0.36, 1),
+            transform 1100ms cubic-bezier(0.22, 0.61, 0.36, 1),
+            opacity 520ms ease;
+          transform: translate3d(0, 0, 0) scale(1);
         }
         .treeRefreshBtn,
         .treeUndoBtn,

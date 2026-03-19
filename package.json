@@ -27,6 +27,7 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:report": "playwright show-report",
+    "test:collection-mapping-kpi": "node --test --test-isolation=none tests/shopify-collection-mapping-kpi.test.mjs",
     "deploy:coolify": "node scripts/deploy-coolify.mjs",
     "deploy:coolify:setup": "node scripts/setup-coolify-deploy.mjs",
     "notify:test": "node scripts/notify-test.mjs",

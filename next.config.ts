@@ -1,5 +1,10 @@
 import type { NextConfig } from "next";
 
+function isTruthy(value: string | undefined): boolean {
+  const normalized = String(value || "").trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
+
 const nextConfig: NextConfig = {
   output: "standalone",
   allowedDevOrigins: [
@@ -44,6 +49,11 @@ const nextConfig: NextConfig = {
 
 export default nextConfig;
 
-if (process.env.NODE_ENV === "development" && !process.env.VERCEL) {
+const enableOpenNextCloudflareDev =
+  process.env.NODE_ENV === "development" &&
+  !process.env.VERCEL &&
+  isTruthy(process.env.OPENNEXT_CLOUDFLARE_DEV);
+
+if (enableOpenNextCloudflareDev) {
   import("@opennextjs/cloudflare").then((m) => m.initOpenNextCloudflareForDev());
 }

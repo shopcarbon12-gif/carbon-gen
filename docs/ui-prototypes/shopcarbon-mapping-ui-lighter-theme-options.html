@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ShopCarbon Mapping UI - Lighter Theme Options</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --page-bg: #08111f;
+      --card-shadow: 0 18px 40px rgba(0, 0, 0, 0.32);
+      --radius-xl: 20px;
+      --radius-lg: 16px;
+      --radius-md: 12px;
+      --radius-sm: 9px;
+      --font: Inter, "Segoe UI", Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      background:
+        radial-gradient(circle at 12% 10%, rgba(88, 135, 214, 0.22), transparent 30%),
+        radial-gradient(circle at 85% 85%, rgba(73, 189, 214, 0.14), transparent 34%),
+        linear-gradient(180deg, #07101d 0%, #08111f 100%);
+      color: #eaf1fb;
+      font-family: var(--font);
+    }
+
+    body {
+      padding: 28px;
+    }
+
+    .page {
+      max-width: 1560px;
+      margin: 0 auto;
+      display: grid;
+      gap: 18px;
+    }
+
+    .intro {
+      border: 1px solid #2d425e;
+      border-radius: var(--radius-xl);
+      padding: 22px 24px;
+      background: rgba(12, 22, 37, 0.82);
+      box-shadow: var(--card-shadow);
+    }
+
+    .intro h1 {
+      margin: 0 0 8px;
+      font-size: 26px;
+      line-height: 1.05;
+      letter-spacing: 0.01em;
+    }
+
+    .intro p {
+      margin: 0;
+      color: #a8bdd8;
+      font-size: 14px;
+      line-height: 1.5;
+      max-width: 980px;
+    }
+
+    .option-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .option {
+      border-radius: var(--radius-xl);
+      padding: 16px;
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, var(--bg), color-mix(in srgb, var(--bg) 78%, #000 22%));
+      box-shadow: var(--card-shadow);
+      display: grid;
+      gap: 14px;
+      min-width: 0;
+    }
+
+    .option-header {
+      display: grid;
+      gap: 8px;
+    }
+
+    .option-kicker {
+      color: var(--accent-soft);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .option-title {
+      font-size: 22px;
+      font-weight: 800;
+      line-height: 1.05;
+      color: var(--text);
+    }
+
+    .option-note {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .swatches {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .swatch {
+      width: 30px;
+      height: 30px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+    }
+
+    .preview {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      overflow: hidden;
+      background: linear-gradient(180deg, var(--panel), var(--panel-2));
+    }
+
+    .preview-topbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 16px;
+      background: linear-gradient(180deg, var(--panel-2), var(--panel));
+      border-bottom: 1px solid var(--line);
+    }
+
+    .burger {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      border: 1px solid var(--line-strong);
+      background: color-mix(in srgb, var(--panel-2) 76%, white 24%);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text);
+      font-weight: 700;
+      font-size: 18px;
+    }
+
+    .brand {
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      color: var(--text);
+    }
+
+    .route {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .kpis {
+      margin-left: auto;
+      display: flex;
+      gap: 8px;
+    }
+
+    .kpi {
+      min-width: 82px;
+      border-radius: 12px;
+      padding: 7px 10px;
+      border: 1px solid var(--line-strong);
+      background: color-mix(in srgb, var(--panel-2) 82%, white 18%);
+    }
+
+    .kpi-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .kpi-value {
+      margin-top: 2px;
+      font-size: 22px;
+      line-height: 1;
+      font-weight: 800;
+    }
+
+    .kpi.review .kpi-value {
+      color: #ffd580;
+    }
+
+    .kpi.push .kpi-value {
+      color: #d8b6ff;
+    }
+
+    .kpi.synced .kpi-value {
+      color: #aaf0c4;
+    }
+
+    .preview-shell {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      min-height: 420px;
+    }
+
+    .tree {
+      border-right: 1px solid var(--line);
+      background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 80%, white 20%), var(--panel));
+      padding: 14px;
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+      gap: 12px;
+    }
+
+    .tree-toolbar {
+      display: grid;
+      grid-template-columns: repeat(4, 34px) 1fr;
+      gap: 8px;
+    }
+
+    .tree-btn,
+    .ghost-chip {
+      border: 1px solid var(--line-strong);
+      background: color-mix(in srgb, var(--panel-2) 68%, white 32%);
+      color: var(--text);
+      border-radius: 10px;
+      min-height: 34px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .tree-search {
+      padding: 0 12px;
+      justify-content: flex-start;
+      color: var(--muted);
+    }
+
+    .tree-list {
+      display: grid;
+      gap: 8px;
+      align-content: start;
+    }
+
+    .tree-node {
+      border-radius: 11px;
+      border: 1px solid var(--line-strong);
+      background: linear-gradient(180deg, color-mix(in srgb, var(--panel-2) 74%, white 26%), color-mix(in srgb, var(--panel) 82%, white 18%));
+      padding: 10px 12px;
+      color: var(--text);
+      display: grid;
+      gap: 2px;
+    }
+
+    .tree-node.active {
+      border-color: var(--accent);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 58%, white 42%);
+      background: linear-gradient(180deg, color-mix(in srgb, var(--accent-bg) 78%, white 22%), color-mix(in srgb, var(--accent-bg) 92%, black 8%));
+    }
+
+    .tree-node b {
+      font-size: 12px;
+    }
+
+    .tree-node span {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .content {
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+      min-width: 0;
+    }
+
+    .controls {
+      display: flex;
+      gap: 8px;
+      padding: 14px;
+      border-bottom: 1px solid var(--line);
+      background: color-mix(in srgb, var(--panel) 86%, white 14%);
+    }
+
+    .search {
+      min-width: 0;
+      flex: 1 1 auto;
+      justify-content: flex-start;
+      padding: 0 14px;
+      color: var(--muted);
+    }
+
+    .primary {
+      padding: 0 16px;
+      border-color: color-mix(in srgb, var(--green) 68%, white 32%);
+      background: color-mix(in srgb, var(--green-bg) 82%, white 18%);
+      color: #e7fff0;
+    }
+
+    .table {
+      min-width: 0;
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    .header-row,
+    .data-row {
+      display: grid;
+      grid-template-columns: 52px 68px 88px 190px 164px 230px 120px 110px 1fr;
+      min-width: 0;
+    }
+
+    .header-row {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: color-mix(in srgb, var(--panel-2) 76%, white 24%);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .header-row > div {
+      padding: 11px 10px;
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--header);
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .table-body {
+      background: color-mix(in srgb, var(--panel) 92%, black 8%);
+    }
+
+    .data-row {
+      min-height: 112px;
+      border-bottom: 1px solid var(--line);
+      background: transparent;
+    }
+
+    .data-row.selected {
+      background: var(--selected);
+    }
+
+    .data-row > div {
+      padding: 12px 10px;
+      color: var(--text);
+      font-size: 12px;
+      min-width: 0;
+    }
+
+    .frozen {
+      background: color-mix(in srgb, var(--panel-2) 78%, white 22%);
+    }
+
+    .data-row.selected > .frozen {
+      background: color-mix(in srgb, var(--selected) 78%, var(--panel-2) 22%);
+    }
+
+    .thumb {
+      width: 54px;
+      height: 72px;
+      border-radius: 12px;
+      background: linear-gradient(180deg, #edf3ff, #d6e4fb);
+      border: 1px solid #c5d5f0;
+    }
+
+    .prod-name {
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--text);
+      margin-bottom: 3px;
+    }
+
+    .prod-sub {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      max-width: 220px;
+    }
+
+    .chip {
+      border-radius: 8px;
+      border: 1px solid var(--line-strong);
+      background: color-mix(in srgb, var(--panel-2) 72%, white 28%);
+      color: var(--text);
+      padding: 3px 8px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .chip.selected {
+      border-color: var(--accent);
+      background: color-mix(in srgb, var(--accent-bg) 78%, white 22%);
+      color: var(--accent-text);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 25px;
+      padding: 0 10px;
+      border-radius: 9px;
+      border: 1px solid transparent;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .badge.mapped {
+      border-color: color-mix(in srgb, var(--green) 70%, white 30%);
+      background: color-mix(in srgb, var(--green-bg) 82%, white 18%);
+      color: #baf7d0;
+    }
+
+    .badge.pending {
+      border-color: color-mix(in srgb, var(--purple) 70%, white 30%);
+      background: color-mix(in srgb, var(--purple-bg) 82%, white 18%);
+      color: #ead4ff;
+    }
+
+    .result-cell {
+      display: grid;
+      gap: 3px;
+      align-content: center;
+    }
+
+    .result-line {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .result-line b {
+      color: #f5f9ff;
+    }
+
+    .delta-add {
+      color: #9df0bc;
+      font-weight: 800;
+    }
+
+    .delta-remove {
+      color: #ffb4bc;
+      font-weight: 800;
+    }
+
+    .modal {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: linear-gradient(180deg, color-mix(in srgb, var(--panel-2) 88%, white 12%), var(--panel));
+      padding: 16px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .modal-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--text);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .modal-copy {
+      display: grid;
+      gap: 3px;
+    }
+
+    .modal-copy .result-line {
+      font-size: 12px;
+    }
+
+    .notes {
+      display: grid;
+      gap: 6px;
+      border-top: 1px solid var(--line);
+      padding-top: 12px;
+    }
+
+    .notes b {
+      color: var(--text);
+      font-size: 12px;
+    }
+
+    .notes p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .option.soft-slate {
+      --bg: #111827;
+      --panel: #1d293d;
+      --panel-2: #2a3952;
+      --line: #485a76;
+      --line-strong: #6781a7;
+      --muted: #b9c6d8;
+      --header: #eef3fb;
+      --text: #f9fbff;
+      --accent: #9bb8ff;
+      --accent-bg: #33486b;
+      --accent-text: #eef3ff;
+      --green: #58d68d;
+      --green-bg: #254d39;
+      --purple: #c7a2ff;
+      --purple-bg: #5a3d82;
+      --accent-soft: #d1b277;
+      --selected: #344763;
+    }
+
+    .option.blue-lift {
+      --bg: #0b1a30;
+      --panel: #17304e;
+      --panel-2: #21456c;
+      --line: #4f7398;
+      --line-strong: #76a0cd;
+      --muted: #c2d3e8;
+      --header: #f1f7ff;
+      --text: #fbfdff;
+      --accent: #6ec5ff;
+      --accent-bg: #245883;
+      --accent-text: #eef8ff;
+      --green: #49d99a;
+      --green-bg: #1e5c43;
+      --purple: #b88dff;
+      --purple-bg: #58339a;
+      --accent-soft: #7ed0ff;
+      --selected: #305785;
+    }
+
+    .option.polar-night {
+      --bg: #132033;
+      --panel: #263b57;
+      --panel-2: #335174;
+      --line: #6a88ae;
+      --line-strong: #92b6dc;
+      --muted: #d2deee;
+      --header: #f7fbff;
+      --text: #ffffff;
+      --accent: #8edfff;
+      --accent-bg: #3d6d92;
+      --accent-text: #f3fbff;
+      --green: #5ee7b7;
+      --green-bg: #2b6a53;
+      --purple: #d2adff;
+      --purple-bg: #7040ab;
+      --accent-soft: #bce7ff;
+      --selected: #40648f;
+    }
+
+    @media (max-width: 1320px) {
+      .option-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <section class="intro">
+      <h1>Lighter Theme Suggestions</h1>
+      <p>
+        These are three slightly lighter directions for the ShopCarbon collection mapping UI. They keep the same overall product feel,
+        structure, and dark-mode intent, but lift panels, borders, and content contrast so the interface feels less heavy.
+      </p>
+    </section>
+
+    <section class="option-grid">
+      <article class="option soft-slate">
+        <header class="option-header">
+          <div class="option-kicker">Option 1</div>
+          <div class="option-title">Soft Slate Lift</div>
+          <div class="option-note">Closest to current, but less blue and a little warmer. Think cleaner slate panels instead of heavy midnight navy.</div>
+          <div class="swatches">
+            <span class="swatch" style="background:#111827"></span>
+            <span class="swatch" style="background:#1d293d"></span>
+            <span class="swatch" style="background:#2a3952"></span>
+            <span class="swatch" style="background:#9bb8ff"></span>
+            <span class="swatch" style="background:#58d68d"></span>
+          </div>
+        </header>
+
+        <section class="preview">
+          <div class="preview-topbar">
+            <div class="burger">≡</div>
+            <div>
+              <div class="brand">CARBON</div>
+              <div class="route">COLLECTION MAPPING</div>
+            </div>
+            <div class="kpis">
+              <div class="kpi review">
+                <div class="kpi-label">Needs Review</div>
+                <div class="kpi-value">12</div>
+              </div>
+              <div class="kpi push">
+                <div class="kpi-label">Pending Push</div>
+                <div class="kpi-value">8</div>
+              </div>
+              <div class="kpi synced">
+                <div class="kpi-label">Synced</div>
+                <div class="kpi-value">3</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="preview-shell">
+            <aside class="tree">
+              <div class="tree-toolbar">
+                <div class="tree-btn">⤢</div>
+                <div class="tree-btn">↻</div>
+                <div class="tree-btn">↶</div>
+                <div class="tree-btn">💾</div>
+                <div class="ghost-chip tree-search">Search Menu</div>
+              </div>
+              <div class="tree-list">
+                <div class="tree-node active"><b>WOMEN</b><span>Women</span></div>
+                <div class="tree-node"><b>JEANS</b><span>jeans.html</span></div>
+                <div class="tree-node"><b>REWARDS</b><span>rewards.html</span></div>
+                <div class="tree-node"><b>NIGHT DRESSES</b><span>Collection</span></div>
+              </div>
+            </aside>
+
+            <section class="content">
+              <div class="controls">
+                <div class="ghost-chip search">Search Products (Title / Sku / Upc)</div>
+                <div class="ghost-chip primary">Search</div>
+                <div class="ghost-chip">Types: All types</div>
+                <div class="ghost-chip">Refresh Products</div>
+              </div>
+
+              <div class="table">
+                <div class="header-row">
+                  <div>✓</div>
+                  <div>View</div>
+                  <div>Picture</div>
+                  <div>Product Name</div>
+                  <div>Auto Path</div>
+                  <div>Suggested</div>
+                  <div>Decision</div>
+                  <div>Status</div>
+                  <div>Current → Final</div>
+                </div>
+
+                <div class="table-body">
+                  <div class="data-row selected">
+                    <div class="frozen">☑</div>
+                    <div class="frozen">◉</div>
+                    <div class="frozen"><div class="thumb"></div></div>
+                    <div class="frozen">
+                      <div class="prod-name">2 PIECES RORRI DRESS</div>
+                      <div class="prod-sub">UPC: 2122114</div>
+                    </div>
+                    <div>
+                      <div class="chip-row"><span class="chip">DRESSES</span></div>
+                    </div>
+                    <div>
+                      <div class="chip-row">
+                        <span class="chip selected">MIDI DRESSES</span>
+                        <span class="chip selected">MAXI DRESSES</span>
+                      </div>
+                    </div>
+                    <div><span class="badge mapped">Mapped</span></div>
+                    <div><span class="badge pending">Ready to Push</span></div>
+                    <div class="result-cell">
+                      <div class="result-line"><b>Current:</b> WOMEN</div>
+                      <div class="result-line"><b>Final:</b> WOMEN, WOMEN &gt; CLOTHING &gt; DRESSES</div>
+                      <div class="result-line"><b>Changed:</b> <span class="delta-add">+2</span> / <span class="delta-remove">-0</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="modal">
+          <div class="modal-title">Modal Snapshot</div>
+          <div class="modal-copy">
+            <div class="result-line"><b>Current:</b> WOMEN &gt; NEW &amp; NOW &gt; SUMMER SETS</div>
+            <div class="result-line"><b>Final:</b> WOMEN &gt; CLOTHING &gt; DRESSES</div>
+            <div class="result-line"><b>Changed:</b> <span class="delta-add">+1</span> / <span class="delta-remove">-0</span></div>
+          </div>
+        </section>
+
+        <div class="notes">
+          <b>Why this works</b>
+          <p>Best if you want the lightest possible change. Borders become easier to read, frozen columns feel cleaner, and result text breathes more.</p>
+        </div>
+      </article>
+
+      <article class="option blue-lift">
+        <header class="option-header">
+          <div class="option-kicker">Option 2</div>
+          <div class="option-title">Blue Lift</div>
+          <div class="option-note">A clearer cobalt/navy direction. This one should feel obviously bluer, sharper, and more digital than the current UI.</div>
+          <div class="swatches">
+            <span class="swatch" style="background:#0b1a30"></span>
+            <span class="swatch" style="background:#17304e"></span>
+            <span class="swatch" style="background:#21456c"></span>
+            <span class="swatch" style="background:#6ec5ff"></span>
+            <span class="swatch" style="background:#49d99a"></span>
+          </div>
+        </header>
+
+        <section class="preview">
+          <div class="preview-topbar">
+            <div class="burger">≡</div>
+            <div>
+              <div class="brand">CARBON</div>
+              <div class="route">COLLECTION MAPPING</div>
+            </div>
+            <div class="kpis">
+              <div class="kpi review">
+                <div class="kpi-label">Needs Review</div>
+                <div class="kpi-value">12</div>
+              </div>
+              <div class="kpi push">
+                <div class="kpi-label">Pending Push</div>
+                <div class="kpi-value">8</div>
+              </div>
+              <div class="kpi synced">
+                <div class="kpi-label">Synced</div>
+                <div class="kpi-value">3</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="preview-shell">
+            <aside class="tree">
+              <div class="tree-toolbar">
+                <div class="tree-btn">⤢</div>
+                <div class="tree-btn">↻</div>
+                <div class="tree-btn">↶</div>
+                <div class="tree-btn">💾</div>
+                <div class="ghost-chip tree-search">Search Menu</div>
+              </div>
+              <div class="tree-list">
+                <div class="tree-node active"><b>MEN</b><span>Men</span></div>
+                <div class="tree-node"><b>TOPS</b><span>tops.html</span></div>
+                <div class="tree-node"><b>SHORTS</b><span>shorts.html</span></div>
+                <div class="tree-node"><b>SUPER SKINNY JEANS</b><span>Collection</span></div>
+              </div>
+            </aside>
+
+            <section class="content">
+              <div class="controls">
+                <div class="ghost-chip search">Search Products (Title / Sku / Upc)</div>
+                <div class="ghost-chip primary">Search</div>
+                <div class="ghost-chip">Types: All types</div>
+                <div class="ghost-chip">Reports</div>
+              </div>
+
+              <div class="table">
+                <div class="header-row">
+                  <div>✓</div>
+                  <div>View</div>
+                  <div>Picture</div>
+                  <div>Product Name</div>
+                  <div>Auto Path</div>
+                  <div>Suggested</div>
+                  <div>Decision</div>
+                  <div>Status</div>
+                  <div>Current → Final</div>
+                </div>
+
+                <div class="table-body">
+                  <div class="data-row selected">
+                    <div class="frozen">☑</div>
+                    <div class="frozen">◉</div>
+                    <div class="frozen"><div class="thumb"></div></div>
+                    <div class="frozen">
+                      <div class="prod-name">73 T-SHIRT SET</div>
+                      <div class="prod-sub">UPC: 1125408</div>
+                    </div>
+                    <div>
+                      <div class="chip-row"><span class="chip">T-SHIRTS</span></div>
+                    </div>
+                    <div>
+                      <div class="chip-row">
+                        <span class="chip selected">TOPS</span>
+                        <span class="chip selected">GRAPHIC T-SHIRTS</span>
+                      </div>
+                    </div>
+                    <div><span class="badge mapped">Mapped</span></div>
+                    <div><span class="badge pending">Ready to Push</span></div>
+                    <div class="result-cell">
+                      <div class="result-line"><b>Current:</b> MEN</div>
+                      <div class="result-line"><b>Final:</b> MEN, MEN &gt; CLOTHING, MEN &gt; TOPS</div>
+                      <div class="result-line"><b>Changed:</b> <span class="delta-add">+3</span> / <span class="delta-remove">-0</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="modal">
+          <div class="modal-title">Modal Snapshot</div>
+          <div class="modal-copy">
+            <div class="result-line"><b>Current:</b> MEN &gt; CLOTHING &gt; TOPS</div>
+            <div class="result-line"><b>Final:</b> MEN &gt; CLOTHING &gt; TOPS, MEN &gt; T-SHIRTS</div>
+            <div class="result-line"><b>Changed:</b> <span class="delta-add">+1</span> / <span class="delta-remove">-0</span></div>
+          </div>
+        </section>
+
+        <div class="notes">
+          <b>Why this works</b>
+          <p>Most balanced option. It keeps the dark professional feel, but makes the interface feel fresher and less closed-in.</p>
+        </div>
+      </article>
+
+      <article class="option polar-night">
+        <header class="option-header">
+          <div class="option-kicker">Option 3</div>
+          <div class="option-title">Polar Night Glass</div>
+          <div class="option-note">The boldest lift. Noticeably lighter panels, icier borders, and more of a glassy studio-console feel.</div>
+          <div class="swatches">
+            <span class="swatch" style="background:#132033"></span>
+            <span class="swatch" style="background:#263b57"></span>
+            <span class="swatch" style="background:#335174"></span>
+            <span class="swatch" style="background:#8edfff"></span>
+            <span class="swatch" style="background:#5ee7b7"></span>
+          </div>
+        </header>
+
+        <section class="preview">
+          <div class="preview-topbar">
+            <div class="burger">≡</div>
+            <div>
+              <div class="brand">CARBON</div>
+              <div class="route">COLLECTION MAPPING</div>
+            </div>
+            <div class="kpis">
+              <div class="kpi review">
+                <div class="kpi-label">Needs Review</div>
+                <div class="kpi-value">12</div>
+              </div>
+              <div class="kpi push">
+                <div class="kpi-label">Pending Push</div>
+                <div class="kpi-value">8</div>
+              </div>
+              <div class="kpi synced">
+                <div class="kpi-label">Synced</div>
+                <div class="kpi-value">3</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="preview-shell">
+            <aside class="tree">
+              <div class="tree-toolbar">
+                <div class="tree-btn">⤢</div>
+                <div class="tree-btn">↻</div>
+                <div class="tree-btn">↶</div>
+                <div class="tree-btn">💾</div>
+                <div class="ghost-chip tree-search">Search Menu</div>
+              </div>
+              <div class="tree-list">
+                <div class="tree-node active"><b>WOMEN</b><span>Women</span></div>
+                <div class="tree-node"><b>DRESSES</b><span>women &gt; clothing</span></div>
+                <div class="tree-node"><b>JUMPSUITS &amp; ROMPERS</b><span>Collection</span></div>
+                <div class="tree-node"><b>MATCHING SETS</b><span>Collection</span></div>
+              </div>
+            </aside>
+
+            <section class="content">
+              <div class="controls">
+                <div class="ghost-chip search">Search Products (Title / Sku / Upc)</div>
+                <div class="ghost-chip primary">Search</div>
+                <div class="ghost-chip">Commit Changes</div>
+                <div class="ghost-chip">Refresh</div>
+              </div>
+
+              <div class="table">
+                <div class="header-row">
+                  <div>✓</div>
+                  <div>View</div>
+                  <div>Picture</div>
+                  <div>Product Name</div>
+                  <div>Auto Path</div>
+                  <div>Suggested</div>
+                  <div>Decision</div>
+                  <div>Status</div>
+                  <div>Current → Final</div>
+                </div>
+
+                <div class="table-body">
+                  <div class="data-row selected">
+                    <div class="frozen">☑</div>
+                    <div class="frozen">◉</div>
+                    <div class="frozen"><div class="thumb"></div></div>
+                    <div class="frozen">
+                      <div class="prod-name">3 PIECES TRACKSUITS</div>
+                      <div class="prod-sub">UPC: 2222773</div>
+                    </div>
+                    <div>
+                      <div class="chip-row"><span class="chip">JUMPSUITS</span></div>
+                    </div>
+                    <div>
+                      <div class="chip-row">
+                        <span class="chip selected">MATCHING SETS</span>
+                        <span class="chip selected">JUMPSUITS &amp; ROMPERS</span>
+                      </div>
+                    </div>
+                    <div><span class="badge mapped">Mapped</span></div>
+                    <div><span class="badge pending">Ready to Push</span></div>
+                    <div class="result-cell">
+                      <div class="result-line"><b>Current:</b> WOMEN, WOMEN &gt; CLOTHING</div>
+                      <div class="result-line"><b>Final:</b> WOMEN, WOMEN &gt; CLOTHING, WOMEN &gt; MATCHING SETS</div>
+                      <div class="result-line"><b>Changed:</b> <span class="delta-add">+1</span> / <span class="delta-remove">-0</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="modal">
+          <div class="modal-title">Modal Snapshot</div>
+          <div class="modal-copy">
+            <div class="result-line"><b>Current:</b> WOMEN &gt; NEW &amp; NOW &gt; WINTER SETS</div>
+            <div class="result-line"><b>Final:</b> WOMEN &gt; NEW &amp; NOW &gt; WINTER SETS, CLOTHING &gt; MATCHING SETS</div>
+            <div class="result-line"><b>Changed:</b> <span class="delta-add">+2</span> / <span class="delta-remove">-0</span></div>
+          </div>
+        </section>
+
+        <div class="notes">
+          <b>Why this works</b>
+          <p>Strongest visual lift. It makes table headers, result lines, and selection states feel crisper, but it is the farthest from the current darker baseline.</p>
+        </div>
+      </article>
+    </section>
+  </div>
+</body>
+</html>
