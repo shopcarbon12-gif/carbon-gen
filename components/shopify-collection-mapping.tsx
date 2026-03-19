@@ -2005,23 +2005,6 @@ export default function ShopifyCollectionMapping() {
     setMenuEditorLinkQuery((prev) => (prev.trim() ? prev : nextLabel));
   }, [showMenuEditor, menuEditorAssetOptions, menuEditorLinkTargetId]);
 
-  function getHeaderArrow(field: "title" | "upc") {
-    const [activeField, dir] = sort.split("-") as ["title" | "upc", "asc" | "desc"];
-    if (activeField !== field) return "\u2195";
-    return dir === "asc" ? "\u25B2" : "\u25BC";
-  }
-
-  function toggleHeaderSort(field: "title" | "upc") {
-    const [activeField, dir] = sort.split("-") as ["title" | "upc", "asc" | "desc"];
-    if (activeField === field) {
-      resetPageForDataQuery();
-      setSort(`${field}-${dir === "asc" ? "desc" : "asc"}` as SortValue);
-      return;
-    }
-    resetPageForDataQuery();
-    setSort(`${field}-asc` as SortValue);
-  }
-
   function downloadAuditCsv() {
     const lines: string[] = [];
     const csvCell = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`;
@@ -4042,62 +4025,63 @@ export default function ShopifyCollectionMapping() {
               />
               <button
                 type="button"
-                className="productSearchBtn"
+                className="productSearchBtn productIconBtn productIconBtnGreen"
                 onClick={() => resetPageForDataQuery()}
                 disabled={loading || saving}
+                aria-label="Search products"
+                title="Search products"
               >
-                Search
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                  <path
+                    d="M10.5 3a7.5 7.5 0 1 0 4.72 13.33l4.72 4.71a1 1 0 0 0 1.41-1.41l-4.7-4.71A7.5 7.5 0 0 0 10.5 3zm0 2a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11z"
+                    fill="currentColor"
+                  />
+                </svg>
               </button>
-              <div className="typesDropdown" ref={typesDropdownRef}>
-                <button
-                  type="button"
-                  className="typesDropdownBtn"
-                  onClick={() => setShowTypesDropdown((prev) => !prev)}
-                  aria-haspopup="listbox"
-                  aria-expanded={showTypesDropdown}
-                >
-                  Types: {selectedTypesLabel}
-                </button>
-                {showTypesDropdown ? (
-                  <div className="typesDropdownMenu" role="listbox" aria-label="Filter by product types" aria-multiselectable="true">
-                    <button
-                      type="button"
-                      className="typesResetBtn"
-                      onClick={() => clearTypeFilter()}
-                      disabled={selectedTypes.length < 1}
-                    >
-                      All types
-                    </button>
-                    <div className="typesList">
-                      {typeOptions.length < 1 ? (
-                        <div className="typesEmpty">No product types found.</div>
-                      ) : (
-                        typeOptions.map((type) => {
-                          const checked = selectedTypes.some((value) => value.toLowerCase() === type.toLowerCase());
-                          return (
-                            <label key={type} className="typesOption">
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() => toggleSelectedType(type)}
-                              />
-                              <span>{type}</span>
-                            </label>
-                          );
-                        })
-                      )}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
               <button
                 type="button"
-                className="productRefreshBtn"
+                className="productRefreshBtn productIconBtn"
                 onClick={() => void refreshProductsSection()}
                 disabled={loading || saving}
+                aria-label="Refresh products"
+                title="Refresh products"
               >
-                Refresh Products
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                  <path
+                    d="M12 4a8 8 0 0 1 7.6 5.6 1 1 0 1 1-1.9.6A6 6 0 1 0 16.8 16a1 1 0 1 1 1.4 1.4A8 8 0 1 1 12 4zm7.7 1.3V9a1 1 0 1 1-2 0V7.7h-1.3a1 1 0 1 1 0-2h2.3a1 1 0 0 1 1 1z"
+                    fill="currentColor"
+                  />
+                </svg>
               </button>
+              <button
+                type="button"
+                className="toolbarPlaceholderBtn productIconBtn"
+                aria-label="Open filters"
+                title="Filters (not wired yet)"
+                disabled={loading || saving}
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                  <path
+                    d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 .8 1.6l-5.8 7.73V19a1 1 0 0 1-1.45.9l-2-1A1 1 0 0 1 10 18v-3.67L4.2 6.6A1 1 0 0 1 4 6z"
+                    fill="currentColor"
+                  />
+                </svg>
+              </button>
+              <button
+                type="button"
+                className="toolbarPlaceholderBtn productIconBtn"
+                aria-label="Open sort options"
+                title="Sort options (not wired yet)"
+                disabled={loading || saving}
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                  <path
+                    d="M7 4a1 1 0 0 1 1 1v12.59l1.3-1.3a1 1 0 1 1 1.4 1.42l-3 3a1 1 0 0 1-1.4 0l-3-3a1 1 0 1 1 1.4-1.42L6 17.59V5a1 1 0 0 1 1-1zm10 16a1 1 0 0 1-1-1V6.41l-1.3 1.3a1 1 0 0 1-1.4-1.42l3-3a1 1 0 0 1 1.4 0l3 3a1 1 0 1 1-1.4 1.42L18 6.41V19a1 1 0 0 1-1 1z"
+                    fill="currentColor"
+                  />
+                </svg>
+              </button>
+              <div className="productControlsSpacer" />
               {/* Consolidate all report/export entry points into one modal trigger on the right side. */}
               <button
                 type="button"
@@ -4180,16 +4164,7 @@ export default function ShopifyCollectionMapping() {
                     </th>
                     <th className="center stickyEyeCol">View</th>
                     <th className="stickyPictureCol">Picture</th>
-                    <th className="productNameCol sortHead stickyProductNameCol">
-                      <button
-                        type="button"
-                        className="sortHeadBtn"
-                        onClick={() => toggleHeaderSort("title")}
-                        aria-label="Sort by product name"
-                      >
-                        Product Name <span className="sortArrow">{getHeaderArrow("title")}</span>
-                      </button>
-                    </th>
+                    <th className="productNameCol stickyProductNameCol">Product</th>
                     <th className="autoMappedCol">Auto Path</th>
                     <th className="suggestedCol">Suggested</th>
                     <th className="mappingDecisionCol">Decision</th>
@@ -5637,7 +5612,7 @@ export default function ShopifyCollectionMapping() {
           align-self: start;
           position: relative;
           top: 1px;
-          z-index: 12;
+          z-index: 2147483001;
           border: 0 !important;
           outline: 1px solid #2a3a56;
           outline-offset: -1px;
@@ -5662,7 +5637,7 @@ export default function ShopifyCollectionMapping() {
           padding: 0 !important;
           position: relative;
           top: 1px;
-          z-index: 12;
+          z-index: 2147483001;
           border: 0 !important;
           outline: 1px solid #2a3a56;
           outline-offset: -1px;
@@ -6117,19 +6092,47 @@ export default function ShopifyCollectionMapping() {
           background: #123924;
         }
         .productSearchBtn {
-          min-width: 104px;
+          min-width: 36px;
           flex: 0 0 auto;
+        }
+        .productControlsSpacer {
+          flex: 1 1 auto;
+          min-width: 0;
         }
         .typesDropdown {
           position: relative;
           flex: 0 0 auto;
         }
         .productRefreshBtn {
-          min-width: 150px;
+          min-width: 36px;
           justify-self: auto;
         }
         .reportsTriggerBtn {
           margin-left: 0;
+        }
+        .productIconBtn {
+          width: 36px;
+          min-width: 36px;
+          height: 36px;
+          min-height: 36px;
+          padding: 0;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 0;
+          line-height: 1;
+        }
+        .productIconBtnGreen {
+          border-color: #22c55e !important;
+          background: #166534 !important;
+          color: #dcfce7 !important;
+        }
+        .productIconBtnGreen:hover:not(:disabled) {
+          border-color: #4ade80 !important;
+          background: #15803d !important;
+        }
+        .toolbarPlaceholderBtn {
+          opacity: 0.95;
         }
         .typesDropdownBtn {
           min-width: 170px;
