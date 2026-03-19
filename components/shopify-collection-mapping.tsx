@@ -145,11 +145,23 @@ type MappingResponse = {
 
 async function readJsonResponse<T>(resp: Response): Promise<T> {
   const text = await resp.text();
-  if (!text) return {} as T;
+  const trimmed = String(text || "").trim();
+  if (!trimmed) return {} as T;
   try {
-    return JSON.parse(text) as T;
+    return JSON.parse(trimmed) as T;
   } catch {
-    return { ok: false, error: "Received malformed JSON response." } as T;
+    // Some upstream responses are prefixed/suffixed with non-JSON noise; salvage the JSON body when possible.
+    const firstBrace = trimmed.indexOf("{");
+    const lastBrace = trimmed.lastIndexOf("}");
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      const candidate = trimmed.slice(firstBrace, lastBrace + 1);
+      try {
+        return JSON.parse(candidate) as T;
+      } catch {
+        // Fall through to a normalized error payload.
+      }
+    }
+    return { ok: false, error: "Received malformed JSON response. Please retry." } as T;
   }
 }
 
@@ -332,6 +344,7 @@ export default function ShopifyCollectionMapping() {
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
   // Queue tabs are now the primary workflow filter, defaulting to Needs Review.
   const [activeQueueTab, setActiveQueueTab] = useState("needs-review");
+  const KPI_NEEDS_REVIEW_UNION_FILTER = "needs-review-kpi-union";
   // Reports are consolidated behind a single modal trigger to reduce canvas clutter.
   const [showReportsModal, setShowReportsModal] = useState(false);
   const [queueJobs, setQueueJobs] = useState<QueueJob[]>([]);
@@ -960,6 +973,10 @@ export default function ShopifyCollectionMapping() {
       const workflow = rowWorkflowById.get(row.id);
       if (!workflow) return false;
       if (activeQueueTab === "needs-review") return workflow.needsReview;
+      // Keep KPI behavior additive only: Needs Review KPI includes review + suggestion-ready + manual-changes.
+      if (activeQueueTab === KPI_NEEDS_REVIEW_UNION_FILTER) {
+        return workflow.needsReview || workflow.suggestionReady || workflow.manualChanges;
+      }
       if (activeQueueTab === "suggestion-ready") return workflow.suggestionReady;
       if (activeQueueTab === "manual-changes") return workflow.manualChanges;
       if (activeQueueTab === "ready-push") return workflow.readyToPush;
@@ -1276,10 +1293,24 @@ export default function ShopifyCollectionMapping() {
       if (options?.refreshCollections) {
         params.set("refreshCollections", "true");
       }
-      const resp = await fetch(`/api/shopify/collection-mapping?${params.toString()}`, {
+      const resp = await fetch(`/api/collection-mapping?${params.toString()}`, {
         cache: "no-store",
         signal: controller.signal,
       });
+      if (resp.status === 404) {
+        // Localhost safety: when the API route resolves to an HTML 404 page, keep the UI stable instead of surfacing a JSON parse error.
+        setNodes([]);
+        setLastSyncedNodes([]);
+        setRows([]);
+        setCollections([]);
+        setCollectionCount(0);
+        setProductCount(0);
+        setTotalPages(1);
+        setPage(1);
+        setWarning("Collection mapping API is currently unavailable on localhost (404).");
+        setError("");
+        return true;
+      }
       const json = await readJsonResponse<MappingResponse>(resp);
       if (requestId !== loadDataReqIdRef.current) return false;
       if (!resp.ok || !json.ok) {
@@ -1370,7 +1401,7 @@ export default function ShopifyCollectionMapping() {
     setMenuEditorAssetsLoading(true);
     setError("");
     try {
-      const resp = await fetch("/api/shopify/collection-mapping", {
+      const resp = await fetch("/api/collection-mapping", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(withShopContext({
@@ -1468,7 +1499,7 @@ export default function ShopifyCollectionMapping() {
     setSaving(true);
     setError("");
     try {
-      const resp = await fetch("/api/shopify/collection-mapping", {
+      const resp = await fetch("/api/collection-mapping", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
@@ -2278,7 +2309,7 @@ export default function ShopifyCollectionMapping() {
             timestamp: Date.now(),
           });
         // #endregion
-        const resp = await fetch("/api/shopify/collection-mapping", {
+        const resp = await fetch("/api/collection-mapping", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(withShopContext(payload)),
@@ -2388,7 +2419,7 @@ export default function ShopifyCollectionMapping() {
             timestamp: Date.now(),
           });
         // #endregion
-        const resp = await fetch("/api/shopify/collection-mapping", {
+        const resp = await fetch("/api/collection-mapping", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(withShopContext(payload)),
@@ -2807,7 +2838,7 @@ export default function ShopifyCollectionMapping() {
     setSaving(true);
     setError("");
     try {
-      const resp = await fetch("/api/shopify/collection-mapping", {
+      const resp = await fetch("/api/collection-mapping", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(withShopContext({
@@ -2857,7 +2888,7 @@ export default function ShopifyCollectionMapping() {
     setSaving(true);
     setError("");
     try {
-      const resp = await fetch("/api/shopify/collection-mapping", {
+      const resp = await fetch("/api/collection-mapping", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(withShopContext({
@@ -3244,7 +3275,7 @@ export default function ShopifyCollectionMapping() {
       setSelectedUnmappedCollectionIds({});
     }
     try {
-      const resp = await fetch("/api/shopify/collection-mapping", {
+      const resp = await fetch("/api/collection-mapping", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(withShopContext({ action: "refresh-menu", menuHandle: currentMenuHandle })),
@@ -3379,14 +3410,14 @@ export default function ShopifyCollectionMapping() {
             <div className="headerKpiValue">{moduleSummary.totalLoaded}</div>
           </div>
           <div
-            className={`headerKpiCard headerKpiCardReview${activeQueueTab === "needs-review" ? " headerKpiCardActive" : ""}`}
+            className={`headerKpiCard headerKpiCardReview${activeQueueTab === KPI_NEEDS_REVIEW_UNION_FILTER ? " headerKpiCardActive" : ""}`}
             role="button"
             tabIndex={0}
-            onClick={() => setActiveQueueTab("needs-review")}
+            onClick={() => setActiveQueueTab(KPI_NEEDS_REVIEW_UNION_FILTER)}
             onKeyDown={(event) => {
               if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
-                setActiveQueueTab("needs-review");
+                setActiveQueueTab(KPI_NEEDS_REVIEW_UNION_FILTER);
               }
             }}
           >
