@@ -539,6 +539,8 @@ export default function ShopifyCollectionMapping() {
   const [treePanelWidth, setTreePanelWidth] = useState(TREE_PANEL_DEFAULT_WIDTH);
   const [treePanelMinWidth, setTreePanelMinWidth] = useState(TREE_PANEL_MIN_WIDTH);
   const [treePaneCollapsed, setTreePaneCollapsed] = useState(false);
+  const [pageDockRightInset, setPageDockRightInset] = useState(0);
+  const [tableDockInsets, setTableDockInsets] = useState({ left: 0, right: 0, startOffset: 0 });
   const [resizingPanes, setResizingPanes] = useState(false);
   const [resizingWorkspaceHeight, setResizingWorkspaceHeight] = useState(false);
   const [workspaceHeight, setWorkspaceHeight] = useState<number | null>(WORKSPACE_DEFAULT_HEIGHT);
@@ -565,6 +567,10 @@ export default function ShopifyCollectionMapping() {
   const undoCounterRef = useRef(0);
   const commitMenuRef = useRef<HTMLDivElement | null>(null);
   const tableWrapRef = useRef<HTMLDivElement | null>(null);
+  const tableScrollDockWrapRef = useRef<HTMLDivElement | null>(null);
+  const tableScrollDockRef = useRef<HTMLDivElement | null>(null);
+  const tableScrollSpacerRef = useRef<HTMLDivElement | null>(null);
+  const syncingTableScrollRef = useRef<"table" | "dock" | null>(null);
   const horizontalSnapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const horizontalDragActiveRef = useRef(false);
   const horizontalSnapInFlightRef = useRef(false);
@@ -1266,6 +1272,118 @@ export default function ShopifyCollectionMapping() {
     return "↕";
   }
 
+  useEffect(() => {
+    const tableWrap = tableWrapRef.current;
+    const dock = tableScrollDockRef.current;
+    const spacer = tableScrollSpacerRef.current;
+    const pageEl = pageScrollRef.current;
+    if (!tableWrap || !dock || !spacer) return;
+    const table = tableWrap.querySelector("table");
+    if (!(table instanceof HTMLElement)) return;
+
+    let rafId = 0;
+    const syncDockGeometry = () => {
+      rafId = 0;
+      const rect = tableWrap.getBoundingClientRect();
+      const nextLeft = Math.max(0, Math.round(rect.left));
+      const nextRight = Math.max(0, Math.round(window.innerWidth - rect.right));
+      setTableDockInsets((prev) => {
+        if (prev.left === nextLeft && prev.right === nextRight && prev.startOffset === 0) return prev;
+        return { left: nextLeft, right: nextRight, startOffset: 0 };
+      });
+      const pageScrollbarWidth = pageEl ? Math.max(0, pageEl.offsetWidth - pageEl.clientWidth) : 0;
+      setPageDockRightInset((prev) => (prev === pageScrollbarWidth ? prev : pageScrollbarWidth));
+      const nextWidth = Math.max(table.scrollWidth, tableWrap.clientWidth);
+      const nextWidthPx = `${nextWidth}px`;
+      if (spacer.style.width !== nextWidthPx) spacer.style.width = nextWidthPx;
+    };
+    const queueGeometrySync = () => {
+      if (rafId) return;
+      rafId = window.requestAnimationFrame(syncDockGeometry);
+    };
+
+    const syncFromTable = () => {
+      if (syncingTableScrollRef.current === "dock") return;
+      syncingTableScrollRef.current = "table";
+      if (Math.abs(dock.scrollLeft - tableWrap.scrollLeft) > 0.5) {
+        dock.scrollLeft = tableWrap.scrollLeft;
+      }
+      requestAnimationFrame(() => {
+        if (syncingTableScrollRef.current === "table") syncingTableScrollRef.current = null;
+      });
+    };
+    const syncFromDock = () => {
+      if (syncingTableScrollRef.current === "table") return;
+      syncingTableScrollRef.current = "dock";
+      if (Math.abs(tableWrap.scrollLeft - dock.scrollLeft) > 0.5) {
+        tableWrap.scrollLeft = dock.scrollLeft;
+      }
+      requestAnimationFrame(() => {
+        if (syncingTableScrollRef.current === "dock") syncingTableScrollRef.current = null;
+      });
+    };
+
+    queueGeometrySync();
+    dock.scrollLeft = tableWrap.scrollLeft;
+    tableWrap.addEventListener("scroll", syncFromTable, { passive: true });
+    dock.addEventListener("scroll", syncFromDock, { passive: true });
+    window.addEventListener("resize", queueGeometrySync);
+    const resizeObserver = new ResizeObserver(queueGeometrySync);
+    resizeObserver.observe(tableWrap);
+    resizeObserver.observe(table);
+    if (pageEl) resizeObserver.observe(pageEl);
+
+    return () => {
+      tableWrap.removeEventListener("scroll", syncFromTable);
+      dock.removeEventListener("scroll", syncFromDock);
+      window.removeEventListener("resize", queueGeometrySync);
+      resizeObserver.disconnect();
+      if (rafId) window.cancelAnimationFrame(rafId);
+    };
+  }, [rows.length, activeQueueTab, treePaneCollapsed, workspaceHeight]);
+
+  useEffect(() => {
+    const pageEl = pageScrollRef.current;
+    const tableWrap = tableWrapRef.current;
+    if (!pageEl || !tableWrap) return;
+    const headerRow = tableWrap.querySelector("thead tr:last-child");
+    if (!(headerRow instanceof HTMLElement)) return;
+
+    let rafId = 0;
+
+    const syncStickyHeaderOffset = () => {
+      rafId = 0;
+      const tableRect = tableWrap.getBoundingClientRect();
+      const pageRect = pageEl.getBoundingClientRect();
+      const headerHeight = headerRow.offsetHeight || 0;
+      const desiredOffset = Math.max(0, Math.round(pageRect.top - tableRect.top));
+      const maxOffset = Math.max(0, Math.round(tableRect.bottom - pageRect.top - headerHeight));
+      const nextOffset = Math.max(0, Math.min(desiredOffset, maxOffset));
+      tableWrap.style.setProperty("--page-table-head-offset", `${nextOffset}px`);
+    };
+
+    const queueSync = () => {
+      if (rafId) return;
+      rafId = window.requestAnimationFrame(syncStickyHeaderOffset);
+    };
+
+    queueSync();
+    pageEl.addEventListener("scroll", queueSync, { passive: true });
+    window.addEventListener("resize", queueSync);
+
+    const resizeObserver = new ResizeObserver(queueSync);
+    resizeObserver.observe(pageEl);
+    resizeObserver.observe(tableWrap);
+    resizeObserver.observe(headerRow);
+
+    return () => {
+      pageEl.removeEventListener("scroll", queueSync);
+      window.removeEventListener("resize", queueSync);
+      resizeObserver.disconnect();
+      if (rafId) window.cancelAnimationFrame(rafId);
+      tableWrap.style.removeProperty("--page-table-head-offset");
+    };
+  }, [rows.length, treePaneCollapsed, workspaceHeight, activeQueueTab]);
 
   const rowById = useMemo(() => {
     return new Map(rows.map((row) => [row.id, row]));
@@ -4135,7 +4253,7 @@ export default function ShopifyCollectionMapping() {
             <div className="tableWrap" ref={tableWrapRef}>
               <table>
                 <thead>
-                  <tr className="columnHeaderRow">
+                  <tr>
                     <th className="center stickyCheckboxCol">
                       <input
                         type="checkbox"
@@ -4192,28 +4310,6 @@ export default function ShopifyCollectionMapping() {
                       </span>
                     </th>
                     <th className="stage4HeadCol">Current → Final</th>
-                  </tr>
-                  <tr className="filterHeaderRow">
-                    <th className="stickyCheckboxCol" />
-                    <th className="stickyEyeCol" />
-                    <th className="stickyPictureCol" />
-                    <th className="stickyProductNameCol">
-                      <input
-                        value={search}
-                        onChange={(event) => {
-                          setSearch(event.target.value);
-                          resetPageForDataQuery();
-                        }}
-                        placeholder="Filter products"
-                        aria-label="Filter products"
-                        className="tableFilterInput"
-                      />
-                    </th>
-                    <th className="autoMappedCol" />
-                    <th className="suggestedCol" />
-                    <th className="mappingDecisionCol" />
-                    <th className="syncStatusCol" />
-                    <th className="stage4HeadCol" />
                   </tr>
                 </thead>
                 <tbody>
@@ -5175,6 +5271,19 @@ export default function ShopifyCollectionMapping() {
       ) : null}
       </div>
       </main>
+      <div
+        className="tableScrollDockWrap"
+        ref={tableScrollDockWrapRef}
+        aria-hidden="true"
+        style={{
+          left: `${Math.max(0, tableDockInsets.left + tableDockInsets.startOffset)}px`,
+          right: `${Math.max(tableDockInsets.right, pageDockRightInset)}px`,
+        }}
+      >
+        <div className="tableScrollDock" ref={tableScrollDockRef}>
+          <div className="tableScrollDockSpacer" ref={tableScrollSpacerRef} />
+        </div>
+      </div>
       <style jsx>{`
         :global(html),
         :global(body) {
@@ -5186,6 +5295,7 @@ export default function ShopifyCollectionMapping() {
           --notice-bar-height: 37px;
           --bottom-dock-lane-height: 12px;
           --bottom-dock-offset: 2px;
+          --page-table-head-offset: 0px;
           --workspace-sticky-top: 8px;
           --notice-gap-to-workspace: 0px;
           --muted: #98a9c4;
@@ -5749,8 +5859,8 @@ export default function ShopifyCollectionMapping() {
           justify-content: flex-start;
           align-items: flex-start;
           align-self: start;
-          position: relative;
-          top: 1px;
+          position: sticky;
+          top: var(--workspace-sticky-top);
           z-index: 2147483001;
           border: 0 !important;
           outline: 1px solid #2a3a56;
@@ -5774,8 +5884,8 @@ export default function ShopifyCollectionMapping() {
           align-self: start;
           overflow: hidden;
           padding: 0 !important;
-          position: relative;
-          top: 1px;
+          position: sticky;
+          top: var(--workspace-sticky-top);
           z-index: 2147483001;
           border: 0 !important;
           outline: 1px solid #2a3a56;
@@ -6757,7 +6867,7 @@ export default function ShopifyCollectionMapping() {
           z-index: 0;
           flex: 1 1 auto;
           min-height: 0;
-          overflow-x: auto;
+          overflow-x: hidden;
           overflow-y: auto;
           border-top: 1px solid #2a3a56;
           border-bottom: 1px solid #2a3a56;
@@ -6767,16 +6877,67 @@ export default function ShopifyCollectionMapping() {
           background: transparent;
           max-height: none;
         }
-        .tableWrap table {
+        .tableScrollDockWrap {
+          position: fixed;
+          left: 0;
+          right: 0;
+          bottom: var(--bottom-dock-offset);
+          z-index: 2147483000;
+          pointer-events: none;
+          height: 12px;
+          min-height: 12px;
+          max-height: 12px;
+          padding: 0;
+          background: #0b1322;
+          isolation: isolate;
+          transform: translateZ(0);
+        }
+        .tableScrollDock {
+          position: relative;
+          z-index: 2147483001;
+          width: 100%;
+          overflow-x: auto;
+          overflow-y: hidden;
+          height: 12px;
+          min-height: 12px;
+          max-height: 12px;
+          pointer-events: auto;
+          scrollbar-width: auto;
+          scrollbar-color: #3c4f70 #0b1322;
+          background: #0b1322;
+          border-top: 1px solid #2a3a56;
+          padding: 0;
+        }
+        .tableScrollDock::-webkit-scrollbar {
+          height: 12px;
+        }
+        .tableScrollDock::-webkit-scrollbar-track {
+          background: #0b1322;
+          border: 0;
+        }
+        .tableScrollDock::-webkit-scrollbar-thumb {
+          background: #3c4f70;
+          border-radius: 10px;
+          border: 0;
+        }
+        .tableScrollDockSpacer {
+          height: 1px;
+          min-width: 100%;
+        }
+        table {
           border-collapse: separate;
           border-spacing: 0;
-          width: max-content;
-          min-width: 100%;
+          width: 100%;
+          min-width: 2200px;
           table-layout: fixed;
         }
         thead {
-          z-index: 40;
+          position: sticky;
+          top: 0;
+          z-index: 34;
           isolation: isolate;
+          transform: none;
+          will-change: auto;
         }
         th,
         td {
@@ -6809,34 +6970,30 @@ export default function ShopifyCollectionMapping() {
         .stickyPictureCol,
         .stickyProductNameCol {
           position: sticky;
-          z-index: 50;
+          z-index: 7;
           background: #0f1a2f;
-          background-clip: padding-box;
         }
         .stickyCheckboxCol {
           left: 0;
           min-width: 52px;
           width: 52px;
-          max-width: 52px;
         }
         .stickyEyeCol {
           left: 52px;
           min-width: 52px;
           width: 52px;
-          max-width: 52px;
         }
         .stickyPictureCol {
           left: 104px;
-          min-width: 88px;
-          width: 88px;
-          max-width: 88px;
+          min-width: 80px;
+          width: 80px;
         }
         .stickyProductNameCol {
-          left: 192px;
-          width: 300px;
-          min-width: 300px;
-          max-width: 300px;
-          z-index: 51;
+          left: 184px;
+          width: 260px;
+          min-width: 260px;
+          max-width: 260px;
+          z-index: 9;
           box-shadow: 10px 0 14px rgba(3, 8, 18, 0.42);
         }
         th {
@@ -6850,47 +7007,23 @@ export default function ShopifyCollectionMapping() {
           background-clip: padding-box;
           box-shadow: 0 1px 0 #24354e;
         }
-        .columnHeaderRow th {
-          top: 0;
-          z-index: 60;
-          height: 48px;
-        }
-        .filterHeaderRow th {
+        thead th {
           position: sticky;
-          top: 48px;
-          z-index: 55;
-          background: #0f1a2f;
-          box-shadow: 0 1px 0 #24354e;
-          text-transform: none;
-          font-size: 12px;
-          padding: 8px;
-        }
-        .filterHeaderRow .stickyCheckboxCol,
-        .filterHeaderRow .stickyEyeCol,
-        .filterHeaderRow .stickyPictureCol,
-        .filterHeaderRow .stickyProductNameCol {
-          z-index: 65;
-          background: #0f1a2f;
+          top: 0;
+          z-index: 36;
         }
         thead .stickyCheckboxCol,
         thead .stickyEyeCol,
         thead .stickyPictureCol,
         thead .stickyProductNameCol {
-          z-index: 60;
+          z-index: 41;
           background: #111f36;
-        }
-        thead .filterHeaderRow .stickyCheckboxCol,
-        thead .filterHeaderRow .stickyEyeCol,
-        thead .filterHeaderRow .stickyPictureCol,
-        thead .filterHeaderRow .stickyProductNameCol {
-          z-index: 65;
-          background: #0f1a2f;
         }
         tbody .stickyCheckboxCol,
         tbody .stickyEyeCol,
         tbody .stickyPictureCol,
         tbody .stickyProductNameCol {
-          z-index: 50;
+          z-index: 15;
         }
         .groupHead th {
           top: 0;
@@ -6908,6 +7041,9 @@ export default function ShopifyCollectionMapping() {
         }
         .stage4HeadCol {
           text-align: left;
+          min-width: 760px;
+          width: auto;
+          max-width: none;
         }
         tbody tr:hover {
           background: #132543;
@@ -6970,19 +7106,6 @@ export default function ShopifyCollectionMapping() {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-        }
-        .tableFilterInput,
-        .tableFilterSelect {
-          width: 100%;
-          min-width: 0;
-          height: 32px;
-          border: 1px solid #2a3a56;
-          border-radius: 8px;
-          background: #0b1322;
-          color: #d7e1ef;
-          padding: 0 10px;
-          font-size: 12px;
-          box-sizing: border-box;
         }
         .center {
           text-align: center;
@@ -7283,13 +7406,14 @@ export default function ShopifyCollectionMapping() {
           display: grid;
           gap: 3px;
           min-width: 0;
-          max-width: 100%;
+          max-width: none;
           text-align: left;
         }
         .stage4ResultCell {
           min-width: 620px;
-          width: 620px;
-          max-width: 620px;
+          width: auto;
+          max-width: none;
+          overflow: visible;
         }
         .stage4ResultLine {
           color: var(--muted);
@@ -7297,8 +7421,8 @@ export default function ShopifyCollectionMapping() {
           line-height: 1.2;
           font-weight: 600;
           white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
+          overflow: visible;
+          text-overflow: clip;
           margin-bottom: 1px;
         }
         .stage4ResultLine b {
