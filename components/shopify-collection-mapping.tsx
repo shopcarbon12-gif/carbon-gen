@@ -939,6 +939,17 @@ export default function ShopifyCollectionMapping() {
     return map;
   }, [collections]);
 
+  const collectionIdByHandle = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const row of collections) {
+      const handle = String(row.handle || "").trim().toLowerCase();
+      const id = String(row.id || "").trim();
+      if (!handle || !id) continue;
+      map.set(handle, id);
+    }
+    return map;
+  }, [collections]);
+
   const getCollectionDisplayName = (handle: string) => {
     const key = String(handle || "").trim().toLowerCase();
     if (!key) return "";
@@ -3927,7 +3938,7 @@ export default function ShopifyCollectionMapping() {
     downloadCsvFile(`collection-delta-${new Date().toISOString().slice(0, 10)}.csv`, lines);
   }
 
-  function executePushPreviewScaffold() {
+  async function executePushPreviewScaffold() {
     if (!pushPreviewModal) return;
     if (pushPreviewModal.actionKind === "remove-all-collections" && removeAllConfirmText.trim() !== "REMOVE ALL") {
       setError('Type "REMOVE ALL" to confirm destructive removal.');
@@ -3955,42 +3966,162 @@ export default function ShopifyCollectionMapping() {
         completedRows: 0,
         failedRows: 0,
         skippedRows: skippedRows.length,
-        note: `Dry-run scaffold: ${queuedRows.length} eligible, ${skippedRows.length} skipped.`,
+        note: `Commit started: ${queuedRows.length} eligible, ${skippedRows.length} skipped.`,
       },
       ...prev,
     ]);
-    window.setTimeout(() => {
-      setQueueJobs((prev) =>
-        prev.map((job) =>
-          job.id === jobId
-            ? {
-                ...job,
-                state: "running",
-                completedRows: Math.max(0, queuedRows.length - 1),
-              }
-            : job
-        )
-      );
-      window.setTimeout(() => {
+    setQueueJobs((prev) =>
+      prev.map((job) =>
+        job.id === jobId
+          ? {
+              ...job,
+              state: "running",
+              completedRows: 0,
+            }
+          : job
+      )
+    );
+    const toTargets = (refs: string[]) => {
+      const nodeKeySet = new Set<string>();
+      const directCollectionIdSet = new Set<string>();
+      for (const ref of refs) {
+        const raw = String(ref || "").trim();
+        if (!raw) continue;
+        if (raw.startsWith("PATH:")) {
+          const path = normalizeMenuPath(raw.slice(5));
+          const nodeKey = nodeKeyByPath.get(path);
+          if (nodeKey) nodeKeySet.add(nodeKey);
+          continue;
+        }
+        if (raw.startsWith("DIRECT:")) {
+          const handle = String(raw.slice(7) || "").trim().toLowerCase();
+          const collectionId = collectionIdByHandle.get(handle);
+          if (collectionId) directCollectionIdSet.add(collectionId);
+        }
+      }
+      return {
+        nodeKeys: Array.from(nodeKeySet),
+        directCollectionIds: Array.from(directCollectionIdSet),
+      };
+    };
+    let completedRows = 0;
+    let failedRows = 0;
+    const warningMessages: string[] = [];
+    const rowIdsToClearDrafts: string[] = [];
+    try {
+      for (const row of queuedRows) {
+        const rowId = String(row.rowId || "").trim();
+        if (!rowId) continue;
+        const runToggle = async (
+          refs: string[],
+          checked: boolean,
+          uncheckPolicy: "keep-descendants" | "remove-descendants" = "keep-descendants"
+        ) => {
+          const targets = toTargets(refs);
+          if (targets.nodeKeys.length < 1 && targets.directCollectionIds.length < 1) return { ok: true, warning: "" };
+          const resp = await fetch("/api/collection-mapping", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(
+              withShopContext({
+                action: "bulk-toggle-nodes",
+                productIds: [rowId],
+                nodeKeys: targets.nodeKeys,
+                directCollectionIds: targets.directCollectionIds,
+                checked,
+                uncheckPolicy,
+              })
+            ),
+          });
+          const json = await readJsonResponse<ToggleResponse>(resp);
+          if (!resp.ok || !json.ok) {
+            return { ok: false, warning: String(json.error || "Commit request failed.") };
+          }
+          return { ok: true, warning: String(json.warning || "") };
+        };
+        let rowSucceeded = true;
+        if (pushPreviewModal.actionKind === "remove-all-collections") {
+          const allCurrentRefs = Array.from(new Set(row.currentCollections));
+          const removal = await runToggle(allCurrentRefs, false, "remove-descendants");
+          if (!removal.ok) rowSucceeded = false;
+          if (removal.warning) warningMessages.push(`${row.title}: ${removal.warning}`);
+        } else {
+          const addResult = await runToggle(row.collectionsToAdd, true);
+          if (!addResult.ok) rowSucceeded = false;
+          if (addResult.warning) warningMessages.push(`${row.title}: ${addResult.warning}`);
+          const removeResult = await runToggle(row.collectionsToRemove, false, "keep-descendants");
+          if (!removeResult.ok) rowSucceeded = false;
+          if (removeResult.warning) warningMessages.push(`${row.title}: ${removeResult.warning}`);
+        }
+        if (rowSucceeded) {
+          completedRows += 1;
+          rowIdsToClearDrafts.push(rowId);
+        } else {
+          failedRows += 1;
+        }
         setQueueJobs((prev) =>
           prev.map((job) =>
             job.id === jobId
               ? {
                   ...job,
-                  state: "completed",
-                  completedRows: queuedRows.length,
-                  finishedAt: Date.now(),
+                  completedRows,
+                  failedRows,
                 }
               : job
           )
         );
-        setExecutionBusy(false);
-      }, 700);
-    }, 300);
-    setWarning(
-      `${pushPreviewModal.actionKind} execution scaffold queued (${queuedRows.length} eligible / ${skippedRows.length} skipped).`
-    );
-    setPushPreviewModal(null);
+      }
+
+      if (rowIdsToClearDrafts.length > 0) {
+        void fetch("/api/collection-mapping", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(withShopContext({ action: "clear-row-drafts", rowIds: rowIdsToClearDrafts })),
+        }).catch(() => {});
+      }
+
+      setQueueJobs((prev) =>
+        prev.map((job) =>
+          job.id === jobId
+            ? {
+                ...job,
+                state: failedRows > 0 ? "failed" : "completed",
+                finishedAt: Date.now(),
+                note:
+                  failedRows > 0
+                    ? `Commit finished with ${failedRows} failed row(s).`
+                    : `Commit finished successfully for ${completedRows} row(s).`,
+              }
+            : job
+        )
+      );
+      setWarning(
+        failedRows > 0
+          ? `Commit completed with ${failedRows} failed row(s). ${warningMessages.join(" | ")}`
+          : warningMessages.length > 0
+            ? `Commit completed. ${warningMessages.join(" | ")}`
+            : `Commit completed for ${completedRows} row(s).`
+      );
+      await loadData({ refreshProducts: true });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Commit execution failed.";
+      setQueueJobs((prev) =>
+        prev.map((job) =>
+          job.id === jobId
+            ? {
+                ...job,
+                state: "failed",
+                finishedAt: Date.now(),
+                note: message,
+              }
+            : job
+        )
+      );
+      setError(message);
+    } finally {
+      setExecutionBusy(false);
+      setPushPreviewModal(null);
+    }
   }
 
   function toggleSuggestionSelection(rowId: string, kind: "menu" | "collection", value: string, disabled: boolean) {
@@ -5365,9 +5496,9 @@ export default function ShopifyCollectionMapping() {
       ) : null}
 
       {pushPreviewModal?.open ? (
-        <div className="previewOverlay" onClick={() => setPushPreviewModal(null)} role="dialog" aria-label="Push dry run preview">
+        <div className="previewOverlay" onClick={() => setPushPreviewModal(null)} role="dialog" aria-label="Push commit preview">
           <div className="editorModal" onClick={(event) => event.stopPropagation()}>
-            <h3>Dry-Run Preview: {pushPreviewModal.actionKind}</h3>
+            <h3>Commit Preview: {pushPreviewModal.actionKind}</h3>
             <p className="muted" style={{ marginTop: 6 }}>
               Eligible rows: {pushPreviewModal.summary.eligibleRows} / {pushPreviewModal.summary.totalRows}. Skipped rows are excluded.
             </p>
@@ -5422,7 +5553,7 @@ export default function ShopifyCollectionMapping() {
                 Cancel
               </button>
               <button type="button" className="primary" onClick={executePushPreviewScaffold} disabled={executionBusy}>
-                {executionBusy ? "Queuing..." : "Confirm Scaffold Run"}
+                {executionBusy ? "Committing..." : "Confirm Commit"}
               </button>
             </div>
           </div>
