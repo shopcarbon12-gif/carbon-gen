@@ -200,6 +200,7 @@ type MappingExplainModalState = {
   suggestionReady: boolean;
   manualChanges: boolean;
   isReviewed: boolean;
+  draftUpdatedAt: string | null;
 };
 
 async function readJsonResponse<T>(resp: Response): Promise<T> {
@@ -492,6 +493,14 @@ function selectedRecordToList(record: Record<string, boolean> | undefined): stri
     .map(([key]) => String(key || "").trim())
     .filter(Boolean)
     .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+}
+
+function formatDraftSavedAt(value: string | null | undefined) {
+  const raw = String(value || "").trim();
+  if (!raw) return "Not saved yet";
+  const ts = Date.parse(raw);
+  if (!Number.isFinite(ts)) return "Not saved yet";
+  return new Date(ts).toLocaleString();
 }
 
 export default function ShopifyCollectionMapping() {
@@ -4084,6 +4093,7 @@ export default function ShopifyCollectionMapping() {
       suggestionReady: workflow.suggestionReady,
       manualChanges: workflow.manualChanges,
       isReviewed: workflow.isReviewed,
+      draftUpdatedAt: row.draft?.updatedAt || null,
     });
   }
 
@@ -5692,6 +5702,7 @@ export default function ShopifyCollectionMapping() {
                   <div className="mappingSectionTitle">DECISION & STATUS</div>
                   <div className="mappingKvRow"><span>Decision</span><span className={`decisionBadge decision-${mappingExplainModal.mappingDecision.toLowerCase()}`}>{getUiStatusLabel(mappingExplainModal.mappingDecision)}</span></div>
                   <div className="mappingKvRow"><span>Approved</span><b>{mappingExplainModal.isReviewed ? "Yes" : "No"}</b></div>
+                  <div className="mappingKvRow"><span>Draft Saved</span><b>{formatDraftSavedAt(mappingExplainModal.draftUpdatedAt)}</b></div>
                   <div className="mappingKvRow"><span>Sync Status</span><span className={`syncBadge sync-${mappingExplainModal.statusBadgeTone}`}>{mappingExplainModal.statusLabel}</span></div>
                   <div className="muted tiny"><b>Auto Paths</b>: {formatListPreview(mappingExplainModal.autoMappedPaths)}</div>
                   <div className="muted tiny"><b>Direct Collections</b>: {formatListPreview(mappingExplainModal.directCollections.map(getCollectionDisplayName))}</div>
