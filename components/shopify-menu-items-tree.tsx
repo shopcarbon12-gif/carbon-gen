@@ -867,9 +867,9 @@ export default function ShopifyMenuItemsTree({
       <div className="treeSearchBar">
         <button
           type="button"
-          className="treeCollapseBtn"
+          className="treeCollapseBtn quickTreeTooltip"
           aria-label={collapsed ? "Expand tree menu" : "Collapse tree menu"}
-          title={collapsed ? "Expand tree menu" : "Collapse tree menu"}
+          data-tooltip={collapsed ? "Expand tree menu" : "Collapse tree menu"}
           onClick={onToggleCollapse}
           disabled={saving}
         >
@@ -905,9 +905,9 @@ export default function ShopifyMenuItemsTree({
         </button>
         <button
           type="button"
-          className="treeRefreshBtn"
+          className="treeRefreshBtn quickTreeTooltip"
           aria-label="refresh"
-          title="refresh"
+          data-tooltip="Refresh menu tree"
           onClick={onRefreshTree}
           disabled={saving}
         >
@@ -915,9 +915,9 @@ export default function ShopifyMenuItemsTree({
         </button>
         <button
           type="button"
-          className="treeUndoBtn"
+          className="treeUndoBtn quickTreeTooltip"
           aria-label={undoEntries.length < 1 ? "Collapse tree cards" : "Undo history"}
-          title={undoEntries.length < 1 ? "Collapse tree cards" : "Undo history"}
+          data-tooltip={undoEntries.length < 1 ? "Collapse tree cards" : "Undo history"}
           onClick={undoEntries.length < 1 ? onCollapseTreeCards : onUndoMenuToggle}
           disabled={saving}
         >
@@ -963,8 +963,9 @@ export default function ShopifyMenuItemsTree({
         ) : null}
         <button
           type="button"
-          className="treeSaveBtn"
+          className="treeSaveBtn quickTreeTooltip"
           aria-label={saving ? "Saving menu tree" : "Save menu tree"}
+          data-tooltip={saving ? "Saving menu tree" : "Save menu tree"}
           onClick={() => void onSaveTree()}
           disabled={saving}
         >
@@ -1332,12 +1333,46 @@ export default function ShopifyMenuItemsTree({
         .treeSaveBtn {
           max-width: 38px;
         }
+        .quickTreeTooltip {
+          position: relative;
+        }
+        .quickTreeTooltip[data-tooltip]::after {
+          content: attr(data-tooltip);
+          position: absolute;
+          left: 50%;
+          bottom: calc(100% + 6px);
+          transform: translate(-50%, 2px);
+          opacity: 0;
+          pointer-events: none;
+          white-space: nowrap;
+          padding: 4px 7px;
+          border-radius: 6px;
+          border: 1px solid #5f789c;
+          background: #0b1322;
+          color: #e5edf9;
+          font-size: 11px;
+          font-weight: 700;
+          line-height: 1;
+          z-index: 200;
+          transition: opacity 70ms ease, transform 70ms ease;
+        }
+        .quickTreeTooltip[data-tooltip]:hover::after,
+        .quickTreeTooltip[data-tooltip]:focus-visible::after {
+          opacity: 1;
+          transform: translate(-50%, 0);
+        }
         .treeSearchInput {
           width: 100%;
           max-width: 100%;
           min-height: 38px;
           height: 38px;
           align-self: center;
+          font-size: 12px;
+          font-weight: 600;
+        }
+        .treeSearchInput::placeholder {
+          font-size: 12px;
+          font-weight: 500;
         }
         .gemTreePanel.collapsed .treeContent,
         .gemTreePanel.collapsed .unmappedWrap {

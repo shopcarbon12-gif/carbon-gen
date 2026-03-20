@@ -59,6 +59,9 @@ type ProductRow = {
   suggestedDirectCollections?: string[];
 };
 
+type AdvancedStatusFilter = "NEEDS_REVIEW" | "READY_TO_PUSH" | "PUSH_FAILED" | "SYNCED";
+type AdvancedDecisionFilter = "AUTO_MAPPED" | "SUGGESTED" | "MANUAL_REVIEW";
+
 type RowStagingState = {
   autoMappedPaths: string[];
   selectedSuggestionPaths: string[];
@@ -234,6 +237,16 @@ type ToggleResponse = {
 };
 
 type SortValue = "title-asc" | "title-desc" | "upc-asc" | "upc-desc";
+type HeaderSortMode =
+  | "product-az"
+  | "product-za"
+  | "picture-with-image"
+  | "picture-without-image"
+  | "suggested-with"
+  | "suggested-without"
+  | "status-synced"
+  | "status-ready"
+  | "status-review";
 
 type DropPosition = "before" | "after" | "inside";
 type MenuEditorMode = "add" | "edit";
@@ -464,8 +477,18 @@ export default function ShopifyCollectionMapping() {
   const [treeSearch, setTreeSearch] = useState("");
   const [search, setSearch] = useState("");
   const [typeOptions, setTypeOptions] = useState<string[]>([]);
-  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
-  const [showTypesDropdown, setShowTypesDropdown] = useState(false);
+  const [showFiltersDrawer, setShowFiltersDrawer] = useState(false);
+  const [appliedFilterTypes, setAppliedFilterTypes] = useState<string[]>([]);
+  const [appliedFilterStatuses, setAppliedFilterStatuses] = useState<AdvancedStatusFilter[]>([]);
+  const [appliedFilterDecisions, setAppliedFilterDecisions] = useState<AdvancedDecisionFilter[]>([]);
+  const [appliedFilterHasSuggestions, setAppliedFilterHasSuggestions] = useState(false);
+  const [appliedFilterIncludeSynced, setAppliedFilterIncludeSynced] = useState(false);
+  const [draftFilterTypes, setDraftFilterTypes] = useState<string[]>([]);
+  const [draftTypeDropdownOpen, setDraftTypeDropdownOpen] = useState(false);
+  const [draftFilterStatuses, setDraftFilterStatuses] = useState<AdvancedStatusFilter[]>([]);
+  const [draftFilterDecisions, setDraftFilterDecisions] = useState<AdvancedDecisionFilter[]>([]);
+  const [draftFilterHasSuggestions, setDraftFilterHasSuggestions] = useState(false);
+  const [draftFilterIncludeSynced, setDraftFilterIncludeSynced] = useState(false);
   const [showCommitMenu, setShowCommitMenu] = useState(false);
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
   // Default to full loaded product view on first load.
@@ -478,6 +501,7 @@ export default function ShopifyCollectionMapping() {
   const [pushPreviewModal, setPushPreviewModal] = useState<PushPreviewModalState | null>(null);
   const [removeAllConfirmText, setRemoveAllConfirmText] = useState("");
   const [sort, setSort] = useState<SortValue>("title-asc");
+  const [headerSortMode, setHeaderSortMode] = useState<HeaderSortMode>("product-az");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [totalPages, setTotalPages] = useState(1);
@@ -544,7 +568,6 @@ export default function ShopifyCollectionMapping() {
   const treePanelAutoWidthRef = useRef<HTMLDivElement | null>(null);
   const tempNodeCounterRef = useRef(0);
   const undoCounterRef = useRef(0);
-  const typesDropdownRef = useRef<HTMLDivElement | null>(null);
   const commitMenuRef = useRef<HTMLDivElement | null>(null);
   const tableWrapRef = useRef<HTMLDivElement | null>(null);
   const tableScrollDockWrapRef = useRef<HTMLDivElement | null>(null);
@@ -1026,14 +1049,255 @@ export default function ShopifyCollectionMapping() {
 
   // Apply the active queue tab directly to table rows.
   const filteredRows = useMemo(() => {
-    return rows.filter((row) => {
+    const appliedFilterTypeSet = new Set(appliedFilterTypes.map((value) => value.trim().toLowerCase()).filter(Boolean));
+    const filtered = rows.filter((row) => {
       const workflow = rowWorkflowById.get(row.id);
       if (!workflow) return false;
       const matchesQueueTab = matchesShopifyCollectionMappingQueueTab(activeQueueTab, workflow);
       if (!matchesQueueTab) return false;
+      const staging = rowStagingById.get(row.id);
+      const rowDecision = String(staging?.mappingDecision || row.mappingDecision || "MANUAL_REVIEW")
+        .trim()
+        .toUpperCase() as AdvancedDecisionFilter;
+      const rowStatusFilter: AdvancedStatusFilter =
+        workflow.statusBadgeTone === "review"
+          ? "NEEDS_REVIEW"
+          : workflow.statusBadgeTone === "failed"
+            ? "PUSH_FAILED"
+            : workflow.statusBadgeTone === "synced"
+              ? "SYNCED"
+              : "READY_TO_PUSH";
+      if (appliedFilterStatuses.length > 0 && !appliedFilterStatuses.includes(rowStatusFilter)) return false;
+      if (appliedFilterDecisions.length > 0 && !appliedFilterDecisions.includes(rowDecision)) return false;
+      if (appliedFilterTypeSet.size > 0) {
+        const rowType = String(row.itemType || "").trim().toLowerCase();
+        if (!rowType || !appliedFilterTypeSet.has(rowType)) return false;
+      }
+      if (appliedFilterHasSuggestions) {
+        const suggestionReady = (staging?.suggestionOptions || []).some((option) => !option.disabled);
+        if (!suggestionReady) return false;
+      }
+      if (!appliedFilterIncludeSynced && workflow.statusBadgeTone === "synced") return false;
       return true;
     });
-  }, [activeQueueTab, rows, rowWorkflowById]);
+    const sorted = [...filtered];
+    const collator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
+    const titleAsc = (left: ProductRow, right: ProductRow) => collator.compare(left.title || "", right.title || "");
+    sorted.sort((left, right) => {
+      const leftWorkflow = rowWorkflowById.get(left.id);
+      const rightWorkflow = rowWorkflowById.get(right.id);
+      const leftStaging = rowStagingById.get(left.id);
+      const rightStaging = rowStagingById.get(right.id);
+      switch (headerSortMode) {
+        case "product-za":
+          return titleAsc(right, left);
+        case "picture-with-image":
+        case "picture-without-image": {
+          const leftHasImage = Boolean(left.image);
+          const rightHasImage = Boolean(right.image);
+          if (leftHasImage !== rightHasImage) {
+            const withImageFirst = headerSortMode === "picture-with-image";
+            return leftHasImage === withImageFirst ? -1 : 1;
+          }
+          return titleAsc(left, right);
+        }
+        case "suggested-with":
+        case "suggested-without": {
+          const leftHasSuggested = (leftStaging?.suggestionOptions || []).some((option) => !option.disabled);
+          const rightHasSuggested = (rightStaging?.suggestionOptions || []).some((option) => !option.disabled);
+          if (leftHasSuggested !== rightHasSuggested) {
+            const withSuggestedFirst = headerSortMode === "suggested-with";
+            return leftHasSuggested === withSuggestedFirst ? -1 : 1;
+          }
+          return titleAsc(left, right);
+        }
+        case "status-synced":
+        case "status-ready":
+        case "status-review": {
+          const primaryStatus =
+            headerSortMode === "status-synced"
+              ? "Synced"
+              : headerSortMode === "status-ready"
+                ? "Ready to Push"
+                : "Needs Review";
+          const leftStatus = leftWorkflow?.statusLabel || "";
+          const rightStatus = rightWorkflow?.statusLabel || "";
+          const leftPrimary = leftStatus === primaryStatus;
+          const rightPrimary = rightStatus === primaryStatus;
+          if (leftPrimary !== rightPrimary) return leftPrimary ? -1 : 1;
+          const statusOrder = collator.compare(leftStatus, rightStatus);
+          if (statusOrder !== 0) return statusOrder;
+          return titleAsc(left, right);
+        }
+        case "product-az":
+        default:
+          return titleAsc(left, right);
+      }
+    });
+    return sorted;
+  }, [
+    activeQueueTab,
+    rows,
+    rowWorkflowById,
+    rowStagingById,
+    appliedFilterStatuses,
+    appliedFilterDecisions,
+    appliedFilterTypes,
+    appliedFilterHasSuggestions,
+    appliedFilterIncludeSynced,
+    headerSortMode,
+  ]);
+
+  const statusFilterOptions: Array<{ key: AdvancedStatusFilter; label: string }> = [
+    { key: "NEEDS_REVIEW", label: "Needs Review" },
+    { key: "READY_TO_PUSH", label: "Ready to Push" },
+    { key: "PUSH_FAILED", label: "Push Failed" },
+    { key: "SYNCED", label: "Synced" },
+  ];
+  const decisionFilterOptions: Array<{ key: AdvancedDecisionFilter; label: string }> = [
+    { key: "AUTO_MAPPED", label: "Auto Matched" },
+    { key: "SUGGESTED", label: "Suggestion" },
+    { key: "MANUAL_REVIEW", label: "Manual" },
+  ];
+  const statusLabelByKey = new Map(statusFilterOptions.map((entry) => [entry.key, entry.label]));
+  const decisionLabelByKey = new Map(decisionFilterOptions.map((entry) => [entry.key, entry.label]));
+
+  const appliedFilterChips = useMemo(() => {
+    const chips: Array<{ id: string; kind: string; value?: string; label: string }> = [];
+    for (const status of appliedFilterStatuses) {
+      chips.push({
+        id: `status-${status}`,
+        kind: "status",
+        value: status,
+        label: `Status: ${statusLabelByKey.get(status) || status}`,
+      });
+    }
+    for (const decision of appliedFilterDecisions) {
+      chips.push({
+        id: `decision-${decision}`,
+        kind: "decision",
+        value: decision,
+        label: `Decision: ${decisionLabelByKey.get(decision) || decision}`,
+      });
+    }
+    for (const itemType of appliedFilterTypes) {
+      chips.push({
+        id: `type-${itemType.toLowerCase()}`,
+        kind: "type",
+        value: itemType,
+        label: `Type: ${itemType}`,
+      });
+    }
+    if (appliedFilterHasSuggestions) {
+      chips.push({
+        id: "has-suggestions",
+        kind: "has-suggestions",
+        label: "Has Suggestions",
+      });
+    }
+    if (appliedFilterIncludeSynced) {
+      chips.push({
+        id: "include-synced",
+        kind: "include-synced",
+        label: "Include Synced",
+      });
+    }
+    return chips;
+  }, [
+    appliedFilterStatuses,
+    appliedFilterDecisions,
+    appliedFilterTypes,
+    appliedFilterHasSuggestions,
+    appliedFilterIncludeSynced,
+  ]);
+
+  const draftFilterTypesLabel = useMemo(() => {
+    if (draftFilterTypes.length < 1) return "All types";
+    if (draftFilterTypes.length === 1) return draftFilterTypes[0];
+    return `${draftFilterTypes.length} types selected`;
+  }, [draftFilterTypes]);
+
+  function openFiltersDrawer() {
+    setDraftFilterTypes(appliedFilterTypes);
+    setDraftFilterStatuses(appliedFilterStatuses);
+    setDraftFilterDecisions(appliedFilterDecisions);
+    setDraftFilterHasSuggestions(appliedFilterHasSuggestions);
+    setDraftFilterIncludeSynced(appliedFilterIncludeSynced);
+    setDraftTypeDropdownOpen(false);
+    setShowFiltersDrawer(true);
+  }
+
+  function applyAdvancedFilters() {
+    setAppliedFilterTypes(draftFilterTypes);
+    setAppliedFilterStatuses(draftFilterStatuses);
+    setAppliedFilterDecisions(draftFilterDecisions);
+    setAppliedFilterHasSuggestions(draftFilterHasSuggestions);
+    setAppliedFilterIncludeSynced(draftFilterIncludeSynced);
+    setPage(1);
+    setDraftTypeDropdownOpen(false);
+    setShowFiltersDrawer(false);
+  }
+
+  function clearAdvancedFilters() {
+    setDraftFilterTypes([]);
+    setDraftFilterStatuses([]);
+    setDraftFilterDecisions([]);
+    setDraftFilterHasSuggestions(false);
+    setDraftFilterIncludeSynced(false);
+    setAppliedFilterTypes([]);
+    setAppliedFilterStatuses([]);
+    setAppliedFilterDecisions([]);
+    setAppliedFilterHasSuggestions(false);
+    setAppliedFilterIncludeSynced(false);
+    setPage(1);
+    setDraftTypeDropdownOpen(false);
+    setShowFiltersDrawer(false);
+  }
+
+  function removeAppliedFilterChip(chip: { kind: string; value?: string }) {
+    if (chip.kind === "status" && chip.value) {
+      setAppliedFilterStatuses((prev) => prev.filter((value) => value !== chip.value));
+    } else if (chip.kind === "decision" && chip.value) {
+      setAppliedFilterDecisions((prev) => prev.filter((value) => value !== chip.value));
+    } else if (chip.kind === "type" && chip.value) {
+      setAppliedFilterTypes((prev) => prev.filter((value) => value.toLowerCase() !== chip.value?.toLowerCase()));
+    } else if (chip.kind === "has-suggestions") {
+      setAppliedFilterHasSuggestions(false);
+    } else if (chip.kind === "include-synced") {
+      setAppliedFilterIncludeSynced(false);
+    }
+    setPage(1);
+  }
+
+  function cycleStatusHeaderSort() {
+    setHeaderSortMode((prev) => {
+      if (prev === "status-synced") return "status-ready";
+      if (prev === "status-ready") return "status-review";
+      return "status-synced";
+    });
+  }
+
+  function getHeaderSortArrow(column: "picture" | "product" | "suggested" | "status") {
+    if (column === "picture") {
+      if (headerSortMode === "picture-with-image") return "↑";
+      if (headerSortMode === "picture-without-image") return "↓";
+      return "↕";
+    }
+    if (column === "product") {
+      if (headerSortMode === "product-az") return "↑";
+      if (headerSortMode === "product-za") return "↓";
+      return "↕";
+    }
+    if (column === "suggested") {
+      if (headerSortMode === "suggested-with") return "↑";
+      if (headerSortMode === "suggested-without") return "↓";
+      return "↕";
+    }
+    if (headerSortMode === "status-synced") return "↑";
+    if (headerSortMode === "status-ready") return "→";
+    if (headerSortMode === "status-review") return "↓";
+    return "↕";
+  }
 
   useEffect(() => {
     const tableWrap = tableWrapRef.current;
@@ -1324,11 +1588,6 @@ export default function ShopifyCollectionMapping() {
     return filteredRows.every((row) => Boolean(selectedProducts[row.id]));
   }, [filteredRows, selectedProducts]);
 
-  const selectedTypesLabel = useMemo(() => {
-    if (selectedTypes.length < 1) return "All types";
-    return selectedTypes[0];
-  }, [selectedTypes]);
-
   function matchesMenuSearch(node: MenuNode, query: string) {
     const normalizedQuery = query.trim().toLowerCase();
     if (!normalizedQuery) return true;
@@ -1484,9 +1743,6 @@ export default function ShopifyCollectionMapping() {
       if (activeShop) {
         params.set("shop", activeShop);
       }
-      if (selectedTypes.length > 0) {
-        params.set("types", selectedTypes[0]);
-      }
       if (options?.refreshProducts) {
         params.set("refreshProducts", "true");
       }
@@ -1553,15 +1809,6 @@ export default function ShopifyCollectionMapping() {
       setMenuMeta({
         title: String(json.menu?.title || "Main menu").trim() || "Main menu",
         handle: String(json.menu?.handle || "main-menu").trim() || "main-menu",
-      });
-      setSelectedTypes((prev) => {
-        if (prev.length < 1) return prev;
-        const allowed = new Set(nextTypeOptions.map((value) => value.toLowerCase()));
-        const nextSelected = prev.filter((value) => allowed.has(value.toLowerCase()));
-        if (nextSelected.length === prev.length && nextSelected.every((value, index) => value === prev[index])) {
-          return prev;
-        }
-        return nextSelected;
       });
       setTotalPages(Math.max(1, Number(json.totalPages || 1)));
       if (json.page && Number.isFinite(Number(json.page))) {
@@ -1933,7 +2180,7 @@ export default function ShopifyCollectionMapping() {
       window.clearTimeout(timer);
       loadDataAbortRef.current?.abort();
     };
-  }, [search, selectedTypes, sort, page, pageSize, activeShop]);
+  }, [search, sort, page, pageSize, activeShop]);
 
   useEffect(() => {
     const queryShop = normalizeShopDomain(new URLSearchParams(window.location.search).get("shop") || "");
@@ -1973,7 +2220,7 @@ export default function ShopifyCollectionMapping() {
 
   useEffect(() => {
     setSelectedProducts({});
-  }, [search, selectedTypes, treeSearch, sort]);
+  }, [search, treeSearch, sort]);
 
   useEffect(() => {
     setExpandedNodes((prev) => {
@@ -2046,18 +2293,6 @@ export default function ShopifyCollectionMapping() {
   }, [previewImage]);
 
   useEffect(() => {
-    if (!showTypesDropdown) return;
-    const onMouseDown = (event: MouseEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (typesDropdownRef.current?.contains(target)) return;
-      setShowTypesDropdown(false);
-    };
-    window.addEventListener("mousedown", onMouseDown);
-    return () => window.removeEventListener("mousedown", onMouseDown);
-  }, [showTypesDropdown]);
-
-  useEffect(() => {
     if (!showCommitMenu) return;
     const onMouseDown = (event: MouseEvent) => {
       const target = event.target;
@@ -2070,13 +2305,16 @@ export default function ShopifyCollectionMapping() {
   }, [showCommitMenu]);
 
   useEffect(() => {
-    if (!showTypesDropdown) return;
+    if (!showFiltersDrawer) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setShowTypesDropdown(false);
+      if (event.key === "Escape") {
+        setDraftTypeDropdownOpen(false);
+        setShowFiltersDrawer(false);
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [showTypesDropdown]);
+  }, [showFiltersDrawer]);
 
   useEffect(() => {
     if (!showMenuEditor || !menuEditorComboboxOpen) return;
@@ -3627,21 +3865,6 @@ export default function ShopifyCollectionMapping() {
     setWarning("Suggestions were applied. This row stays under Needs Review until the pending work is fully finalized.");
   }
 
-  function toggleSelectedType(type: string) {
-    const normalized = type.trim();
-    if (!normalized) return;
-    setSelectedTypes((prev) => {
-      const exists = prev.some((value) => value.toLowerCase() === normalized.toLowerCase());
-      return exists ? [] : [normalized];
-    });
-    resetPageForDataQuery();
-  }
-
-  function clearTypeFilter() {
-    setSelectedTypes([]);
-    resetPageForDataQuery();
-  }
-
   async function refreshProductsSection() {
     setSelectedProducts({});
     await loadData({ refreshProducts: true });
@@ -4025,11 +4248,11 @@ export default function ShopifyCollectionMapping() {
               />
               <button
                 type="button"
-                className="productSearchBtn productIconBtn productIconBtnGreen"
+                className="productSearchBtn productIconBtn productIconBtnGreen quickTooltip"
                 onClick={() => resetPageForDataQuery()}
                 disabled={loading || saving}
                 aria-label="Search products"
-                title="Search products"
+                data-tooltip="Search products"
               >
                 <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
                   <path
@@ -4040,11 +4263,11 @@ export default function ShopifyCollectionMapping() {
               </button>
               <button
                 type="button"
-                className="productRefreshBtn productIconBtn"
+                className="productRefreshBtn productIconBtn quickTooltip"
                 onClick={() => void refreshProductsSection()}
                 disabled={loading || saving}
                 aria-label="Refresh products"
-                title="Refresh products"
+                data-tooltip="Refresh products"
               >
                 <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
                   <path
@@ -4053,12 +4276,14 @@ export default function ShopifyCollectionMapping() {
                   />
                 </svg>
               </button>
+              <div className="productControlsSpacer" />
               <button
                 type="button"
-                className="toolbarPlaceholderBtn productIconBtn"
-                aria-label="Open filters"
-                title="Filters (not wired yet)"
-                disabled={loading || saving}
+                className="toolbarPlaceholderBtn productIconBtn quickTooltip"
+                aria-label="Open more filters"
+                data-tooltip="More filters"
+                onClick={openFiltersDrawer}
+                disabled={saving}
               >
                 <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
                   <path
@@ -4067,29 +4292,21 @@ export default function ShopifyCollectionMapping() {
                   />
                 </svg>
               </button>
-              <button
-                type="button"
-                className="toolbarPlaceholderBtn productIconBtn"
-                aria-label="Open sort options"
-                title="Sort options (not wired yet)"
-                disabled={loading || saving}
-              >
-                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-                  <path
-                    d="M7 4a1 1 0 0 1 1 1v12.59l1.3-1.3a1 1 0 1 1 1.4 1.42l-3 3a1 1 0 0 1-1.4 0l-3-3a1 1 0 1 1 1.4-1.42L6 17.59V5a1 1 0 0 1 1-1zm10 16a1 1 0 0 1-1-1V6.41l-1.3 1.3a1 1 0 0 1-1.4-1.42l3-3a1 1 0 0 1 1.4 0l3 3a1 1 0 1 1-1.4 1.42L18 6.41V19a1 1 0 0 1-1 1z"
-                    fill="currentColor"
-                  />
-                </svg>
-              </button>
-              <div className="productControlsSpacer" />
               {/* Consolidate all report/export entry points into one modal trigger on the right side. */}
               <button
                 type="button"
-                className="reportsTriggerBtn"
+                className="reportsTriggerBtn productIconBtn quickTooltip"
                 onClick={() => setShowReportsModal(true)}
                 disabled={loading || saving || auditOpening}
+                aria-label="Open reports"
+                data-tooltip="Reports"
               >
-                {"\u2197"} Reports
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                  <path
+                    d="M7 3a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8.8a2 2 0 0 0-.55-1.38l-3.2-3.3A2 2 0 0 0 13.8 3H7zm6 1.5v3a1 1 0 0 0 1 1h3.06l-4.06-4zM8.5 12a1 1 0 0 1 1-1h5a1 1 0 1 1 0 2h-5a1 1 0 0 1-1-1zm0 3.5a1 1 0 0 1 1-1h5a1 1 0 1 1 0 2h-5a1 1 0 0 1-1-1z"
+                    fill="currentColor"
+                  />
+                </svg>
               </button>
               <div className="commitMenuWrap" ref={commitMenuRef}>
                 <button
@@ -4098,7 +4315,7 @@ export default function ShopifyCollectionMapping() {
                   disabled={saving || loading || executionBusy}
                   onClick={() => setShowCommitMenu((prev) => !prev)}
                 >
-                  Commit changes
+                  COMMIT CHANGES
                   <span className="commitMenuArrow">{showCommitMenu ? "\u25B2" : "\u25BC"}</span>
                 </button>
                 {showCommitMenu && (
@@ -4143,6 +4360,24 @@ export default function ShopifyCollectionMapping() {
               </div>
             </div>
 
+            {appliedFilterChips.length > 0 ? (
+              <div className="appliedFilterChips" aria-label="Applied filters">
+                {appliedFilterChips.map((chip) => (
+                  <span key={chip.id} className="appliedFilterChip">
+                    {chip.label}
+                    <button
+                      type="button"
+                      className="appliedFilterChipClose"
+                      aria-label={`Remove ${chip.label}`}
+                      onClick={() => removeAppliedFilterChip(chip)}
+                    >
+                      ✕
+                    </button>
+                  </span>
+                ))}
+              </div>
+            ) : null}
+
             <div className="tableWrap" ref={tableWrapRef}>
               <table>
                 <thead>
@@ -4163,12 +4398,45 @@ export default function ShopifyCollectionMapping() {
                       />
                     </th>
                     <th className="center stickyEyeCol">View</th>
-                    <th className="stickyPictureCol">Picture</th>
-                    <th className="productNameCol stickyProductNameCol">Product</th>
+                    <th className="stickyPictureCol sortHead">
+                      <span
+                        className="sortHeadText"
+                        onClick={() =>
+                          setHeaderSortMode((prev) =>
+                            prev === "picture-with-image" ? "picture-without-image" : "picture-with-image"
+                          )
+                        }
+                      >
+                        Picture <span className="sortArrow">{getHeaderSortArrow("picture")}</span>
+                      </span>
+                    </th>
+                    <th className="productNameCol stickyProductNameCol sortHead">
+                      <span
+                        className="sortHeadText"
+                        onClick={() => setHeaderSortMode((prev) => (prev === "product-az" ? "product-za" : "product-az"))}
+                      >
+                        Product <span className="sortArrow">{getHeaderSortArrow("product")}</span>
+                      </span>
+                    </th>
                     <th className="autoMappedCol">Auto Path</th>
-                    <th className="suggestedCol">Suggested</th>
+                    <th className="suggestedCol sortHead">
+                      <span
+                        className="sortHeadText"
+                        onClick={() =>
+                          setHeaderSortMode((prev) =>
+                            prev === "suggested-with" ? "suggested-without" : "suggested-with"
+                          )
+                        }
+                      >
+                        Suggested <span className="sortArrow">{getHeaderSortArrow("suggested")}</span>
+                      </span>
+                    </th>
                     <th className="mappingDecisionCol">Decision</th>
-                    <th className="syncStatusCol">Status</th>
+                    <th className="syncStatusCol sortHead">
+                      <span className="sortHeadText" onClick={cycleStatusHeaderSort}>
+                        Status <span className="sortArrow">{getHeaderSortArrow("status")}</span>
+                      </span>
+                    </th>
                     <th>Current → Final</th>
                   </tr>
                 </thead>
@@ -4231,7 +4499,7 @@ export default function ShopifyCollectionMapping() {
                       return (
                         <tr
                           key={row.id}
-                          className={`${selectedProductRow ? "selectedProductRow " : ""}${isActiveRow ? "activeProductRow " : ""}${isManualReviewRow ? "manualReviewRow" : ""}`.trim()}
+                          className={`${selectedProductRow ? "selectedProductRow " : ""}${isActiveRow ? "activeProductRow " : ""}${isManualReviewRow ? "manualReviewRow " : ""}statusTone-${workflow.statusBadgeTone}`.trim()}
                           onClick={() => toggleRowSelectionFromRowClick(row.id)}
                         >
                           <td className="center stickyCheckboxCol">
@@ -4394,7 +4662,7 @@ export default function ShopifyCollectionMapping() {
                 <button type="button" onClick={() => setPage((prev) => Math.max(1, prev - 1))} disabled={page <= 1 || loading}>
                   {"<"}
                 </button>
-                <span className="muted">Page {page} of {totalPages}</span>
+                <span className="pagerPageLabel muted">Page {page} of {totalPages}</span>
                 <button
                   type="button"
                   onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
@@ -4484,6 +4752,135 @@ export default function ShopifyCollectionMapping() {
           </div>
         </div>
       ) : null}
+
+      {showFiltersDrawer ? (
+        <div
+          className="filtersDrawerOverlay"
+          onClick={() => {
+            setDraftTypeDropdownOpen(false);
+            setShowFiltersDrawer(false);
+          }}
+        />
+      ) : null}
+      <aside className={`filtersDrawer ${showFiltersDrawer ? "open" : ""}`} aria-label="Advanced filters">
+        <div className="filtersDrawerHead">
+          <strong>Advanced Filters</strong>
+          <button
+            type="button"
+            className="btn ghost filtersDrawerCloseBtn"
+            onClick={() => {
+              setDraftTypeDropdownOpen(false);
+              setShowFiltersDrawer(false);
+            }}
+          >
+            ✕
+          </button>
+        </div>
+        <div className="filtersDrawerBody">
+          <div className="filtersField">
+            <h4>Sync Status</h4>
+            {statusFilterOptions.map((option) => (
+              <label key={option.key} className="filtersFieldOption">
+                <input
+                  type="checkbox"
+                  checked={draftFilterStatuses.includes(option.key)}
+                  onChange={(event) => {
+                    setDraftFilterStatuses((prev) =>
+                      event.target.checked ? [...prev, option.key] : prev.filter((value) => value !== option.key)
+                    );
+                  }}
+                />
+                <span>{option.label}</span>
+              </label>
+            ))}
+          </div>
+          <div className="filtersField">
+            <h4>Mapping Decision</h4>
+            {decisionFilterOptions.map((option) => (
+              <label key={option.key} className="filtersFieldOption">
+                <input
+                  type="checkbox"
+                  checked={draftFilterDecisions.includes(option.key)}
+                  onChange={(event) => {
+                    setDraftFilterDecisions((prev) =>
+                      event.target.checked ? [...prev, option.key] : prev.filter((value) => value !== option.key)
+                    );
+                  }}
+                />
+                <span>{option.label}</span>
+              </label>
+            ))}
+          </div>
+          <div className="filtersField">
+            <h4>Other</h4>
+            <label className="filtersFieldOption">
+              <input
+                type="checkbox"
+                checked={draftFilterHasSuggestions}
+                onChange={(event) => setDraftFilterHasSuggestions(event.target.checked)}
+              />
+              <span>Has Suggestions only</span>
+            </label>
+            <label className="filtersFieldOption">
+              <input
+                type="checkbox"
+                checked={draftFilterIncludeSynced}
+                onChange={(event) => setDraftFilterIncludeSynced(event.target.checked)}
+              />
+              <span>Include Synced rows</span>
+            </label>
+          </div>
+          <div className="filtersField">
+            <h4>Product Type</h4>
+            {typeOptions.length > 0 ? (
+              <div className="filtersTypeDropdown">
+                <button
+                  type="button"
+                  className="filtersTypeDropdownBtn"
+                  aria-expanded={draftTypeDropdownOpen}
+                  onClick={() => setDraftTypeDropdownOpen((prev) => !prev)}
+                >
+                  <span>{draftFilterTypesLabel}</span>
+                  <span className="filtersTypeDropdownCaret">{draftTypeDropdownOpen ? "▲" : "▼"}</span>
+                </button>
+                {draftTypeDropdownOpen ? (
+                  <div className="filtersTypeDropdownMenu" role="listbox" aria-label="Product types">
+                    {typeOptions.map((itemType) => (
+                      <label key={itemType} className="filtersTypeOption">
+                        <input
+                          type="checkbox"
+                          checked={draftFilterTypes.some((value) => value.toLowerCase() === itemType.toLowerCase())}
+                          onChange={(event) => {
+                            setDraftFilterTypes((prev) => {
+                              const exists = prev.some((value) => value.toLowerCase() === itemType.toLowerCase());
+                              if (event.target.checked && !exists) return [...prev, itemType];
+                              if (!event.target.checked && exists) {
+                                return prev.filter((value) => value.toLowerCase() !== itemType.toLowerCase());
+                              }
+                              return prev;
+                            });
+                          }}
+                        />
+                        <span>{itemType}</span>
+                      </label>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <div className="filtersFieldEmpty">No type options loaded yet.</div>
+            )}
+          </div>
+        </div>
+        <div className="filtersDrawerFoot">
+          <button type="button" className="btn ghost" onClick={clearAdvancedFilters}>
+            Clear All
+          </button>
+          <button type="button" className="btn primary" onClick={applyAdvancedFilters}>
+            Apply Filters
+          </button>
+        </div>
+      </aside>
 
       {previewImage ? (
         <div className="previewOverlay" onClick={() => setPreviewImage(null)} role="dialog" aria-label="Product image preview">
@@ -5127,7 +5524,7 @@ export default function ShopifyCollectionMapping() {
             0 0 0 2px rgba(148, 163, 184, 0.26);
         }
         .headerKpiLabel {
-          font-size: 11px;
+          font-size: 12px;
           color: #98a9c4;
           text-transform: uppercase;
           letter-spacing: 0.04em;
@@ -5414,13 +5811,13 @@ export default function ShopifyCollectionMapping() {
           font-weight: 500;
         }
         table th {
-          font-size: 10px;
+          font-size: 13px;
           font-weight: 700;
           letter-spacing: 0.04em;
           text-transform: uppercase;
         }
         table td {
-          font-size: 11px;
+          font-size: 12.33px;
           font-weight: 600;
         }
         .topbar {
@@ -5870,6 +6267,46 @@ export default function ShopifyCollectionMapping() {
             padding-left 1100ms cubic-bezier(0.22, 0.61, 0.36, 1),
             border-radius 1100ms cubic-bezier(0.22, 0.61, 0.36, 1);
         }
+        .appliedFilterChips {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          padding: 8px 12px;
+          border-bottom: 1px solid #2a3a56;
+          background: #0f1a2f;
+        }
+        .appliedFilterChip {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          min-height: 28px;
+          padding: 0 10px;
+          border-radius: 8px;
+          border: 1px solid #3b82f6;
+          background: #1a3050;
+          color: #bfdbfe;
+          font-size: 12px;
+          font-weight: 600;
+        }
+        .appliedFilterChipClose {
+          width: 18px;
+          min-width: 18px;
+          height: 18px;
+          min-height: 18px;
+          border: 0;
+          border-radius: 6px;
+          padding: 0;
+          background: transparent;
+          color: #93c5fd;
+          font-size: 11px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .appliedFilterChipClose:hover {
+          background: rgba(147, 197, 253, 0.15);
+          color: #ffffff;
+        }
         .productPanel.treePaneCollapsed .productControls {
           padding-left: 72px;
         }
@@ -5934,93 +6371,112 @@ export default function ShopifyCollectionMapping() {
         .commitMenu {
           position: absolute;
           top: calc(100% + 6px);
-          left: 0;
-          min-width: 320px;
+          right: 0;
+          left: auto;
+          min-width: 380px;
+          max-width: min(520px, calc(100vw - 20px));
           z-index: 2147483500;
-          border: 1px solid #2a3a56;
-          border-radius: 12px;
-          background: #0d1628;
-          box-shadow: 0 14px 34px rgba(0,0,0,0.5);
-          padding: 8px;
+          border: 1px solid #3f5f8f;
+          border-radius: 14px;
+          background: linear-gradient(180deg, rgba(15, 33, 60, 0.98), rgba(12, 26, 48, 0.98));
+          box-shadow: 0 20px 48px rgba(0, 0, 0, 0.56);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          padding: 10px;
           display: flex;
           flex-direction: column;
-          gap: 0;
+          gap: 4px;
           overflow: visible;
           pointer-events: auto;
         }
         .commitMenuSection {
-          font-size: 10px;
-          font-weight: 700;
+          font-size: 11px;
+          font-weight: 800;
           letter-spacing: 0.06em;
-          color: #5a7a9e;
+          color: #89b2df;
           text-transform: uppercase;
-          padding: 6px 8px 2px;
+          padding: 4px 10px 0;
         }
         .commitMenuSafeActions {
           display: flex;
           flex-direction: column;
-          gap: 8px;
+          gap: 6px;
         }
         .commitMenuItem {
           width: 100%;
           text-align: left;
           min-height: 0;
           height: auto;
-          padding: 8px 12px;
-          border-radius: 8px;
-          border: 0;
-          background: #13233d;
+          padding: 10px 16px;
+          border-radius: 10px;
+          border: 1px solid #38577e;
+          background: #163256;
           cursor: pointer;
           display: grid;
           grid-template-rows: auto auto;
           align-content: start;
-          gap: 4px;
-          transition: background 0.13s;
+          gap: 5px;
+          transition: background 0.13s, border-color 0.13s;
         }
         .commitMenuItem:hover:not(:disabled) {
-          background: #1a3050;
+          background: #1d3e69;
+          border-color: #4f7bb2;
         }
         .commitMenuItem:disabled {
-          opacity: 0.45;
+          opacity: 1;
           cursor: not-allowed;
+          border-color: #355173;
+          background: #132947;
         }
         .commitMenuItemTitle {
-          font-size: 13px;
+          font-size: 15px;
           font-weight: 700;
-          color: #e2e8f0;
+          color: #e8f2ff;
           white-space: normal;
           line-height: 1.25;
         }
         .commitMenuItemSub {
-          font-size: 11px;
-          color: #7a96b8;
+          font-size: 12px;
+          color: #c8dcf8;
           white-space: normal;
           line-height: 1.25;
         }
         .commitMenuDivider {
           height: 1px;
-          background: #1e3050;
-          margin: 8px 0;
+          background: #33527b;
+          margin: 6px 0 2px;
         }
         .commitMenuDanger {
-          background: #3f181d;
-          border: 1px solid #7f1d1d;
+          background: #4d1e26;
+          border: 1px solid #8f3342;
         }
         .commitMenuDanger .commitMenuItemTitle {
-          color: #f87171;
+          color: #ff9aa9;
         }
         .commitMenuDanger .commitMenuItemSub {
-          color: #7a96b8;
+          color: #ffd3da;
         }
         .commitMenuDanger:hover:not(:disabled) {
-          background: #4c1d1d;
-          border-color: #991b1b;
+          background: #5b2430;
+          border-color: #b1465a;
         }
         .commitMenuPushAction .commitMenuItemTitle {
-          color: #22c55e;
+          color: #3df084;
         }
         .commitMenuPushAction .commitMenuItemSub {
-          color: #ffffff;
+          color: #e9fff1;
+        }
+        .commitMenuPushAction:disabled .commitMenuItemTitle {
+          color: #6abf8f;
+        }
+        .commitMenuPushAction:disabled .commitMenuItemSub {
+          color: #9fc8af;
+        }
+        .commitMenuDanger:disabled .commitMenuItemTitle {
+          color: #a97a84;
+        }
+        .commitMenuDanger:disabled .commitMenuItemSub {
+          color: #9d7f86;
         }
         .dangerBtn {
           border-color: #ef4444;
@@ -6074,10 +6530,10 @@ export default function ShopifyCollectionMapping() {
           color: #bbf7d0;
         }
         .productSearchInput {
-          width: 220px;
-          min-width: 220px;
-          max-width: 220px;
-          flex: 0 0 220px;
+          width: 320px;
+          min-width: 320px;
+          max-width: 320px;
+          flex: 0 0 320px;
           border-color: #22c55e;
           background: #113025;
           color: #d8ffe8;
@@ -6111,32 +6567,234 @@ export default function ShopifyCollectionMapping() {
           margin-left: 0;
         }
         .productIconBtn {
-          width: 36px;
-          min-width: 36px;
-          height: 36px;
-          min-height: 36px;
+          width: 38px;
+          min-width: 38px;
+          height: 38px;
+          min-height: 38px;
           padding: 0;
           display: inline-flex;
           align-items: center;
           justify-content: center;
           font-size: 0;
           line-height: 1;
+          border-width: 1px;
+          border-style: solid;
+        }
+        .productIconBtn svg {
+          width: 18px;
+          height: 18px;
+          display: block;
+          opacity: 1;
+          filter: drop-shadow(0 0 0.35px currentColor);
+        }
+        .quickTooltip {
+          position: relative;
+        }
+        .quickTooltip[data-tooltip]::after {
+          content: attr(data-tooltip);
+          position: absolute;
+          left: 50%;
+          bottom: calc(100% + 6px);
+          transform: translate(-50%, 2px);
+          opacity: 0;
+          pointer-events: none;
+          white-space: nowrap;
+          padding: 4px 7px;
+          border-radius: 6px;
+          border: 1px solid #5f789c;
+          background: #0b1322;
+          color: #e5edf9;
+          font-size: 11px;
+          font-weight: 700;
+          line-height: 1;
+          z-index: 2147483600;
+          transition: opacity 70ms ease, transform 70ms ease;
+        }
+        .quickTooltip[data-tooltip]:hover::after,
+        .quickTooltip[data-tooltip]:focus-visible::after {
+          opacity: 1;
+          transform: translate(-50%, 0);
         }
         .productIconBtnGreen {
-          border-color: #22c55e !important;
-          background: #166534 !important;
+          border-color: #168e69 !important;
+          background: #0d7a57 !important;
           color: #dcfce7 !important;
         }
         .productIconBtnGreen:hover:not(:disabled) {
-          border-color: #4ade80 !important;
+          border-color: #22c55e !important;
           background: #15803d !important;
         }
         .toolbarPlaceholderBtn {
-          opacity: 0.95;
+          opacity: 1;
+          border-color: #4f6b8c !important;
+          background: #182e4f !important;
+          color: #eef6ff !important;
+        }
+        .toolbarPlaceholderBtn:hover:not(:disabled) {
+          border-color: #89a7cf !important;
+          background: #26446d !important;
+        }
+        .moreFiltersBtn {
+          min-height: 36px;
+          padding: 0 14px;
+          border-radius: 10px;
+          border: 1px solid #4f6b8c !important;
+          background: #182e4f !important;
+          color: #eef6ff !important;
+          font-size: 12px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.02em;
+        }
+        .moreFiltersBtn:hover:not(:disabled) {
+          border-color: #89a7cf !important;
+          background: #26446d !important;
+        }
+        .reportsTriggerBtn,
+        .commitMenuTrigger {
+          text-transform: uppercase;
+          letter-spacing: 0.02em;
         }
         .typesDropdownBtn {
           min-width: 170px;
           justify-content: flex-start;
+        }
+        .filtersDrawerOverlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(2, 6, 23, 0.62);
+          z-index: 2147483400;
+        }
+        .filtersDrawer {
+          position: fixed;
+          top: 0;
+          right: 0;
+          width: min(380px, 95vw);
+          height: 100vh;
+          background: #0f172a;
+          border-left: 1px solid #2a3a56;
+          box-shadow: 0 14px 34px rgba(0, 0, 0, 0.38);
+          z-index: 2147483401;
+          transform: translateX(100%);
+          transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+          display: grid;
+          grid-template-rows: auto 1fr auto;
+        }
+        .filtersDrawer.open {
+          transform: translateX(0);
+        }
+        .filtersDrawerHead {
+          padding: 12px 14px;
+          border-bottom: 1px solid #2a3a56;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+        .filtersDrawerHead strong {
+          font-size: 16px;
+          font-weight: 800;
+          letter-spacing: 0.01em;
+        }
+        .filtersDrawerCloseBtn {
+          min-height: 30px;
+          padding: 0 8px;
+        }
+        .filtersDrawerBody {
+          padding: 12px;
+          overflow: auto;
+          display: grid;
+          gap: 12px;
+        }
+        .filtersDrawerFoot {
+          padding: 12px 14px;
+          border-top: 1px solid #2a3a56;
+          display: flex;
+          justify-content: flex-end;
+          gap: 8px;
+        }
+        .filtersDrawerFoot button {
+          font-size: 13px;
+        }
+        .filtersField {
+          border: 1px solid #2a3a56;
+          border-radius: 12px;
+          background: #0e1a30;
+          padding: 10px;
+        }
+        .filtersField h4 {
+          font-size: 15px;
+          color: #dce9ff;
+          margin: 0 0 8px;
+        }
+        .filtersFieldOption {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 6px;
+          font-size: 14px;
+          cursor: pointer;
+        }
+        .filtersTypeDropdown {
+          position: relative;
+        }
+        .filtersTypeDropdownBtn {
+          width: 100%;
+          min-height: 34px;
+          border-radius: 8px;
+          border: 1px solid #3c4f70;
+          background: #152848;
+          color: #e5edf9;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          padding: 0 10px;
+          font-size: 14px;
+          font-weight: 600;
+        }
+        .filtersTypeDropdownBtn:hover {
+          border-color: #5f789c;
+          background: #1b3f73;
+        }
+        .filtersTypeDropdownCaret {
+          color: #9fc0e8;
+          font-size: 10px;
+        }
+        .filtersTypeDropdownMenu {
+          margin-top: 8px;
+          border: 1px solid #2a3a56;
+          border-radius: 10px;
+          background: #0f1a2f;
+          padding: 8px;
+          display: grid;
+          gap: 6px;
+          max-height: calc(10 * 30px);
+          overflow: auto;
+        }
+        .filtersTypeOption {
+          min-height: 30px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 14px;
+          cursor: pointer;
+        }
+        .filtersFieldEmpty {
+          color: #98a9c4;
+          font-size: 13px;
+        }
+        tbody tr.statusTone-synced > td:first-child {
+          box-shadow: inset 4px 0 0 #22c55e;
+        }
+        tbody tr.statusTone-add-pending > td:first-child,
+        tbody tr.statusTone-removal-pending > td:first-child {
+          box-shadow: inset 4px 0 0 #7c3aed;
+        }
+        tbody tr.statusTone-failed > td:first-child {
+          box-shadow: inset 4px 0 0 #ef4444;
+        }
+        tbody tr.statusTone-review > td:first-child {
+          box-shadow: inset 4px 0 0 #f59e0b;
         }
         .productRefreshBtn,
         .productSearchBtn,
@@ -6411,7 +7069,7 @@ export default function ShopifyCollectionMapping() {
           border-collapse: separate;
           border-spacing: 0;
           width: 100%;
-          min-width: 1900px;
+          min-width: 2200px;
         }
         thead {
           position: sticky;
@@ -6480,7 +7138,7 @@ export default function ShopifyCollectionMapping() {
           background: #111f36;
           color: #d7e1ef;
           text-transform: uppercase;
-          font-size: 11px;
+          font-size: 20px;
           z-index: 20;
           background-clip: padding-box;
           box-shadow: 0 1px 0 #24354e;
@@ -6508,7 +7166,7 @@ export default function ShopifyCollectionMapping() {
           z-index: 4;
           background: #0d1931;
           color: #9fb4d0;
-          font-size: 10px;
+          font-size: 12px;
           letter-spacing: 0.05em;
           border-bottom: 1px solid #24354e;
           text-transform: uppercase;
@@ -6550,25 +7208,34 @@ export default function ShopifyCollectionMapping() {
         .sortHead {
           padding: 0;
         }
-        .sortHeadBtn {
+        .sortHeadText {
           width: 100%;
           min-height: 0;
-          border: 0;
-          border-radius: 0;
-          background: transparent;
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          gap: 5px;
+          gap: 7px;
           text-transform: uppercase;
           font-size: 12px;
           font-weight: 700;
           color: #d7e1ef;
           padding: 10px;
+          cursor: pointer;
+          user-select: none;
         }
         .sortArrow {
-          font-size: 10px;
+          min-width: 18px;
+          height: 18px;
+          border-radius: 999px;
+          border: 1px solid rgba(125, 211, 252, 0.55);
+          background: rgba(30, 58, 95, 0.8);
+          color: #7dd3fc;
+          font-size: 12px;
+          font-weight: 900;
           line-height: 1;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
         }
         .center {
           text-align: center;
@@ -6578,7 +7245,7 @@ export default function ShopifyCollectionMapping() {
           margin-top: auto;
           display: flex;
           align-items: center;
-          justify-content: space-between;
+          justify-content: flex-end;
           gap: 10px;
           flex-wrap: nowrap;
           padding: 10px 12px;
@@ -6591,11 +7258,17 @@ export default function ShopifyCollectionMapping() {
           gap: 8px;
           min-width: 0;
         }
+        .pagerPageLabel {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 92px;
+          text-align: center;
+        }
         .pagerPerPage {
           display: inline-flex;
           align-items: center;
           gap: 6px;
-          margin-left: auto;
           white-space: nowrap;
         }
         .pagerPerPageSelect {
@@ -6673,7 +7346,7 @@ export default function ShopifyCollectionMapping() {
           padding: 0 8px;
           border-radius: 8px;
           border: 1px solid transparent;
-          font-size: 12px;
+          font-size: 13.33px;
           font-weight: 700;
         }
         .decisionBadgeBtn {
@@ -6725,6 +7398,10 @@ export default function ShopifyCollectionMapping() {
           line-height: 1.3;
           display: block;
         }
+        .productNameCol .tiny {
+          font-size: 12.66px;
+          line-height: 1.25;
+        }
         .suggestionChips {
           display: flex;
           flex-wrap: wrap;
@@ -6769,7 +7446,7 @@ export default function ShopifyCollectionMapping() {
           background: #142845;
           color: #d9e8ff;
           border-radius: 7px;
-          font-size: 11px;
+          font-size: 12.33px;
           padding: 3px 8px;
           line-height: 1.1;
           transition:
@@ -6858,17 +7535,22 @@ export default function ShopifyCollectionMapping() {
         .stage4ResultBlock {
           display: grid;
           gap: 3px;
-          min-width: 260px;
+          min-width: 0;
+          max-width: clamp(360px, 40vw, 720px);
           text-align: left;
+        }
+        .stage4ResultCell {
+          min-width: 360px;
+          width: auto;
         }
         .stage4ResultLine {
           color: var(--muted);
-          font-size: 11px;
+          font-size: 12.33px;
           line-height: 1.35;
           font-weight: 600;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
+          white-space: normal;
+          overflow-wrap: anywhere;
+          word-break: break-word;
           margin-bottom: 2px;
         }
         .stage4ResultLine b {
