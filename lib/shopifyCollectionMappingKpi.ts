@@ -20,6 +20,8 @@ export type ShopifyCollectionMappingRowWorkflowInput = {
   actionStatus?: ShopifyCollectionMappingActionStatus | string | null;
   suggestionReady: boolean;
   manualChanges: boolean;
+  isReviewed?: boolean;
+  currentMatchesFinal?: boolean;
 };
 
 export type ShopifyCollectionMappingPrimaryStatus = "needs-review" | "ready-push" | "push-failed" | "synced";
@@ -34,6 +36,9 @@ export type ShopifyCollectionMappingRowWorkflow = {
   mappingDecision: ShopifyCollectionMappingDecision;
   collectionSyncStatus: ShopifyCollectionMappingSyncStatus;
   actionStatus: ShopifyCollectionMappingActionStatus;
+  isReviewed: boolean;
+  currentMatchesFinal: boolean;
+  requiresHumanEye: boolean;
   baseNeedsReview: boolean;
   suggestionReady: boolean;
   manualChanges: boolean;
@@ -82,6 +87,14 @@ function normalizeActionStatus(value: ShopifyCollectionMappingRowWorkflowInput["
   return "";
 }
 
+function normalizeCurrentMatchesFinal(
+  value: ShopifyCollectionMappingRowWorkflowInput["currentMatchesFinal"],
+  collectionSyncStatus: ShopifyCollectionMappingSyncStatus
+): boolean {
+  if (typeof value === "boolean") return value;
+  return collectionSyncStatus === "SYNCED";
+}
+
 export function classifyShopifyCollectionMappingRow(
   input: ShopifyCollectionMappingRowWorkflowInput
 ): ShopifyCollectionMappingRowWorkflow {
@@ -90,18 +103,23 @@ export function classifyShopifyCollectionMappingRow(
   const actionStatus = normalizeActionStatus(input.actionStatus);
   const suggestionReady = Boolean(input.suggestionReady);
   const manualChanges = Boolean(input.manualChanges);
+  const isReviewed = Boolean(input.isReviewed);
   const pushFailed = actionStatus === "FAILED";
+  const currentMatchesFinal = normalizeCurrentMatchesFinal(input.currentMatchesFinal, collectionSyncStatus);
   const baseNeedsReview = mappingDecision === "MANUAL_REVIEW" || collectionSyncStatus === "REVIEW";
-  const needsReview = baseNeedsReview || suggestionReady || manualChanges;
-  const pendingSyncStatus = collectionSyncStatus === "ADD_PENDING" || collectionSyncStatus === "REMOVAL_PENDING";
-  const pendingPush = pendingSyncStatus && !needsReview && !pushFailed;
-  const synced = collectionSyncStatus === "SYNCED" && !needsReview && !pushFailed;
+  const requiresHumanEye = baseNeedsReview || suggestionReady || manualChanges;
+  const synced = currentMatchesFinal && !requiresHumanEye && !pushFailed;
+  const pendingPush = !synced && !pushFailed && (requiresHumanEye ? isReviewed : !currentMatchesFinal);
+  const needsReview = !synced && !pushFailed && !pendingPush;
 
   if (pushFailed) {
     return {
       mappingDecision,
       collectionSyncStatus,
       actionStatus,
+      isReviewed,
+      currentMatchesFinal,
+      requiresHumanEye,
       baseNeedsReview,
       suggestionReady,
       manualChanges,
@@ -115,11 +133,14 @@ export function classifyShopifyCollectionMappingRow(
     };
   }
 
-  if (needsReview) {
+  if (synced) {
     return {
       mappingDecision,
       collectionSyncStatus,
       actionStatus,
+      isReviewed,
+      currentMatchesFinal,
+      requiresHumanEye,
       baseNeedsReview,
       suggestionReady,
       manualChanges,
@@ -127,9 +148,9 @@ export function classifyShopifyCollectionMappingRow(
       pendingPush,
       pushFailed,
       synced,
-      primaryStatus: "needs-review",
-      statusLabel: "Needs Review",
-      statusBadgeTone: "review",
+      primaryStatus: "synced",
+      statusLabel: "Synced",
+      statusBadgeTone: "synced",
     };
   }
 
@@ -138,6 +159,9 @@ export function classifyShopifyCollectionMappingRow(
       mappingDecision,
       collectionSyncStatus,
       actionStatus,
+      isReviewed,
+      currentMatchesFinal,
+      requiresHumanEye,
       baseNeedsReview,
       suggestionReady,
       manualChanges,
@@ -147,7 +171,12 @@ export function classifyShopifyCollectionMappingRow(
       synced,
       primaryStatus: "ready-push",
       statusLabel: "Ready to Push",
-      statusBadgeTone: collectionSyncStatus === "REMOVAL_PENDING" ? "removal-pending" : "add-pending",
+      statusBadgeTone:
+        collectionSyncStatus === "REMOVAL_PENDING"
+          ? "removal-pending"
+          : collectionSyncStatus === "ADD_PENDING"
+            ? "add-pending"
+            : "add-pending",
     };
   }
 
@@ -155,6 +184,9 @@ export function classifyShopifyCollectionMappingRow(
     mappingDecision,
     collectionSyncStatus,
     actionStatus,
+    isReviewed,
+    currentMatchesFinal,
+    requiresHumanEye,
     baseNeedsReview,
     suggestionReady,
     manualChanges,
@@ -162,9 +194,9 @@ export function classifyShopifyCollectionMappingRow(
     pendingPush,
     pushFailed,
     synced,
-    primaryStatus: "synced",
-    statusLabel: "Synced",
-    statusBadgeTone: "synced",
+    primaryStatus: "needs-review",
+    statusLabel: "Needs Review",
+    statusBadgeTone: "review",
   };
 }
 

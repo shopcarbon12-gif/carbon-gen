@@ -32,6 +32,7 @@ const cases = [
       actionStatus: "",
       suggestionReady: false,
       manualChanges: false,
+      isReviewed: false,
     },
     expected: {
       loaded: true,
@@ -50,6 +51,7 @@ const cases = [
       actionStatus: "",
       suggestionReady: true,
       manualChanges: false,
+      isReviewed: false,
     },
     expected: {
       loaded: true,
@@ -68,6 +70,7 @@ const cases = [
       actionStatus: "",
       suggestionReady: false,
       manualChanges: true,
+      isReviewed: false,
     },
     expected: {
       loaded: true,
@@ -86,6 +89,7 @@ const cases = [
       actionStatus: "PROCESSED",
       suggestionReady: false,
       manualChanges: false,
+      isReviewed: true,
     },
     expected: {
       loaded: true,
@@ -104,6 +108,7 @@ const cases = [
       actionStatus: "PROCESSED",
       suggestionReady: false,
       manualChanges: false,
+      isReviewed: true,
     },
     expected: {
       loaded: true,
@@ -122,6 +127,7 @@ const cases = [
       actionStatus: "FAILED",
       suggestionReady: false,
       manualChanges: false,
+      isReviewed: true,
     },
     expected: {
       loaded: true,
@@ -133,13 +139,14 @@ const cases = [
     },
   },
   {
-    name: "strict SYNCED",
+    name: "strict SYNCED unreviewed",
     input: {
       mappingDecision: "AUTO_MAPPED",
       collectionSyncStatus: "SYNCED",
       actionStatus: "PROCESSED",
       suggestionReady: false,
       manualChanges: false,
+      isReviewed: false,
     },
     expected: {
       loaded: true,
@@ -151,13 +158,33 @@ const cases = [
     },
   },
   {
-    name: "SYNCED plus suggestionReady",
+    name: "strict SYNCED reviewed",
     input: {
       mappingDecision: "AUTO_MAPPED",
       collectionSyncStatus: "SYNCED",
       actionStatus: "PROCESSED",
+      suggestionReady: false,
+      manualChanges: false,
+      isReviewed: true,
+    },
+    expected: {
+      loaded: true,
+      needsReview: false,
+      pendingPush: false,
+      pushFailed: false,
+      synced: true,
+      statusLabel: "Synced",
+    },
+  },
+  {
+    name: "suggestion-ready unreviewed stays Needs Review",
+    input: {
+      mappingDecision: "AUTO_MAPPED",
+      collectionSyncStatus: "ADD_PENDING",
+      actionStatus: "",
       suggestionReady: true,
       manualChanges: false,
+      isReviewed: false,
     },
     expected: {
       loaded: true,
@@ -169,13 +196,14 @@ const cases = [
     },
   },
   {
-    name: "SYNCED plus manualChanges",
+    name: "manual change unreviewed stays Needs Review",
     input: {
       mappingDecision: "AUTO_MAPPED",
-      collectionSyncStatus: "SYNCED",
-      actionStatus: "PROCESSED",
+      collectionSyncStatus: "ADD_PENDING",
+      actionStatus: "",
       suggestionReady: false,
       manualChanges: true,
+      isReviewed: false,
     },
     expected: {
       loaded: true,
@@ -194,6 +222,7 @@ const cases = [
       actionStatus: "PROCESSED",
       suggestionReady: true,
       manualChanges: false,
+      isReviewed: false,
     },
     expected: {
       loaded: true,
@@ -212,6 +241,7 @@ const cases = [
       actionStatus: "PROCESSED",
       suggestionReady: false,
       manualChanges: true,
+      isReviewed: false,
     },
     expected: {
       loaded: true,
@@ -230,6 +260,7 @@ const cases = [
       actionStatus: "",
       suggestionReady: false,
       manualChanges: false,
+      isReviewed: false,
     },
     expected: {
       loaded: true,
@@ -248,6 +279,7 @@ const cases = [
       actionStatus: "",
       suggestionReady: true,
       manualChanges: false,
+      isReviewed: false,
     },
     expected: {
       loaded: true,
@@ -259,13 +291,14 @@ const cases = [
     },
   },
   {
-    name: "finalized pending delta with no unresolved flags",
+    name: "reviewed unresolved suggestion row is ready to push",
     input: {
-      mappingDecision: "SUGGESTED",
-      collectionSyncStatus: "ADD_PENDING",
+      mappingDecision: "AUTO_MAPPED",
+      collectionSyncStatus: "SYNCED",
       actionStatus: "",
-      suggestionReady: false,
+      suggestionReady: true,
       manualChanges: false,
+      isReviewed: true,
     },
     expected: {
       loaded: true,
@@ -274,6 +307,64 @@ const cases = [
       pushFailed: false,
       synced: false,
       statusLabel: "Ready to Push",
+    },
+  },
+  {
+    name: "reviewed unresolved row is ready to push",
+    input: {
+      mappingDecision: "MANUAL_REVIEW",
+      collectionSyncStatus: "REVIEW",
+      actionStatus: "",
+      suggestionReady: false,
+      manualChanges: false,
+      isReviewed: true,
+    },
+    expected: {
+      loaded: true,
+      needsReview: false,
+      pendingPush: true,
+      pushFailed: false,
+      synced: false,
+      statusLabel: "Ready to Push",
+    },
+  },
+  {
+    name: "finalized pending delta with no unresolved flags",
+    input: {
+      mappingDecision: "SUGGESTED",
+      collectionSyncStatus: "ADD_PENDING",
+      actionStatus: "",
+      suggestionReady: false,
+      manualChanges: false,
+      isReviewed: true,
+    },
+    expected: {
+      loaded: true,
+      needsReview: false,
+      pendingPush: true,
+      pushFailed: false,
+      synced: false,
+      statusLabel: "Ready to Push",
+    },
+  },
+  {
+    name: "already-correct row is synced without processed flag",
+    input: {
+      mappingDecision: "AUTO_MAPPED",
+      collectionSyncStatus: "SYNCED",
+      actionStatus: "",
+      suggestionReady: false,
+      manualChanges: false,
+      isReviewed: false,
+      currentMatchesFinal: true,
+    },
+    expected: {
+      loaded: true,
+      needsReview: false,
+      pendingPush: false,
+      pushFailed: false,
+      synced: true,
+      statusLabel: "Synced",
     },
   },
 ];
@@ -315,8 +406,8 @@ test("KPI summary counts match filtered result sets", () => {
   assert.equal(summary.synced, syncedRows, "Synced KPI matches filtered rows");
 });
 
-test("rows with suggestions or manual changes never classify as pending push or synced", () => {
-  for (const rowCase of cases.filter((entry) => entry.input.suggestionReady || entry.input.manualChanges)) {
+test("unreviewed rows with suggestions or manual changes stay in needs review", () => {
+  for (const rowCase of cases.filter((entry) => !entry.input.isReviewed && (entry.input.suggestionReady || entry.input.manualChanges))) {
     const workflow = classifyShopifyCollectionMappingRow(rowCase.input);
     assert.equal(workflow.needsReview, true, `${rowCase.name}: unresolved rows stay in needs review`);
     assert.equal(workflow.pendingPush, false, `${rowCase.name}: unresolved rows are not pending push`);
@@ -331,10 +422,90 @@ test("push failed rows do not leak into synced or pending push", () => {
     actionStatus: "FAILED",
     suggestionReady: false,
     manualChanges: false,
+    isReviewed: true,
   });
 
   assert.equal(workflow.pushFailed, true);
   assert.equal(workflow.pendingPush, false);
   assert.equal(workflow.synced, false);
   assert.equal(workflow.statusLabel, "Push Failed");
+});
+
+test("approval checkbox gates only human-eye rows", () => {
+  const pairs = [
+    {
+      name: "synced rows keep synced regardless of reviewed",
+      left: {
+        mappingDecision: "AUTO_MAPPED",
+        collectionSyncStatus: "SYNCED",
+        actionStatus: "PROCESSED",
+        suggestionReady: false,
+        manualChanges: false,
+        isReviewed: false,
+      },
+      right: {
+        mappingDecision: "AUTO_MAPPED",
+        collectionSyncStatus: "SYNCED",
+        actionStatus: "PROCESSED",
+        suggestionReady: false,
+        manualChanges: false,
+        isReviewed: true,
+      },
+      expected: "Synced",
+    },
+    {
+      name: "engine-clean delta rows stay ready regardless approval",
+      left: {
+        mappingDecision: "AUTO_MAPPED",
+        collectionSyncStatus: "ADD_PENDING",
+        actionStatus: "",
+        suggestionReady: false,
+        manualChanges: false,
+        isReviewed: false,
+      },
+      right: {
+        mappingDecision: "AUTO_MAPPED",
+        collectionSyncStatus: "ADD_PENDING",
+        actionStatus: "",
+        suggestionReady: false,
+        manualChanges: false,
+        isReviewed: true,
+      },
+      expectedLeft: "Ready to Push",
+      expectedRight: "Ready to Push",
+    },
+    {
+      name: "review-required rows need approval gate",
+      left: {
+        mappingDecision: "MANUAL_REVIEW",
+        collectionSyncStatus: "REVIEW",
+        actionStatus: "",
+        suggestionReady: false,
+        manualChanges: false,
+        isReviewed: false,
+      },
+      right: {
+        mappingDecision: "MANUAL_REVIEW",
+        collectionSyncStatus: "REVIEW",
+        actionStatus: "",
+        suggestionReady: false,
+        manualChanges: false,
+        isReviewed: true,
+      },
+      expectedLeft: "Needs Review",
+      expectedRight: "Ready to Push",
+    },
+  ];
+
+  for (const pair of pairs) {
+    const left = classifyShopifyCollectionMappingRow(pair.left);
+    const right = classifyShopifyCollectionMappingRow(pair.right);
+    if (pair.expected) {
+      assert.equal(left.statusLabel, pair.expected, `${pair.name}: left status`);
+      assert.equal(right.statusLabel, pair.expected, `${pair.name}: right status`);
+      continue;
+    }
+    assert.equal(left.statusLabel, pair.expectedLeft, `${pair.name}: left status`);
+    assert.equal(right.statusLabel, pair.expectedRight, `${pair.name}: right status`);
+  }
 });

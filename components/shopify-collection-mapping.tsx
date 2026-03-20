@@ -57,6 +57,7 @@ type ProductRow = {
   directCollectionsToAssign?: string[];
   suggestedPaths?: string[];
   suggestedDirectCollections?: string[];
+  isReviewed?: boolean;
 };
 
 type AdvancedDecisionFilter = "AUTO_MAPPED" | "SUGGESTED" | "MANUAL_REVIEW";
@@ -70,8 +71,10 @@ type RowStagingState = {
   finalMenuPaths: string[];
   finalMenuPathSet: Set<string>;
   finalDirectCollections: string[];
+  currentMatchesFinal: boolean;
   collectionSyncStatus: "REVIEW" | "REMOVAL_PENDING" | "ADD_PENDING" | "SYNCED";
   mappingDecision: "AUTO_MAPPED" | "SUGGESTED" | "MANUAL_REVIEW";
+  isReviewed: boolean;
   reviewReason: string;
   suggestionOptions: Array<{
     kind: "menu" | "collection";
@@ -183,6 +186,7 @@ type MappingExplainModalState = {
   statusBadgeTone: ShopifyCollectionMappingStatusBadgeTone;
   suggestionReady: boolean;
   manualChanges: boolean;
+  isReviewed: boolean;
 };
 
 async function readJsonResponse<T>(resp: Response): Promise<T> {
@@ -468,6 +472,7 @@ export default function ShopifyCollectionMapping() {
   const [selectedSuggestionCollectionsByRow, setSelectedSuggestionCollectionsByRow] = useState<Record<string, Record<string, boolean>>>({});
   const [manualAddedPathsByRow, setManualAddedPathsByRow] = useState<Record<string, Record<string, boolean>>>({});
   const [manualRemovedPathsByRow, setManualRemovedPathsByRow] = useState<Record<string, Record<string, boolean>>>({});
+  const [reviewedByRow, setReviewedByRow] = useState<Record<string, boolean>>({});
   const [selectedNodes, setSelectedNodes] = useState<Record<string, boolean>>({});
   const [selectedUnmappedCollectionIds, setSelectedUnmappedCollectionIds] = useState<Record<string, boolean>>({});
   const [dismissedUnmappedCollectionIds, setDismissedUnmappedCollectionIds] = useState<Record<string, boolean>>({});
@@ -925,6 +930,7 @@ export default function ShopifyCollectionMapping() {
           break;
         }
       }
+      const currentMatchesFinal = !hasAdds && !hasRemovals;
       let collectionSyncStatus: RowStagingState["collectionSyncStatus"] = "SYNCED";
       if (hasReview) {
         collectionSyncStatus = "REVIEW";
@@ -945,6 +951,7 @@ export default function ShopifyCollectionMapping() {
       }
 
       const reasons: string[] = [];
+      const isReviewed = Boolean(reviewedByRow[row.id] ?? row.isReviewed);
       if (row.reviewReason) reasons.push(row.reviewReason);
       const selectedSuggestionCount = effectiveSelectedSuggestions.length + effectiveSelectedSuggestionCollections.length;
       if (selectedSuggestionCount > 0) reasons.push(`Selected ${selectedSuggestionCount} suggestion(s).`);
@@ -962,8 +969,10 @@ export default function ShopifyCollectionMapping() {
         finalMenuPaths,
         finalMenuPathSet: closedFinalSet,
         finalDirectCollections,
+        currentMatchesFinal,
         collectionSyncStatus,
         mappingDecision,
+        isReviewed,
         reviewReason,
         suggestionOptions,
       });
@@ -976,6 +985,7 @@ export default function ShopifyCollectionMapping() {
     selectedSuggestionCollectionsByRow,
     manualAddedPathsByRow,
     manualRemovedPathsByRow,
+    reviewedByRow,
     nodeKeyByPath,
     nodePathByKey,
     parentMap,
@@ -1034,6 +1044,8 @@ export default function ShopifyCollectionMapping() {
           actionStatus: row.actionStatus || "",
           suggestionReady,
           manualChanges,
+          isReviewed: Boolean(staging?.isReviewed ?? row.isReviewed),
+          currentMatchesFinal: staging?.currentMatchesFinal,
         })
       );
     }
@@ -1076,8 +1088,11 @@ export default function ShopifyCollectionMapping() {
       if (appliedFilterHasSuggestions) {
         if (!suggestionReady) return false;
       }
-      // Keep Synced KPI predictable: when Synced workflow tab is active, never hide synced rows via secondary filters.
-      if (activeQueueTab !== "synced" && !appliedFilterIncludeSynced && workflow.statusBadgeTone === "synced") return false;
+      // Loaded/all view should always reflect the full loaded page size.
+      // Keep secondary "Include Synced" filtering for non-all tabs only.
+      if (activeQueueTab !== "all" && activeQueueTab !== "synced" && !appliedFilterIncludeSynced && workflow.statusBadgeTone === "synced") {
+        return false;
+      }
       return true;
     });
     const sorted = [...filtered];
@@ -1427,9 +1442,13 @@ export default function ShopifyCollectionMapping() {
       const noOp = collectionsToAdd.length < 1 && collectionsToRemove.length < 1;
       let plannerStatus: PlannerStatus = "readyToPush";
       let skippedReason = "";
-      if (mappingDecision === "MANUAL_REVIEW" || collectionSyncStatus === "REVIEW") {
+      const workflow = rowWorkflowById.get(row.id);
+      if (!workflow) {
+        plannerStatus = "failedPlanning";
+        skippedReason = "Missing workflow state.";
+      } else if (workflow.needsReview) {
         plannerStatus = "skippedReview";
-        skippedReason = "Row is in review/manual state.";
+        skippedReason = "Row is not approved for push yet.";
       } else if (!row.id || !row.title) {
         plannerStatus = "skippedMissingData";
         skippedReason = "Missing row identity fields.";
@@ -1455,7 +1474,7 @@ export default function ShopifyCollectionMapping() {
       });
     }
     return out;
-  }, [rows, rowStagingById, nodePathByKey]);
+  }, [rows, rowStagingById, rowWorkflowById, nodePathByKey]);
 
   const allSelectedOnPage = useMemo(() => {
     if (filteredRows.length < 1) return false;
@@ -2044,6 +2063,14 @@ export default function ShopifyCollectionMapping() {
     setSelectedSuggestionCollectionsByRow((prev) => prune(prev));
     setManualAddedPathsByRow((prev) => prune(prev));
     setManualRemovedPathsByRow((prev) => prune(prev));
+    setReviewedByRow((prev) => {
+      const next: Record<string, boolean> = {};
+      for (const [rowId, value] of Object.entries(prev)) {
+        if (!valid.has(rowId)) continue;
+        next[rowId] = Boolean(value);
+      }
+      return next;
+    });
   }, [rows]);
 
   useEffect(() => {
@@ -3741,6 +3768,8 @@ export default function ShopifyCollectionMapping() {
             (staging?.manualAddedPaths.length || 0) +
             (staging?.manualRemovedPaths.length || 0) >
           0,
+        isReviewed: Boolean(staging?.isReviewed ?? row.isReviewed),
+        currentMatchesFinal: staging?.currentMatchesFinal,
       });
     setMappingExplainModal({
       open: true,
@@ -3769,6 +3798,7 @@ export default function ShopifyCollectionMapping() {
       statusBadgeTone: workflow.statusBadgeTone,
       suggestionReady: workflow.suggestionReady,
       manualChanges: workflow.manualChanges,
+      isReviewed: workflow.isReviewed,
     });
   }
 
@@ -3776,6 +3806,7 @@ export default function ShopifyCollectionMapping() {
     if (!mappingExplainModal) return;
     const rowId = mappingExplainModal.rowId;
     const workflow = rowWorkflowById.get(rowId);
+    setReviewedByRow((prev) => ({ ...prev, [rowId]: false }));
     setRows((prev) =>
       prev.map((row) =>
         row.id === rowId
@@ -3789,11 +3820,24 @@ export default function ShopifyCollectionMapping() {
     setMappingExplainModal((prev) =>
       prev && prev.rowId === rowId
         ? {
-            ...prev,
-            mappingDecision: "MANUAL_REVIEW",
-            collectionSyncStatus: "REVIEW",
-            statusLabel: "Needs Review",
-            statusBadgeTone: "review",
+            ...(() => {
+              const nextWorkflow = classifyShopifyCollectionMappingRow({
+                mappingDecision: "MANUAL_REVIEW",
+                collectionSyncStatus: "REVIEW",
+                actionStatus: prev.actionStatus,
+                suggestionReady: prev.suggestionReady,
+                manualChanges: prev.manualChanges,
+                isReviewed: false,
+              });
+              return {
+                ...prev,
+                mappingDecision: "MANUAL_REVIEW",
+                collectionSyncStatus: "REVIEW",
+                statusLabel: nextWorkflow.statusLabel,
+                statusBadgeTone: nextWorkflow.statusBadgeTone,
+                isReviewed: false,
+              };
+            })(),
           }
         : prev
     );
@@ -3810,6 +3854,7 @@ export default function ShopifyCollectionMapping() {
     const row = rowById.get(rowId);
     const staging = rowStagingById.get(rowId);
     if (!row || !staging) return;
+    setReviewedByRow((prev) => ({ ...prev, [rowId]: true }));
 
     setSelectedSuggestionPathsByRow((prev) => {
       const current = { ...(prev[rowId] || {}) };
@@ -3857,18 +3902,32 @@ export default function ShopifyCollectionMapping() {
     setMappingExplainModal((prev) =>
       prev && prev.rowId === rowId
         ? {
-            ...prev,
-            mappingDecision: prev.mappingDecision === "MANUAL_REVIEW" ? "SUGGESTED" : prev.mappingDecision,
-            statusLabel: "Needs Review",
-            statusBadgeTone: "review",
-            suggestionReady: true,
-            manualChanges: true,
+            ...(() => {
+              const nextMappingDecision = prev.mappingDecision === "MANUAL_REVIEW" ? "SUGGESTED" : prev.mappingDecision;
+              const nextWorkflow = classifyShopifyCollectionMappingRow({
+                mappingDecision: nextMappingDecision,
+                collectionSyncStatus: prev.collectionSyncStatus,
+                actionStatus: prev.actionStatus,
+                suggestionReady: true,
+                manualChanges: true,
+                isReviewed: true,
+              });
+              return {
+                ...prev,
+                mappingDecision: nextMappingDecision,
+                statusLabel: nextWorkflow.statusLabel,
+                statusBadgeTone: nextWorkflow.statusBadgeTone,
+                suggestionReady: true,
+                manualChanges: true,
+                isReviewed: true,
+              };
+            })(),
           }
         : prev
     );
     setSelectedProducts((prev) => ({ ...prev, [rowId]: true }));
     setActiveRowId(rowId);
-    setWarning("Suggestions were applied. This row stays under Needs Review until the pending work is fully finalized.");
+    setWarning("Suggestions were applied and this row is now approved for push.");
   }
 
   async function refreshProductsSection() {
@@ -4069,7 +4128,7 @@ export default function ShopifyCollectionMapping() {
               }
             }}
           >
-            <div className="headerKpiLabel">Pending Push</div>
+            <div className="headerKpiLabel">Ready to Push</div>
             <div className="headerKpiValue">{moduleSummary.readyToPush}</div>
           </div>
           <div
@@ -4437,6 +4496,7 @@ export default function ShopifyCollectionMapping() {
                       </span>
                     </th>
                     <th className="mappingDecisionCol">Decision</th>
+                    <th className="reviewedCol">Approved</th>
                     <th className="syncStatusCol sortHead">
                       <span className="sortHeadText" onClick={cycleStatusHeaderSort}>
                         Status <span className="sortArrow">{getHeaderSortArrow("status")}</span>
@@ -4448,11 +4508,11 @@ export default function ShopifyCollectionMapping() {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={9} className="empty">Loading Shopify products...</td>
+                      <td colSpan={10} className="empty">Loading Shopify products...</td>
                     </tr>
                   ) : filteredRows.length < 1 ? (
                     <tr>
-                      <td colSpan={9} className="empty">No products match the current filter.</td>
+                      <td colSpan={10} className="empty">No products match the current filter.</td>
                     </tr>
                   ) : (
                     filteredRows.map((row) => {
@@ -4625,6 +4685,20 @@ export default function ShopifyCollectionMapping() {
                             <span className={`decisionBadge decision-${mappingDecision.toLowerCase()}`}>
                               {getUiStatusLabel(mappingDecision)}
                             </span>
+                          </td>
+                          <td className="reviewedCol">
+                            <label className="reviewedCheckboxLabel" onClick={(event) => event.stopPropagation()}>
+                              <input
+                                type="checkbox"
+                                checked={Boolean(staging.isReviewed)}
+                                onChange={(event) => {
+                                  event.stopPropagation();
+                                  const checked = event.target.checked;
+                                  setReviewedByRow((prev) => ({ ...prev, [row.id]: checked }));
+                                }}
+                                aria-label={`Approve ${row.title} for push`}
+                              />
+                            </label>
                           </td>
                           <td className="syncStatusCol">
                             <span className={`syncBadge sync-${workflow.statusBadgeTone}`}>{workflow.statusLabel}</span>
@@ -5332,6 +5406,7 @@ export default function ShopifyCollectionMapping() {
                 <div className="rowInspectorBlock">
                   <div className="mappingSectionTitle">DECISION & STATUS</div>
                   <div className="mappingKvRow"><span>Decision</span><span className={`decisionBadge decision-${mappingExplainModal.mappingDecision.toLowerCase()}`}>{getUiStatusLabel(mappingExplainModal.mappingDecision)}</span></div>
+                  <div className="mappingKvRow"><span>Approved</span><b>{mappingExplainModal.isReviewed ? "Yes" : "No"}</b></div>
                   <div className="mappingKvRow"><span>Sync Status</span><span className={`syncBadge sync-${mappingExplainModal.statusBadgeTone}`}>{mappingExplainModal.statusLabel}</span></div>
                   <div className="muted tiny"><b>Auto Paths</b>: {formatListPreview(mappingExplainModal.autoMappedPaths)}</div>
                   <div className="muted tiny"><b>Direct Collections</b>: {formatListPreview(mappingExplainModal.directCollections.map(getCollectionDisplayName))}</div>
@@ -5548,6 +5623,7 @@ export default function ShopifyCollectionMapping() {
           line-height: 1.1;
           margin-top: 0;
           transform: translateY(2px);
+          white-space: nowrap;
         }
         .headerKpiValue {
           margin-top: 6px;
@@ -5608,6 +5684,12 @@ export default function ShopifyCollectionMapping() {
         .headerKpiCardPending .headerKpiLabel,
         .headerKpiCardPending .headerKpiValue {
           color: #f5f3ff;
+        }
+        .headerKpiCardPending .headerKpiLabel {
+          letter-spacing: 0.02em;
+        }
+        .headerKpiCardPending .headerKpiLabel {
+          letter-spacing: 0.02em;
         }
         .headerKpiCardLoaded .headerKpiLabel,
         .headerKpiCardLoaded .headerKpiValue {
@@ -7254,6 +7336,10 @@ export default function ShopifyCollectionMapping() {
           min-width: 110px;
           width: 110px;
         }
+        .reviewedCol {
+          min-width: 120px;
+          width: 120px;
+        }
         .syncStatusCol {
           min-width: 140px;
           width: 140px;
@@ -7423,8 +7509,17 @@ export default function ShopifyCollectionMapping() {
         .autoMappedCol,
         .suggestedCol,
         .mappingDecisionCol,
+        .reviewedCol,
         .syncStatusCol {
           text-align: center;
+        }
+        .reviewedCheckboxLabel {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0;
+          cursor: pointer;
+          width: 100%;
         }
         .decisionBadge,
         .syncBadge {
@@ -7551,6 +7646,9 @@ export default function ShopifyCollectionMapping() {
           justify-content: center;
           cursor: default;
           position: relative;
+          border-color: #22c55e;
+          background: #123522;
+          color: #bbf7d0;
         }
         .suggestionChip {
           cursor: pointer;
