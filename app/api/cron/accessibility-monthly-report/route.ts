@@ -16,6 +16,9 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const CHECKLIST_LABELS: Array<{ key: string; label: string }> = [
   { key: "statementPublished", label: "Accessibility statement published" },
   { key: "issueChannelActive", label: "Issue channel active" },
+  { key: "ownerAssigned", label: "Accessibility owner assigned" },
+  { key: "responseSlaDefined", label: "Response SLA defined" },
+  { key: "remediationLogActive", label: "Remediation log active" },
   { key: "keyboardAuditDone", label: "Keyboard audit completed" },
   { key: "contrastAuditDone", label: "Contrast audit completed" },
   { key: "altTextAuditDone", label: "Alt text audit completed" },
@@ -102,6 +105,14 @@ export async function GET(req: NextRequest) {
   const savedStatementUrl = String(savedConfig.statementUrl ?? "").trim();
   const savedFeedbackUrl = String(savedConfig.feedbackUrl ?? "").trim();
   const savedSupportEmail = String(savedConfig.supportEmail ?? "").trim();
+  const savedAccessibilityOwner = String(savedConfig.accessibilityOwner ?? "").trim();
+  const savedAccessibilityOwnerRole = String(savedConfig.accessibilityOwnerRole ?? "").trim();
+  const savedRemediationLogUrl = String(savedConfig.remediationLogUrl ?? "").trim();
+  const savedResponseSlaHoursRaw = Number(savedConfig.responseSlaHours ?? 0);
+  const savedResponseSlaHours =
+    Number.isFinite(savedResponseSlaHoursRaw) && savedResponseSlaHoursRaw > 0
+      ? Math.round(savedResponseSlaHoursRaw)
+      : 0;
   const savedChecklistRaw =
     savedConfig.complianceChecklist &&
     typeof savedConfig.complianceChecklist === "object" &&
@@ -182,6 +193,9 @@ export async function GET(req: NextRequest) {
     <tr><td style="border:1px solid #ddd;"><strong>Accessibility statement</strong></td><td style="border:1px solid #ddd;"><a href="${escapeHtml(statementUrl)}">${escapeHtml(statementUrl)}</a></td></tr>
     <tr><td style="border:1px solid #ddd;"><strong>Issue reporting URL</strong></td><td style="border:1px solid #ddd;">${feedbackUrl ? `<a href="${escapeHtml(feedbackUrl)}">${escapeHtml(feedbackUrl)}</a>` : "Not configured"}</td></tr>
     <tr><td style="border:1px solid #ddd;"><strong>Issue reporting email</strong></td><td style="border:1px solid #ddd;">${escapeHtml(supportEmail)}</td></tr>
+    <tr><td style="border:1px solid #ddd;"><strong>Accessibility owner</strong></td><td style="border:1px solid #ddd;">${savedAccessibilityOwner ? escapeHtml(savedAccessibilityOwner) : "Not configured"}${savedAccessibilityOwnerRole ? ` (${escapeHtml(savedAccessibilityOwnerRole)})` : ""}</td></tr>
+    <tr><td style="border:1px solid #ddd;"><strong>Response SLA</strong></td><td style="border:1px solid #ddd;">${savedResponseSlaHours > 0 ? `${savedResponseSlaHours} hours` : "Not configured"}</td></tr>
+    <tr><td style="border:1px solid #ddd;"><strong>Remediation log</strong></td><td style="border:1px solid #ddd;">${savedRemediationLogUrl ? `<a href="${escapeHtml(savedRemediationLogUrl)}">${escapeHtml(savedRemediationLogUrl)}</a>` : "Not configured"}</td></tr>
   </table>
 
   <h3 style="margin:16px 0 8px;">Review checklist</h3>

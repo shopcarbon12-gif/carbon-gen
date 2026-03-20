@@ -1,0 +1,3 @@
+[     661ms] [ERROR] Failed to load resource: net::ERR_CACHE_READ_FAILURE @ https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css:0
+[     672ms] [ERROR] Failed to load resource: net::ERR_CACHE_READ_FAILURE @ http://localhost:3000/brand/carbon-long-white.png:0
+[    5081ms] [ERROR] Failed to load resource: net::ERR_CACHE_READ_FAILURE @ http://localhost:3000/__nextjs_font/geist-latin.woff2:0

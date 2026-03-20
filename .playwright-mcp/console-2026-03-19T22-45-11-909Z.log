@@ -1,0 +1,4 @@
+[    7904ms] [WARNING] Widget initialization error: no account/code provided. Default code will be used @ https://cdn.userway.org/widgetapp/2026-03-17-15-07-37/widget_app_base_1773760057621.js:4
+[ 2219580ms] Uncaught TypeError: Cannot read properties of undefined (reading '$el')
+    at <anonymous> (https://embed.tawk.to/_s/v4/app/69967ba6a3b/js/twk-chunk-2d0b345a.js:1:9377)
+    at <anonymous> (https://embed.tawk.to/_s/v4/app/69967ba6a3b/js/twk-chunk-2d0b345a.js:1:9329)

@@ -56,7 +56,10 @@ function normalizeConfigObject(input: unknown) {
       typeof cfg.cornerRadius === "number" && Number.isFinite(cfg.cornerRadius)
         ? Math.max(8, Math.min(24, Math.round(cfg.cornerRadius)))
         : DEFAULT_CONFIG.cornerRadius,
-    label: typeof cfg.label === "string" && cfg.label.trim() ? cfg.label : DEFAULT_CONFIG.label,
+    label:
+      (typeof cfg.label === "string" && cfg.label.trim() ? cfg.label : "") ||
+      (typeof cfg.widgetLabel === "string" && cfg.widgetLabel.trim() ? cfg.widgetLabel : "") ||
+      DEFAULT_CONFIG.label,
     showTextLabel:
       typeof cfg.showTextLabel === "boolean" ? cfg.showTextLabel : DEFAULT_CONFIG.showTextLabel,
     statementUrl: normalizeUrl(cfg.statementUrl, DEFAULT_CONFIG.statementUrl),

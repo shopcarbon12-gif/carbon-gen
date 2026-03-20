@@ -1,0 +1,11 @@
+[    7004ms] [WARNING] Widget initialization error: no account/code provided. Default code will be used @ https://cdn.userway.org/widgetapp/2026-03-17-15-07-37/widget_app_1773760057621.js:4
+[   10854ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://shopcarbon.com/pages/become-affiliate:0
+[   11086ms] [ERROR] The service is temporarily unavailable. Please contact support@elfsight.com. @ https://static.elfsight.com/apps/instashow/stable/7ddd74df7ca4bbe49e6051e8181ec9ead18dee20/app/instashow.js:63
+[   11108ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://shopcarbon.com/pages/become-affiliate:0
+[   16534ms] [WARNING] Widget initialization error: no account/code provided. Default code will be used @ https://cdn.userway.org/widgetapp/2026-03-17-15-07-37/widget_app_1773760057621.js:4
+[   19170ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://shopcarbon.com/pages/become-affiliate:0
+[   98096ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://shopcarbon.com/pages/become-affiliate:0
+[   99612ms] [WARNING] Widget initialization error: no account/code provided. Default code will be used @ https://cdn.userway.org/widgetapp/2026-03-17-15-07-37/widget_app_1773760057621.js:4
+[  101577ms] [WARNING] Widget initialization error: no account/code provided. Default code will be used @ https://cdn.userway.org/widgetapp/2026-03-17-15-07-37/widget_app_1773760057621.js:4
+[  123816ms] [WARNING] Widget initialization error: no account/code provided. Default code will be used @ https://cdn.userway.org/widgetapp/2026-03-17-15-07-37/widget_app_1773760057621.js:4
+[  129503ms] [ERROR] Attestation check for Attribution Reporting on https://www.facebook.com failed. @ https://www.shopify.com/:0

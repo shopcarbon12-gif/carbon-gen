@@ -540,10 +540,10 @@ export default function ShopifyCollectionMapping() {
   const [treePanelMinWidth, setTreePanelMinWidth] = useState(TREE_PANEL_MIN_WIDTH);
   const [treePaneCollapsed, setTreePaneCollapsed] = useState(false);
   const [pageDockRightInset, setPageDockRightInset] = useState(0);
-  const [tableDockInsets, setTableDockInsets] = useState({ left: 0, right: 0, startOffset: 0 });
+  const [tableDockInsets, setTableDockInsets] = useState({ left: 0, right: 0, startOffset: 0, tableWrapTop: 0 });
   const [resizingPanes, setResizingPanes] = useState(false);
   const [resizingWorkspaceHeight, setResizingWorkspaceHeight] = useState(false);
-  const [workspaceHeight, setWorkspaceHeight] = useState<number | null>(WORKSPACE_DEFAULT_HEIGHT);
+  const [workspaceHeight, setWorkspaceHeight] = useState<number | null>(null);
   const [workspaceBaseHeight, setWorkspaceBaseHeight] = useState<number | null>(null);
   const [noticeHidden, setNoticeHidden] = useState(false);
   const [progressLingerUntil, setProgressLingerUntil] = useState(0);
@@ -571,6 +571,7 @@ export default function ShopifyCollectionMapping() {
   const tableScrollDockRef = useRef<HTMLDivElement | null>(null);
   const tableScrollSpacerRef = useRef<HTMLDivElement | null>(null);
   const syncingTableScrollRef = useRef<"table" | "dock" | null>(null);
+  const tableScrollDockVertThumbRef = useRef<HTMLDivElement | null>(null);
   const horizontalSnapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const horizontalDragActiveRef = useRef(false);
   const horizontalSnapInFlightRef = useRef(false);
@@ -1289,7 +1290,7 @@ export default function ShopifyCollectionMapping() {
       const nextRight = Math.max(0, Math.round(window.innerWidth - rect.right));
       setTableDockInsets((prev) => {
         if (prev.left === nextLeft && prev.right === nextRight && prev.startOffset === 0) return prev;
-        return { left: nextLeft, right: nextRight, startOffset: 0 };
+        return { left: nextLeft, right: nextRight, startOffset: 0, tableWrapTop: prev.tableWrapTop };
       });
       const pageScrollbarWidth = pageEl ? Math.max(0, pageEl.offsetWidth - pageEl.clientWidth) : 0;
       setPageDockRightInset((prev) => (prev === pageScrollbarWidth ? prev : pageScrollbarWidth));
@@ -2511,6 +2512,139 @@ export default function ShopifyCollectionMapping() {
       window.clearInterval(intervalId);
       resizeObserver.disconnect();
       mutationObserver.disconnect();
+    };
+  }, []);
+
+  // Compute the left/right insets + tableWrap top offset for the custom scroll docks.
+  useEffect(() => {
+    const grid = workspaceGridRef.current;
+    if (!grid) return;
+    const update = () => {
+      const productPanel = grid.querySelector<HTMLElement>(".productPanel");
+      const tableWrap = tableWrapRef.current;
+      if (!productPanel) return;
+      const rect = productPanel.getBoundingClientRect();
+      const tableRect = tableWrap ? tableWrap.getBoundingClientRect() : null;
+      const nextLeft = Math.round(rect.left);
+      const nextRight = Math.round(window.innerWidth - rect.right);
+      const nextTableWrapTop = tableRect ? Math.round(tableRect.top) : 0;
+      setTableDockInsets((prev) => {
+        if (prev.left === nextLeft && prev.right === nextRight && prev.tableWrapTop === nextTableWrapTop) return prev;
+        return { left: nextLeft, right: nextRight, startOffset: nextLeft, tableWrapTop: nextTableWrapTop };
+      });
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(grid);
+    window.addEventListener("resize", update);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", update);
+    };
+  }, [treePanelWidth, treePaneCollapsed]);
+
+  // Sync tableWrap horizontal scroll <-> custom scroll dock bidirectionally.
+  useEffect(() => {
+    const tableEl = tableWrapRef.current;
+    const dockEl = tableScrollDockRef.current;
+    const spacerEl = tableScrollSpacerRef.current;
+    if (!tableEl || !dockEl || !spacerEl) return;
+
+    const syncSpacerWidth = () => {
+      const w = tableEl.scrollWidth;
+      if (Math.abs(parseInt(spacerEl.style.width || "0") - w) > 1) {
+        spacerEl.style.width = `${w}px`;
+      }
+    };
+    syncSpacerWidth();
+
+    const onTableScroll = () => {
+      if (syncingTableScrollRef.current === "dock") return;
+      syncingTableScrollRef.current = "table";
+      dockEl.scrollLeft = tableEl.scrollLeft;
+      syncingTableScrollRef.current = null;
+    };
+
+    const onDockScroll = () => {
+      if (syncingTableScrollRef.current === "table") return;
+      syncingTableScrollRef.current = "dock";
+      tableEl.scrollLeft = dockEl.scrollLeft;
+      syncingTableScrollRef.current = null;
+    };
+
+    tableEl.addEventListener("scroll", onTableScroll, { passive: true });
+    dockEl.addEventListener("scroll", onDockScroll, { passive: true });
+
+    const ro = new ResizeObserver(syncSpacerWidth);
+    ro.observe(tableEl);
+
+    return () => {
+      tableEl.removeEventListener("scroll", onTableScroll);
+      dockEl.removeEventListener("scroll", onDockScroll);
+      ro.disconnect();
+    };
+  }, []);
+
+  // Custom vertical scrollbar: sync tableWrap.scrollTop <-> thumb position, support drag.
+  useEffect(() => {
+    const tableEl = tableWrapRef.current;
+    const thumbEl = tableScrollDockVertThumbRef.current;
+    if (!tableEl || !thumbEl) return;
+
+    const updateThumb = () => {
+      const { scrollTop, scrollHeight, clientHeight } = tableEl;
+      if (scrollHeight <= clientHeight) {
+        thumbEl.style.display = "none";
+        return;
+      }
+      thumbEl.style.display = "block";
+      const trackH = clientHeight;
+      const thumbH = Math.max(28, (clientHeight / scrollHeight) * trackH);
+      const maxThumbTop = trackH - thumbH;
+      const thumbTop = (scrollTop / (scrollHeight - clientHeight)) * maxThumbTop;
+      thumbEl.style.height = `${thumbH}px`;
+      thumbEl.style.top = `${thumbTop}px`;
+    };
+
+    tableEl.addEventListener("scroll", updateThumb, { passive: true });
+    const ro = new ResizeObserver(updateThumb);
+    ro.observe(tableEl);
+    updateThumb();
+
+    let dragActive = false;
+    let dragStartY = 0;
+    let dragStartScrollTop = 0;
+
+    const onThumbMouseDown = (e: MouseEvent) => {
+      e.preventDefault();
+      dragActive = true;
+      dragStartY = e.clientY;
+      dragStartScrollTop = tableEl.scrollTop;
+      document.body.style.userSelect = "none";
+    };
+    const onMouseMove = (e: MouseEvent) => {
+      if (!dragActive) return;
+      const { scrollHeight, clientHeight } = tableEl;
+      const trackH = clientHeight;
+      const thumbH = parseFloat(thumbEl.style.height || "28");
+      const ratio = (scrollHeight - clientHeight) / (trackH - thumbH);
+      tableEl.scrollTop = dragStartScrollTop + (e.clientY - dragStartY) * ratio;
+    };
+    const onMouseUp = () => {
+      dragActive = false;
+      document.body.style.userSelect = "";
+    };
+
+    thumbEl.addEventListener("mousedown", onThumbMouseDown);
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+
+    return () => {
+      tableEl.removeEventListener("scroll", updateThumb);
+      ro.disconnect();
+      thumbEl.removeEventListener("mousedown", onThumbMouseDown);
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
     };
   }, []);
 
@@ -4005,9 +4139,9 @@ export default function ShopifyCollectionMapping() {
       >
       <div className="pageBody">
       <section
-        className={`card workspaceSection${workspaceHeight ? " workspaceSectionExpanded" : ""}`}
+        className="card workspaceSection workspaceSectionExpanded"
         style={
-          workspaceHeight != null && Number.isFinite(workspaceHeight)
+          workspaceHeight != null && Number.isFinite(workspaceHeight) && workspaceUserResizedRef.current
             ? { minHeight: `${Math.max(0, workspaceHeight + WORKSPACE_RESIZE_HANDLE_SPACE)}px` }
             : undefined
         }
@@ -4018,7 +4152,6 @@ export default function ShopifyCollectionMapping() {
           style={{
             gridTemplateColumns: `${treePaneCollapsed ? TREE_PANEL_COLLAPSED_WIDTH : treePanelWidth}px ${treePaneCollapsed ? 0 : 11}px minmax(0, 1fr)`,
             gap: "0",
-            minHeight: workspaceHeight != null && Number.isFinite(workspaceHeight) ? `${Math.max(0, workspaceHeight)}px` : "100%",
             transition: resizingPanes
               ? "none"
               : "grid-template-columns 1100ms cubic-bezier(0.22, 0.61, 0.36, 1), gap 1100ms cubic-bezier(0.22, 0.61, 0.36, 1)",
@@ -4567,6 +4700,38 @@ export default function ShopifyCollectionMapping() {
           </main>
         </div>
       </section>
+
+      {/* Custom horizontal scroll dock — spans full right panel, replaces native horizontal scrollbar */}
+      <div
+        className="tableScrollDockWrap"
+        ref={tableScrollDockWrapRef}
+        style={{
+          left: tableDockInsets.left,
+          right: 0,
+        }}
+        aria-hidden="true"
+      >
+        <div className="tableScrollDock" ref={tableScrollDockRef}>
+          <div className="tableScrollDockSpacer" ref={tableScrollSpacerRef} />
+        </div>
+      </div>
+
+      {/* Custom vertical scroll dock — fixed on the right screen edge */}
+      <div
+        className="tableScrollDockVertWrap"
+        style={{
+          top: tableDockInsets.tableWrapTop,
+          right: 0,
+          bottom: 13,
+        }}
+        aria-hidden="true"
+      >
+        <div
+          className="tableScrollDockVertThumb"
+          ref={tableScrollDockVertThumbRef}
+        />
+      </div>
+
       {/* Consolidated reports modal centralizes all report/export actions and removes inline report links from the canvas. */}
       {showReportsModal ? (
         <div className="previewOverlay" onClick={() => setShowReportsModal(false)} role="dialog" aria-label="Reports">
@@ -5479,10 +5644,9 @@ export default function ShopifyCollectionMapping() {
         .page.pageExpanded {
           height: calc(100dvh - var(--shell-content-top-offset) - var(--notice-bar-height) - var(--bottom-dock-lane-height) - var(--bottom-dock-offset));
           max-height: calc(100dvh - var(--shell-content-top-offset) - var(--notice-bar-height) - var(--bottom-dock-lane-height) - var(--bottom-dock-offset));
-          overflow-x: hidden;
-          overflow-y: auto;
-          scrollbar-width: auto;
-          scrollbar-color: #3c4f70 #0b1322;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
         }
         .pageBody {
           min-width: 0;
@@ -5490,9 +5654,9 @@ export default function ShopifyCollectionMapping() {
           display: flex;
           flex-direction: column;
           gap: 0;
-          flex: 0 0 auto;
-          overflow: visible;
-          padding-bottom: 8px;
+          flex: 1 1 auto;
+          overflow: hidden;
+          padding-bottom: 0;
         }
         .page :is(h1, h2, h3, h4, h5, h6, p, span, label, th, td, a, button, input, select, textarea, small, b) {
           font-family: Inter, Arial, sans-serif;
@@ -5512,14 +5676,17 @@ export default function ShopifyCollectionMapping() {
           flex-direction: column;
           flex: 0 0 auto;
           min-height: 0;
-          overflow: visible;
+          overflow: hidden;
         }
         .workspaceSection.workspaceSectionExpanded {
-          flex: 0 0 auto;
+          flex: 1 1 auto;
+          min-height: 0;
+          height: 100%;
         }
         .workspaceGridHost {
-          flex: 0 0 auto;
+          flex: 1 1 auto;
           min-height: 0;
+          height: 100%;
         }
         .card {
           background: linear-gradient(180deg, #111c32, #0d1628);
@@ -5971,7 +6138,7 @@ export default function ShopifyCollectionMapping() {
         .grid2 > .card.panel.productPanel {
           position: relative;
           z-index: 30;
-          overflow: visible;
+          overflow: hidden;
           height: 100%;
           max-height: 100%;
           min-height: 0;
@@ -6867,7 +7034,9 @@ export default function ShopifyCollectionMapping() {
           z-index: 0;
           flex: 1 1 auto;
           min-height: 0;
-          overflow-x: auto;
+          /* overflow-x:scroll is required — browsers only honour position:sticky inside a real scroll container.
+             The native scrollbar UI is hidden via CSS below; the custom dock drives scrollLeft via JS. */
+          overflow-x: scroll;
           overflow-y: auto;
           border-top: 1px solid #2a3a56;
           border-bottom: 1px solid #2a3a56;
@@ -6876,12 +7045,16 @@ export default function ShopifyCollectionMapping() {
           border-radius: 0;
           background: transparent;
           max-height: none;
+          scrollbar-width: none; /* Firefox: hide all native bars */
+        }
+        .tableWrap::-webkit-scrollbar {
+          width: 0;   /* hide vertical native (custom dock used) */
+          height: 0;  /* hide horizontal native (custom dock used) */
         }
         .tableScrollDockWrap {
           position: fixed;
-          left: 0;
-          right: 0;
-          bottom: var(--bottom-dock-offset);
+          /* left/right are set dynamically via inline style to align with the product panel */
+          bottom: var(--bottom-dock-offset, 0px);
           z-index: 2147483000;
           pointer-events: none;
           height: 12px;
@@ -6891,6 +7064,7 @@ export default function ShopifyCollectionMapping() {
           background: #0b1322;
           isolation: isolate;
           transform: translateZ(0);
+          border-top: 1px solid #2a3a56;
         }
         .tableScrollDock {
           position: relative;
@@ -6924,12 +7098,41 @@ export default function ShopifyCollectionMapping() {
           height: 1px;
           min-width: 100%;
         }
+        /* Custom vertical scroll dock — fixed at right edge of screen, spans table row area */
+        .tableScrollDockVertWrap {
+          position: fixed;
+          width: 10px;
+          z-index: 2147483000;
+          background: #0b1322;
+          border-left: 1px solid #2a3a56;
+          pointer-events: none;
+        }
+        .tableScrollDockVertThumb {
+          position: absolute;
+          right: 0;
+          width: 10px;
+          border-radius: 4px;
+          background: #3c4f70;
+          cursor: default;
+          pointer-events: auto;
+          display: none;
+          transition: background 120ms ease;
+        }
+        .tableScrollDockVertThumb:hover,
+        .tableScrollDockVertThumb:active {
+          background: #4e6691;
+        }
+        /* Pager bar: add bottom padding so it clears the 12px horizontal dock with a visible gap */
+        .topbar.pagerBar {
+          padding-bottom: 24px;
+          flex-shrink: 0;
+        }
         .tableWrap table {
           border-collapse: separate;
           border-spacing: 0;
           width: max-content;
           min-width: 100%;
-          table-layout: auto;
+          table-layout: fixed;
         }
         thead {
           position: sticky;
@@ -6980,21 +7183,21 @@ export default function ShopifyCollectionMapping() {
         }
         .stickyEyeCol {
           left: 52px;
-          min-width: 52px;
-          width: 52px;
+          min-width: 55px;
+          width: 55px;
         }
         .stickyPictureCol {
-          left: 104px;
-          min-width: 80px;
-          width: 80px;
+          left: 107px;
+          min-width: 101px;
+          width: 101px;
         }
         .stickyProductNameCol {
-          left: 184px;
-          width: 260px;
-          min-width: 260px;
-          max-width: 260px;
+          left: 208px;
+          width: 300px;
+          min-width: 300px;
+          max-width: 300px;
           z-index: 9;
-          box-shadow: 10px 0 14px rgba(3, 8, 18, 0.42);
+          box-shadow: 4px 0 8px rgba(3, 8, 18, 0.32);
         }
         th {
           position: sticky;
@@ -7039,9 +7242,25 @@ export default function ShopifyCollectionMapping() {
           padding-top: 0;
           padding-bottom: 0;
         }
+        .autoMappedCol {
+          min-width: 160px;
+          width: 160px;
+        }
+        .suggestedCol {
+          min-width: 220px;
+          width: 220px;
+        }
+        .mappingDecisionCol {
+          min-width: 110px;
+          width: 110px;
+        }
+        .syncStatusCol {
+          min-width: 140px;
+          width: 140px;
+        }
         .stage4HeadCol {
           text-align: left;
-          min-width: 760px;
+          min-width: 620px;
           width: auto;
           max-width: none;
         }
@@ -7180,9 +7399,9 @@ export default function ShopifyCollectionMapping() {
           background: #0b1322;
         }
         .imgCell {
-          width: 80px;
-          min-width: 80px;
-          max-width: 80px;
+          width: 88px;
+          min-width: 88px;
+          max-width: 88px;
           text-align: center;
         }
         .thumbBtn {

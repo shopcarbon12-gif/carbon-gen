@@ -1,0 +1,5 @@
+[    2230ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:3101/api/admin/me:0
+[    2313ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:3101/api/accessibility/law-watch-status:0
+[    2425ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:3101/api/accessibility/settings?scope=default:0
+[    2522ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:3101/api/accessibility/usage?days=30:0
+[    2560ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:3101/api/accessibility/monthly-report-status:0

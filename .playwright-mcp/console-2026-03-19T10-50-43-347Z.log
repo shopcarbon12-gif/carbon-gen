@@ -1,0 +1,1 @@
+[   29725ms] [WARNING] Failed to execute 'postMessage' on 'DOMWindow': The target origin provided ('https://sp.stapecdn.com') does not match the recipient window's origin ('https://admin.shopify.com'). @ https://cdn.shopify.com/shopifycloud/web/assets/v1/vite/client/en/common-e17bfe6eb148.js:88

@@ -16,9 +16,16 @@ type AccessibilitySettings = {
   feedbackUrl: string;
   supportEmail: string;
   monthlyReportEmail: string;
+  accessibilityOwner: string;
+  accessibilityOwnerRole: string;
+  responseSlaHours: number;
+  remediationLogUrl: string;
   complianceChecklist: {
     statementPublished: boolean;
     issueChannelActive: boolean;
+    ownerAssigned: boolean;
+    responseSlaDefined: boolean;
+    remediationLogActive: boolean;
     keyboardAuditDone: boolean;
     contrastAuditDone: boolean;
     altTextAuditDone: boolean;
@@ -85,9 +92,16 @@ const defaultSettings: AccessibilitySettings = {
   feedbackUrl: "https://www.shopcarbon.com/pages/contact",
   supportEmail: "elior@carbonjeanscompany.com",
   monthlyReportEmail: "elior@carbonjeanscompany.com",
+  accessibilityOwner: "Elior",
+  accessibilityOwnerRole: "Accessibility owner",
+  responseSlaHours: 48,
+  remediationLogUrl: "",
   complianceChecklist: {
     statementPublished: false,
     issueChannelActive: false,
+    ownerAssigned: false,
+    responseSlaDefined: false,
+    remediationLogActive: false,
     keyboardAuditDone: false,
     contrastAuditDone: false,
     altTextAuditDone: false,
@@ -166,18 +180,32 @@ export default function AccessibilityPage() {
     const hasStatement = Boolean(settings.statementUrl.trim());
     const hasFeedbackPath = Boolean(settings.feedbackUrl.trim() || settings.supportEmail.trim());
     const hasMonthlyRecipient = Boolean(settings.monthlyReportEmail.trim());
-    const ready = hasStatement && hasFeedbackPath && hasMonthlyRecipient;
+    const hasOwner = Boolean(settings.accessibilityOwner.trim());
+    const hasSla = Number.isFinite(settings.responseSlaHours) && settings.responseSlaHours > 0;
+    const ready = hasStatement && hasFeedbackPath && hasMonthlyRecipient && hasOwner && hasSla;
     return {
       ready,
       hasStatement,
       hasFeedbackPath,
       hasMonthlyRecipient,
+      hasOwner,
+      hasSla,
     };
-  }, [settings.feedbackUrl, settings.monthlyReportEmail, settings.statementUrl, settings.supportEmail]);
+  }, [
+    settings.accessibilityOwner,
+    settings.feedbackUrl,
+    settings.monthlyReportEmail,
+    settings.responseSlaHours,
+    settings.statementUrl,
+    settings.supportEmail,
+  ]);
   const checklistItems = useMemo(
     () => [
       { key: "statementPublished", label: "Accessibility statement is published" },
       { key: "issueChannelActive", label: "Issue reporting channel is active" },
+      { key: "ownerAssigned", label: "Accessibility owner is assigned" },
+      { key: "responseSlaDefined", label: "Response SLA is defined" },
+      { key: "remediationLogActive", label: "Remediation log is active and updated" },
       { key: "keyboardAuditDone", label: "Keyboard navigation audit completed" },
       { key: "contrastAuditDone", label: "Contrast audit completed" },
       { key: "altTextAuditDone", label: "Alt text audit completed" },
@@ -670,6 +698,46 @@ export default function AccessibilityPage() {
               placeholder="elior@carbonjeanscompany.com"
             />
           </label>
+          <label>
+            Accessibility owner
+            <input
+              value={settings.accessibilityOwner}
+              onChange={(e) => setSettings((prev) => ({ ...prev, accessibilityOwner: e.target.value }))}
+              placeholder="Owner name"
+            />
+          </label>
+          <label>
+            Owner role/title
+            <input
+              value={settings.accessibilityOwnerRole}
+              onChange={(e) => setSettings((prev) => ({ ...prev, accessibilityOwnerRole: e.target.value }))}
+              placeholder="Accessibility owner"
+            />
+          </label>
+          <label>
+            Response SLA (hours)
+            <input
+              type="number"
+              min={1}
+              max={720}
+              value={settings.responseSlaHours}
+              onChange={(e) =>
+                setSettings((prev) => ({
+                  ...prev,
+                  responseSlaHours: Math.max(1, Math.min(720, Number(e.target.value) || 1)),
+                }))
+              }
+            />
+          </label>
+          <label>
+            Remediation log URL
+            <input
+              type="url"
+              value={settings.remediationLogUrl}
+              onChange={(e) => setSettings((prev) => ({ ...prev, remediationLogUrl: e.target.value }))}
+              placeholder="https://..."
+            />
+          </label>
         </article>
 
         <article className="card">
@@ -872,6 +940,16 @@ export default function AccessibilityPage() {
             {settings.feedbackUrl.trim() || settings.supportEmail.trim()
               ? "Configured (URL and/or support email)."
               : "Missing - add feedback URL or support email."}
+          </li>
+          <li>
+            <strong>Accessibility ownership + SLA:</strong>{" "}
+            {readiness.hasOwner && readiness.hasSla
+              ? `${settings.accessibilityOwner || "Owner"} assigned with ${settings.responseSlaHours}h response SLA.`
+              : "Missing - assign owner and set response SLA."}
+          </li>
+          <li>
+            <strong>Remediation log:</strong>{" "}
+            {settings.remediationLogUrl.trim() ? "Configured and ready for audit evidence." : "Missing - add remediation log URL."}
           </li>
           <li>
             <strong>WCAG content/media/forms fixes:</strong> Not handled by widget alone - must be remediated in
