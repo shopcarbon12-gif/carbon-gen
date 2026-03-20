@@ -188,11 +188,36 @@ const DEFAULT_MENU_NODES: MenuNodeSeed[] = [
 
 const memoryNodesByShop = new Map<string, MenuNodeRecord[]>();
 const memoryAuditLogsByShop = new Map<string, MappingAuditLogRow[]>();
+const memoryRowReviewByShop = new Map<string, Map<string, boolean>>();
+const memoryRowDraftByShop = new Map<string, Map<string, RowDraftState>>();
 let sqlTablesEnsured = false;
-const MAPPING_AUDIT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+const MAPPING_AUDIT_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
+const ROW_DRAFT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const MAPPING_AUDIT_LIMIT_MAX = 1000;
 const TRIM_AUDIT_LOGS_INTERVAL_MS = 60 * 60 * 1000;
 const trimAuditLogsLastRunByShop = new Map<string, number>();
+const TRIM_ROW_DRAFTS_INTERVAL_MS = 10 * 60 * 1000;
+const trimRowDraftsLastRunByShop = new Map<string, number>();
+
+export type RowDraftState = {
+  isReviewed: boolean;
+  selectedSuggestionPaths: string[];
+  selectedSuggestionCollections: string[];
+  manualAddedPaths: string[];
+  manualRemovedPaths: string[];
+  mappingDecision?: "AUTO_MAPPED" | "SUGGESTED" | "MANUAL_REVIEW";
+  collectionSyncStatus?: "REVIEW" | "REMOVAL_PENDING" | "ADD_PENDING" | "SYNCED";
+  finalMenuPaths?: string[];
+  finalDirectCollections?: string[];
+  currentMatchesFinal?: boolean;
+  updatedAt?: string;
+};
+
+type PersistedRowDraftRow = {
+  row_id: string;
+  draft_data: unknown;
+  updated_at: string;
+};
 
 function normalizeText(value: unknown) {
   return String(value ?? "").trim();
@@ -295,6 +320,48 @@ function normalizeDetails(details: unknown): Record<string, unknown> {
     return details as Record<string, unknown>;
   }
   return {};
+}
+
+function normalizeTextArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return Array.from(
+    new Set(
+      value
+        .map((entry) => normalizeText(entry))
+        .filter(Boolean)
+    )
+  );
+}
+
+function normalizeRowDraftState(value: unknown): RowDraftState {
+  const raw = value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+  const mappingDecisionRaw = normalizeText(raw.mappingDecision);
+  const collectionSyncStatusRaw = normalizeText(raw.collectionSyncStatus);
+  const mappingDecision =
+    mappingDecisionRaw === "AUTO_MAPPED" || mappingDecisionRaw === "SUGGESTED" || mappingDecisionRaw === "MANUAL_REVIEW"
+      ? mappingDecisionRaw
+      : undefined;
+  const collectionSyncStatus =
+    collectionSyncStatusRaw === "REVIEW" ||
+    collectionSyncStatusRaw === "REMOVAL_PENDING" ||
+    collectionSyncStatusRaw === "ADD_PENDING" ||
+    collectionSyncStatusRaw === "SYNCED"
+      ? collectionSyncStatusRaw
+      : undefined;
+  return {
+    isReviewed: Boolean(raw.isReviewed),
+    selectedSuggestionPaths: normalizeTextArray(raw.selectedSuggestionPaths),
+    selectedSuggestionCollections: normalizeTextArray(raw.selectedSuggestionCollections),
+    manualAddedPaths: normalizeTextArray(raw.manualAddedPaths),
+    manualRemovedPaths: normalizeTextArray(raw.manualRemovedPaths),
+    mappingDecision,
+    collectionSyncStatus,
+    finalMenuPaths: normalizeTextArray(raw.finalMenuPaths),
+    finalDirectCollections: normalizeTextArray(raw.finalDirectCollections),
+    currentMatchesFinal: typeof raw.currentMatchesFinal === "boolean" ? raw.currentMatchesFinal : undefined,
+  };
 }
 
 function parsePersistedMappingAuditRow(row: PersistedMappingAuditRow): MappingAuditLogRow {
@@ -406,6 +473,28 @@ async function ensureSqlTables() {
   `);
 
   await sqlQuery(`
+    CREATE TABLE IF NOT EXISTS shopify_collection_mapping_row_reviews (
+      shop TEXT NOT NULL,
+      row_id TEXT NOT NULL,
+      is_reviewed BOOLEAN NOT NULL DEFAULT false,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (shop, row_id)
+    )
+  `);
+
+  await sqlQuery(`
+    CREATE TABLE IF NOT EXISTS shopify_collection_mapping_row_drafts (
+      shop TEXT NOT NULL,
+      row_id TEXT NOT NULL,
+      draft_data JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (shop, row_id)
+    )
+  `);
+
+  await sqlQuery(`
     CREATE INDEX IF NOT EXISTS idx_shopify_collection_menu_nodes_shop_sort
       ON shopify_collection_menu_nodes (shop, sort_order, node_key)
   `);
@@ -418,6 +507,16 @@ async function ensureSqlTables() {
   await sqlQuery(`
     CREATE INDEX IF NOT EXISTS idx_shopify_collection_mapping_audit_shop_created
       ON shopify_collection_mapping_audit (shop, created_at DESC)
+  `);
+
+  await sqlQuery(`
+    CREATE INDEX IF NOT EXISTS idx_shopify_collection_mapping_row_reviews_shop_updated
+      ON shopify_collection_mapping_row_reviews (shop, updated_at DESC)
+  `);
+
+  await sqlQuery(`
+    CREATE INDEX IF NOT EXISTS idx_shopify_collection_mapping_row_drafts_shop_updated
+      ON shopify_collection_mapping_row_drafts (shop, updated_at DESC)
   `);
 
   sqlTablesEnsured = true;
@@ -938,10 +1037,23 @@ async function trimSqlMappingAuditLogs(shop: string) {
   await sqlQuery(
     `DELETE FROM shopify_collection_mapping_audit
      WHERE shop = $1
-       AND created_at < now() - interval '7 days'`,
+       AND created_at < now() - interval '90 days'`,
     [shop]
   );
   trimAuditLogsLastRunByShop.set(shop, now);
+}
+
+async function trimSqlRowDrafts(shop: string) {
+  const now = Date.now();
+  const lastTrim = trimRowDraftsLastRunByShop.get(shop) || 0;
+  if (now - lastTrim < TRIM_ROW_DRAFTS_INTERVAL_MS) return;
+  await sqlQuery(
+    `DELETE FROM shopify_collection_mapping_row_drafts
+     WHERE shop = $1
+       AND updated_at < now() - interval '7 days'`,
+    [shop]
+  );
+  trimRowDraftsLastRunByShop.set(shop, now);
 }
 
 export async function logMappingAudit(input: MappingAuditInput): Promise<void> {
@@ -1069,6 +1181,267 @@ export async function listLatestProductActionStatus(
     statusByProductId.set(productId, status);
   }
   return { backend: "sql", statusByProductId };
+}
+
+export async function listRowReviewStates(
+  shop: string,
+  rowIds: string[]
+): Promise<{
+  backend: "sql" | "memory";
+  statusByRowId: Map<string, boolean>;
+  warning?: string;
+}> {
+  const safeShop = normalizeShopKey(shop);
+  const normalizedRowIds = Array.from(
+    new Set(
+      (Array.isArray(rowIds) ? rowIds : [])
+        .map((rowId) => normalizeText(rowId))
+        .filter(Boolean)
+    )
+  );
+  const empty = new Map<string, boolean>();
+  if (normalizedRowIds.length < 1) {
+    return { backend: (await canUseSql()) ? "sql" : "memory", statusByRowId: empty };
+  }
+
+  if (!(await canUseSql())) {
+    const store = memoryRowReviewByShop.get(safeShop) || new Map<string, boolean>();
+    const statusByRowId = new Map<string, boolean>();
+    for (const rowId of normalizedRowIds) {
+      if (!store.has(rowId)) continue;
+      statusByRowId.set(rowId, Boolean(store.get(rowId)));
+    }
+    return {
+      backend: "memory",
+      warning: "SQL is not configured. Review approvals are only available for this local session.",
+      statusByRowId,
+    };
+  }
+
+  type PersistedReviewRow = {
+    row_id: string;
+    is_reviewed: boolean;
+  };
+  const rows = await sqlQuery<PersistedReviewRow>(
+    `SELECT row_id, is_reviewed
+     FROM shopify_collection_mapping_row_reviews
+     WHERE shop = $1
+       AND row_id = ANY($2::text[])`,
+    [safeShop, normalizedRowIds]
+  );
+  const statusByRowId = new Map<string, boolean>();
+  for (const row of rows) {
+    const rowId = normalizeText(row.row_id);
+    if (!rowId) continue;
+    statusByRowId.set(rowId, Boolean(row.is_reviewed));
+  }
+  return { backend: "sql", statusByRowId };
+}
+
+export async function saveRowReviewStates(
+  shop: string,
+  reviews: Array<{ rowId: string; isReviewed: boolean }>
+): Promise<{ backend: "sql" | "memory"; warning?: string }> {
+  const safeShop = normalizeShopKey(shop);
+  const normalized = Array.from(
+    new Map(
+      (Array.isArray(reviews) ? reviews : [])
+        .map((entry) => ({
+          rowId: normalizeText(entry?.rowId),
+          isReviewed: Boolean(entry?.isReviewed),
+        }))
+        .filter((entry) => entry.rowId)
+        .map((entry) => [entry.rowId, entry] as const)
+    ).values()
+  );
+  if (normalized.length < 1) {
+    return { backend: (await canUseSql()) ? "sql" : "memory" };
+  }
+
+  if (!(await canUseSql())) {
+    const existing = memoryRowReviewByShop.get(safeShop) || new Map<string, boolean>();
+    for (const entry of normalized) {
+      existing.set(entry.rowId, entry.isReviewed);
+    }
+    memoryRowReviewByShop.set(safeShop, existing);
+    return {
+      backend: "memory",
+      warning: "SQL is not configured. Review approvals are only available for this local session.",
+    };
+  }
+
+  await sqlQuery(
+    `INSERT INTO shopify_collection_mapping_row_reviews (shop, row_id, is_reviewed, updated_at)
+     SELECT
+       $1,
+       unnest($2::text[]),
+       unnest($3::boolean[]),
+       now()
+     ON CONFLICT (shop, row_id) DO UPDATE
+       SET is_reviewed = EXCLUDED.is_reviewed,
+           updated_at = EXCLUDED.updated_at`,
+    [safeShop, normalized.map((entry) => entry.rowId), normalized.map((entry) => entry.isReviewed)]
+  );
+
+  return { backend: "sql" };
+}
+
+export async function listRowDraftStates(
+  shop: string,
+  rowIds: string[]
+): Promise<{
+  backend: "sql" | "memory";
+  draftByRowId: Map<string, RowDraftState>;
+  warning?: string;
+}> {
+  const safeShop = normalizeShopKey(shop);
+  const normalizedRowIds = Array.from(
+    new Set(
+      (Array.isArray(rowIds) ? rowIds : [])
+        .map((rowId) => normalizeText(rowId))
+        .filter(Boolean)
+    )
+  );
+  const empty = new Map<string, RowDraftState>();
+  if (normalizedRowIds.length < 1) {
+    return { backend: (await canUseSql()) ? "sql" : "memory", draftByRowId: empty };
+  }
+
+  if (!(await canUseSql())) {
+    const store = memoryRowDraftByShop.get(safeShop) || new Map<string, RowDraftState>();
+    const threshold = Date.now() - ROW_DRAFT_RETENTION_MS;
+    const nextStore = new Map<string, RowDraftState>();
+    const draftByRowId = new Map<string, RowDraftState>();
+    for (const [rowId, draft] of store.entries()) {
+      const ts = Date.parse(normalizeText(draft.updatedAt));
+      if (Number.isFinite(ts) && ts >= threshold) {
+        nextStore.set(rowId, draft);
+      }
+    }
+    memoryRowDraftByShop.set(safeShop, nextStore);
+    for (const rowId of normalizedRowIds) {
+      const draft = nextStore.get(rowId);
+      if (!draft) continue;
+      draftByRowId.set(rowId, { ...draft });
+    }
+    return {
+      backend: "memory",
+      warning: "SQL is not configured. Draft row state is only available for this local session.",
+      draftByRowId,
+    };
+  }
+
+  await trimSqlRowDrafts(safeShop);
+  const rows = await sqlQuery<PersistedRowDraftRow>(
+    `SELECT row_id, draft_data, updated_at
+     FROM shopify_collection_mapping_row_drafts
+     WHERE shop = $1
+       AND row_id = ANY($2::text[])`,
+    [safeShop, normalizedRowIds]
+  );
+  const draftByRowId = new Map<string, RowDraftState>();
+  for (const row of rows) {
+    const rowId = normalizeText(row.row_id);
+    if (!rowId) continue;
+    const parsed = normalizeRowDraftState(row.draft_data);
+    parsed.updatedAt = normalizeText(row.updated_at) || new Date().toISOString();
+    draftByRowId.set(rowId, parsed);
+  }
+  return { backend: "sql", draftByRowId };
+}
+
+export async function saveRowDraftStates(
+  shop: string,
+  drafts: Array<{ rowId: string; draft: RowDraftState }>
+): Promise<{ backend: "sql" | "memory"; warning?: string }> {
+  const safeShop = normalizeShopKey(shop);
+  const normalized = Array.from(
+    new Map(
+      (Array.isArray(drafts) ? drafts : [])
+        .map((entry) => ({
+          rowId: normalizeText(entry?.rowId),
+          draft: normalizeRowDraftState(entry?.draft),
+        }))
+        .filter((entry) => entry.rowId)
+        .map((entry) => [entry.rowId, entry] as const)
+    ).values()
+  );
+  if (normalized.length < 1) {
+    return { backend: (await canUseSql()) ? "sql" : "memory" };
+  }
+
+  if (!(await canUseSql())) {
+    const existing = memoryRowDraftByShop.get(safeShop) || new Map<string, RowDraftState>();
+    const nowIso = new Date().toISOString();
+    for (const entry of normalized) {
+      existing.set(entry.rowId, { ...entry.draft, updatedAt: nowIso });
+    }
+    memoryRowDraftByShop.set(safeShop, existing);
+    return {
+      backend: "memory",
+      warning: "SQL is not configured. Draft row state is only available for this local session.",
+    };
+  }
+
+  await trimSqlRowDrafts(safeShop);
+  await sqlQuery(
+    `INSERT INTO shopify_collection_mapping_row_drafts (shop, row_id, draft_data, updated_at)
+     SELECT
+       $1,
+       unnest($2::text[]),
+       unnest($3::jsonb[]),
+       now()
+     ON CONFLICT (shop, row_id) DO UPDATE
+       SET draft_data = EXCLUDED.draft_data,
+           updated_at = EXCLUDED.updated_at`,
+    [
+      safeShop,
+      normalized.map((entry) => entry.rowId),
+      normalized.map((entry) => JSON.stringify(entry.draft)),
+    ]
+  );
+
+  return { backend: "sql" };
+}
+
+export async function clearRowDraftStates(
+  shop: string,
+  rowIds: string[]
+): Promise<{ backend: "sql" | "memory"; warning?: string; cleared: number }> {
+  const safeShop = normalizeShopKey(shop);
+  const normalizedRowIds = Array.from(
+    new Set(
+      (Array.isArray(rowIds) ? rowIds : [])
+        .map((rowId) => normalizeText(rowId))
+        .filter(Boolean)
+    )
+  );
+  if (normalizedRowIds.length < 1) {
+    return { backend: (await canUseSql()) ? "sql" : "memory", cleared: 0 };
+  }
+
+  if (!(await canUseSql())) {
+    const existing = memoryRowDraftByShop.get(safeShop) || new Map<string, RowDraftState>();
+    let cleared = 0;
+    for (const rowId of normalizedRowIds) {
+      if (existing.delete(rowId)) cleared += 1;
+    }
+    memoryRowDraftByShop.set(safeShop, existing);
+    return {
+      backend: "memory",
+      warning: "SQL is not configured. Draft row state is only available for this local session.",
+      cleared,
+    };
+  }
+
+  const result = await sqlQuery<{ row_id: string }>(
+    `DELETE FROM shopify_collection_mapping_row_drafts
+     WHERE shop = $1
+       AND row_id = ANY($2::text[])
+     RETURNING row_id`,
+    [safeShop, normalizedRowIds]
+  );
+  return { backend: "sql", cleared: result.length };
 }
 
 export function getDefaultMenuNodes() {

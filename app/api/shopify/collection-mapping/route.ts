@@ -13,14 +13,18 @@ import {
 import {
   type CollectionOption,
   type ProductActionStatus,
+  type RowDraftState,
   type LiveMenuNodeInput,
   type MappingAuditLogRow,
   type MenuNodeRecord,
   getDefaultMenuNodes,
   listAndEnsureMenuNodes,
   listLatestProductActionStatus,
+  listRowDraftStates,
   listMappingAuditLogs,
   logMappingAudit,
+  saveRowDraftStates,
+  clearRowDraftStates,
   saveMenuMappings,
   logCollectionMappingAction,
   syncLiveMenuNodes,
@@ -2384,10 +2388,12 @@ function mapUpcRowToResponse(
   nodes: MenuNodeRecord[],
   worksheetState: UpcWorksheetState,
   actionStatusByProductId: Map<string, ProductActionStatus>,
+  rowDraftById: Map<string, RowDraftState>,
   nodePathByKey: Map<string, string>,
   collectionHandleById: Map<string, string>,
   mappedCollectionIdSet: Set<string>
 ) {
+  const rowDraft = rowDraftById.get(row.id);
   const worksheetEntry = worksheetState.upcMap.get(row.upc);
   const membership = new Set(row.representativeProduct.collectionIds);
   const checkedNodeKeys = nodes
@@ -2479,6 +2485,24 @@ function mapUpcRowToResponse(
     directCollectionsToAssign: autoMap.directCollectionsToAssign,
     suggestedPaths: autoMap.suggestedPaths,
     suggestedDirectCollections: autoMap.suggestedDirectCollections,
+    isReviewed: Boolean(rowDraft?.isReviewed),
+    draft: rowDraft
+      ? {
+          isReviewed: Boolean(rowDraft.isReviewed),
+          selectedSuggestionPaths: Array.isArray(rowDraft.selectedSuggestionPaths) ? rowDraft.selectedSuggestionPaths : [],
+          selectedSuggestionCollections: Array.isArray(rowDraft.selectedSuggestionCollections)
+            ? rowDraft.selectedSuggestionCollections
+            : [],
+          manualAddedPaths: Array.isArray(rowDraft.manualAddedPaths) ? rowDraft.manualAddedPaths : [],
+          manualRemovedPaths: Array.isArray(rowDraft.manualRemovedPaths) ? rowDraft.manualRemovedPaths : [],
+          mappingDecision: rowDraft.mappingDecision || null,
+          collectionSyncStatus: rowDraft.collectionSyncStatus || null,
+          finalMenuPaths: Array.isArray(rowDraft.finalMenuPaths) ? rowDraft.finalMenuPaths : [],
+          finalDirectCollections: Array.isArray(rowDraft.finalDirectCollections) ? rowDraft.finalDirectCollections : [],
+          currentMatchesFinal: typeof rowDraft.currentMatchesFinal === "boolean" ? rowDraft.currentMatchesFinal : null,
+          updatedAt: rowDraft.updatedAt || null,
+        }
+      : null,
   };
 }
 
@@ -2607,6 +2631,7 @@ export async function GET(req: NextRequest) {
     const paged = sorted.slice(start, start + pageSize);
     const pagedProductIds = Array.from(new Set(paged.flatMap((row) => row.productIds).filter(Boolean)));
     const actionStatusResult = await listLatestProductActionStatus(shop, pagedProductIds);
+    const rowDraftResult = await listRowDraftStates(shop, paged.map((row) => row.id));
 
     const logsResult = includeLogs ? await listMappingAuditLogs(shop, logLimit) : null;
     const warningParts = [
@@ -2614,6 +2639,7 @@ export async function GET(req: NextRequest) {
       normalizeText(nodesResult.warning),
       normalizeText(linkTargetsResult.warning),
       normalizeText(actionStatusResult.warning),
+      normalizeText(rowDraftResult.warning),
       normalizeText(logsResult?.warning),
     ].filter(Boolean);
 
@@ -2672,6 +2698,7 @@ export async function GET(req: NextRequest) {
           nodes,
           worksheetState,
           actionStatusResult.statusByProductId,
+          rowDraftResult.draftByRowId,
           nodePathByKey,
           collectionHandleById,
           mappedCollectionIdSet
@@ -2836,6 +2863,42 @@ export async function POST(req: NextRequest) {
         backend: logs.backend,
         warning: logs.warning || "",
         logs: logs.logs,
+      });
+    }
+
+    if (action === "set-row-draft-batch") {
+      const draftsRaw = Array.isArray(body.drafts) ? body.drafts : [];
+      const drafts = draftsRaw
+        .map((entry) => {
+          const safe = entry as { rowId?: unknown; draft?: unknown };
+          return {
+            rowId: normalizeText(safe.rowId),
+            draft: (safe.draft || {}) as RowDraftState,
+          };
+        })
+        .filter((entry) => entry.rowId);
+      if (drafts.length > 0) {
+        const saved = await saveRowDraftStates(shop, drafts);
+        return NextResponse.json({
+          ok: true,
+          shop,
+          backend: saved.backend,
+          warning: saved.warning || "",
+          saved: drafts.length,
+        });
+      }
+      return NextResponse.json({ ok: true, shop, saved: 0 });
+    }
+
+    if (action === "clear-row-drafts") {
+      const rowIds = Array.isArray(body.rowIds) ? body.rowIds.map((row) => normalizeText(row)) : [];
+      const cleared = await clearRowDraftStates(shop, rowIds);
+      return NextResponse.json({
+        ok: true,
+        shop,
+        backend: cleared.backend,
+        warning: cleared.warning || "",
+        cleared: cleared.cleared,
       });
     }
 

@@ -58,6 +58,19 @@ type ProductRow = {
   suggestedPaths?: string[];
   suggestedDirectCollections?: string[];
   isReviewed?: boolean;
+  draft?: {
+    isReviewed?: boolean;
+    selectedSuggestionPaths?: string[];
+    selectedSuggestionCollections?: string[];
+    manualAddedPaths?: string[];
+    manualRemovedPaths?: string[];
+    mappingDecision?: "AUTO_MAPPED" | "SUGGESTED" | "MANUAL_REVIEW" | null;
+    collectionSyncStatus?: "REVIEW" | "REMOVAL_PENDING" | "ADD_PENDING" | "SYNCED" | null;
+    finalMenuPaths?: string[];
+    finalDirectCollections?: string[];
+    currentMatchesFinal?: boolean | null;
+    updatedAt?: string | null;
+  } | null;
 };
 
 type AdvancedDecisionFilter = "AUTO_MAPPED" | "SUGGESTED" | "MANUAL_REVIEW";
@@ -325,6 +338,9 @@ const DEBUG_INGEST_ENABLED =
   String(process.env.NEXT_PUBLIC_COLLECTION_MAPPING_DEBUG_INGEST || "")
     .trim()
     .toLowerCase() === "true";
+const UI_PREFS_STORAGE_KEY = "shopify_collection_mapping_ui_prefs_v1";
+const UI_PREFS_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+const DRAFT_AUTOSAVE_DEBOUNCE_MS = 550;
 
 function normalizeMenuEditorLinkType(value: string): MenuLinkType {
   const normalized = String(value || "").trim().toUpperCase();
@@ -460,6 +476,24 @@ function dedupeCollectionHandles(values: string[]) {
   return out;
 }
 
+function mapToSelectedRecord(values: string[] | undefined): Record<string, boolean> {
+  const out: Record<string, boolean> = {};
+  for (const value of values || []) {
+    const key = String(value || "").trim();
+    if (!key) continue;
+    out[key] = true;
+  }
+  return out;
+}
+
+function selectedRecordToList(record: Record<string, boolean> | undefined): string[] {
+  return Object.entries(record || {})
+    .filter(([, value]) => Boolean(value))
+    .map(([key]) => String(key || "").trim())
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+}
+
 export default function ShopifyCollectionMapping() {
   const pathname = usePathname();
   const isStandaloneCollectionMappingRoute = pathname === "/shopify-collection-mapping";
@@ -584,6 +618,10 @@ export default function ShopifyCollectionMapping() {
   const menuEditorComboboxRef = useRef<HTMLDivElement | null>(null);
   const loadDataAbortRef = useRef<AbortController | null>(null);
   const loadDataReqIdRef = useRef(0);
+  const draftHydrationDoneRef = useRef(false);
+  const syncedDraftClearInFlightRef = useRef(false);
+  const lastDraftSavePayloadRef = useRef("");
+  const syncedDraftClearedRowIdsRef = useRef<Set<string>>(new Set());
 
   const activeShop = useMemo(() => {
     const normalized = normalizeShopDomain(shop);
@@ -627,6 +665,89 @@ export default function ShopifyCollectionMapping() {
   useEffect(() => {
     if (noticeState) setNoticeHidden(false);
   }, [noticeState?.tone, noticeState?.message]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem(UI_PREFS_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as {
+        expiresAt?: number;
+        savedAt?: number;
+        activeQueueTab?: ShopifyCollectionMappingQueueTab;
+        search?: string;
+        sort?: SortValue;
+        pageSize?: number;
+        appliedFilterTypes?: string[];
+        appliedFilterDecisions?: AdvancedDecisionFilter[];
+        appliedFilterHasSuggestions?: boolean;
+        appliedFilterIncludeSynced?: boolean;
+      };
+      const expiresAt = Number(parsed?.expiresAt || 0);
+      if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+        window.localStorage.removeItem(UI_PREFS_STORAGE_KEY);
+        return;
+      }
+      const allowedTabs: ShopifyCollectionMappingQueueTab[] = ["all", "needs-review", "ready-push", "push-failed", "synced"];
+      const allowedSorts: SortValue[] = ["title-asc", "title-desc", "upc-asc", "upc-desc"];
+      if (typeof parsed.search === "string") setSearch(parsed.search);
+      if (allowedTabs.includes(parsed.activeQueueTab as ShopifyCollectionMappingQueueTab)) {
+        setActiveQueueTab(parsed.activeQueueTab as ShopifyCollectionMappingQueueTab);
+      }
+      if (allowedSorts.includes(parsed.sort as SortValue)) {
+        setSort(parsed.sort as SortValue);
+      }
+      if (Number.isFinite(Number(parsed.pageSize)) && Number(parsed.pageSize) > 0) {
+        setPageSize(Math.min(500, Number(parsed.pageSize)));
+      }
+      if (Array.isArray(parsed.appliedFilterTypes)) setAppliedFilterTypes(parsed.appliedFilterTypes.map((v) => String(v || "")));
+      if (Array.isArray(parsed.appliedFilterDecisions)) {
+        setAppliedFilterDecisions(
+          parsed.appliedFilterDecisions.filter((value): value is AdvancedDecisionFilter =>
+            value === "AUTO_MAPPED" || value === "SUGGESTED" || value === "MANUAL_REVIEW"
+          )
+        );
+      }
+      if (typeof parsed.appliedFilterHasSuggestions === "boolean") {
+        setAppliedFilterHasSuggestions(parsed.appliedFilterHasSuggestions);
+      }
+      if (typeof parsed.appliedFilterIncludeSynced === "boolean") {
+        setAppliedFilterIncludeSynced(parsed.appliedFilterIncludeSynced);
+      }
+    } catch {
+      // ignore malformed local prefs
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const payload = {
+        savedAt: Date.now(),
+        expiresAt: Date.now() + UI_PREFS_TTL_MS,
+        activeQueueTab,
+        search,
+        sort,
+        pageSize,
+        appliedFilterTypes,
+        appliedFilterDecisions,
+        appliedFilterHasSuggestions,
+        appliedFilterIncludeSynced,
+      };
+      window.localStorage.setItem(UI_PREFS_STORAGE_KEY, JSON.stringify(payload));
+    } catch {
+      // ignore storage failures
+    }
+  }, [
+    activeQueueTab,
+    search,
+    sort,
+    pageSize,
+    appliedFilterTypes,
+    appliedFilterDecisions,
+    appliedFilterHasSuggestions,
+    appliedFilterIncludeSynced,
+  ]);
 
   function withShopContext(input: Record<string, unknown>) {
     if (!activeShop) return input;
@@ -1680,7 +1801,39 @@ export default function ShopifyCollectionMapping() {
       const nextNodes = json.nodes || [];
       setNodes(nextNodes);
       setLastSyncedNodes(cloneNodes(nextNodes));
-      setRows(json.rows || []);
+      const nextRows = Array.isArray(json.rows) ? json.rows : [];
+      const nextSelectedSuggestionPathsByRow: Record<string, Record<string, boolean>> = {};
+      const nextSelectedSuggestionCollectionsByRow: Record<string, Record<string, boolean>> = {};
+      const nextManualAddedPathsByRow: Record<string, Record<string, boolean>> = {};
+      const nextManualRemovedPathsByRow: Record<string, Record<string, boolean>> = {};
+      const nextReviewedByRow: Record<string, boolean> = {};
+      for (const row of nextRows) {
+        const draft = row?.draft;
+        if (!draft || typeof draft !== "object") continue;
+        const rowId = String(row.id || "").trim();
+        if (!rowId) continue;
+        const selectedSuggestionPaths = mapToSelectedRecord(Array.isArray(draft.selectedSuggestionPaths) ? draft.selectedSuggestionPaths : []);
+        const selectedSuggestionCollections = mapToSelectedRecord(
+          Array.isArray(draft.selectedSuggestionCollections) ? draft.selectedSuggestionCollections : []
+        );
+        const manualAddedPaths = mapToSelectedRecord(Array.isArray(draft.manualAddedPaths) ? draft.manualAddedPaths : []);
+        const manualRemovedPaths = mapToSelectedRecord(Array.isArray(draft.manualRemovedPaths) ? draft.manualRemovedPaths : []);
+        if (Object.keys(selectedSuggestionPaths).length > 0) nextSelectedSuggestionPathsByRow[rowId] = selectedSuggestionPaths;
+        if (Object.keys(selectedSuggestionCollections).length > 0) {
+          nextSelectedSuggestionCollectionsByRow[rowId] = selectedSuggestionCollections;
+        }
+        if (Object.keys(manualAddedPaths).length > 0) nextManualAddedPathsByRow[rowId] = manualAddedPaths;
+        if (Object.keys(manualRemovedPaths).length > 0) nextManualRemovedPathsByRow[rowId] = manualRemovedPaths;
+        if (draft.isReviewed === true) nextReviewedByRow[rowId] = true;
+      }
+      setRows(nextRows);
+      setSelectedSuggestionPathsByRow(nextSelectedSuggestionPathsByRow);
+      setSelectedSuggestionCollectionsByRow(nextSelectedSuggestionCollectionsByRow);
+      setManualAddedPathsByRow(nextManualAddedPathsByRow);
+      setManualRemovedPathsByRow(nextManualRemovedPathsByRow);
+      setReviewedByRow(nextReviewedByRow);
+      syncedDraftClearedRowIdsRef.current.clear();
+      draftHydrationDoneRef.current = true;
       const nextCollections = (json.collections || []).map((row) => ({
         id: String(row.id || ""),
         title: String(row.title || "").trim() || String(row.id || ""),
@@ -1809,6 +1962,7 @@ export default function ShopifyCollectionMapping() {
   function toggleUnmappedCollectionSelection(collectionId: string) {
     const normalized = String(collectionId || "").trim();
     if (!normalized) return;
+    if (selectedRowIds.length < 1) return;
     setSelectedUnmappedCollectionIds((prev) => ({
       ...prev,
       [normalized]: !prev[normalized],
@@ -1877,6 +2031,7 @@ export default function ShopifyCollectionMapping() {
   }
 
   function applyNodeSelection(nodeKey: string) {
+    if (selectedRowIds.length < 1) return;
     if (selectedRowIds.length > 1) {
       setManualTreeSelectionActive(true);
     }
@@ -2072,6 +2227,136 @@ export default function ShopifyCollectionMapping() {
       return next;
     });
   }, [rows]);
+
+  useEffect(() => {
+    if (!draftHydrationDoneRef.current) return;
+    if (!activeShop) return;
+    const timer = window.setTimeout(() => {
+      const drafts: Array<{ rowId: string; draft: Record<string, unknown> }> = [];
+      for (const row of rows) {
+        const rowId = String(row.id || "").trim();
+        if (!rowId) continue;
+        const selectedSuggestionPaths = selectedRecordToList(selectedSuggestionPathsByRow[rowId]);
+        const selectedSuggestionCollections = selectedRecordToList(selectedSuggestionCollectionsByRow[rowId]);
+        const manualAddedPaths = selectedRecordToList(manualAddedPathsByRow[rowId]);
+        const manualRemovedPaths = selectedRecordToList(manualRemovedPathsByRow[rowId]);
+        const staging = rowStagingById.get(rowId);
+        const isReviewed = Boolean(reviewedByRow[rowId] ?? row.isReviewed);
+        const hasDraft =
+          isReviewed ||
+          selectedSuggestionPaths.length > 0 ||
+          selectedSuggestionCollections.length > 0 ||
+          manualAddedPaths.length > 0 ||
+          manualRemovedPaths.length > 0;
+        if (!hasDraft) continue;
+        drafts.push({
+          rowId,
+          draft: {
+            isReviewed,
+            selectedSuggestionPaths,
+            selectedSuggestionCollections,
+            manualAddedPaths,
+            manualRemovedPaths,
+            mappingDecision: staging?.mappingDecision || row.mappingDecision || null,
+            collectionSyncStatus: staging?.collectionSyncStatus || null,
+            finalMenuPaths: staging?.finalMenuPaths || [],
+            finalDirectCollections: staging?.finalDirectCollections || [],
+            currentMatchesFinal: typeof staging?.currentMatchesFinal === "boolean" ? staging.currentMatchesFinal : null,
+          },
+        });
+      }
+      const payloadHash = JSON.stringify(drafts);
+      if (payloadHash === lastDraftSavePayloadRef.current) return;
+      lastDraftSavePayloadRef.current = payloadHash;
+      void fetch("/api/collection-mapping", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(withShopContext({ action: "set-row-draft-batch", drafts })),
+      }).catch(() => {});
+    }, DRAFT_AUTOSAVE_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [
+    activeShop,
+    rows,
+    reviewedByRow,
+    selectedSuggestionPathsByRow,
+    selectedSuggestionCollectionsByRow,
+    manualAddedPathsByRow,
+    manualRemovedPathsByRow,
+    rowStagingById,
+  ]);
+
+  useEffect(() => {
+    if (!draftHydrationDoneRef.current) return;
+    if (!activeShop) return;
+    if (syncedDraftClearInFlightRef.current) return;
+    const syncedWithDrafts = rows
+      .filter((row) => {
+        const workflow = rowWorkflowById.get(row.id);
+        if (!workflow?.synced) return false;
+        const rowId = String(row.id || "").trim();
+        if (!rowId) return false;
+        if (syncedDraftClearedRowIdsRef.current.has(rowId)) return false;
+        const hasLocalDraft =
+          rowId in reviewedByRow ||
+          Boolean(selectedSuggestionPathsByRow[rowId]) ||
+          Boolean(selectedSuggestionCollectionsByRow[rowId]) ||
+          Boolean(manualAddedPathsByRow[rowId]) ||
+          Boolean(manualRemovedPathsByRow[rowId]) ||
+          Boolean(row.draft);
+        return hasLocalDraft;
+      })
+      .map((row) => String(row.id || "").trim())
+      .filter(Boolean);
+    if (syncedWithDrafts.length < 1) return;
+    syncedDraftClearInFlightRef.current = true;
+    void fetch("/api/collection-mapping", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(withShopContext({ action: "clear-row-drafts", rowIds: syncedWithDrafts })),
+    })
+      .catch(() => {})
+      .finally(() => {
+        syncedDraftClearInFlightRef.current = false;
+      });
+    for (const rowId of syncedWithDrafts) {
+      syncedDraftClearedRowIdsRef.current.add(rowId);
+    }
+    setReviewedByRow((prev) => {
+      const next = { ...prev };
+      for (const rowId of syncedWithDrafts) delete next[rowId];
+      return next;
+    });
+    setSelectedSuggestionPathsByRow((prev) => {
+      const next = { ...prev };
+      for (const rowId of syncedWithDrafts) delete next[rowId];
+      return next;
+    });
+    setSelectedSuggestionCollectionsByRow((prev) => {
+      const next = { ...prev };
+      for (const rowId of syncedWithDrafts) delete next[rowId];
+      return next;
+    });
+    setManualAddedPathsByRow((prev) => {
+      const next = { ...prev };
+      for (const rowId of syncedWithDrafts) delete next[rowId];
+      return next;
+    });
+    setManualRemovedPathsByRow((prev) => {
+      const next = { ...prev };
+      for (const rowId of syncedWithDrafts) delete next[rowId];
+      return next;
+    });
+  }, [
+    activeShop,
+    rows,
+    rowWorkflowById,
+    reviewedByRow,
+    selectedSuggestionPathsByRow,
+    selectedSuggestionCollectionsByRow,
+    manualAddedPathsByRow,
+    manualRemovedPathsByRow,
+  ]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -6635,10 +6920,10 @@ export default function ShopifyCollectionMapping() {
           color: #bbf7d0;
         }
         .productSearchInput {
-          width: 320px;
-          min-width: 320px;
-          max-width: 320px;
-          flex: 0 0 320px;
+          width: 410px;
+          min-width: 410px;
+          max-width: 410px;
+          flex: 0 0 410px;
           border-color: #22c55e;
           background: #113025;
           color: #d8ffe8;
