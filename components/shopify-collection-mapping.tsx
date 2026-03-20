@@ -6867,7 +6867,7 @@ export default function ShopifyCollectionMapping() {
           z-index: 0;
           flex: 1 1 auto;
           min-height: 0;
-          overflow-x: hidden;
+          overflow-x: auto;
           overflow-y: auto;
           border-top: 1px solid #2a3a56;
           border-bottom: 1px solid #2a3a56;
@@ -6924,12 +6924,12 @@ export default function ShopifyCollectionMapping() {
           height: 1px;
           min-width: 100%;
         }
-        table {
+        .tableWrap table {
           border-collapse: separate;
           border-spacing: 0;
-          width: 100%;
-          min-width: 2200px;
-          table-layout: fixed;
+          width: max-content;
+          min-width: 100%;
+          table-layout: auto;
         }
         thead {
           position: sticky;
@@ -7415,12 +7415,17 @@ export default function ShopifyCollectionMapping() {
           max-width: none;
           overflow: visible;
         }
+        tbody td.stage4ResultCell {
+          overflow: visible;
+        }
         .stage4ResultLine {
           color: var(--muted);
           font-size: 12.33px;
           line-height: 1.2;
           font-weight: 600;
-          white-space: nowrap;
+          white-space: normal;
+          overflow-wrap: anywhere;
+          word-break: break-word;
           overflow: visible;
           text-overflow: clip;
           margin-bottom: 1px;
