@@ -4,7 +4,7 @@ import {
   POST as postCollectionMapping,
 } from "@/app/api/shopify/collection-mapping/route";
 
-type RouteHandler = (request: Request) => Promise<Response>;
+type RouteHandler = any;
 
 function getHeaderValue(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] || "" : value || "";
@@ -31,7 +31,7 @@ function getRequestHeaders(req: NextApiRequest) {
   return headers;
 }
 
-function getRequestBody(req: NextApiRequest) {
+function getRequestBody(req: NextApiRequest): any {
   const method = String(req.method || "GET").toUpperCase();
   if (method === "GET" || method === "HEAD") return undefined;
   if (req.body === undefined || req.body === null) return undefined;

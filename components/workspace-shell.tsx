@@ -120,7 +120,7 @@ function getCurrentTitle(pathname: string) {
 }
 
 export function WorkspaceShell({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
+  const pathname = usePathname() || "/";
   const router = useRouter();
   const isCollectionMappingRoute =
     pathname.startsWith("/shopify-collection-mapping") ||
