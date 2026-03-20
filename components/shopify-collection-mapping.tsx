@@ -59,7 +59,6 @@ type ProductRow = {
   suggestedDirectCollections?: string[];
 };
 
-type AdvancedStatusFilter = "NEEDS_REVIEW" | "READY_TO_PUSH" | "PUSH_FAILED" | "SYNCED";
 type AdvancedDecisionFilter = "AUTO_MAPPED" | "SUGGESTED" | "MANUAL_REVIEW";
 
 type RowStagingState = {
@@ -479,13 +478,11 @@ export default function ShopifyCollectionMapping() {
   const [typeOptions, setTypeOptions] = useState<string[]>([]);
   const [showFiltersDrawer, setShowFiltersDrawer] = useState(false);
   const [appliedFilterTypes, setAppliedFilterTypes] = useState<string[]>([]);
-  const [appliedFilterStatuses, setAppliedFilterStatuses] = useState<AdvancedStatusFilter[]>([]);
   const [appliedFilterDecisions, setAppliedFilterDecisions] = useState<AdvancedDecisionFilter[]>([]);
   const [appliedFilterHasSuggestions, setAppliedFilterHasSuggestions] = useState(false);
   const [appliedFilterIncludeSynced, setAppliedFilterIncludeSynced] = useState(false);
   const [draftFilterTypes, setDraftFilterTypes] = useState<string[]>([]);
   const [draftTypeDropdownOpen, setDraftTypeDropdownOpen] = useState(false);
-  const [draftFilterStatuses, setDraftFilterStatuses] = useState<AdvancedStatusFilter[]>([]);
   const [draftFilterDecisions, setDraftFilterDecisions] = useState<AdvancedDecisionFilter[]>([]);
   const [draftFilterHasSuggestions, setDraftFilterHasSuggestions] = useState(false);
   const [draftFilterIncludeSynced, setDraftFilterIncludeSynced] = useState(false);
@@ -1059,25 +1056,27 @@ export default function ShopifyCollectionMapping() {
       const rowDecision = String(staging?.mappingDecision || row.mappingDecision || "MANUAL_REVIEW")
         .trim()
         .toUpperCase() as AdvancedDecisionFilter;
-      const rowStatusFilter: AdvancedStatusFilter =
-        workflow.statusBadgeTone === "review"
-          ? "NEEDS_REVIEW"
-          : workflow.statusBadgeTone === "failed"
-            ? "PUSH_FAILED"
-            : workflow.statusBadgeTone === "synced"
-              ? "SYNCED"
-              : "READY_TO_PUSH";
-      if (appliedFilterStatuses.length > 0 && !appliedFilterStatuses.includes(rowStatusFilter)) return false;
-      if (appliedFilterDecisions.length > 0 && !appliedFilterDecisions.includes(rowDecision)) return false;
+      const suggestionReady = (staging?.suggestionOptions || []).some((option) => !option.disabled);
+      if (
+        appliedFilterDecisions.length > 0 &&
+        !appliedFilterDecisions.some((decision) => {
+          if (decision === "AUTO_MAPPED") return rowDecision === "AUTO_MAPPED";
+          if (decision === "SUGGESTED") return suggestionReady || rowDecision === "SUGGESTED";
+          if (decision === "MANUAL_REVIEW") return workflow.needsReview || rowDecision === "MANUAL_REVIEW";
+          return false;
+        })
+      ) {
+        return false;
+      }
       if (appliedFilterTypeSet.size > 0) {
         const rowType = String(row.itemType || "").trim().toLowerCase();
         if (!rowType || !appliedFilterTypeSet.has(rowType)) return false;
       }
       if (appliedFilterHasSuggestions) {
-        const suggestionReady = (staging?.suggestionOptions || []).some((option) => !option.disabled);
         if (!suggestionReady) return false;
       }
-      if (!appliedFilterIncludeSynced && workflow.statusBadgeTone === "synced") return false;
+      // Keep Synced KPI predictable: when Synced workflow tab is active, never hide synced rows via secondary filters.
+      if (activeQueueTab !== "synced" && !appliedFilterIncludeSynced && workflow.statusBadgeTone === "synced") return false;
       return true;
     });
     const sorted = [...filtered];
@@ -1140,7 +1139,6 @@ export default function ShopifyCollectionMapping() {
     rows,
     rowWorkflowById,
     rowStagingById,
-    appliedFilterStatuses,
     appliedFilterDecisions,
     appliedFilterTypes,
     appliedFilterHasSuggestions,
@@ -1148,36 +1146,20 @@ export default function ShopifyCollectionMapping() {
     headerSortMode,
   ]);
 
-  const statusFilterOptions: Array<{ key: AdvancedStatusFilter; label: string }> = [
-    { key: "NEEDS_REVIEW", label: "Needs Review" },
-    { key: "READY_TO_PUSH", label: "Ready to Push" },
-    { key: "PUSH_FAILED", label: "Push Failed" },
-    { key: "SYNCED", label: "Synced" },
-  ];
-  const decisionFilterOptions: Array<{ key: AdvancedDecisionFilter; label: string }> = [
-    { key: "AUTO_MAPPED", label: "Auto Matched" },
-    { key: "SUGGESTED", label: "Suggestion" },
-    { key: "MANUAL_REVIEW", label: "Manual" },
-  ];
-  const statusLabelByKey = new Map(statusFilterOptions.map((entry) => [entry.key, entry.label]));
-  const decisionLabelByKey = new Map(decisionFilterOptions.map((entry) => [entry.key, entry.label]));
+  const decisionLabelByKey = new Map<AdvancedDecisionFilter, string>([
+    ["AUTO_MAPPED", "Auto-mapped"],
+    ["SUGGESTED", "Has suggestions"],
+    ["MANUAL_REVIEW", "Needs manual review"],
+  ]);
 
   const appliedFilterChips = useMemo(() => {
     const chips: Array<{ id: string; kind: string; value?: string; label: string }> = [];
-    for (const status of appliedFilterStatuses) {
-      chips.push({
-        id: `status-${status}`,
-        kind: "status",
-        value: status,
-        label: `Status: ${statusLabelByKey.get(status) || status}`,
-      });
-    }
     for (const decision of appliedFilterDecisions) {
       chips.push({
         id: `decision-${decision}`,
         kind: "decision",
         value: decision,
-        label: `Decision: ${decisionLabelByKey.get(decision) || decision}`,
+        label: `Review Type: ${decisionLabelByKey.get(decision) || decision}`,
       });
     }
     for (const itemType of appliedFilterTypes) {
@@ -1192,19 +1174,18 @@ export default function ShopifyCollectionMapping() {
       chips.push({
         id: "has-suggestions",
         kind: "has-suggestions",
-        label: "Has Suggestions",
+        label: "Only rows with suggestions",
       });
     }
     if (appliedFilterIncludeSynced) {
       chips.push({
         id: "include-synced",
         kind: "include-synced",
-        label: "Include Synced",
+        label: "Include finished rows",
       });
     }
     return chips;
   }, [
-    appliedFilterStatuses,
     appliedFilterDecisions,
     appliedFilterTypes,
     appliedFilterHasSuggestions,
@@ -1212,14 +1193,13 @@ export default function ShopifyCollectionMapping() {
   ]);
 
   const draftFilterTypesLabel = useMemo(() => {
-    if (draftFilterTypes.length < 1) return "All types";
+    if (draftFilterTypes.length < 1) return "All product types";
     if (draftFilterTypes.length === 1) return draftFilterTypes[0];
-    return `${draftFilterTypes.length} types selected`;
+    return `${draftFilterTypes.length} product types selected`;
   }, [draftFilterTypes]);
 
   function openFiltersDrawer() {
     setDraftFilterTypes(appliedFilterTypes);
-    setDraftFilterStatuses(appliedFilterStatuses);
     setDraftFilterDecisions(appliedFilterDecisions);
     setDraftFilterHasSuggestions(appliedFilterHasSuggestions);
     setDraftFilterIncludeSynced(appliedFilterIncludeSynced);
@@ -1229,35 +1209,28 @@ export default function ShopifyCollectionMapping() {
 
   function applyAdvancedFilters() {
     setAppliedFilterTypes(draftFilterTypes);
-    setAppliedFilterStatuses(draftFilterStatuses);
     setAppliedFilterDecisions(draftFilterDecisions);
     setAppliedFilterHasSuggestions(draftFilterHasSuggestions);
     setAppliedFilterIncludeSynced(draftFilterIncludeSynced);
     setPage(1);
     setDraftTypeDropdownOpen(false);
-    setShowFiltersDrawer(false);
   }
 
   function clearAdvancedFilters() {
     setDraftFilterTypes([]);
-    setDraftFilterStatuses([]);
     setDraftFilterDecisions([]);
     setDraftFilterHasSuggestions(false);
     setDraftFilterIncludeSynced(false);
     setAppliedFilterTypes([]);
-    setAppliedFilterStatuses([]);
     setAppliedFilterDecisions([]);
     setAppliedFilterHasSuggestions(false);
     setAppliedFilterIncludeSynced(false);
     setPage(1);
     setDraftTypeDropdownOpen(false);
-    setShowFiltersDrawer(false);
   }
 
   function removeAppliedFilterChip(chip: { kind: string; value?: string }) {
-    if (chip.kind === "status" && chip.value) {
-      setAppliedFilterStatuses((prev) => prev.filter((value) => value !== chip.value));
-    } else if (chip.kind === "decision" && chip.value) {
+    if (chip.kind === "decision" && chip.value) {
       setAppliedFilterDecisions((prev) => prev.filter((value) => value !== chip.value));
     } else if (chip.kind === "type" && chip.value) {
       setAppliedFilterTypes((prev) => prev.filter((value) => value.toLowerCase() !== chip.value?.toLowerCase()));
@@ -1303,22 +1276,30 @@ export default function ShopifyCollectionMapping() {
     const tableWrap = tableWrapRef.current;
     const dock = tableScrollDockRef.current;
     const spacer = tableScrollSpacerRef.current;
+    const pageEl = pageScrollRef.current;
     if (!tableWrap || !dock || !spacer) return;
     const table = tableWrap.querySelector("table");
     if (!(table instanceof HTMLElement)) return;
 
-    const syncSpacerWidth = () => {
-      spacer.style.width = `${table.scrollWidth}px`;
+    let rafId = 0;
+    const syncDockGeometry = () => {
+      rafId = 0;
       const rect = tableWrap.getBoundingClientRect();
-      const stickyProductCol = tableWrap.querySelector("th.stickyProductNameCol");
-      const frozenRightEdge =
-        stickyProductCol instanceof HTMLElement ? Math.max(0, Math.round(stickyProductCol.offsetLeft + stickyProductCol.offsetWidth)) : 0;
       const nextLeft = Math.max(0, Math.round(rect.left));
       const nextRight = Math.max(0, Math.round(window.innerWidth - rect.right));
       setTableDockInsets((prev) => {
-        if (prev.left === nextLeft && prev.right === nextRight && prev.startOffset === frozenRightEdge) return prev;
-        return { left: nextLeft, right: nextRight, startOffset: frozenRightEdge };
+        if (prev.left === nextLeft && prev.right === nextRight && prev.startOffset === 0) return prev;
+        return { left: nextLeft, right: nextRight, startOffset: 0 };
       });
+      const pageScrollbarWidth = pageEl ? Math.max(0, pageEl.offsetWidth - pageEl.clientWidth) : 0;
+      setPageDockRightInset((prev) => (prev === pageScrollbarWidth ? prev : pageScrollbarWidth));
+      const nextWidth = Math.max(table.scrollWidth, tableWrap.clientWidth);
+      const nextWidthPx = `${nextWidth}px`;
+      if (spacer.style.width !== nextWidthPx) spacer.style.width = nextWidthPx;
+    };
+    const queueGeometrySync = () => {
+      if (rafId) return;
+      rafId = window.requestAnimationFrame(syncDockGeometry);
     };
 
     const syncFromTable = () => {
@@ -1331,7 +1312,6 @@ export default function ShopifyCollectionMapping() {
         if (syncingTableScrollRef.current === "table") syncingTableScrollRef.current = null;
       });
     };
-
     const syncFromDock = () => {
       if (syncingTableScrollRef.current === "table") return;
       syncingTableScrollRef.current = "dock";
@@ -1343,131 +1323,24 @@ export default function ShopifyCollectionMapping() {
       });
     };
 
-    syncSpacerWidth();
+    queueGeometrySync();
     dock.scrollLeft = tableWrap.scrollLeft;
     tableWrap.addEventListener("scroll", syncFromTable, { passive: true });
     dock.addEventListener("scroll", syncFromDock, { passive: true });
-    const resizeObserver = new ResizeObserver(syncSpacerWidth);
+    window.addEventListener("resize", queueGeometrySync);
+    const resizeObserver = new ResizeObserver(queueGeometrySync);
     resizeObserver.observe(tableWrap);
     resizeObserver.observe(table);
-    window.addEventListener("resize", syncSpacerWidth);
+    if (pageEl) resizeObserver.observe(pageEl);
 
     return () => {
       tableWrap.removeEventListener("scroll", syncFromTable);
       dock.removeEventListener("scroll", syncFromDock);
+      window.removeEventListener("resize", queueGeometrySync);
       resizeObserver.disconnect();
-      window.removeEventListener("resize", syncSpacerWidth);
+      if (rafId) window.cancelAnimationFrame(rafId);
     };
   }, [rows.length, activeQueueTab, treePaneCollapsed, workspaceHeight]);
-
-  const snapToClosestColumnStart = () => {
-    if (!ENABLE_HORIZONTAL_COLUMN_SNAP) return;
-    const tableWrap = tableWrapRef.current;
-    const dock = tableScrollDockRef.current;
-    if (!tableWrap || !dock) return;
-    if (horizontalSnapInFlightRef.current) return;
-    const headerRow = tableWrap.querySelector("thead tr:last-child");
-    if (!(headerRow instanceof HTMLElement)) return;
-    const headers = Array.from(headerRow.querySelectorAll("th"));
-    if (headers.length < 1) return;
-    const maxScrollLeft = Math.max(0, tableWrap.scrollWidth - tableWrap.clientWidth);
-    if (maxScrollLeft < 1) return;
-    const current = tableWrap.scrollLeft;
-    // Keep right-edge drags stable and avoid bounce-back snaps near the end.
-    if (current >= maxScrollLeft - 80) {
-      tableWrap.scrollLeft = maxScrollLeft;
-      dock.scrollLeft = maxScrollLeft;
-      return;
-    }
-    const boundaries = headers
-      .map((th) => (th instanceof HTMLElement ? Math.max(0, Math.round(th.offsetLeft)) : -1))
-      .filter((value) => value >= 0 && value <= maxScrollLeft);
-    boundaries.push(maxScrollLeft);
-    if (boundaries.length < 1) return;
-    let closest = boundaries[0];
-    for (const boundary of boundaries) {
-      if (Math.abs(boundary - current) < Math.abs(closest - current)) closest = boundary;
-    }
-    if (Math.abs(closest - current) < 1) return;
-    horizontalSnapInFlightRef.current = true;
-    tableWrap.scrollLeft = closest;
-    dock.scrollLeft = closest;
-    requestAnimationFrame(() => {
-      horizontalSnapInFlightRef.current = false;
-    });
-  };
-
-  const scheduleColumnSnap = () => {
-    if (!ENABLE_HORIZONTAL_COLUMN_SNAP) return;
-    if (horizontalSnapTimerRef.current) clearTimeout(horizontalSnapTimerRef.current);
-    horizontalSnapTimerRef.current = setTimeout(() => {
-      snapToClosestColumnStart();
-      horizontalSnapTimerRef.current = null;
-    }, 220);
-  };
-
-  useEffect(() => {
-    const tableWrap = tableWrapRef.current;
-    const dock = tableScrollDockRef.current;
-    if (!tableWrap || !dock) return;
-    const onPointerDown = () => {
-      horizontalDragActiveRef.current = true;
-    };
-    const onScroll = () => {
-      if (!ENABLE_HORIZONTAL_COLUMN_SNAP) return;
-      if (horizontalDragActiveRef.current || horizontalSnapInFlightRef.current) return;
-      scheduleColumnSnap();
-    };
-    const onEnd = () => {
-      horizontalDragActiveRef.current = false;
-      if (ENABLE_HORIZONTAL_COLUMN_SNAP) snapToClosestColumnStart();
-    };
-    tableWrap.addEventListener("pointerdown", onPointerDown);
-    dock.addEventListener("pointerdown", onPointerDown);
-    tableWrap.addEventListener("scroll", onScroll, { passive: true });
-    dock.addEventListener("scroll", onScroll, { passive: true });
-    tableWrap.addEventListener("pointerup", onEnd);
-    tableWrap.addEventListener("mouseup", onEnd);
-    tableWrap.addEventListener("touchend", onEnd);
-    dock.addEventListener("pointerup", onEnd);
-    dock.addEventListener("mouseup", onEnd);
-    dock.addEventListener("touchend", onEnd);
-    return () => {
-      tableWrap.removeEventListener("pointerdown", onPointerDown);
-      dock.removeEventListener("pointerdown", onPointerDown);
-      tableWrap.removeEventListener("scroll", onScroll);
-      dock.removeEventListener("scroll", onScroll);
-      tableWrap.removeEventListener("pointerup", onEnd);
-      tableWrap.removeEventListener("mouseup", onEnd);
-      tableWrap.removeEventListener("touchend", onEnd);
-      dock.removeEventListener("pointerup", onEnd);
-      dock.removeEventListener("mouseup", onEnd);
-      dock.removeEventListener("touchend", onEnd);
-      if (horizontalSnapTimerRef.current) {
-        clearTimeout(horizontalSnapTimerRef.current);
-        horizontalSnapTimerRef.current = null;
-      }
-    };
-  }, [rows.length, activeQueueTab, treePaneCollapsed]);
-
-  useEffect(() => {
-    const pageEl = pageScrollRef.current;
-    if (!pageEl) return;
-    const syncPageDockInset = () => {
-      const scrollbarWidth = Math.max(0, pageEl.offsetWidth - pageEl.clientWidth);
-      setPageDockRightInset((prev) => (prev === scrollbarWidth ? prev : scrollbarWidth));
-    };
-    syncPageDockInset();
-    const resizeObserver = new ResizeObserver(syncPageDockInset);
-    resizeObserver.observe(pageEl);
-    window.addEventListener("resize", syncPageDockInset);
-    window.addEventListener("scroll", syncPageDockInset, { passive: true });
-    return () => {
-      resizeObserver.disconnect();
-      window.removeEventListener("resize", syncPageDockInset);
-      window.removeEventListener("scroll", syncPageDockInset);
-    };
-  }, [rows.length, treePaneCollapsed, workspaceHeight, activeQueueTab]);
 
   useEffect(() => {
     const pageEl = pageScrollRef.current;
@@ -2309,7 +2182,6 @@ export default function ShopifyCollectionMapping() {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setDraftTypeDropdownOpen(false);
-        setShowFiltersDrawer(false);
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -4437,7 +4309,7 @@ export default function ShopifyCollectionMapping() {
                         Status <span className="sortArrow">{getHeaderSortArrow("status")}</span>
                       </span>
                     </th>
-                    <th>Current → Final</th>
+                    <th className="stage4HeadCol">Current → Final</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -4753,15 +4625,6 @@ export default function ShopifyCollectionMapping() {
         </div>
       ) : null}
 
-      {showFiltersDrawer ? (
-        <div
-          className="filtersDrawerOverlay"
-          onClick={() => {
-            setDraftTypeDropdownOpen(false);
-            setShowFiltersDrawer(false);
-          }}
-        />
-      ) : null}
       <aside className={`filtersDrawer ${showFiltersDrawer ? "open" : ""}`} aria-label="Advanced filters">
         <div className="filtersDrawerHead">
           <strong>Advanced Filters</strong>
@@ -4778,56 +4641,49 @@ export default function ShopifyCollectionMapping() {
         </div>
         <div className="filtersDrawerBody">
           <div className="filtersField">
-            <h4>Sync Status</h4>
-            {statusFilterOptions.map((option) => (
-              <label key={option.key} className="filtersFieldOption">
-                <input
-                  type="checkbox"
-                  checked={draftFilterStatuses.includes(option.key)}
-                  onChange={(event) => {
-                    setDraftFilterStatuses((prev) =>
-                      event.target.checked ? [...prev, option.key] : prev.filter((value) => value !== option.key)
-                    );
-                  }}
-                />
-                <span>{option.label}</span>
-              </label>
-            ))}
-          </div>
-          <div className="filtersField">
-            <h4>Mapping Decision</h4>
-            {decisionFilterOptions.map((option) => (
-              <label key={option.key} className="filtersFieldOption">
-                <input
-                  type="checkbox"
-                  checked={draftFilterDecisions.includes(option.key)}
-                  onChange={(event) => {
-                    setDraftFilterDecisions((prev) =>
-                      event.target.checked ? [...prev, option.key] : prev.filter((value) => value !== option.key)
-                    );
-                  }}
-                />
-                <span>{option.label}</span>
-              </label>
-            ))}
-          </div>
-          <div className="filtersField">
-            <h4>Other</h4>
+            <h4>Quick Filters</h4>
             <label className="filtersFieldOption">
               <input
                 type="checkbox"
                 checked={draftFilterHasSuggestions}
                 onChange={(event) => setDraftFilterHasSuggestions(event.target.checked)}
               />
-              <span>Has Suggestions only</span>
+              <span>Has suggestions</span>
             </label>
+            <label className="filtersFieldOption">
+              <input
+                type="checkbox"
+                checked={draftFilterDecisions.includes("MANUAL_REVIEW")}
+                onChange={(event) => {
+                  setDraftFilterDecisions((prev) =>
+                    event.target.checked ? [...prev, "MANUAL_REVIEW"] : prev.filter((value) => value !== "MANUAL_REVIEW")
+                  );
+                }}
+              />
+              <span>Needs manual review</span>
+            </label>
+            <label className="filtersFieldOption">
+              <input
+                type="checkbox"
+                checked={draftFilterDecisions.includes("AUTO_MAPPED")}
+                onChange={(event) => {
+                  setDraftFilterDecisions((prev) =>
+                    event.target.checked ? [...prev, "AUTO_MAPPED"] : prev.filter((value) => value !== "AUTO_MAPPED")
+                  );
+                }}
+              />
+              <span>Auto-mapped</span>
+            </label>
+          </div>
+          <div className="filtersField">
+            <h4>Visibility</h4>
             <label className="filtersFieldOption">
               <input
                 type="checkbox"
                 checked={draftFilterIncludeSynced}
                 onChange={(event) => setDraftFilterIncludeSynced(event.target.checked)}
               />
-              <span>Include Synced rows</span>
+              <span>Include finished rows</span>
             </label>
           </div>
           <div className="filtersField">
@@ -4837,35 +4693,32 @@ export default function ShopifyCollectionMapping() {
                 <button
                   type="button"
                   className="filtersTypeDropdownBtn"
-                  aria-expanded={draftTypeDropdownOpen}
-                  onClick={() => setDraftTypeDropdownOpen((prev) => !prev)}
+                  aria-expanded={draftTypeDropdownOpen || true}
                 >
                   <span>{draftFilterTypesLabel}</span>
-                  <span className="filtersTypeDropdownCaret">{draftTypeDropdownOpen ? "▲" : "▼"}</span>
+                  <span className="filtersTypeDropdownCaret">▲</span>
                 </button>
-                {draftTypeDropdownOpen ? (
-                  <div className="filtersTypeDropdownMenu" role="listbox" aria-label="Product types">
-                    {typeOptions.map((itemType) => (
-                      <label key={itemType} className="filtersTypeOption">
-                        <input
-                          type="checkbox"
-                          checked={draftFilterTypes.some((value) => value.toLowerCase() === itemType.toLowerCase())}
-                          onChange={(event) => {
-                            setDraftFilterTypes((prev) => {
-                              const exists = prev.some((value) => value.toLowerCase() === itemType.toLowerCase());
-                              if (event.target.checked && !exists) return [...prev, itemType];
-                              if (!event.target.checked && exists) {
-                                return prev.filter((value) => value.toLowerCase() !== itemType.toLowerCase());
-                              }
-                              return prev;
-                            });
-                          }}
-                        />
-                        <span>{itemType}</span>
-                      </label>
-                    ))}
-                  </div>
-                ) : null}
+                <div className="filtersTypeDropdownMenu" role="listbox" aria-label="Product types">
+                  {typeOptions.map((itemType) => (
+                    <label key={itemType} className="filtersTypeOption">
+                      <input
+                        type="checkbox"
+                        checked={draftFilterTypes.some((value) => value.toLowerCase() === itemType.toLowerCase())}
+                        onChange={(event) => {
+                          setDraftFilterTypes((prev) => {
+                            const exists = prev.some((value) => value.toLowerCase() === itemType.toLowerCase());
+                            if (event.target.checked && !exists) return [...prev, itemType];
+                            if (!event.target.checked && exists) {
+                              return prev.filter((value) => value.toLowerCase() !== itemType.toLowerCase());
+                            }
+                            return prev;
+                          });
+                        }}
+                      />
+                      <span>{itemType}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
             ) : (
               <div className="filtersFieldEmpty">No type options loaded yet.</div>
@@ -5431,7 +5284,6 @@ export default function ShopifyCollectionMapping() {
           <div className="tableScrollDockSpacer" ref={tableScrollSpacerRef} />
         </div>
       </div>
-
       <style jsx>{`
         :global(html),
         :global(body) {
@@ -6247,8 +6099,9 @@ export default function ShopifyCollectionMapping() {
           z-index: 3;
         }
         .productControls {
-          position: relative;
-          z-index: 2147483400;
+          position: sticky;
+          top: var(--workspace-sticky-top);
+          z-index: 2147483405;
           isolation: isolate;
           overflow: visible;
           display: flex;
@@ -6268,6 +6121,9 @@ export default function ShopifyCollectionMapping() {
             border-radius 1100ms cubic-bezier(0.22, 0.61, 0.36, 1);
         }
         .appliedFilterChips {
+          position: sticky;
+          top: calc(var(--workspace-sticky-top) + 62px);
+          z-index: 2147483404;
           display: flex;
           flex-wrap: wrap;
           gap: 6px;
@@ -6700,13 +6556,13 @@ export default function ShopifyCollectionMapping() {
           padding: 0 8px;
         }
         .filtersDrawerBody {
-          padding: 12px;
+          padding: 10px;
           overflow: auto;
           display: grid;
-          gap: 12px;
+          gap: 8px;
         }
         .filtersDrawerFoot {
-          padding: 12px 14px;
+          padding: 10px 12px;
           border-top: 1px solid #2a3a56;
           display: flex;
           justify-content: flex-end;
@@ -6717,21 +6573,24 @@ export default function ShopifyCollectionMapping() {
         }
         .filtersField {
           border: 1px solid #2a3a56;
-          border-radius: 12px;
+          border-radius: 9px;
           background: #0e1a30;
-          padding: 10px;
+          padding: 7px 8px;
+          display: grid;
+          gap: 4px;
         }
         .filtersField h4 {
-          font-size: 15px;
+          font-size: 13px;
           color: #dce9ff;
-          margin: 0 0 8px;
+          margin: 0 0 4px;
         }
         .filtersFieldOption {
           display: flex;
           align-items: center;
-          gap: 8px;
-          margin-bottom: 6px;
-          font-size: 14px;
+          gap: 7px;
+          margin-bottom: 0;
+          min-height: 24px;
+          font-size: 13px;
           cursor: pointer;
         }
         .filtersTypeDropdown {
@@ -6739,7 +6598,7 @@ export default function ShopifyCollectionMapping() {
         }
         .filtersTypeDropdownBtn {
           width: 100%;
-          min-height: 34px;
+          min-height: 30px;
           border-radius: 8px;
           border: 1px solid #3c4f70;
           background: #152848;
@@ -6749,7 +6608,7 @@ export default function ShopifyCollectionMapping() {
           justify-content: space-between;
           gap: 8px;
           padding: 0 10px;
-          font-size: 14px;
+          font-size: 13px;
           font-weight: 600;
         }
         .filtersTypeDropdownBtn:hover {
@@ -6761,22 +6620,22 @@ export default function ShopifyCollectionMapping() {
           font-size: 10px;
         }
         .filtersTypeDropdownMenu {
-          margin-top: 8px;
+          margin-top: 6px;
           border: 1px solid #2a3a56;
           border-radius: 10px;
           background: #0f1a2f;
-          padding: 8px;
+          padding: 6px;
           display: grid;
-          gap: 6px;
+          gap: 4px;
           max-height: calc(10 * 30px);
           overflow: auto;
         }
         .filtersTypeOption {
-          min-height: 30px;
+          min-height: 28px;
           display: flex;
           align-items: center;
           gap: 8px;
-          font-size: 14px;
+          font-size: 13px;
           cursor: pointer;
         }
         .filtersFieldEmpty {
@@ -7070,14 +6929,15 @@ export default function ShopifyCollectionMapping() {
           border-spacing: 0;
           width: 100%;
           min-width: 2200px;
+          table-layout: fixed;
         }
         thead {
           position: sticky;
           top: 0;
-          z-index: 26;
+          z-index: 34;
           isolation: isolate;
-          transform: translateY(var(--page-table-head-offset));
-          will-change: transform;
+          transform: none;
+          will-change: auto;
         }
         th,
         td {
@@ -7086,16 +6946,17 @@ export default function ShopifyCollectionMapping() {
           white-space: nowrap;
           font-size: 12px;
           vertical-align: middle;
+          box-sizing: border-box;
         }
         tbody tr {
-          height: 104px;
-          min-height: 104px;
-          max-height: 104px;
+          height: 92px;
+          min-height: 92px;
+          max-height: 92px;
         }
         tbody td {
-          height: 104px;
-          min-height: 104px;
-          max-height: 104px;
+          height: 92px;
+          min-height: 92px;
+          max-height: 92px;
           box-sizing: border-box;
           vertical-align: middle;
           overflow: hidden;
@@ -7129,6 +6990,9 @@ export default function ShopifyCollectionMapping() {
         }
         .stickyProductNameCol {
           left: 184px;
+          width: 260px;
+          min-width: 260px;
+          max-width: 260px;
           z-index: 9;
           box-shadow: 10px 0 14px rgba(3, 8, 18, 0.42);
         }
@@ -7146,20 +7010,20 @@ export default function ShopifyCollectionMapping() {
         thead th {
           position: sticky;
           top: 0;
-          z-index: 30;
+          z-index: 36;
         }
         thead .stickyCheckboxCol,
         thead .stickyEyeCol,
         thead .stickyPictureCol,
         thead .stickyProductNameCol {
-          z-index: 24;
+          z-index: 41;
           background: #111f36;
         }
         tbody .stickyCheckboxCol,
         tbody .stickyEyeCol,
         tbody .stickyPictureCol,
         tbody .stickyProductNameCol {
-          z-index: 8;
+          z-index: 15;
         }
         .groupHead th {
           top: 0;
@@ -7174,6 +7038,9 @@ export default function ShopifyCollectionMapping() {
           height: var(--group-head-height);
           padding-top: 0;
           padding-bottom: 0;
+        }
+        .stage4HeadCol {
+          text-align: left;
         }
         tbody tr:hover {
           background: #132543;
@@ -7536,22 +7403,23 @@ export default function ShopifyCollectionMapping() {
           display: grid;
           gap: 3px;
           min-width: 0;
-          max-width: clamp(360px, 40vw, 720px);
+          max-width: 100%;
           text-align: left;
         }
         .stage4ResultCell {
-          min-width: 360px;
-          width: auto;
+          min-width: 620px;
+          width: 620px;
+          max-width: 620px;
         }
         .stage4ResultLine {
           color: var(--muted);
           font-size: 12.33px;
-          line-height: 1.35;
+          line-height: 1.2;
           font-weight: 600;
-          white-space: normal;
-          overflow-wrap: anywhere;
-          word-break: break-word;
-          margin-bottom: 2px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          margin-bottom: 1px;
         }
         .stage4ResultLine b {
           color: #e2e8f0;
