@@ -2242,6 +2242,7 @@ export default function ShopifyCollectionMapping() {
     if (!activeShop) return;
     const timer = window.setTimeout(() => {
       const drafts: Array<{ rowId: string; draft: Record<string, unknown> }> = [];
+      const rowIdsToClear: string[] = [];
       for (const row of rows) {
         const rowId = String(row.id || "").trim();
         if (!rowId) continue;
@@ -2257,7 +2258,10 @@ export default function ShopifyCollectionMapping() {
           selectedSuggestionCollections.length > 0 ||
           manualAddedPaths.length > 0 ||
           manualRemovedPaths.length > 0;
-        if (!hasDraft) continue;
+        if (!hasDraft) {
+          if (row.draft) rowIdsToClear.push(rowId);
+          continue;
+        }
         drafts.push({
           rowId,
           draft: {
@@ -2274,14 +2278,26 @@ export default function ShopifyCollectionMapping() {
           },
         });
       }
-      const payloadHash = JSON.stringify(drafts);
+      const payloadHash = JSON.stringify({
+        drafts,
+        rowIdsToClear: [...rowIdsToClear].sort((a, b) => a.localeCompare(b)),
+      });
       if (payloadHash === lastDraftSavePayloadRef.current) return;
       lastDraftSavePayloadRef.current = payloadHash;
-      void fetch("/api/collection-mapping", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(withShopContext({ action: "set-row-draft-batch", drafts })),
-      }).catch(() => {});
+      if (drafts.length > 0) {
+        void fetch("/api/collection-mapping", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(withShopContext({ action: "set-row-draft-batch", drafts })),
+        }).catch(() => {});
+      }
+      if (rowIdsToClear.length > 0) {
+        void fetch("/api/collection-mapping", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(withShopContext({ action: "clear-row-drafts", rowIds: rowIdsToClear })),
+        }).catch(() => {});
+      }
     }, DRAFT_AUTOSAVE_DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
   }, [
