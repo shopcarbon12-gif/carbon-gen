@@ -13,6 +13,14 @@
       "schedule": "55 4 * * *"
     },
     {
+      "path": "/api/cron/accessibility-monthly-report",
+      "schedule": "0 14 1 * *"
+    },
+    {
+      "path": "/api/cron/accessibility-law-watch",
+      "schedule": "30 13 * * *"
+    },
+    {
       "path": "/api/cron/sales-sync",
       "schedule": "* 0-2,14-23 * * *"
     },

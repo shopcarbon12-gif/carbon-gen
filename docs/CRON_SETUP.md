@@ -8,6 +8,7 @@ The app runs on Cloudflare. For automatic sync to work 24/7 without visiting the
 |----------|---------|--------------------|
 | `GET /api/cron/cart-sync` | Push Cart Inventory → Shopify | Every 15 min |
 | `GET /api/cron/lightspeed-catalog-warm` | Warm LS catalog cache | Every 30 min |
+| `GET /api/cron/accessibility-monthly-report` | Send monthly accessibility compliance reminder email | 1st day monthly |
 
 ## Setup (cron-job.org or similar)
 
@@ -21,9 +22,21 @@ The app runs on Cloudflare. For automatic sync to work 24/7 without visiting the
 3. Add another for LS catalog warm:
    - **URL:** `https://YOUR-DOMAIN.com/api/cron/lightspeed-catalog-warm`
    - **Schedule:** Every 30 minutes (`*/30 * * * *`)
+4. Add monthly accessibility reminder:
+   - **URL:** `https://YOUR-DOMAIN.com/api/cron/accessibility-monthly-report`
+   - **Schedule:** first day of month (`0 14 1 * *`)
+   - **Headers:** `Authorization: Bearer YOUR_CRON_SECRET`
 
 Or pass the secret in the query string:  
 `https://YOUR-DOMAIN.com/api/cron/cart-sync?secret=YOUR_CRON_SECRET`
+
+Monthly reminder env vars (used by `/api/cron/accessibility-monthly-report`):
+
+- `ACCESSIBILITY_REPORT_EMAIL` (default: `elior@carbonjeanscompany.com`)
+- `ACCESSIBILITY_STATEMENT_URL` (default: `https://www.shopcarbon.com/pages/accessibility`)
+- `ACCESSIBILITY_FEEDBACK_URL` (optional)
+- `ACCESSIBILITY_SUPPORT_EMAIL` (optional, falls back to report email)
+- `RESEND_API_KEY` (required)
 
 ## Manual trigger
 

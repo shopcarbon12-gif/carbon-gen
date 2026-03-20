@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type WidgetPosition = "left" | "right";
 
@@ -12,6 +12,20 @@ type AccessibilitySettings = {
   cornerRadius: number;
   widgetLabel: string;
   showTextLabel: boolean;
+  statementUrl: string;
+  feedbackUrl: string;
+  supportEmail: string;
+  monthlyReportEmail: string;
+  complianceChecklist: {
+    statementPublished: boolean;
+    issueChannelActive: boolean;
+    keyboardAuditDone: boolean;
+    contrastAuditDone: boolean;
+    altTextAuditDone: boolean;
+    formsAuditDone: boolean;
+    captionsAuditDone: boolean;
+    monthlyRetestDone: boolean;
+  };
   features: {
     textScale: boolean;
     highContrast: boolean;
@@ -19,6 +33,44 @@ type AccessibilitySettings = {
     pauseAnimations: boolean;
     highlightLinks: boolean;
   };
+};
+
+type UsageSummary = {
+  sinceDays: number;
+  totalEvents: number;
+  byEvent: Array<{ eventName: string; count: number }>;
+};
+
+type MonthlyReportState = {
+  sentAt: string;
+  sentTo: string;
+  month: string;
+  messageId: string | null;
+  ok: boolean;
+  error?: string;
+};
+
+type LawWatchSourceState = {
+  id: string;
+  title: string;
+  url: string;
+  lastStatus: "ok" | "error";
+  lastError?: string;
+  lastFetchedAt: string;
+};
+
+type LawWatchState = {
+  checkedAt: string;
+  lastRunOk: boolean;
+  lastError?: string;
+  sources: LawWatchSourceState[];
+  lastChanges: Array<{ id: string; title: string; url: string; detectedAt: string }>;
+  lastEmailSentAt?: string;
+};
+
+type CurrentUser = {
+  role: string;
+  username: string | null;
 };
 
 const defaultSettings: AccessibilitySettings = {
@@ -29,6 +81,20 @@ const defaultSettings: AccessibilitySettings = {
   cornerRadius: 14,
   widgetLabel: "Accessibility",
   showTextLabel: true,
+  statementUrl: "https://www.shopcarbon.com/pages/accessibility",
+  feedbackUrl: "https://www.shopcarbon.com/pages/contact",
+  supportEmail: "elior@carbonjeanscompany.com",
+  monthlyReportEmail: "elior@carbonjeanscompany.com",
+  complianceChecklist: {
+    statementPublished: false,
+    issueChannelActive: false,
+    keyboardAuditDone: false,
+    contrastAuditDone: false,
+    altTextAuditDone: false,
+    formsAuditDone: false,
+    captionsAuditDone: false,
+    monthlyRetestDone: false,
+  },
   features: {
     textScale: true,
     highContrast: true,
@@ -46,10 +112,17 @@ function buildInstallSnippet(settings: AccessibilitySettings) {
     cornerRadius: settings.cornerRadius,
     label: settings.widgetLabel,
     showTextLabel: settings.showTextLabel,
+    statementUrl: settings.statementUrl,
+    feedbackUrl: settings.feedbackUrl,
+    supportEmail: settings.supportEmail,
     features: settings.features,
   };
   const encoded = encodeURIComponent(JSON.stringify(config));
   return `<script src="https://app.shopcarbon.com/accessibility/widget?config=${encoded}" defer></script>`;
+}
+
+function buildManagedInstallSnippet(scope = "default") {
+  return `<script src="https://app.shopcarbon.com/accessibility/widget?scope=${encodeURIComponent(scope)}" defer></script>`;
 }
 
 function toButtonLabel(enabled: boolean) {
@@ -57,15 +130,269 @@ function toButtonLabel(enabled: boolean) {
 }
 
 export default function AccessibilityPage() {
+  const [settingsScope, setSettingsScope] = useState("default");
   const [settings, setSettings] = useState<AccessibilitySettings>(defaultSettings);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsStatus, setSettingsStatus] = useState<string | null>(null);
+  const [copyManagedState, setCopyManagedState] = useState(false);
+  const [usageSummary, setUsageSummary] = useState<UsageSummary | null>(null);
+  const [usageLoading, setUsageLoading] = useState(false);
+  const [usageStatus, setUsageStatus] = useState<string | null>(null);
+  const [lastReportState, setLastReportState] = useState<MonthlyReportState | null>(null);
+  const [lastReportLoading, setLastReportLoading] = useState(false);
+  const [lawWatchState, setLawWatchState] = useState<LawWatchState | null>(null);
+  const [lawWatchLoading, setLawWatchLoading] = useState(false);
+  const [lawWatchRunning, setLawWatchRunning] = useState(false);
+  const [lawWatchStatus, setLawWatchStatus] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [userLoading, setUserLoading] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewTextScale, setPreviewTextScale] = useState(100);
   const [previewContrast, setPreviewContrast] = useState(false);
   const [previewReadableFont, setPreviewReadableFont] = useState(false);
   const [previewLinkHighlight, setPreviewLinkHighlight] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [sendingMonthlyTest, setSendingMonthlyTest] = useState(false);
+  const [monthlyTestStatus, setMonthlyTestStatus] = useState<string | null>(null);
 
   const installSnippet = useMemo(() => buildInstallSnippet(settings), [settings]);
+  const managedInstallSnippet = useMemo(
+    () => buildManagedInstallSnippet(settingsScope || "default"),
+    [settingsScope]
+  );
+  const readiness = useMemo(() => {
+    const hasStatement = Boolean(settings.statementUrl.trim());
+    const hasFeedbackPath = Boolean(settings.feedbackUrl.trim() || settings.supportEmail.trim());
+    const hasMonthlyRecipient = Boolean(settings.monthlyReportEmail.trim());
+    const ready = hasStatement && hasFeedbackPath && hasMonthlyRecipient;
+    return {
+      ready,
+      hasStatement,
+      hasFeedbackPath,
+      hasMonthlyRecipient,
+    };
+  }, [settings.feedbackUrl, settings.monthlyReportEmail, settings.statementUrl, settings.supportEmail]);
+  const checklistItems = useMemo(
+    () => [
+      { key: "statementPublished", label: "Accessibility statement is published" },
+      { key: "issueChannelActive", label: "Issue reporting channel is active" },
+      { key: "keyboardAuditDone", label: "Keyboard navigation audit completed" },
+      { key: "contrastAuditDone", label: "Contrast audit completed" },
+      { key: "altTextAuditDone", label: "Alt text audit completed" },
+      { key: "formsAuditDone", label: "Forms and validation audit completed" },
+      { key: "captionsAuditDone", label: "Captions/transcripts audit completed" },
+      { key: "monthlyRetestDone", label: "Monthly retest and evidence log completed" },
+    ] as const,
+    []
+  );
+  const checklistCompletion = useMemo(() => {
+    const values = Object.values(settings.complianceChecklist);
+    const total = values.length;
+    const done = values.filter(Boolean).length;
+    const percent = total > 0 ? Math.round((done / total) * 100) : 0;
+    return { total, done, percent };
+  }, [settings.complianceChecklist]);
+  const canSaveSettings = currentUser?.role === "admin";
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadSavedSettings() {
+      setSettingsLoading(true);
+      setSettingsStatus(null);
+      try {
+        const res = await fetch(
+          `/api/accessibility/settings?scope=${encodeURIComponent(settingsScope || "default")}`,
+          { method: "GET" }
+        );
+        if (!res.ok) {
+          if (!cancelled) setSettingsStatus("Loaded defaults (saved settings unavailable).");
+          return;
+        }
+        const data = (await res.json()) as { ok?: boolean; config?: Partial<AccessibilitySettings> };
+        if (!data.ok || !data.config || cancelled) return;
+        setSettings((prev) => {
+          const incoming = data.config || {};
+          const incomingFeatures = incoming.features || {};
+          const incomingChecklist = incoming.complianceChecklist || {};
+          return {
+            ...prev,
+            ...incoming,
+            complianceChecklist: {
+              ...prev.complianceChecklist,
+              ...(incomingChecklist as AccessibilitySettings["complianceChecklist"]),
+            },
+            features: {
+              ...prev.features,
+              ...incomingFeatures,
+            },
+          };
+        });
+        setSettingsStatus(`Loaded saved settings for scope "${settingsScope || "default"}".`);
+      } catch {
+        if (!cancelled) setSettingsStatus("Loaded defaults (saved settings unavailable).");
+      } finally {
+        if (!cancelled) {
+          setSettingsLoading(false);
+          setSettingsLoaded(true);
+        }
+      }
+    }
+    void loadSavedSettings();
+    return () => {
+      cancelled = true;
+    };
+  }, [settingsScope]);
+
+  async function refreshCurrentUser() {
+    setUserLoading(true);
+    try {
+      let res = await fetch("/api/admin/me", { method: "GET" });
+      if (res.status === 401) {
+        const authRes = await fetch("/api/dev/local-auth-session", { method: "POST" });
+        if (authRes.ok) {
+          res = await fetch("/api/admin/me", { method: "GET" });
+        }
+      }
+      if (!res.ok) {
+        setCurrentUser(null);
+        return;
+      }
+      const data = (await res.json()) as { user?: { role?: string; username?: string | null } };
+      setCurrentUser({
+        role: String(data.user?.role || "user").trim().toLowerCase() || "user",
+        username: data.user?.username ?? null,
+      });
+    } catch {
+      setCurrentUser(null);
+    } finally {
+      setUserLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void refreshCurrentUser();
+  }, []);
+
+  async function refreshUsageSummary() {
+    setUsageLoading(true);
+    setUsageStatus(null);
+    try {
+      let res = await fetch("/api/accessibility/usage?days=30", { method: "GET" });
+      if (res.status === 401) {
+        const authRes = await fetch("/api/dev/local-auth-session", { method: "POST" });
+        if (authRes.ok) {
+          res = await fetch("/api/accessibility/usage?days=30", { method: "GET" });
+        }
+      }
+      const data = (await res.json()) as { ok?: boolean; summary?: UsageSummary; error?: string };
+      if (!res.ok || !data.ok || !data.summary) {
+        setUsageSummary(null);
+        setUsageStatus(data.error ? `Usage unavailable: ${data.error}` : "Usage unavailable.");
+        return;
+      }
+      setUsageSummary(data.summary);
+      setUsageStatus("Usage snapshot refreshed.");
+    } catch {
+      setUsageSummary(null);
+      setUsageStatus("Usage unavailable.");
+    } finally {
+      setUsageLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void refreshUsageSummary();
+  }, []);
+
+  async function refreshLastReportState() {
+    setLastReportLoading(true);
+    try {
+      let res = await fetch("/api/accessibility/monthly-report-status", { method: "GET" });
+      if (res.status === 401) {
+        const authRes = await fetch("/api/dev/local-auth-session", { method: "POST" });
+        if (authRes.ok) {
+          res = await fetch("/api/accessibility/monthly-report-status", { method: "GET" });
+        }
+      }
+      const data = (await res.json()) as { ok?: boolean; state?: MonthlyReportState | null };
+      if (!res.ok || !data.ok) {
+        setLastReportState(null);
+        return;
+      }
+      setLastReportState(data.state || null);
+    } catch {
+      setLastReportState(null);
+    } finally {
+      setLastReportLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void refreshLastReportState();
+  }, []);
+
+  async function refreshLawWatchStatus() {
+    setLawWatchLoading(true);
+    try {
+      let res = await fetch("/api/accessibility/law-watch-status", { method: "GET" });
+      if (res.status === 401) {
+        const authRes = await fetch("/api/dev/local-auth-session", { method: "POST" });
+        if (authRes.ok) {
+          res = await fetch("/api/accessibility/law-watch-status", { method: "GET" });
+        }
+      }
+      const data = (await res.json()) as { ok?: boolean; state?: LawWatchState | null };
+      if (!res.ok || !data.ok) {
+        setLawWatchState(null);
+        return;
+      }
+      setLawWatchState(data.state || null);
+    } catch {
+      setLawWatchState(null);
+    } finally {
+      setLawWatchLoading(false);
+    }
+  }
+
+  async function runLawWatchNow() {
+    setLawWatchRunning(true);
+    setLawWatchStatus(null);
+    try {
+      let res = await fetch("/api/cron/accessibility-law-watch?force=true", { method: "POST" });
+      if (res.status === 401) {
+        const authRes = await fetch("/api/dev/local-auth-session", { method: "POST" });
+        if (authRes.ok) {
+          res = await fetch("/api/cron/accessibility-law-watch?force=true", { method: "POST" });
+        }
+      }
+      const data = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+        changedCount?: number;
+        emailSent?: boolean;
+        hasFetchError?: boolean;
+      };
+      if (!res.ok || !data.ok) {
+        setLawWatchStatus(data.error ? `Law watch failed: ${data.error}` : `Law watch failed (${res.status}).`);
+        await refreshLawWatchStatus();
+        return;
+      }
+      setLawWatchStatus(
+        `Law watch complete. Changes detected: ${data.changedCount || 0}. Email sent: ${data.emailSent ? "yes" : "no"}.`
+      );
+      await refreshLawWatchStatus();
+    } catch {
+      setLawWatchStatus("Law watch failed: network error.");
+    } finally {
+      setLawWatchRunning(false);
+    }
+  }
+
+  useEffect(() => {
+    void refreshLawWatchStatus();
+  }, []);
 
   const previewStyles = useMemo(() => {
     const contrastText = previewContrast ? "#ffffff" : "#f8fafc";
@@ -100,6 +427,16 @@ export default function AccessibilityPage() {
     }
   }
 
+  async function copyManagedSnippet() {
+    try {
+      await navigator.clipboard.writeText(managedInstallSnippet);
+      setCopyManagedState(true);
+      window.setTimeout(() => setCopyManagedState(false), 1500);
+    } catch {
+      setCopyManagedState(false);
+    }
+  }
+
   function resetPreview() {
     setPreviewTextScale(100);
     setPreviewContrast(false);
@@ -107,8 +444,94 @@ export default function AccessibilityPage() {
     setPreviewLinkHighlight(false);
   }
 
+  function updateChecklist(
+    key: keyof AccessibilitySettings["complianceChecklist"],
+    value: boolean
+  ) {
+    setSettings((prev) => ({
+      ...prev,
+      complianceChecklist: {
+        ...prev.complianceChecklist,
+        [key]: value,
+      },
+    }));
+  }
+
+  async function sendMonthlyTestReport() {
+    const to = settings.monthlyReportEmail.trim();
+    if (!to) {
+      setMonthlyTestStatus("Enter a monthly report email first.");
+      return;
+    }
+    setSendingMonthlyTest(true);
+    setMonthlyTestStatus(null);
+    try {
+      const url = `/api/cron/accessibility-monthly-report?to=${encodeURIComponent(to)}`;
+      let res = await fetch(url, { method: "POST" });
+
+      // Localhost-only convenience: if not authed, create a local auth cookie and retry once.
+      if (res.status === 401) {
+        const authRes = await fetch("/api/dev/local-auth-session", { method: "POST" });
+        if (authRes.ok) {
+          res = await fetch(url, { method: "POST" });
+        }
+      }
+
+      const data = (await res.json()) as { ok?: boolean; error?: string; sentTo?: string };
+      if (!res.ok || !data.ok) {
+        setMonthlyTestStatus(data.error ? `Failed: ${data.error}` : `Failed: HTTP ${res.status}`);
+        void refreshLastReportState();
+        return;
+      }
+      setMonthlyTestStatus(`Sent monthly test report to ${data.sentTo || to}.`);
+      void refreshLastReportState();
+    } catch {
+      setMonthlyTestStatus("Failed: network error while sending test report.");
+    } finally {
+      setSendingMonthlyTest(false);
+    }
+  }
+
+  async function saveSettings() {
+    if (!canSaveSettings) {
+      setSettingsStatus("Save blocked: admin role required.");
+      return;
+    }
+    setSettingsSaving(true);
+    setSettingsStatus(null);
+    try {
+      const res = await fetch(
+        `/api/accessibility/settings?scope=${encodeURIComponent(settingsScope || "default")}`,
+        {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ config: settings }),
+        }
+      );
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) {
+        setSettingsStatus(data.error ? `Save failed: ${data.error}` : `Save failed: HTTP ${res.status}`);
+        return;
+      }
+      setSettingsStatus(`Settings saved for scope "${settingsScope || "default"}".`);
+    } catch {
+      setSettingsStatus("Save failed: network error.");
+    } finally {
+      setSettingsSaving(false);
+    }
+  }
+
   return (
     <main className="page">
+      <style jsx global>{`
+        .app-bg-top-photo,
+        .app-bg-top-fade {
+          display: block !important;
+          --app-bg-top-cut: 245px;
+          clip-path: inset(0 0 calc(100% - var(--app-bg-top-cut)) 0);
+        }
+      `}</style>
+
       <section className="header-card">
         <div>
           <h1>Accessibility Widget Builder</h1>
@@ -117,12 +540,25 @@ export default function AccessibilityPage() {
             scratch so design and behavior are fully controlled by your team.
           </p>
         </div>
-        <div className="pill">Legal-safe custom build</div>
+        <div className="header-badges">
+          <div className="pill">Legal-safe custom build</div>
+          <div className={`pill status-pill ${readiness.ready ? "ready" : "blocked"}`}>
+            {readiness.ready ? "Compliance readiness: Ready" : "Compliance readiness: Blocked"}
+          </div>
+        </div>
       </section>
 
       <section className="grid">
         <article className="card">
           <h2>Brand & Layout</h2>
+          <label>
+            Settings scope
+            <input
+              value={settingsScope}
+              onChange={(e) => setSettingsScope(e.target.value)}
+              placeholder="default"
+            />
+          </label>
           <label>
             Profile name
             <input
@@ -194,6 +630,46 @@ export default function AccessibilityPage() {
             />
             Show text label next to icon
           </label>
+
+          <label>
+            Accessibility statement URL
+            <input
+              type="url"
+              value={settings.statementUrl}
+              onChange={(e) => setSettings((prev) => ({ ...prev, statementUrl: e.target.value }))}
+              placeholder="https://www.shopcarbon.com/pages/accessibility"
+            />
+          </label>
+
+          <label>
+            Accessibility feedback URL
+            <input
+              type="url"
+              value={settings.feedbackUrl}
+              onChange={(e) => setSettings((prev) => ({ ...prev, feedbackUrl: e.target.value }))}
+              placeholder="https://www.shopcarbon.com/pages/contact"
+            />
+          </label>
+
+          <label>
+            Accessibility support email
+            <input
+              type="email"
+              value={settings.supportEmail}
+              onChange={(e) => setSettings((prev) => ({ ...prev, supportEmail: e.target.value }))}
+              placeholder="elior@carbonjeanscompany.com"
+            />
+          </label>
+
+          <label>
+            Monthly compliance report email
+            <input
+              type="email"
+              value={settings.monthlyReportEmail}
+              onChange={(e) => setSettings((prev) => ({ ...prev, monthlyReportEmail: e.target.value }))}
+              placeholder="elior@carbonjeanscompany.com"
+            />
+          </label>
         </article>
 
         <article className="card">
@@ -250,12 +726,36 @@ export default function AccessibilityPage() {
           Paste this script in your storefront head section. It loads your custom widget from your own app
           domain.
         </p>
+        <p className="muted">
+          Recommended: managed scope snippet (loads latest saved settings server-side).
+        </p>
+        <textarea readOnly value={managedInstallSnippet} rows={2} />
+        <div className="actions">
+          <button className="btn primary" onClick={copyManagedSnippet}>
+            {copyManagedState ? "Copied" : "Copy managed snippet"}
+          </button>
+        </div>
+        <p className="muted">Static snapshot snippet (embeds current settings in URL):</p>
         <textarea readOnly value={installSnippet} rows={3} />
         <div className="actions">
           <button className="btn primary" onClick={copySnippet}>
             {copied ? "Copied" : "Copy Snippet"}
           </button>
+          <button className="btn" onClick={saveSettings} disabled={settingsSaving || !canSaveSettings}>
+            {settingsSaving ? "Saving..." : "Save settings"}
+          </button>
         </div>
+        <p className="muted status-text">
+          {userLoading
+            ? "Checking permissions..."
+            : canSaveSettings
+              ? "You can save settings (admin)."
+              : "Save settings is admin-only. You can still test locally, but writes are blocked for non-admin users."}
+        </p>
+        {settingsLoading ? <p className="muted status-text">Loading saved settings...</p> : null}
+        {!settingsLoading && settingsLoaded && settingsStatus ? (
+          <p className="muted status-text">{settingsStatus}</p>
+        ) : null}
       </section>
 
       <section className="card preview-card" style={previewStyles}>
@@ -352,6 +852,181 @@ export default function AccessibilityPage() {
         </ol>
       </section>
 
+      <section className="card">
+        <h2>Compliance Coverage Snapshot (U.S. + Florida)</h2>
+        <p className="muted">
+          This widget helps with controls and reporting paths, but legal compliance still requires site-level
+          remediation of templates, content, forms, media captions/transcripts, and keyboard navigation.
+        </p>
+        <ul className="coverage-list">
+          <li>
+            <strong>Widget keyboard support:</strong> Covered in widget runtime (button semantics + focus/escape
+            handling).
+          </li>
+          <li>
+            <strong>Accessibility statement:</strong>{" "}
+            {settings.statementUrl.trim() ? "Configured in install config." : "Missing - add statement URL."}
+          </li>
+          <li>
+            <strong>Issue reporting path:</strong>{" "}
+            {settings.feedbackUrl.trim() || settings.supportEmail.trim()
+              ? "Configured (URL and/or support email)."
+              : "Missing - add feedback URL or support email."}
+          </li>
+          <li>
+            <strong>WCAG content/media/forms fixes:</strong> Not handled by widget alone - must be remediated in
+            storefront code/content.
+          </li>
+        </ul>
+        <div className="actions">
+          <button className="btn primary" onClick={sendMonthlyTestReport} disabled={sendingMonthlyTest}>
+            {sendingMonthlyTest ? "Sending..." : "Send test monthly report now"}
+          </button>
+        </div>
+        {monthlyTestStatus ? <p className="muted status-text">{monthlyTestStatus}</p> : null}
+      </section>
+
+      <section className="card">
+        <h2>Compliance Checklist Tracker</h2>
+        <p className="muted">
+          Track legal-readiness tasks for ADA/WCAG operations. This status is persisted and included in monthly report
+          reminders.
+        </p>
+        <p>
+          Completion:{" "}
+          <strong>
+            {checklistCompletion.done}/{checklistCompletion.total} ({checklistCompletion.percent}%)
+          </strong>
+        </p>
+        <div className="feature-list">
+          {checklistItems.map((item) => (
+            <label key={item.key} className="switch">
+              <input
+                type="checkbox"
+                checked={settings.complianceChecklist[item.key]}
+                onChange={(e) => updateChecklist(item.key, e.target.checked)}
+              />
+              {item.label}
+            </label>
+          ))}
+        </div>
+      </section>
+
+      <section className="card">
+        <h2>Widget Usage (Last 30 Days)</h2>
+        <p className="muted">
+          This summary comes from runtime widget events and is included in the monthly compliance email.
+        </p>
+        <div className="actions">
+          <button className="btn" onClick={refreshUsageSummary} disabled={usageLoading}>
+            {usageLoading ? "Refreshing..." : "Refresh usage snapshot"}
+          </button>
+        </div>
+        {usageSummary ? (
+          <div className="usage-summary">
+            <p>
+              Total events: <strong>{usageSummary.totalEvents}</strong>
+            </p>
+            {usageSummary.byEvent.length > 0 ? (
+              <table className="usage-table">
+                <thead>
+                  <tr>
+                    <th>Event</th>
+                    <th>Count</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {usageSummary.byEvent.slice(0, 10).map((entry) => (
+                    <tr key={entry.eventName}>
+                      <td>{entry.eventName}</td>
+                      <td>{entry.count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p className="muted">No events tracked yet.</p>
+            )}
+          </div>
+        ) : null}
+        {usageStatus ? <p className="muted status-text">{usageStatus}</p> : null}
+      </section>
+
+      <section className="card">
+        <h2>Last Monthly Report Status</h2>
+        <div className="actions">
+          <button className="btn" onClick={refreshLastReportState} disabled={lastReportLoading}>
+            {lastReportLoading ? "Refreshing..." : "Refresh report status"}
+          </button>
+        </div>
+        {lastReportState ? (
+          <div className="usage-summary">
+            <p>
+              Last attempt: <strong>{new Date(lastReportState.sentAt).toLocaleString()}</strong>
+            </p>
+            <p>
+              Recipient: <strong>{lastReportState.sentTo}</strong>
+            </p>
+            <p>
+              Month: <strong>{lastReportState.month}</strong>
+            </p>
+            <p>
+              Status:{" "}
+              <strong className={lastReportState.ok ? "status-ok" : "status-fail"}>
+                {lastReportState.ok ? "Sent" : "Failed"}
+              </strong>
+            </p>
+            {lastReportState.messageId ? (
+              <p>
+                Message ID: <code>{lastReportState.messageId}</code>
+              </p>
+            ) : null}
+            {lastReportState.error ? <p className="muted">Error: {lastReportState.error}</p> : null}
+          </div>
+        ) : (
+          <p className="muted">No monthly report attempt has been recorded yet.</p>
+        )}
+      </section>
+
+      <section className="card">
+        <h2>Law Watch Status</h2>
+        <p className="muted">
+          Daily automated check for accessibility law/regulation source updates (ADA.gov, Federal Register, Florida
+          statutes, WCAG pages).
+        </p>
+        <div className="actions">
+          <button className="btn" onClick={refreshLawWatchStatus} disabled={lawWatchLoading}>
+            {lawWatchLoading ? "Refreshing..." : "Refresh law watch status"}
+          </button>
+          <button className="btn primary" onClick={runLawWatchNow} disabled={lawWatchRunning}>
+            {lawWatchRunning ? "Running..." : "Run law watch now"}
+          </button>
+        </div>
+        {lawWatchState ? (
+          <div className="usage-summary">
+            <p>
+              Last check: <strong>{new Date(lawWatchState.checkedAt).toLocaleString()}</strong>
+            </p>
+            <p>
+              Sources tracked: <strong>{lawWatchState.sources.length}</strong>
+            </p>
+            <p>
+              Last detected changes: <strong>{lawWatchState.lastChanges.length}</strong>
+            </p>
+            <p>
+              Last run status:{" "}
+              <strong className={lawWatchState.lastRunOk ? "status-ok" : "status-fail"}>
+                {lawWatchState.lastRunOk ? "OK" : "Issues detected"}
+              </strong>
+            </p>
+            {lawWatchState.lastError ? <p className="muted">Error: {lawWatchState.lastError}</p> : null}
+          </div>
+        ) : (
+          <p className="muted">No law watch run recorded yet.</p>
+        )}
+        {lawWatchStatus ? <p className="muted status-text">{lawWatchStatus}</p> : null}
+      </section>
+
       <style jsx>{`
         .page {
           max-width: 1120px;
@@ -405,6 +1080,19 @@ export default function AccessibilityPage() {
           font-weight: 700;
           text-transform: uppercase;
           letter-spacing: 0.04em;
+        }
+        .header-badges {
+          display: grid;
+          gap: 8px;
+          justify-items: end;
+        }
+        .status-pill.ready {
+          border-color: rgba(16, 185, 129, 0.8);
+          color: #a7f3d0;
+        }
+        .status-pill.blocked {
+          border-color: rgba(248, 113, 113, 0.8);
+          color: #fecaca;
         }
         .grid {
           display: grid;
@@ -535,6 +1223,46 @@ export default function AccessibilityPage() {
           padding-left: 18px;
           display: grid;
           gap: 6px;
+        }
+        .coverage-list {
+          margin: 0;
+          padding-left: 18px;
+          display: grid;
+          gap: 8px;
+          line-height: 1.45;
+        }
+        .status-text {
+          margin-top: 4px;
+          font-size: 0.88rem;
+        }
+        .usage-summary p {
+          margin: 4px 0;
+        }
+        .status-ok {
+          color: #86efac;
+        }
+        .status-fail {
+          color: #fca5a5;
+        }
+        .usage-table {
+          width: 100%;
+          max-width: 480px;
+          border-collapse: collapse;
+          margin-top: 6px;
+        }
+        .usage-table th,
+        .usage-table td {
+          border: 1px solid rgba(255, 255, 255, 0.24);
+          padding: 6px 8px;
+          text-align: left;
+        }
+        .usage-table th:last-child,
+        .usage-table td:last-child {
+          text-align: right;
+        }
+        .btn:disabled {
+          opacity: 0.65;
+          cursor: not-allowed;
         }
         @media (max-width: 920px) {
           .grid {
