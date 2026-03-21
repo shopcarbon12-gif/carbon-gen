@@ -5146,13 +5146,10 @@ export default function ShopifyCollectionMapping() {
                         currentTopGender !== "" &&
                         expectedTopGender !== currentTopGender;
                       const suggestionOptionsCount = showGenderMismatchSuggestion ? 1 : staging.suggestionOptions.length;
-                      const tableSuggestionLayoutClass = showGenderMismatchSuggestion
-                        ? "suggestionChips tableSuggestionChips tableSuggestionChipsCount1"
-                        : suggestionOptionsCount >= 1 && suggestionOptionsCount <= 4
+                      const tableSuggestionLayoutClass =
+                        suggestionOptionsCount >= 1 && suggestionOptionsCount <= 4
                           ? `suggestionChips tableSuggestionChips tableSuggestionChipsCount${suggestionOptionsCount}`
-                          : suggestionOptionsCount > 4
-                            ? "suggestionChips tableSuggestionChips tableSuggestionChipsMany"
-                            : "suggestionChips tableSuggestionChips";
+                          : "suggestionChips tableSuggestionChips";
                       const hasPendingFinalEdits =
                         staging.selectedSuggestionPaths.length +
                           staging.selectedSuggestionDirectCollections.length +
@@ -8287,31 +8284,6 @@ export default function ShopifyCollectionMapping() {
         .tableSuggestionChipsCount4 .suggestionChip:nth-child(4) {
           grid-column: 1 / span 2;
           justify-self: center;
-        }
-        /* 5+ suggestions: 2-column compact grid; odd last row — single chip centered under the pair */
-        .tableSuggestionChips.tableSuggestionChipsMany {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          width: 100%;
-          max-width: 100%;
-          max-height: 84px;
-          overflow-x: hidden;
-          overflow-y: auto;
-          gap: 3px 5px;
-          align-content: start;
-          justify-items: stretch;
-        }
-        .tableSuggestionChipsMany .suggestionChip:last-child:nth-child(odd):not(:only-child) {
-          grid-column: 1 / -1;
-          justify-self: center;
-        }
-        .tableSuggestionChipsMany .suggestionChip {
-          min-height: 18px;
-          padding: 1px 5px;
-          font-size: 9.5px;
-          line-height: 1.2;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
         }
         .autoPathChips {
           display: flex;
