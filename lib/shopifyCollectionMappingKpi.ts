@@ -111,9 +111,17 @@ export function classifyShopifyCollectionMappingRow(
   const pushFailed = actionStatus === "FAILED";
   const currentMatchesFinal = normalizeCurrentMatchesFinal(input.currentMatchesFinal, collectionSyncStatus);
   const baseNeedsReview = mappingDecision === "MANUAL_REVIEW" || collectionSyncStatus === "REVIEW";
-  // Human review is required for explicit review rows and for any row with visible
-  // suggestions/manual edits that must be explicitly approved before syncing.
-  const requiresHumanEye = baseNeedsReview || suggestionReady || manualChanges || conflictSignals;
+  const hasPendingCollectionWork =
+    !currentMatchesFinal ||
+    collectionSyncStatus === "REVIEW" ||
+    collectionSyncStatus === "ADD_PENDING" ||
+    collectionSyncStatus === "REMOVAL_PENDING";
+  // Suggestions alone do not require human eye when live already matches final (informational chips).
+  const requiresHumanEye =
+    baseNeedsReview ||
+    conflictSignals ||
+    manualChanges ||
+    (suggestionReady && hasPendingCollectionWork);
   const humanEyeResolved = !requiresHumanEye || isReviewed;
   const synced = !pushFailed && currentMatchesFinal && humanEyeResolved;
   const pendingPush = !pushFailed && !currentMatchesFinal && (requiresHumanEye ? isReviewed : true);

@@ -93,7 +93,6 @@ type RowStagingState = {
   currentMatchesFinal: boolean;
   collectionSyncStatus: "REVIEW" | "REMOVAL_PENDING" | "ADD_PENDING" | "SYNCED";
   mappingDecision: "AUTO_MAPPED" | "SUGGESTED" | "MANUAL_REVIEW";
-  isReviewed: boolean;
   holdFromSync: boolean;
   reviewReason: string;
   suggestionOptions: Array<{
@@ -1155,38 +1154,50 @@ export default function ShopifyCollectionMapping() {
       ]);
 
       const hasReview = String(row.mappingDecision || "") === "MANUAL_REVIEW";
-      const finalRefs = new Set([
-        ...Array.from(closedFinalSet).map((path) => `PATH:${path}`),
-        ...finalDirectCollections.map((handle) => `DIRECT:${handle}`),
-      ]);
-      const liveRefs = new Set([
-        ...currentAssigned.map((path) => `PATH:${path}`),
-        ...currentDirectCollections.map((handle) => `DIRECT:${handle}`),
-      ]);
+      const livePathSet = closeMenuPathSetWithAncestors(new Set(currentAssigned));
+      const finalRefs = new Set<string>();
+      for (const path of closedFinalSet) {
+        const n = normalizeMenuPath(path);
+        if (n) finalRefs.add(`PATH:${n}`);
+      }
+      for (const handle of finalDirectCollections) {
+        finalRefs.add(`DIRECT:${handle}`);
+      }
+      const liveRefs = new Set<string>();
+      for (const path of livePathSet) {
+        const n = normalizeMenuPath(path);
+        if (n) liveRefs.add(`PATH:${n}`);
+      }
+      for (const handle of currentDirectCollections) {
+        liveRefs.add(`DIRECT:${handle}`);
+      }
       let hasAdds = false;
-      let hasRemovals = false;
       for (const ref of finalRefs) {
         if (!liveRefs.has(ref)) {
           hasAdds = true;
           break;
         }
       }
+      let hasLiveNotInFinal = false;
       for (const ref of liveRefs) {
         if (!finalRefs.has(ref)) {
-          hasRemovals = true;
+          hasLiveNotInFinal = true;
           break;
         }
       }
-      const currentMatchesFinal = !hasAdds && !hasRemovals;
+      const hasExplicitRemovals = manualRemovedPaths.length > 0;
+      const currentMatchesFinal = !hasAdds && !hasLiveNotInFinal;
       let collectionSyncStatus: RowStagingState["collectionSyncStatus"] = "SYNCED";
       if (hasReview) {
         collectionSyncStatus = "REVIEW";
-      } else if (hasAdds && hasRemovals) {
+      } else if (hasExplicitRemovals && hasAdds) {
         collectionSyncStatus = "REMOVAL_PENDING";
-      } else if (hasRemovals) {
+      } else if (hasExplicitRemovals) {
         collectionSyncStatus = "REMOVAL_PENDING";
       } else if (hasAdds) {
         collectionSyncStatus = "ADD_PENDING";
+      } else if (hasLiveNotInFinal) {
+        collectionSyncStatus = "REVIEW";
       }
 
       let mappingDecision: RowStagingState["mappingDecision"] = row.mappingDecision || "MANUAL_REVIEW";
@@ -1201,7 +1212,6 @@ export default function ShopifyCollectionMapping() {
       }
 
       const reasons: string[] = [];
-      const isReviewed = Boolean(reviewedByRow[row.id] ?? row.isReviewed);
       const holdFromSync = Boolean(holdFromSyncByRow[row.id] ?? row.draft?.holdFromSync);
       if (row.reviewReason) reasons.push(row.reviewReason);
       const selectedSuggestionCount = effectiveSelectedSuggestions.length + effectiveSelectedSuggestionCollections.length;
@@ -1223,7 +1233,6 @@ export default function ShopifyCollectionMapping() {
         currentMatchesFinal,
         collectionSyncStatus,
         mappingDecision,
-        isReviewed,
         holdFromSync,
         reviewReason,
         suggestionOptions,
@@ -1237,7 +1246,6 @@ export default function ShopifyCollectionMapping() {
     selectedSuggestionCollectionsByRow,
     manualAddedPathsByRow,
     manualRemovedPathsByRow,
-    reviewedByRow,
     holdFromSyncByRow,
     nodeKeyByPath,
     nodePathByKey,
@@ -1298,13 +1306,13 @@ export default function ShopifyCollectionMapping() {
           suggestionReady: (staging?.suggestionOptions || []).length > 0,
           conflictSignals: (row.collectionConflictFlags?.length ?? 0) > 0,
           manualChanges,
-          isReviewed: Boolean(staging?.isReviewed ?? row.isReviewed),
+          isReviewed: Boolean(reviewedByRow[row.id] ?? row.isReviewed),
           currentMatchesFinal: staging?.currentMatchesFinal,
         })
       );
     }
     return out;
-  }, [rows, rowStagingById]);
+  }, [rows, rowStagingById, reviewedByRow]);
 
   const moduleSummary = useMemo(
     () => summarizeShopifyCollectionMappingWorkflows(Array.from(rowWorkflowById.values())),
@@ -1705,7 +1713,8 @@ export default function ShopifyCollectionMapping() {
       const currentSet = new Set(currentRefs);
       const finalSet = new Set(finalRefs);
       const collectionsToAdd = finalRefs.filter((entry) => !currentSet.has(entry));
-      const collectionsToRemove = currentRefs.filter((entry) => !finalSet.has(entry));
+      const explicitRemovalRefs = toPathRefs(staging.manualRemovedPaths || []).filter((ref) => currentSet.has(ref));
+      const collectionsToRemove = explicitRemovalRefs;
       const noOp = collectionsToAdd.length < 1 && collectionsToRemove.length < 1;
       const holdFromSync = Boolean(staging.holdFromSync);
       let plannerStatus: PlannerStatus = "readyToPush";
@@ -4292,6 +4301,37 @@ export default function ShopifyCollectionMapping() {
       }
 
       if (rowIdsToClearDrafts.length > 0) {
+        const clearedIds = new Set(rowIdsToClearDrafts);
+        setSelectedSuggestionPathsByRow((prev) => {
+          const next = { ...prev };
+          for (const id of clearedIds) delete next[id];
+          return next;
+        });
+        setSelectedSuggestionCollectionsByRow((prev) => {
+          const next = { ...prev };
+          for (const id of clearedIds) delete next[id];
+          return next;
+        });
+        setManualAddedPathsByRow((prev) => {
+          const next = { ...prev };
+          for (const id of clearedIds) delete next[id];
+          return next;
+        });
+        setManualRemovedPathsByRow((prev) => {
+          const next = { ...prev };
+          for (const id of clearedIds) delete next[id];
+          return next;
+        });
+        setReviewedByRow((prev) => {
+          const next = { ...prev };
+          for (const id of clearedIds) delete next[id];
+          return next;
+        });
+        setHoldFromSyncByRow((prev) => {
+          const next = { ...prev };
+          for (const id of clearedIds) delete next[id];
+          return next;
+        });
         void fetch("/api/collection-mapping", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -4429,7 +4469,7 @@ export default function ShopifyCollectionMapping() {
             (staging?.manualAddedPaths.length || 0) +
             (staging?.manualRemovedPaths.length || 0) >
           0,
-        isReviewed: Boolean(staging?.isReviewed ?? row.isReviewed),
+        isReviewed: Boolean(reviewedByRow[row.id] ?? row.isReviewed),
         currentMatchesFinal: staging?.currentMatchesFinal,
       });
     setMappingExplainModal({
@@ -5227,8 +5267,9 @@ export default function ShopifyCollectionMapping() {
                       const selectedProductRow = Boolean(selectedProducts[row.id]);
                       const isActiveRow = row.id === activeRowId;
                       const isManualReviewRow = mappingDecision === "MANUAL_REVIEW";
-                      const changedAddCount = Math.max(0, finalCollectionsRaw.length - currentCollectionsRaw.length);
-                      const changedRemoveCount = Math.max(0, currentCollectionsRaw.length - finalCollectionsRaw.length);
+                      const plannerRow = plannerRowsById.get(row.id);
+                      const changedAddCount = plannerRow?.collectionsToAdd.length ?? 0;
+                      const changedRemoveCount = plannerRow?.collectionsToRemove.length ?? 0;
                       const expectedTopGender = getExpectedTopGenderFromUpc(row.upc || "");
                       const currentTopGender = getTopGenderFromPaths(currentCollectionsRaw);
                       const showGenderMismatchSuggestion =
@@ -5446,7 +5487,7 @@ export default function ShopifyCollectionMapping() {
                               <label className="reviewedCheckboxLabel" onClick={(event) => event.stopPropagation()}>
                                 <input
                                   type="checkbox"
-                                  checked={Boolean(staging.isReviewed)}
+                                  checked={Boolean(reviewedByRow[row.id] ?? row.isReviewed)}
                                   onChange={(event) => {
                                     event.stopPropagation();
                                     const checked = event.target.checked;

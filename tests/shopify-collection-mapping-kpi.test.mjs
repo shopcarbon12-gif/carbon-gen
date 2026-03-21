@@ -55,11 +55,11 @@ const cases = [
     },
     expected: {
       loaded: true,
-      needsReview: true,
+      needsReview: false,
       pendingPush: false,
       pushFailed: false,
-      synced: false,
-      statusLabel: "Needs Review",
+      synced: true,
+      statusLabel: "Synced",
     },
   },
   {
@@ -272,7 +272,7 @@ const cases = [
     },
   },
   {
-    name: "visible suggestions stay Needs Review",
+    name: "visible suggestions with no pending delta stay Synced",
     input: {
       mappingDecision: "SUGGESTED",
       collectionSyncStatus: "SYNCED",
@@ -283,11 +283,11 @@ const cases = [
     },
     expected: {
       loaded: true,
-      needsReview: true,
+      needsReview: false,
       pendingPush: false,
       pushFailed: false,
-      synced: false,
-      statusLabel: "Needs Review",
+      synced: true,
+      statusLabel: "Synced",
     },
   },
   {
@@ -425,7 +425,13 @@ test("unreviewed rows with suggestions or manual changes stay in needs review", 
   for (const rowCase of cases.filter(
     (entry) =>
       !entry.input.isReviewed &&
-      (entry.input.suggestionReady || entry.input.manualChanges || entry.input.conflictSignals)
+      (entry.input.manualChanges ||
+        entry.input.conflictSignals ||
+        (entry.input.suggestionReady &&
+          !(
+            entry.input.collectionSyncStatus === "SYNCED" &&
+            entry.input.mappingDecision !== "MANUAL_REVIEW"
+          )))
   )) {
     const workflow = classifyShopifyCollectionMappingRow(rowCase.input);
     assert.equal(workflow.needsReview, true, `${rowCase.name}: unresolved rows stay in needs review`);
