@@ -17,6 +17,10 @@ type AccessibilitySettings = {
   panelWidth: number;
   cornerRadius: number;
   widgetLabel: string;
+  logoUrl: string;
+  logoAlt: string;
+  logoVariant: "symbol" | "full" | "wordmark";
+  logoMaxHeight: number;
   language: "en" | "es" | "pt-BR" | "he";
   showTextLabel: boolean;
   statementUrl: string;
@@ -111,7 +115,11 @@ const defaultSettings: AccessibilitySettings = {
   iconSize: 20,
   panelWidth: 300,
   cornerRadius: 14,
-  widgetLabel: "Accessibility",
+  widgetLabel: "Carbon Assist",
+  logoUrl: "",
+  logoAlt: "Carbon Assist",
+  logoVariant: "wordmark",
+  logoMaxHeight: 32,
   language: "en",
   showTextLabel: true,
   statementUrl: "https://www.shopcarbon.com/pages/accessibility",
@@ -171,6 +179,10 @@ function buildInstallSnippet(settings: AccessibilitySettings) {
     label: settings.widgetLabel,
     language: settings.language,
     showTextLabel: settings.showTextLabel,
+    logoUrl: settings.logoUrl,
+    logoAlt: settings.logoAlt,
+    logoVariant: settings.logoVariant,
+    logoMaxHeight: settings.logoMaxHeight,
     statementUrl: settings.statementUrl,
     feedbackUrl: settings.feedbackUrl,
     supportEmail: settings.supportEmail,
@@ -677,6 +689,59 @@ export default function AccessibilityPage() {
               onChange={(e) => setSettings((prev) => ({ ...prev, widgetLabel: e.target.value }))}
             />
           </label>
+          <p style={{ fontSize: 13, opacity: 0.85, margin: "0 0 8px" }}>
+            Runtime widget logo (HTTPS URL to PNG/SVG). Shown only inside the floating widget; does not affect store
+            theme CSS.
+          </p>
+          <label>
+            Widget logo URL (optional)
+            <input
+              value={settings.logoUrl}
+              onChange={(e) => setSettings((prev) => ({ ...prev, logoUrl: e.target.value }))}
+              placeholder="https://cdn.example.com/carbon-assist-logo.svg"
+            />
+          </label>
+          <label>
+            Logo alt text
+            <input
+              value={settings.logoAlt}
+              onChange={(e) => setSettings((prev) => ({ ...prev, logoAlt: e.target.value }))}
+              placeholder="Carbon Assist"
+            />
+          </label>
+          <div className="row">
+            <label>
+              Logo variant
+              <select
+                value={settings.logoVariant}
+                onChange={(e) =>
+                  setSettings((prev) => ({
+                    ...prev,
+                    logoVariant: e.target.value as AccessibilitySettings["logoVariant"],
+                  }))
+                }
+              >
+                <option value="wordmark">Wordmark / balanced</option>
+                <option value="symbol">Symbol / compact</option>
+                <option value="full">Full / header emphasis</option>
+              </select>
+            </label>
+            <label>
+              Logo max height (px)
+              <input
+                type="number"
+                min={12}
+                max={120}
+                value={settings.logoMaxHeight}
+                onChange={(e) =>
+                  setSettings((prev) => ({
+                    ...prev,
+                    logoMaxHeight: Number(e.target.value) || prev.logoMaxHeight,
+                  }))
+                }
+              />
+            </label>
+          </div>
           <label>
             Default widget language
             <select

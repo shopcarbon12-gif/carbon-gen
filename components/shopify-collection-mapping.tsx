@@ -78,6 +78,9 @@ type ProductRow = {
 
 type AdvancedDecisionFilter = "AUTO_MAPPED" | "SUGGESTED" | "MANUAL_REVIEW";
 
+/** Shown on chips when the suggestion matches an existing path/collection — still clickable for corrections. */
+type SuggestionOverlapHint = "current" | "auto" | "manual" | "assigned";
+
 type RowStagingState = {
   autoMappedPaths: string[];
   selectedSuggestionPaths: string[];
@@ -97,8 +100,11 @@ type RowStagingState = {
     kind: "menu" | "collection";
     value: string;
     label: string;
+    /** Only true when the chip cannot do anything useful (reserved; suggestions stay enabled for corrections). */
     disabled: boolean;
     selected: boolean;
+    /** Present when this suggestion already appears in live/auto/manual state — informational, not disabling. */
+    overlapHint?: SuggestionOverlapHint | null;
   }>;
 };
 
@@ -463,7 +469,71 @@ function formatCompactPathSummary(paths: string[]) {
 }
 
 function getSuggestionTooltip(kind: "menu" | "collection", label: string) {
-  return kind === "collection" ? "COLLECTION" : label;
+  if (kind === "collection") {
+    const trimmed = String(label || "").trim();
+    return trimmed ? `Direct collection: ${trimmed}` : "Direct collection suggestion";
+  }
+  return label;
+}
+
+/**
+ * Four chip surfaces: suggested (outlined) · currentPath / assignedCollection (pressed “on product”) · selected (chosen for final).
+ * Current/Assigned always win over Selected when both apply — no mixed “double” styling.
+ */
+type SuggestionChipVisualMode = "suggested" | "currentPath" | "assignedCollection" | "selected";
+
+type SuggestionOptionForChip = RowStagingState["suggestionOptions"][number];
+
+function isMenuPathOnProduct(option: SuggestionOptionForChip): boolean {
+  return (
+    option.kind === "menu" &&
+    Boolean(option.overlapHint) &&
+    (option.overlapHint === "current" || option.overlapHint === "auto" || option.overlapHint === "manual")
+  );
+}
+
+function isAssignedDirectCollectionOnProduct(option: SuggestionOptionForChip): boolean {
+  return (
+    option.kind === "collection" &&
+    Boolean(option.overlapHint) &&
+    (option.overlapHint === "assigned" || option.overlapHint === "auto")
+  );
+}
+
+function getSuggestionChipVisualMode(option: SuggestionOptionForChip): SuggestionChipVisualMode {
+  if (isMenuPathOnProduct(option)) return "currentPath";
+  if (isAssignedDirectCollectionOnProduct(option)) return "assignedCollection";
+  if (option.selected) return "selected";
+  return "suggested";
+}
+
+function getSuggestionChipBadgeText(mode: SuggestionChipVisualMode, option: SuggestionOptionForChip): string {
+  if (mode === "suggested") return "";
+  if (mode === "selected") return "Selected";
+  if (mode === "assignedCollection") return "Assigned";
+  if (mode === "currentPath") {
+    if (option.overlapHint === "current") return "Current";
+    if (option.overlapHint === "auto") return "Auto";
+    if (option.overlapHint === "manual") return "Manual";
+  }
+  return "";
+}
+
+function buildSuggestionChipTooltip(option: SuggestionOptionForChip, mode: SuggestionChipVisualMode): string {
+  const base = getSuggestionTooltip(option.kind, option.kind === "collection" ? option.label : option.value);
+  if (option.disabled) return base;
+  if (mode === "currentPath") {
+    const staged = option.selected ? " Staged for final as well; chip shows “on product” first." : "";
+    return `Already assigned on the product now.${staged} ${base}`.trim();
+  }
+  if (mode === "assignedCollection") {
+    const staged = option.selected ? " Staged for final as well." : "";
+    return `This collection is already assigned on the product now.${staged} ${base}`.trim();
+  }
+  if (mode === "selected") {
+    return `Selected for the final result. ${base}`.trim();
+  }
+  return `Click to add this suggestion. ${base}`.trim();
 }
 
 function dedupeNormalizedPaths(values: string[]) {
@@ -1022,26 +1092,45 @@ export default function ShopifyCollectionMapping() {
 
       const currentSet = new Set(currentAssigned);
       const autoSet = new Set(autoMappedPaths);
-      const liveDirectCollectionSet = new Set(
-        dedupeCollectionHandles([...(row.currentDirectCollections || []), ...(row.directCollectionsToAssign || [])])
-      );
       const manualAddedSet = new Set(manualAddedPaths);
+      const currentDirectOnlySet = new Set(dedupeCollectionHandles(row.currentDirectCollections || []));
+      const autoDirectOnlySet = new Set(dedupeCollectionHandles(row.directCollectionsToAssign || []));
+      const menuPathOverlapHint = (path: string): SuggestionOverlapHint | null => {
+        if (currentSet.has(path)) return "current";
+        if (autoSet.has(path)) return "auto";
+        if (manualAddedSet.has(path)) return "manual";
+        return null;
+      };
+      const directCollectionOverlapHint = (handle: string): SuggestionOverlapHint | null => {
+        if (currentDirectOnlySet.has(handle)) return "assigned";
+        if (autoDirectOnlySet.has(handle)) return "auto";
+        return null;
+      };
       const suggestionPathBase = dedupeNormalizedPaths(row.suggestedPaths || []);
       const suggestionPathOptions = suggestionPathBase.map((path) => {
-        const disabled = currentSet.has(path) || autoSet.has(path) || manualAddedSet.has(path);
-        const selected = selectedSuggestionPaths.includes(path) && !disabled;
-        return { kind: "menu" as const, value: path, label: path, disabled, selected };
+        const overlapHint = menuPathOverlapHint(path);
+        const selected = selectedSuggestionPaths.includes(path);
+        return {
+          kind: "menu" as const,
+          value: path,
+          label: path,
+          disabled: false,
+          selected,
+          overlapHint,
+        };
       });
       const suggestionCollectionBase = dedupeCollectionHandles(row.suggestedDirectCollections || []);
       const suggestionCollectionOptions = suggestionCollectionBase.map((handle) => {
-        const disabled = liveDirectCollectionSet.has(handle);
-        const selected = selectedSuggestionDirectCollections.includes(handle) && !disabled;
+        const overlapHint = directCollectionOverlapHint(handle);
+        const selected = selectedSuggestionDirectCollections.includes(handle);
+        const displayTitle = collectionTitleByHandle.get(handle) || handle;
         return {
           kind: "collection" as const,
           value: handle,
-          label: `COLLECTION: ${handle}`,
-          disabled,
+          label: displayTitle,
+          disabled: false,
           selected,
+          overlapHint,
         };
       });
       const suggestionOptions = [...suggestionPathOptions, ...suggestionCollectionOptions];
@@ -1101,8 +1190,8 @@ export default function ShopifyCollectionMapping() {
       }
 
       let mappingDecision: RowStagingState["mappingDecision"] = row.mappingDecision || "MANUAL_REVIEW";
-      // Prefer SUGGESTED whenever there are actionable suggestion chips (even if the API said AUTO_MAPPED).
-      if (!hasReview && suggestionOptions.some((option) => !option.disabled)) {
+      // Prefer SUGGESTED whenever the engine surfaced suggestions (chips stay usable even if they overlap current state).
+      if (!hasReview && suggestionOptions.length > 0) {
         mappingDecision = "SUGGESTED";
       } else if (!hasReview && effectiveSelectedSuggestions.length > 0) {
         mappingDecision = "SUGGESTED";
@@ -1153,6 +1242,7 @@ export default function ShopifyCollectionMapping() {
     nodeKeyByPath,
     nodePathByKey,
     parentMap,
+    collectionTitleByHandle,
   ]);
 
   const selectedNodeKeys = useMemo(() => {
@@ -1205,7 +1295,7 @@ export default function ShopifyCollectionMapping() {
           mappingDecision: staging?.mappingDecision || row.mappingDecision || "MANUAL_REVIEW",
           collectionSyncStatus: staging?.collectionSyncStatus || "REVIEW",
           actionStatus: row.actionStatus || "",
-          suggestionReady: (staging?.suggestionOptions || []).some((option) => !option.disabled),
+          suggestionReady: (staging?.suggestionOptions || []).length > 0,
           conflictSignals: (row.collectionConflictFlags?.length ?? 0) > 0,
           manualChanges,
           isReviewed: Boolean(staging?.isReviewed ?? row.isReviewed),
@@ -1233,7 +1323,7 @@ export default function ShopifyCollectionMapping() {
       const rowDecision = String(staging?.mappingDecision || row.mappingDecision || "MANUAL_REVIEW")
         .trim()
         .toUpperCase() as AdvancedDecisionFilter;
-      const suggestionReady = (staging?.suggestionOptions || []).some((option) => !option.disabled);
+      const suggestionReady = (staging?.suggestionOptions || []).length > 0;
       const conflictSignals = (row.collectionConflictFlags?.length ?? 0) > 0;
       if (
         appliedFilterDecisions.length > 0 &&
@@ -1284,10 +1374,10 @@ export default function ShopifyCollectionMapping() {
         case "suggested-with":
         case "suggested-without": {
           const leftHasSuggested =
-            (leftStaging?.suggestionOptions || []).some((option) => !option.disabled) ||
+            (leftStaging?.suggestionOptions || []).length > 0 ||
             (left.collectionConflictFlags?.length ?? 0) > 0;
           const rightHasSuggested =
-            (rightStaging?.suggestionOptions || []).some((option) => !option.disabled) ||
+            (rightStaging?.suggestionOptions || []).length > 0 ||
             (right.collectionConflictFlags?.length ?? 0) > 0;
           if (leftHasSuggested !== rightHasSuggested) {
             const withSuggestedFirst = headerSortMode === "suggested-with";
@@ -3945,7 +4035,7 @@ export default function ShopifyCollectionMapping() {
         if (!staging) continue;
         const current = { ...(next[id] || {}) };
         for (const option of staging.suggestionOptions) {
-          if (option.disabled || option.kind !== "menu") continue;
+          if (option.kind !== "menu") continue;
           current[option.value] = true;
         }
         next[id] = current;
@@ -3959,7 +4049,7 @@ export default function ShopifyCollectionMapping() {
         if (!staging) continue;
         const current = { ...(next[id] || {}) };
         for (const option of staging.suggestionOptions) {
-          if (option.disabled || option.kind !== "collection") continue;
+          if (option.kind !== "collection") continue;
           current[option.value] = true;
         }
         next[id] = current;
@@ -4331,7 +4421,7 @@ export default function ShopifyCollectionMapping() {
         mappingDecision,
         collectionSyncStatus,
         actionStatus: row.actionStatus || "",
-        suggestionReady: (staging?.suggestionOptions || []).some((option) => !option.disabled),
+        suggestionReady: (staging?.suggestionOptions || []).length > 0,
         conflictSignals: (row.collectionConflictFlags?.length ?? 0) > 0,
         manualChanges:
           (staging?.selectedSuggestionPaths.length || 0) +
@@ -4436,7 +4526,7 @@ export default function ShopifyCollectionMapping() {
     setSelectedSuggestionPathsByRow((prev) => {
       const current = { ...(prev[rowId] || {}) };
       for (const option of staging.suggestionOptions) {
-        if (option.disabled || option.kind !== "menu") continue;
+        if (option.kind !== "menu") continue;
         const normalizedPath = normalizeMenuPath(option.value);
         if (!normalizedPath) continue;
         current[normalizedPath] = true;
@@ -4446,7 +4536,7 @@ export default function ShopifyCollectionMapping() {
     setSelectedSuggestionCollectionsByRow((prev) => {
       const current = { ...(prev[rowId] || {}) };
       for (const option of staging.suggestionOptions) {
-        if (option.disabled || option.kind !== "collection") continue;
+        if (option.kind !== "collection") continue;
         const normalizedHandle = String(option.value || "").trim().toLowerCase();
         if (!normalizedHandle) continue;
         current[normalizedHandle] = true;
@@ -5279,24 +5369,43 @@ export default function ShopifyCollectionMapping() {
                                     option.kind === "collection"
                                       ? getCollectionDisplayName(option.value)
                                       : getLastPathSegment(option.value);
+                                  const visualMode = getSuggestionChipVisualMode(option);
+                                  const badgeText = getSuggestionChipBadgeText(visualMode, option);
+                                  const tooltipLine = buildSuggestionChipTooltip(option, visualMode);
+                                  const ariaLabel = [
+                                    badgeText || (visualMode === "suggested" ? "Suggested" : ""),
+                                    option.kind === "collection" ? option.label : chipLabel,
+                                    "Click to toggle staging",
+                                  ]
+                                    .filter(Boolean)
+                                    .join(". ");
                                   return (
                                     <button
                                       key={`${row.id}-${option.kind}-${option.value}`}
                                       type="button"
-                                      className={`suggestionChip${option.selected ? " selected" : ""}`}
+                                      className={`suggestionChip suggestionChip--state-${visualMode}${badgeText ? " suggestionChip--hasBadge" : ""}`}
+                                      data-path-kind={
+                                        visualMode === "currentPath" && option.overlapHint ? option.overlapHint : undefined
+                                      }
+                                      aria-pressed={option.selected}
                                       disabled={option.disabled}
                                       onClick={(event) => {
                                         event.stopPropagation();
                                         toggleSuggestionSelection(row.id, option.kind, option.value, option.disabled);
                                       }}
-                                      data-tooltip={option.disabled ? "" : getSuggestionTooltip(option.kind, option.label)}
-                                      aria-label={option.disabled ? "Already assigned or staged; cannot select." : option.label}
+                                      data-tooltip={tooltipLine}
+                                      aria-label={ariaLabel}
                                     >
-                                      {denseSuggestions ? (
-                                        <span className="suggestionChipTextClamp">{chipLabel}</span>
-                                      ) : (
-                                        chipLabel
-                                      )}
+                                      <span
+                                        className={`suggestionChipInner${badgeText ? "" : " suggestionChipInner--nameOnly"}`}
+                                      >
+                                        {badgeText ? <span className="suggestionChipBadge">{badgeText}</span> : null}
+                                        {denseSuggestions ? (
+                                          <span className="suggestionChipTextClamp suggestionChipName">{chipLabel}</span>
+                                        ) : (
+                                          <span className="suggestionChipName">{chipLabel}</span>
+                                        )}
+                                      </span>
                                     </button>
                                   );
                                 });
@@ -6097,22 +6206,28 @@ export default function ShopifyCollectionMapping() {
                       <button
                         key={`modal-suggested-menu-${path}`}
                         type="button"
-                        className="suggestionChip selected"
+                        className="suggestionChip suggestionChip--state-suggested mappingExplainSuggestionPreview"
                         data-tooltip={path}
                         onClick={(event) => event.preventDefault()}
                       >
-                        {getLastPathSegment(path)}
+                        <span className="suggestionChipInner">
+                          <span className="suggestionChipBadge">Suggested</span>
+                          <span className="suggestionChipName">{getLastPathSegment(path)}</span>
+                        </span>
                       </button>
                     ))}
                     {mappingExplainModal.suggestedDirectCollections.map((collection) => (
                       <button
                         key={`modal-suggested-collection-${collection}`}
                         type="button"
-                        className="suggestionChip selected"
+                        className="suggestionChip suggestionChip--state-suggested mappingExplainSuggestionPreview"
                         data-tooltip={getSuggestionTooltip("collection", getCollectionDisplayName(collection))}
                         onClick={(event) => event.preventDefault()}
                       >
-                        {getCollectionDisplayName(collection)}
+                        <span className="suggestionChipInner">
+                          <span className="suggestionChipBadge">Suggested</span>
+                          <span className="suggestionChipName">{getCollectionDisplayName(collection)}</span>
+                        </span>
                       </button>
                     ))}
                   </div>
@@ -8364,7 +8479,10 @@ export default function ShopifyCollectionMapping() {
           text-overflow: ellipsis;
           white-space: nowrap;
         }
-        .tableSuggestionChips.tableSuggestionChipsMany .suggestionChip:hover:not(:disabled) {
+        .tableSuggestionChips.tableSuggestionChipsMany .suggestionChip--state-suggested:hover:not(:disabled),
+        .tableSuggestionChips.tableSuggestionChipsMany .suggestionChip--state-currentPath:hover:not(:disabled),
+        .tableSuggestionChips.tableSuggestionChipsMany .suggestionChip--state-assignedCollection:hover:not(:disabled),
+        .tableSuggestionChips.tableSuggestionChipsMany .suggestionChip--state-selected:hover:not(:disabled) {
           transform: none;
         }
         .tableSuggestionChips.tableSuggestionChipsMany .suggestionChip::after {
@@ -8445,13 +8563,9 @@ export default function ShopifyCollectionMapping() {
         }
         .autoPathChip,
         .suggestionChip {
-          border: 1px solid #46628b;
-          background: #142845;
-          color: #d9e8ff;
           border-radius: 7px;
           font-size: 12.33px;
-          padding: 3px 8px;
-          line-height: 1.1;
+          line-height: 1.15;
           transition:
             background-color 120ms ease,
             border-color 120ms ease,
@@ -8460,6 +8574,10 @@ export default function ShopifyCollectionMapping() {
             transform 120ms ease;
         }
         .autoPathChip {
+          border: 1px solid #46628b;
+          background: #142845;
+          color: #d9e8ff;
+          padding: 3px 8px;
           display: inline-flex;
           align-items: center;
           justify-content: center;
@@ -8472,33 +8590,133 @@ export default function ShopifyCollectionMapping() {
         .suggestionChip {
           cursor: pointer;
           position: relative;
+          text-align: left;
+          padding: 5px 9px 6px;
+          border: 1.5px solid transparent;
+        }
+        .suggestionChipInner {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          justify-content: center;
+          gap: 3px;
+          min-width: 0;
+          width: 100%;
+        }
+        .suggestionChipInner--nameOnly {
+          align-items: center;
+          justify-content: center;
+        }
+        .tableSuggestionChips.tableSuggestionChipsMany .suggestionChipInner {
+          flex-direction: row;
+          flex-wrap: wrap;
+          align-items: center;
+          justify-content: center;
+          gap: 5px;
+        }
+        .tableSuggestionChips.tableSuggestionChipsMany .suggestionChipInner--nameOnly {
+          flex-direction: row;
+        }
+        .suggestionChipBadge {
+          display: block;
+          font-size: 8px;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          line-height: 1;
+        }
+        .suggestionChipName {
+          font-size: 11px;
+          font-weight: 600;
+          line-height: 1.15;
+          color: inherit;
+        }
+        /* 1) Suggested — not on product, not selected: outlined, unpressed */
+        .suggestionChip--state-suggested {
+          background: rgba(12, 28, 52, 0.35);
+          border: 1.5px solid #6478a8;
+          color: #dbeafe;
+          box-shadow: none;
+        }
+        .tableSuggestionChips .suggestionChip--state-suggested:hover:not(:disabled) {
+          border-color: #7c9fd4;
+          background: rgba(22, 45, 78, 0.75);
+          color: #f0f7ff;
+          box-shadow: 0 4px 12px rgba(4, 10, 24, 0.35);
+          transform: translateY(-1px);
+        }
+        /* 2) Current path — menu path already on product: pressed slate */
+        .suggestionChip--state-currentPath {
+          background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+          border: 2px solid #64748b;
+          color: #f1f5f9;
+          box-shadow:
+            inset 0 3px 8px rgba(0, 0, 0, 0.5),
+            inset 0 -1px 0 rgba(255, 255, 255, 0.06);
+        }
+        .suggestionChip--state-currentPath .suggestionChipBadge {
+          color: #cbd5e1;
+        }
+        .suggestionChip--state-currentPath[data-path-kind="auto"] {
+          border-color: rgba(34, 197, 94, 0.55);
+        }
+        .suggestionChip--state-currentPath[data-path-kind="manual"] {
+          border-color: rgba(250, 204, 21, 0.55);
+        }
+        .tableSuggestionChips .suggestionChip--state-currentPath:hover:not(:disabled) {
+          border-color: #94a3b8;
+          background: linear-gradient(180deg, #273449 0%, #131c2e 100%);
+          color: #ffffff;
+          box-shadow:
+            inset 0 3px 8px rgba(0, 0, 0, 0.45),
+            0 4px 14px rgba(4, 10, 24, 0.35);
+          transform: translateY(-1px);
+        }
+        /* 3) Assigned collection — direct collection already on product: pressed teal/cyan family */
+        .suggestionChip--state-assignedCollection {
+          background: linear-gradient(180deg, #134e4a 0%, #0a2f2e 100%);
+          border: 2px solid #2dd4bf;
+          color: #ecfdf5;
+          box-shadow:
+            inset 0 3px 8px rgba(0, 0, 0, 0.45),
+            inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+        }
+        .suggestionChip--state-assignedCollection .suggestionChipBadge {
+          color: #99f6e4;
+        }
+        .tableSuggestionChips .suggestionChip--state-assignedCollection:hover:not(:disabled) {
+          border-color: #5eead4;
+          background: linear-gradient(180deg, #115e59 0%, #0c3d3a 100%);
+          color: #ffffff;
+          box-shadow:
+            inset 0 3px 8px rgba(0, 0, 0, 0.4),
+            0 4px 14px rgba(13, 148, 136, 0.35);
+          transform: translateY(-1px);
+        }
+        /* 4) Selected — user chose for final (not “on product” styling) */
+        .suggestionChip--state-selected {
+          background: linear-gradient(180deg, #4c1d95 0%, #312547 100%);
+          border: 2px solid #c4b5fd;
+          color: #faf5ff;
+          box-shadow:
+            0 0 0 1px rgba(167, 139, 250, 0.35),
+            inset 0 1px 0 rgba(255, 255, 255, 0.12);
+        }
+        .suggestionChip--state-selected .suggestionChipBadge {
+          color: #e9d5ff;
+        }
+        .tableSuggestionChips .suggestionChip--state-selected:hover:not(:disabled) {
+          border-color: #ddd6fe;
+          background: linear-gradient(180deg, #5b21b6 0%, #3b2c5c 100%);
+          color: #ffffff;
+          box-shadow:
+            0 0 0 1px rgba(196, 181, 253, 0.45),
+            0 6px 16px rgba(76, 29, 149, 0.45);
+          transform: translateY(-1px);
         }
         .tableSuggestionChips .suggestionChip {
-          min-height: 28px;
-          padding: 3px 9px;
+          min-height: 30px;
           font-size: 11px;
-        }
-        .tableSuggestionChips .suggestionChip:hover:not(:disabled) {
-          border-color: #6f8fbe;
-          background: #1a3458;
-          color: #edf4ff;
-          box-shadow: 0 6px 14px rgba(4, 10, 24, 0.28);
-          transform: translateY(-1px);
-        }
-        .suggestionChip.selected {
-          border-color: #5c86ca;
-          color: #e8f0ff;
-          background: #234979;
-          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-        }
-        .tableSuggestionChips .suggestionChip.selected:hover:not(:disabled) {
-          border-color: #77a2e7;
-          color: #f5f9ff;
-          background: #2b578f;
-          box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.1),
-            0 6px 14px rgba(4, 10, 24, 0.3);
-          transform: translateY(-1px);
         }
         .genderMismatchSuggestion {
           color: #f87171;
@@ -8717,6 +8935,10 @@ export default function ShopifyCollectionMapping() {
           min-height: 30px;
           padding: 0 11px;
           font-size: 12px;
+        }
+        .mappingExplainSuggestionPreview {
+          cursor: default;
+          opacity: 0.95;
         }
         .mappingExplainFooter {
           justify-content: flex-end;

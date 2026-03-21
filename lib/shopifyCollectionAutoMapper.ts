@@ -130,6 +130,7 @@ export function computeCollectionAutoMap(input: CollectionAutoMapInput): Collect
   const suggestions = autoMapResolved
     ? buildCollectionSuggestions({
         autoMappedPaths,
+        matchingFallbackPaths: input.assignedMenuPaths,
         alreadyAssignedPaths: [...input.assignedMenuPaths, ...autoMappedPaths],
         alreadyAssignedDirectCollections: directCollectionsToAssign,
         title: input.title,

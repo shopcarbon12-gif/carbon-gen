@@ -3,6 +3,11 @@ import { normalizeMenuPath, tokenizeCandidateText } from "@/lib/shopifyCollectio
 
 export type SuggestionInput = {
   autoMappedPaths?: string[];
+  /**
+   * When barcode auto-map assigns only direct collections (no menu paths), match suggestion rules
+   * against these normalized tree paths (e.g. current Shopify menu assignments).
+   */
+  matchingFallbackPaths?: string[];
   /** Retained for API compatibility; positive suggestions are not filtered server-side (UI disables duplicates). */
   alreadyAssignedPaths?: string[];
   alreadyAssignedDirectCollections?: string[];
@@ -73,17 +78,21 @@ const COMPILED_SUGGESTION_RULES: CompiledSuggestionRule[] = SHOPCARBON_SUGGESTIO
   id: row.id,
   basePaths: dedupePaths(row.basePaths),
   menuPaths: stableDedupeMenuPathsInOrder(row.menuPaths),
-  directCollections: [],
+  directCollections: stableDedupeHandlesInOrder(row.directCollections || []),
   requiresAnyTokens: [],
 }));
 
 /**
- * Positive suggestions from the ShopCarbon CSV ruleset.
- * Match on full normalized auto-mapped base paths; emit all suggested menu paths (deduped, stable order).
- * Paths that are already assigned are still returned — the UI marks them disabled.
+ * Positive suggestions from the ShopCarbon ruleset (`shopcarbonSuggestionRulesData.ts`, synced from xlsx).
+ * Match on full normalized auto-mapped base paths; emit menu paths and direct collection handles (stable order, deduped).
+ * Items already assigned are still returned — the UI may mark overlap (Current / Auto / etc.) but keeps chips clickable.
  */
 export function buildCollectionSuggestions(input: SuggestionInput): CollectionSuggestionsResult {
-  const autoMappedPathSet = new Set(dedupePaths(input.autoMappedPaths || []));
+  const fromAuto = dedupePaths(input.autoMappedPaths || []);
+  const fromFallback = dedupePaths(input.matchingFallbackPaths || []);
+  /** Prefer real auto-mapped menu paths; if none, use current menu paths (direct-only barcode targets). */
+  const basesForMatching = fromAuto.length > 0 ? fromAuto : fromFallback;
+  const autoMappedPathSet = new Set(basesForMatching);
   if (autoMappedPathSet.size < 1) {
     return { menuPaths: [], directCollections: [] };
   }

@@ -28,6 +28,7 @@
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:report": "playwright show-report",
     "test:collection-mapping-kpi": "node --test --test-isolation=none tests/shopify-collection-mapping-kpi.test.mjs",
+    "sync:suggestion-rules": "node scripts/sync-suggestion-rules-from-xlsx.mjs",
     "deploy:coolify": "node scripts/deploy-coolify.mjs",
     "deploy:coolify:setup": "node scripts/setup-coolify-deploy.mjs",
     "notify:test": "node scripts/notify-test.mjs",
@@ -68,6 +69,7 @@
     "playwright": "^1.58.2",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "wrangler": "^4.65.0"
+    "wrangler": "^4.65.0",
+    "xlsx": "^0.18.5"
   }
 }
