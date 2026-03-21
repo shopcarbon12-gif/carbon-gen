@@ -5150,6 +5150,12 @@ export default function ShopifyCollectionMapping() {
                         suggestionOptionsCount >= 1 && suggestionOptionsCount <= 4
                           ? `suggestionChips tableSuggestionChips tableSuggestionChipsCount${suggestionOptionsCount}`
                           : "suggestionChips tableSuggestionChips";
+                      const tableSuggestionDenseClass =
+                        !showGenderMismatchSuggestion && suggestionOptionsCount > 4
+                          ? `suggestionChips tableSuggestionChips tableSuggestionChipsMany tableSuggestionChipsMany${
+                              suggestionOptionsCount >= 8 ? 8 : suggestionOptionsCount
+                            }`
+                          : "";
                       const hasPendingFinalEdits =
                         staging.selectedSuggestionPaths.length +
                           staging.selectedSuggestionDirectCollections.length +
@@ -5264,8 +5270,10 @@ export default function ShopifyCollectionMapping() {
                                 </button>
                               </div>
                             ) : staging?.suggestionOptions && staging.suggestionOptions.length > 0 ? (
-                              <div className={tableSuggestionLayoutClass}>
-                                {staging.suggestionOptions.map((option) => (
+                              (() => {
+                                const chipClass =
+                                  tableSuggestionDenseClass || tableSuggestionLayoutClass;
+                                const chips = staging.suggestionOptions.map((option) => (
                                   <button
                                     key={`${row.id}-${option.kind}-${option.value}`}
                                     type="button"
@@ -5278,10 +5286,18 @@ export default function ShopifyCollectionMapping() {
                                     data-tooltip={option.disabled ? "" : getSuggestionTooltip(option.kind, option.label)}
                                     aria-label={option.disabled ? "Already assigned or staged; cannot select." : option.label}
                                   >
-                                    {option.kind === "collection" ? getCollectionDisplayName(option.value) : getLastPathSegment(option.value)}
+                                    {option.kind === "collection"
+                                      ? getCollectionDisplayName(option.value)
+                                      : getLastPathSegment(option.value)}
                                   </button>
-                                ))}
-                              </div>
+                                ));
+                                const grid = <div className={chipClass}>{chips}</div>;
+                                return tableSuggestionDenseClass ? (
+                                  <div className="tableSuggestionChipsWrapDense">{grid}</div>
+                                ) : (
+                                  grid
+                                );
+                              })()
                             ) : (
                               <span className="muted small">-</span>
                             )}
@@ -8284,6 +8300,124 @@ export default function ShopifyCollectionMapping() {
         .tableSuggestionChipsCount4 .suggestionChip:nth-child(4) {
           grid-column: 1 / span 2;
           justify-self: center;
+        }
+        /* Only when suggestion count > 4: fill the fixed row height; max 3 chips per row (3 columns). */
+        .tableSuggestionChipsWrapDense {
+          box-sizing: border-box;
+          height: 100%;
+          max-height: 100%;
+          width: 100%;
+          min-height: 0;
+          display: flex;
+          align-items: stretch;
+          justify-content: center;
+          overflow: hidden;
+        }
+        .tableSuggestionChips.tableSuggestionChipsMany {
+          flex: 1 1 auto;
+          align-self: stretch;
+          min-width: 0;
+          min-height: 0;
+          width: 100%;
+          max-width: 100%;
+          height: 100%;
+          margin: 0;
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 2px 3px;
+          justify-items: stretch;
+          align-items: stretch;
+          align-content: stretch;
+          box-sizing: border-box;
+        }
+        .tableSuggestionChips.tableSuggestionChipsMany .suggestionChip {
+          min-width: 0;
+          min-height: 0;
+          width: 100%;
+          height: 100%;
+          max-width: 100%;
+          max-height: 100%;
+          box-sizing: border-box;
+          padding: 1px 3px;
+          font-size: 11px;
+          line-height: 1.15;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          text-align: center;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .tableSuggestionChips.tableSuggestionChipsMany .suggestionChip:hover:not(:disabled) {
+          transform: none;
+        }
+        .tableSuggestionChipsMany5 {
+          grid-template-rows: repeat(3, minmax(0, 1fr));
+        }
+        .tableSuggestionChipsMany5 .suggestionChip:nth-child(1) {
+          grid-column: 1;
+          grid-row: 1;
+        }
+        .tableSuggestionChipsMany5 .suggestionChip:nth-child(2) {
+          grid-column: 2;
+          grid-row: 1;
+        }
+        .tableSuggestionChipsMany5 .suggestionChip:nth-child(3) {
+          grid-column: 1;
+          grid-row: 2;
+        }
+        .tableSuggestionChipsMany5 .suggestionChip:nth-child(4) {
+          grid-column: 2;
+          grid-row: 2;
+        }
+        .tableSuggestionChipsMany5 .suggestionChip:nth-child(5) {
+          grid-column: 2;
+          grid-row: 3;
+          justify-self: center;
+          width: auto;
+          max-width: 100%;
+        }
+        .tableSuggestionChipsMany6 {
+          grid-template-rows: repeat(2, minmax(0, 1fr));
+        }
+        .tableSuggestionChipsMany7 {
+          grid-template-rows: repeat(3, minmax(0, 1fr));
+        }
+        .tableSuggestionChipsMany7 .suggestionChip:nth-child(1) {
+          grid-column: 1;
+          grid-row: 1;
+        }
+        .tableSuggestionChipsMany7 .suggestionChip:nth-child(2) {
+          grid-column: 2;
+          grid-row: 1;
+        }
+        .tableSuggestionChipsMany7 .suggestionChip:nth-child(3) {
+          grid-column: 3;
+          grid-row: 1;
+        }
+        .tableSuggestionChipsMany7 .suggestionChip:nth-child(4) {
+          grid-column: 1;
+          grid-row: 2;
+        }
+        .tableSuggestionChipsMany7 .suggestionChip:nth-child(5) {
+          grid-column: 2;
+          grid-row: 2;
+        }
+        .tableSuggestionChipsMany7 .suggestionChip:nth-child(6) {
+          grid-column: 3;
+          grid-row: 2;
+        }
+        .tableSuggestionChipsMany7 .suggestionChip:nth-child(7) {
+          grid-column: 2;
+          grid-row: 3;
+          justify-self: center;
+          width: auto;
+          max-width: 100%;
+        }
+        .tableSuggestionChipsMany8 {
+          grid-auto-rows: minmax(0, 1fr);
+          align-content: stretch;
         }
         .autoPathChips {
           display: flex;
