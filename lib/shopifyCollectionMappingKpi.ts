@@ -19,6 +19,8 @@ export type ShopifyCollectionMappingRowWorkflowInput = {
   collectionSyncStatus?: ShopifyCollectionMappingSyncStatus | "";
   actionStatus?: ShopifyCollectionMappingActionStatus | string | null;
   suggestionReady: boolean;
+  /** High-confidence path/title conflicts (negative layer) — requires human eye like visible suggestions. */
+  conflictSignals?: boolean;
   manualChanges: boolean;
   isReviewed?: boolean;
   currentMatchesFinal?: boolean;
@@ -41,6 +43,7 @@ export type ShopifyCollectionMappingRowWorkflow = {
   requiresHumanEye: boolean;
   baseNeedsReview: boolean;
   suggestionReady: boolean;
+  conflictSignals: boolean;
   manualChanges: boolean;
   needsReview: boolean;
   pendingPush: boolean;
@@ -102,15 +105,19 @@ export function classifyShopifyCollectionMappingRow(
   const collectionSyncStatus = normalizeCollectionSyncStatus(input.collectionSyncStatus);
   const actionStatus = normalizeActionStatus(input.actionStatus);
   const suggestionReady = Boolean(input.suggestionReady);
+  const conflictSignals = Boolean(input.conflictSignals);
   const manualChanges = Boolean(input.manualChanges);
   const isReviewed = Boolean(input.isReviewed);
   const pushFailed = actionStatus === "FAILED";
   const currentMatchesFinal = normalizeCurrentMatchesFinal(input.currentMatchesFinal, collectionSyncStatus);
   const baseNeedsReview = mappingDecision === "MANUAL_REVIEW" || collectionSyncStatus === "REVIEW";
-  const requiresHumanEye = baseNeedsReview || suggestionReady || manualChanges;
-  const synced = currentMatchesFinal && !requiresHumanEye && !pushFailed;
-  const pendingPush = !synced && !pushFailed && (requiresHumanEye ? isReviewed : !currentMatchesFinal);
-  const needsReview = !synced && !pushFailed && !pendingPush;
+  // Human review is required for explicit review rows and for any row with visible
+  // suggestions/manual edits that must be explicitly approved before syncing.
+  const requiresHumanEye = baseNeedsReview || suggestionReady || manualChanges || conflictSignals;
+  const humanEyeResolved = !requiresHumanEye || isReviewed;
+  const synced = !pushFailed && currentMatchesFinal && humanEyeResolved;
+  const pendingPush = !pushFailed && !currentMatchesFinal && (requiresHumanEye ? isReviewed : true);
+  const needsReview = !pushFailed && requiresHumanEye && !isReviewed;
 
   if (pushFailed) {
     return {
@@ -122,6 +129,7 @@ export function classifyShopifyCollectionMappingRow(
       requiresHumanEye,
       baseNeedsReview,
       suggestionReady,
+      conflictSignals,
       manualChanges,
       needsReview,
       pendingPush,
@@ -143,6 +151,7 @@ export function classifyShopifyCollectionMappingRow(
       requiresHumanEye,
       baseNeedsReview,
       suggestionReady,
+      conflictSignals,
       manualChanges,
       needsReview,
       pendingPush,
@@ -164,6 +173,7 @@ export function classifyShopifyCollectionMappingRow(
       requiresHumanEye,
       baseNeedsReview,
       suggestionReady,
+      conflictSignals,
       manualChanges,
       needsReview,
       pendingPush,
@@ -189,6 +199,7 @@ export function classifyShopifyCollectionMappingRow(
     requiresHumanEye,
     baseNeedsReview,
     suggestionReady,
+    conflictSignals,
     manualChanges,
     needsReview,
     pendingPush,
@@ -206,7 +217,7 @@ export function matchesShopifyCollectionMappingQueueTab(
 ): boolean {
   if (queueTab === "all") return true;
   if (queueTab === "needs-review" || queueTab === KPI_NEEDS_REVIEW_UNION_FILTER) return workflow.needsReview;
-  if (queueTab === "suggestion-ready") return workflow.suggestionReady;
+  if (queueTab === "suggestion-ready") return workflow.suggestionReady || workflow.conflictSignals;
   if (queueTab === "manual-changes") return workflow.manualChanges;
   if (queueTab === "ready-push") return workflow.pendingPush;
   if (queueTab === "push-failed") return workflow.pushFailed;

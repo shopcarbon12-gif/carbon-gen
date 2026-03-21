@@ -201,6 +201,7 @@ const trimRowDraftsLastRunByShop = new Map<string, number>();
 
 export type RowDraftState = {
   isReviewed: boolean;
+  holdFromSync?: boolean;
   selectedSuggestionPaths: string[];
   selectedSuggestionCollections: string[];
   manualAddedPaths: string[];
@@ -229,6 +230,26 @@ function normalizeLower(value: unknown) {
 
 function normalizeShopKey(shop: string) {
   return normalizeShopDomain(normalizeText(shop)) || DEFAULT_SHOP_KEY;
+}
+
+const DRAFT_ROW_SCOPE_DELIMITER = "::";
+const DEFAULT_DRAFT_ACTOR_KEY = "anon:sessionless";
+
+function normalizeDraftActorKey(value: unknown) {
+  const raw = normalizeLower(value);
+  if (!raw) return DEFAULT_DRAFT_ACTOR_KEY;
+  return raw.replaceAll(DRAFT_ROW_SCOPE_DELIMITER, ":");
+}
+
+function toScopedDraftRowId(actorKey: string, rowId: string) {
+  return `${normalizeDraftActorKey(actorKey)}${DRAFT_ROW_SCOPE_DELIMITER}${normalizeText(rowId)}`;
+}
+
+function fromScopedDraftRowId(scopedRowId: string, actorKey: string) {
+  const scoped = normalizeText(scopedRowId);
+  const prefix = `${normalizeDraftActorKey(actorKey)}${DRAFT_ROW_SCOPE_DELIMITER}`;
+  if (!scoped.startsWith(prefix)) return "";
+  return normalizeText(scoped.slice(prefix.length));
 }
 
 function toInt(value: unknown): number {
@@ -352,6 +373,7 @@ function normalizeRowDraftState(value: unknown): RowDraftState {
       : undefined;
   return {
     isReviewed: Boolean(raw.isReviewed),
+    holdFromSync: Boolean(raw.holdFromSync),
     selectedSuggestionPaths: normalizeTextArray(raw.selectedSuggestionPaths),
     selectedSuggestionCollections: normalizeTextArray(raw.selectedSuggestionCollections),
     manualAddedPaths: normalizeTextArray(raw.manualAddedPaths),
@@ -1288,7 +1310,8 @@ export async function saveRowReviewStates(
 
 export async function listRowDraftStates(
   shop: string,
-  rowIds: string[]
+  rowIds: string[],
+  actorKey?: string
 ): Promise<{
   backend: "sql" | "memory";
   draftByRowId: Map<string, RowDraftState>;
@@ -1302,6 +1325,8 @@ export async function listRowDraftStates(
         .filter(Boolean)
     )
   );
+  const draftActorKey = normalizeDraftActorKey(actorKey);
+  const scopedRowIds = normalizedRowIds.map((rowId) => toScopedDraftRowId(draftActorKey, rowId));
   const empty = new Map<string, RowDraftState>();
   if (normalizedRowIds.length < 1) {
     return { backend: (await canUseSql()) ? "sql" : "memory", draftByRowId: empty };
@@ -1320,7 +1345,7 @@ export async function listRowDraftStates(
     }
     memoryRowDraftByShop.set(safeShop, nextStore);
     for (const rowId of normalizedRowIds) {
-      const draft = nextStore.get(rowId);
+      const draft = nextStore.get(toScopedDraftRowId(draftActorKey, rowId));
       if (!draft) continue;
       draftByRowId.set(rowId, { ...draft });
     }
@@ -1337,11 +1362,11 @@ export async function listRowDraftStates(
      FROM shopify_collection_mapping_row_drafts
      WHERE shop = $1
        AND row_id = ANY($2::text[])`,
-    [safeShop, normalizedRowIds]
+    [safeShop, scopedRowIds]
   );
   const draftByRowId = new Map<string, RowDraftState>();
   for (const row of rows) {
-    const rowId = normalizeText(row.row_id);
+    const rowId = fromScopedDraftRowId(normalizeText(row.row_id), draftActorKey);
     if (!rowId) continue;
     const parsed = normalizeRowDraftState(row.draft_data);
     parsed.updatedAt = normalizeText(row.updated_at) || new Date().toISOString();
@@ -1352,9 +1377,11 @@ export async function listRowDraftStates(
 
 export async function saveRowDraftStates(
   shop: string,
-  drafts: Array<{ rowId: string; draft: RowDraftState }>
+  drafts: Array<{ rowId: string; draft: RowDraftState }>,
+  actorKey?: string
 ): Promise<{ backend: "sql" | "memory"; warning?: string }> {
   const safeShop = normalizeShopKey(shop);
+  const draftActorKey = normalizeDraftActorKey(actorKey);
   const normalized = Array.from(
     new Map(
       (Array.isArray(drafts) ? drafts : [])
@@ -1374,7 +1401,7 @@ export async function saveRowDraftStates(
     const existing = memoryRowDraftByShop.get(safeShop) || new Map<string, RowDraftState>();
     const nowIso = new Date().toISOString();
     for (const entry of normalized) {
-      existing.set(entry.rowId, { ...entry.draft, updatedAt: nowIso });
+      existing.set(toScopedDraftRowId(draftActorKey, entry.rowId), { ...entry.draft, updatedAt: nowIso });
     }
     memoryRowDraftByShop.set(safeShop, existing);
     return {
@@ -1396,7 +1423,7 @@ export async function saveRowDraftStates(
            updated_at = EXCLUDED.updated_at`,
     [
       safeShop,
-      normalized.map((entry) => entry.rowId),
+      normalized.map((entry) => toScopedDraftRowId(draftActorKey, entry.rowId)),
       normalized.map((entry) => JSON.stringify(entry.draft)),
     ]
   );
@@ -1406,9 +1433,11 @@ export async function saveRowDraftStates(
 
 export async function clearRowDraftStates(
   shop: string,
-  rowIds: string[]
+  rowIds: string[],
+  actorKey?: string
 ): Promise<{ backend: "sql" | "memory"; warning?: string; cleared: number }> {
   const safeShop = normalizeShopKey(shop);
+  const draftActorKey = normalizeDraftActorKey(actorKey);
   const normalizedRowIds = Array.from(
     new Set(
       (Array.isArray(rowIds) ? rowIds : [])
@@ -1416,6 +1445,7 @@ export async function clearRowDraftStates(
         .filter(Boolean)
     )
   );
+  const scopedRowIds = normalizedRowIds.map((rowId) => toScopedDraftRowId(draftActorKey, rowId));
   if (normalizedRowIds.length < 1) {
     return { backend: (await canUseSql()) ? "sql" : "memory", cleared: 0 };
   }
@@ -1423,7 +1453,7 @@ export async function clearRowDraftStates(
   if (!(await canUseSql())) {
     const existing = memoryRowDraftByShop.get(safeShop) || new Map<string, RowDraftState>();
     let cleared = 0;
-    for (const rowId of normalizedRowIds) {
+    for (const rowId of scopedRowIds) {
       if (existing.delete(rowId)) cleared += 1;
     }
     memoryRowDraftByShop.set(safeShop, existing);
@@ -1439,7 +1469,41 @@ export async function clearRowDraftStates(
      WHERE shop = $1
        AND row_id = ANY($2::text[])
      RETURNING row_id`,
-    [safeShop, normalizedRowIds]
+    [safeShop, scopedRowIds]
+  );
+  return { backend: "sql", cleared: result.length };
+}
+
+export async function clearAllRowDraftStates(
+  shop: string,
+  actorKey?: string
+): Promise<{ backend: "sql" | "memory"; warning?: string; cleared: number }> {
+  const safeShop = normalizeShopKey(shop);
+  const draftActorKey = normalizeDraftActorKey(actorKey);
+  const scopedPrefix = `${draftActorKey}${DRAFT_ROW_SCOPE_DELIMITER}`;
+
+  if (!(await canUseSql())) {
+    const existing = memoryRowDraftByShop.get(safeShop) || new Map<string, RowDraftState>();
+    let cleared = 0;
+    for (const key of Array.from(existing.keys())) {
+      if (!key.startsWith(scopedPrefix)) continue;
+      existing.delete(key);
+      cleared += 1;
+    }
+    memoryRowDraftByShop.set(safeShop, existing);
+    return {
+      backend: "memory",
+      warning: "SQL is not configured. Draft row state is only available for this local session.",
+      cleared,
+    };
+  }
+
+  const result = await sqlQuery<{ row_id: string }>(
+    `DELETE FROM shopify_collection_mapping_row_drafts
+     WHERE shop = $1
+       AND left(row_id, $2) = $3
+     RETURNING row_id`,
+    [safeShop, scopedPrefix.length, scopedPrefix]
   );
   return { backend: "sql", cleared: result.length };
 }

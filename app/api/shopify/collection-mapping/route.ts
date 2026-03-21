@@ -25,11 +25,13 @@ import {
   logMappingAudit,
   saveRowDraftStates,
   clearRowDraftStates,
+  clearAllRowDraftStates,
   saveMenuMappings,
   logCollectionMappingAction,
   syncLiveMenuNodes,
 } from "@/lib/shopifyCollectionMappingRepository";
 import { computeCollectionAutoMap } from "@/lib/shopifyCollectionAutoMapper";
+import { readSession } from "@/lib/userAuth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -80,6 +82,7 @@ type UpcWorksheetEntry = {
   directCollectionsToAssign: string[];
   suggestedPaths: string[];
   suggestedDirectCollections: string[];
+  collectionConflictFlags: Array<{ id: string; ruleId: string; path: string; message: string }>;
 };
 
 type UpcWorksheetState = {
@@ -123,6 +126,33 @@ function parseCsvList(value: unknown) {
         .filter(Boolean)
     )
   );
+}
+
+type DraftActorScope = {
+  actorKey: string;
+  actorSource: "user_id" | "username" | "anonymous_fallback";
+};
+
+function resolveDraftActorScope(req: NextRequest): DraftActorScope {
+  const session = readSession(req);
+  const userId = normalizeText(session.userId);
+  if (userId) {
+    return {
+      actorKey: `uid:${normalizeLower(userId)}`,
+      actorSource: "user_id",
+    };
+  }
+  const username = normalizeText(session.username);
+  if (username) {
+    return {
+      actorKey: `uname:${normalizeLower(username)}`,
+      actorSource: "username",
+    };
+  }
+  return {
+    actorKey: "anon:sessionless",
+    actorSource: "anonymous_fallback",
+  };
 }
 
 function getWorksheetDayKey() {
@@ -839,6 +869,7 @@ function pickRepresentativeSkuOnce(
     directCollectionsToAssign: [],
     suggestedPaths: [],
     suggestedDirectCollections: [],
+    collectionConflictFlags: [],
   });
   return representativeSku;
 }
@@ -2431,6 +2462,7 @@ function mapUpcRowToResponse(
       directCollectionsToAssign: computed.directCollectionsToAssign,
       suggestedPaths: computed.suggestedPaths,
       suggestedDirectCollections: computed.suggestedDirectCollections,
+      collectionConflictFlags: computed.collectionConflictFlags,
     };
     worksheetState.upcMap.set(row.upc, autoMap);
     worksheetState.processedUpcSet.add(row.upc);
@@ -2485,10 +2517,12 @@ function mapUpcRowToResponse(
     directCollectionsToAssign: autoMap.directCollectionsToAssign,
     suggestedPaths: autoMap.suggestedPaths,
     suggestedDirectCollections: autoMap.suggestedDirectCollections,
+    collectionConflictFlags: Array.isArray(autoMap.collectionConflictFlags) ? autoMap.collectionConflictFlags : [],
     isReviewed: Boolean(rowDraft?.isReviewed),
     draft: rowDraft
       ? {
           isReviewed: Boolean(rowDraft.isReviewed),
+          holdFromSync: Boolean(rowDraft.holdFromSync),
           selectedSuggestionPaths: Array.isArray(rowDraft.selectedSuggestionPaths) ? rowDraft.selectedSuggestionPaths : [],
           selectedSuggestionCollections: Array.isArray(rowDraft.selectedSuggestionCollections)
             ? rowDraft.selectedSuggestionCollections
@@ -2543,6 +2577,7 @@ export async function GET(req: NextRequest) {
     const refreshProducts = parseBool(searchParams.get("refreshProducts"));
     const refreshCollections = parseBool(searchParams.get("refreshCollections"));
     const shop = await resolveShop(rawShop);
+    const draftActor = resolveDraftActorScope(req);
     if (!shop) {
       return NextResponse.json({ ok: false, error: "Missing Shopify shop." }, { status: 400 });
     }
@@ -2631,7 +2666,7 @@ export async function GET(req: NextRequest) {
     const paged = sorted.slice(start, start + pageSize);
     const pagedProductIds = Array.from(new Set(paged.flatMap((row) => row.productIds).filter(Boolean)));
     const actionStatusResult = await listLatestProductActionStatus(shop, pagedProductIds);
-    const rowDraftResult = await listRowDraftStates(shop, paged.map((row) => row.id));
+    const rowDraftResult = await listRowDraftStates(shop, paged.map((row) => row.id), draftActor.actorKey);
 
     const logsResult = includeLogs ? await listMappingAuditLogs(shop, logLimit) : null;
     const warningParts = [
@@ -2682,6 +2717,7 @@ export async function GET(req: NextRequest) {
       pageSize,
       total,
       totalPages,
+      draftActorSource: draftActor.actorSource,
       menu: {
         id: menuSyncResult.menu.menuId,
         handle: menuSyncResult.menu.menuHandle,
@@ -2731,6 +2767,7 @@ export async function POST(req: NextRequest) {
     const requestedShop = normalizeText(body.shop || "");
     const menuHandle = parseMenuHandleParam(body.menuHandle);
     const shop = await resolveShop(requestedShop);
+    const draftActor = resolveDraftActorScope(req);
     if (!shop) {
       return NextResponse.json({ ok: false, error: "Missing Shopify shop." }, { status: 400 });
     }
@@ -2878,27 +2915,41 @@ export async function POST(req: NextRequest) {
         })
         .filter((entry) => entry.rowId);
       if (drafts.length > 0) {
-        const saved = await saveRowDraftStates(shop, drafts);
+        const saved = await saveRowDraftStates(shop, drafts, draftActor.actorKey);
         return NextResponse.json({
           ok: true,
           shop,
           backend: saved.backend,
           warning: saved.warning || "",
           saved: drafts.length,
+          draftActorSource: draftActor.actorSource,
         });
       }
-      return NextResponse.json({ ok: true, shop, saved: 0 });
+      return NextResponse.json({ ok: true, shop, saved: 0, draftActorSource: draftActor.actorSource });
     }
 
     if (action === "clear-row-drafts") {
       const rowIds = Array.isArray(body.rowIds) ? body.rowIds.map((row) => normalizeText(row)) : [];
-      const cleared = await clearRowDraftStates(shop, rowIds);
+      const cleared = await clearRowDraftStates(shop, rowIds, draftActor.actorKey);
       return NextResponse.json({
         ok: true,
         shop,
         backend: cleared.backend,
         warning: cleared.warning || "",
         cleared: cleared.cleared,
+        draftActorSource: draftActor.actorSource,
+      });
+    }
+
+    if (action === "clear-my-row-drafts") {
+      const cleared = await clearAllRowDraftStates(shop, draftActor.actorKey);
+      return NextResponse.json({
+        ok: true,
+        shop,
+        backend: cleared.backend,
+        warning: cleared.warning || "",
+        cleared: cleared.cleared,
+        draftActorSource: draftActor.actorSource,
       });
     }
 

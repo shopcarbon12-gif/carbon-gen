@@ -1,3 +1,4 @@
+import { detectCollectionPathConflicts, type CollectionPathConflictFlag } from "@/lib/shopifyCollectionMappingConflicts";
 import { resolveCollectionMappingRules } from "@/lib/shopifyCollectionMappingRules";
 import { parseSkuRouteInfo } from "@/lib/shopifyCollectionSkuParser";
 import { buildCollectionSuggestions } from "@/lib/shopifyCollectionSuggestions";
@@ -39,6 +40,7 @@ export type CollectionAutoMapResult = {
   autoMapFailureReason: string;
   autoMapFailureDetails: string[];
   reviewReasons: string[];
+  collectionConflictFlags: CollectionPathConflictFlag[];
 };
 
 function dedupe(values: string[]) {
@@ -116,24 +118,36 @@ export function computeCollectionAutoMap(input: CollectionAutoMapInput): Collect
   });
   const autoMappedPaths = dedupe(ruleResult.menuPathsToAssign);
   const directCollectionsToAssign = dedupe(ruleResult.directCollectionsToAssign);
-  const suggestions = buildCollectionSuggestions({
-    autoMappedPaths,
-    alreadyAssignedPaths: [...input.assignedMenuPaths, ...autoMappedPaths],
-    alreadyAssignedDirectCollections: directCollectionsToAssign,
+  const autoMapResolved = !ruleResult.unresolved && (autoMappedPaths.length > 0 || directCollectionsToAssign.length > 0);
+
+  const collectionConflictFlags = detectCollectionPathConflicts({
     title: input.title,
     itemType: input.itemType,
     sku: input.sku,
+    assignedMenuPaths: input.assignedMenuPaths,
   });
+
+  const suggestions = autoMapResolved
+    ? buildCollectionSuggestions({
+        autoMappedPaths,
+        alreadyAssignedPaths: [...input.assignedMenuPaths, ...autoMappedPaths],
+        alreadyAssignedDirectCollections: directCollectionsToAssign,
+        title: input.title,
+        itemType: input.itemType,
+        sku: input.sku,
+      })
+    : { menuPaths: [], directCollections: [] };
   const suggestedPaths = suggestions.menuPaths;
   const suggestedDirectCollections = suggestions.directCollections;
 
   let mappingDecision: MappingDecision = "MANUAL_REVIEW";
   let reviewReason = ruleResult.reason;
-  if (!ruleResult.unresolved && (autoMappedPaths.length > 0 || directCollectionsToAssign.length > 0)) {
-    mappingDecision = "AUTO_MAPPED";
-  } else if (suggestedPaths.length > 0 || suggestedDirectCollections.length > 0) {
+  // Subtype / follow-on suggestions must win over pure AUTO_MAPPED so rows stay in review until approved.
+  if (suggestedPaths.length > 0 || suggestedDirectCollections.length > 0) {
     mappingDecision = "SUGGESTED";
     if (!reviewReason) reviewReason = "Suggestion candidates available.";
+  } else if (!ruleResult.unresolved && (autoMappedPaths.length > 0 || directCollectionsToAssign.length > 0)) {
+    mappingDecision = "AUTO_MAPPED";
   } else if (!reviewReason) {
     reviewReason = "No auto-map or suggestions matched.";
   }
@@ -184,5 +198,6 @@ export function computeCollectionAutoMap(input: CollectionAutoMapInput): Collect
     autoMapFailureReason,
     autoMapFailureDetails,
     reviewReasons,
+    collectionConflictFlags,
   };
 }

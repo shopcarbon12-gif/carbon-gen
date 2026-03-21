@@ -8,9 +8,16 @@ type AccessibilitySettings = {
   profileName: string;
   brandColor: string;
   panelColor: string;
+  triggerStyle: "solid" | "outline" | "glass";
   position: WidgetPosition;
+  sideOffset: number;
+  bottomOffset: number;
+  triggerSize: number;
+  iconSize: number;
+  panelWidth: number;
   cornerRadius: number;
   widgetLabel: string;
+  language: "en" | "es" | "pt-BR" | "he";
   showTextLabel: boolean;
   statementUrl: string;
   feedbackUrl: string;
@@ -39,6 +46,18 @@ type AccessibilitySettings = {
     readableFont: boolean;
     pauseAnimations: boolean;
     highlightLinks: boolean;
+    profiles: boolean;
+    contrastModes: boolean;
+    textSpacing: boolean;
+    lineHeight: boolean;
+    textAlign: boolean;
+    saturation: boolean;
+    hideImages: boolean;
+    readingGuide: boolean;
+    readingMask: boolean;
+    bigCursor: boolean;
+    pageStructure: boolean;
+    languageSelector: boolean;
   };
 };
 
@@ -84,9 +103,16 @@ const defaultSettings: AccessibilitySettings = {
   profileName: "Carbon Accessibility",
   brandColor: "#6d28d9",
   panelColor: "#111827",
+  triggerStyle: "solid",
   position: "right",
+  sideOffset: 18,
+  bottomOffset: 18,
+  triggerSize: 52,
+  iconSize: 20,
+  panelWidth: 300,
   cornerRadius: 14,
   widgetLabel: "Accessibility",
+  language: "en",
   showTextLabel: true,
   statementUrl: "https://www.shopcarbon.com/pages/accessibility",
   feedbackUrl: "https://www.shopcarbon.com/pages/contact",
@@ -115,6 +141,18 @@ const defaultSettings: AccessibilitySettings = {
     readableFont: true,
     pauseAnimations: true,
     highlightLinks: true,
+    profiles: true,
+    contrastModes: true,
+    textSpacing: true,
+    lineHeight: true,
+    textAlign: true,
+    saturation: true,
+    hideImages: true,
+    readingGuide: true,
+    readingMask: true,
+    bigCursor: true,
+    pageStructure: true,
+    languageSelector: true,
   },
 };
 
@@ -122,9 +160,16 @@ function buildInstallSnippet(settings: AccessibilitySettings) {
   const config = {
     brandColor: settings.brandColor,
     panelColor: settings.panelColor,
+    triggerStyle: settings.triggerStyle,
     position: settings.position,
+    sideOffset: settings.sideOffset,
+    bottomOffset: settings.bottomOffset,
+    triggerSize: settings.triggerSize,
+    iconSize: settings.iconSize,
+    panelWidth: settings.panelWidth,
     cornerRadius: settings.cornerRadius,
     label: settings.widgetLabel,
+    language: settings.language,
     showTextLabel: settings.showTextLabel,
     statementUrl: settings.statementUrl,
     feedbackUrl: settings.feedbackUrl,
@@ -170,6 +215,7 @@ export default function AccessibilityPage() {
   const [copied, setCopied] = useState(false);
   const [sendingMonthlyTest, setSendingMonthlyTest] = useState(false);
   const [monthlyTestStatus, setMonthlyTestStatus] = useState<string | null>(null);
+  const [runtimeWidgetMounted, setRuntimeWidgetMounted] = useState(false);
 
   const installSnippet = useMemo(() => buildInstallSnippet(settings), [settings]);
   const managedInstallSnippet = useMemo(
@@ -549,6 +595,35 @@ export default function AccessibilityPage() {
     }
   }
 
+  function removeRuntimeWidgetFromPage() {
+    const existingWrap = document.getElementById("carbon-a11y-widget");
+    if (existingWrap?.parentElement) existingWrap.parentElement.removeChild(existingWrap);
+    const existingStyle = document.getElementById("carbon-a11y-style");
+    if (existingStyle?.parentElement) existingStyle.parentElement.removeChild(existingStyle);
+    const existingGuide = document.getElementById("carbon-a11y-guide-line");
+    if (existingGuide?.parentElement) existingGuide.parentElement.removeChild(existingGuide);
+    const existingMask = document.getElementById("carbon-a11y-reading-mask");
+    if (existingMask?.parentElement) existingMask.parentElement.removeChild(existingMask);
+    const runtimeScript = document.getElementById("carbon-a11y-runtime-script");
+    if (runtimeScript?.parentElement) runtimeScript.parentElement.removeChild(runtimeScript);
+    try {
+      (window as unknown as Record<string, unknown>).__carbonA11yLoaded = false;
+    } catch {
+      // no-op
+    }
+  }
+
+  function installRuntimeWidgetOnPage() {
+    removeRuntimeWidgetFromPage();
+    const script = document.createElement("script");
+    script.id = "carbon-a11y-runtime-script";
+    script.defer = true;
+    script.src = `/accessibility/widget?scope=${encodeURIComponent(settingsScope || "default")}&_ts=${Date.now()}`;
+    script.onload = () => setRuntimeWidgetMounted(true);
+    script.onerror = () => setRuntimeWidgetMounted(false);
+    document.body.appendChild(script);
+  }
+
   return (
     <main className="page">
       <style jsx global>{`
@@ -602,6 +677,23 @@ export default function AccessibilityPage() {
               onChange={(e) => setSettings((prev) => ({ ...prev, widgetLabel: e.target.value }))}
             />
           </label>
+          <label>
+            Default widget language
+            <select
+              value={settings.language}
+              onChange={(e) =>
+                setSettings((prev) => ({
+                  ...prev,
+                  language: e.target.value as AccessibilitySettings["language"],
+                }))
+              }
+            >
+              <option value="en">English</option>
+              <option value="es">Espanol</option>
+              <option value="pt-BR">Portugues (Brasil)</option>
+              <option value="he">Hebrew</option>
+            </select>
+          </label>
 
           <div className="row">
             <label>
@@ -634,19 +726,6 @@ export default function AccessibilityPage() {
                 <option value="right">Right</option>
                 <option value="left">Left</option>
               </select>
-            </label>
-
-            <label>
-              Corner radius: {settings.cornerRadius}px
-              <input
-                type="range"
-                min={8}
-                max={22}
-                value={settings.cornerRadius}
-                onChange={(e) =>
-                  setSettings((prev) => ({ ...prev, cornerRadius: Number(e.target.value) }))
-                }
-              />
             </label>
           </div>
 
@@ -741,6 +820,126 @@ export default function AccessibilityPage() {
         </article>
 
         <article className="card">
+          <h2>Design</h2>
+          <p className="muted">
+            Configure widget appearance, collapsed icon size, panel size, and exact site placement.
+          </p>
+          <div className="row">
+            <label>
+              Trigger style
+              <select
+                value={settings.triggerStyle}
+                onChange={(e) =>
+                  setSettings((prev) => ({
+                    ...prev,
+                    triggerStyle: e.target.value as AccessibilitySettings["triggerStyle"],
+                  }))
+                }
+              >
+                <option value="solid">Solid</option>
+                <option value="outline">Outline</option>
+                <option value="glass">Glass</option>
+              </select>
+            </label>
+            <label>
+              Corner radius: {settings.cornerRadius}px
+              <input
+                type="range"
+                min={8}
+                max={22}
+                value={settings.cornerRadius}
+                onChange={(e) =>
+                  setSettings((prev) => ({ ...prev, cornerRadius: Number(e.target.value) }))
+                }
+              />
+            </label>
+          </div>
+          <div className="row">
+            <label>
+              Side offset: {settings.sideOffset}px
+              <input
+                type="range"
+                min={8}
+                max={72}
+                value={settings.sideOffset}
+                onChange={(e) =>
+                  setSettings((prev) => ({ ...prev, sideOffset: Number(e.target.value) }))
+                }
+              />
+            </label>
+            <label>
+              Bottom offset: {settings.bottomOffset}px
+              <input
+                type="range"
+                min={8}
+                max={72}
+                value={settings.bottomOffset}
+                onChange={(e) =>
+                  setSettings((prev) => ({ ...prev, bottomOffset: Number(e.target.value) }))
+                }
+              />
+            </label>
+          </div>
+          <div className="row">
+            <label>
+              Collapsed button size: {settings.triggerSize}px
+              <input
+                type="range"
+                min={40}
+                max={76}
+                value={settings.triggerSize}
+                onChange={(e) =>
+                  setSettings((prev) => ({ ...prev, triggerSize: Number(e.target.value) }))
+                }
+              />
+            </label>
+            <label>
+              Icon size: {settings.iconSize}px
+              <input
+                type="range"
+                min={14}
+                max={34}
+                value={settings.iconSize}
+                onChange={(e) =>
+                  setSettings((prev) => ({ ...prev, iconSize: Number(e.target.value) }))
+                }
+              />
+            </label>
+          </div>
+          <label>
+            Panel width: {settings.panelWidth}px
+            <input
+              type="range"
+              min={260}
+              max={420}
+              value={settings.panelWidth}
+              onChange={(e) =>
+                setSettings((prev) => ({ ...prev, panelWidth: Number(e.target.value) }))
+              }
+            />
+          </label>
+          <div className="actions">
+            <button className="btn primary" onClick={installRuntimeWidgetOnPage}>
+              {runtimeWidgetMounted ? "Reload widget on this page" : "Install widget on this page"}
+            </button>
+            <button
+              className="btn"
+              onClick={() => {
+                removeRuntimeWidgetFromPage();
+                setRuntimeWidgetMounted(false);
+              }}
+            >
+              Remove widget from this page
+            </button>
+          </div>
+          <p className="muted status-text">
+            {runtimeWidgetMounted
+              ? "Runtime widget is mounted on this page. Save settings and click reload to see latest managed config."
+              : "Widget is not mounted on this page yet."}
+          </p>
+        </article>
+
+        <article className="card">
           <h2>Feature Matrix</h2>
           <p className="muted">Pick which controls will be available in your widget panel.</p>
           <div className="feature-list">
@@ -759,6 +958,22 @@ export default function AccessibilityPage() {
                 onChange={(e) => updateFeature("highContrast", e.target.checked)}
               />
               High contrast mode
+            </label>
+            <label className="switch">
+              <input
+                type="checkbox"
+                checked={settings.features.profiles}
+                onChange={(e) => updateFeature("profiles", e.target.checked)}
+              />
+              Accessibility profiles
+            </label>
+            <label className="switch">
+              <input
+                type="checkbox"
+                checked={settings.features.contrastModes}
+                onChange={(e) => updateFeature("contrastModes", e.target.checked)}
+              />
+              Contrast variants (dark/light/invert/smart)
             </label>
             <label className="switch">
               <input
@@ -783,6 +998,86 @@ export default function AccessibilityPage() {
                 onChange={(e) => updateFeature("highlightLinks", e.target.checked)}
               />
               Highlight links mode
+            </label>
+            <label className="switch">
+              <input
+                type="checkbox"
+                checked={settings.features.textSpacing}
+                onChange={(e) => updateFeature("textSpacing", e.target.checked)}
+              />
+              Text spacing controls
+            </label>
+            <label className="switch">
+              <input
+                type="checkbox"
+                checked={settings.features.lineHeight}
+                onChange={(e) => updateFeature("lineHeight", e.target.checked)}
+              />
+              Line height controls
+            </label>
+            <label className="switch">
+              <input
+                type="checkbox"
+                checked={settings.features.textAlign}
+                onChange={(e) => updateFeature("textAlign", e.target.checked)}
+              />
+              Text alignment controls
+            </label>
+            <label className="switch">
+              <input
+                type="checkbox"
+                checked={settings.features.saturation}
+                onChange={(e) => updateFeature("saturation", e.target.checked)}
+              />
+              Color saturation controls
+            </label>
+            <label className="switch">
+              <input
+                type="checkbox"
+                checked={settings.features.hideImages}
+                onChange={(e) => updateFeature("hideImages", e.target.checked)}
+              />
+              Hide images mode
+            </label>
+            <label className="switch">
+              <input
+                type="checkbox"
+                checked={settings.features.readingGuide}
+                onChange={(e) => updateFeature("readingGuide", e.target.checked)}
+              />
+              Reading guide
+            </label>
+            <label className="switch">
+              <input
+                type="checkbox"
+                checked={settings.features.readingMask}
+                onChange={(e) => updateFeature("readingMask", e.target.checked)}
+              />
+              Reading mask
+            </label>
+            <label className="switch">
+              <input
+                type="checkbox"
+                checked={settings.features.bigCursor}
+                onChange={(e) => updateFeature("bigCursor", e.target.checked)}
+              />
+              Big cursor
+            </label>
+            <label className="switch">
+              <input
+                type="checkbox"
+                checked={settings.features.pageStructure}
+                onChange={(e) => updateFeature("pageStructure", e.target.checked)}
+              />
+              Page structure quick navigation
+            </label>
+            <label className="switch">
+              <input
+                type="checkbox"
+                checked={settings.features.languageSelector}
+                onChange={(e) => updateFeature("languageSelector", e.target.checked)}
+              />
+              Language selector
             </label>
           </div>
         </article>

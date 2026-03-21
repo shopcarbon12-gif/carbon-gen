@@ -57,9 +57,12 @@ type ProductRow = {
   directCollectionsToAssign?: string[];
   suggestedPaths?: string[];
   suggestedDirectCollections?: string[];
+  /** High-confidence negative layer: likely-wrong assigned paths vs title/type signals */
+  collectionConflictFlags?: Array<{ id: string; ruleId: string; path: string; message: string }>;
   isReviewed?: boolean;
   draft?: {
     isReviewed?: boolean;
+    holdFromSync?: boolean;
     selectedSuggestionPaths?: string[];
     selectedSuggestionCollections?: string[];
     manualAddedPaths?: string[];
@@ -88,6 +91,7 @@ type RowStagingState = {
   collectionSyncStatus: "REVIEW" | "REMOVAL_PENDING" | "ADD_PENDING" | "SYNCED";
   mappingDecision: "AUTO_MAPPED" | "SUGGESTED" | "MANUAL_REVIEW";
   isReviewed: boolean;
+  holdFromSync: boolean;
   reviewReason: string;
   suggestionOptions: Array<{
     kind: "menu" | "collection";
@@ -98,7 +102,13 @@ type RowStagingState = {
   }>;
 };
 
-type PlannerStatus = "readyToPush" | "noChange" | "skippedReview" | "skippedMissingData" | "failedPlanning";
+type PlannerStatus =
+  | "readyToPush"
+  | "noChange"
+  | "skippedReview"
+  | "skippedMissingData"
+  | "skippedHoldFromSync"
+  | "failedPlanning";
 type QueueJobState = "queued" | "running" | "completed" | "failed" | "skipped";
 type QueueJobType =
   | "pull_products"
@@ -121,6 +131,7 @@ type PushPlannerRow = {
   collectionsToAdd: string[];
   collectionsToRemove: string[];
   noOp: boolean;
+  holdFromSync: boolean;
 };
 
 type PushPlanSummary = {
@@ -198,9 +209,11 @@ type MappingExplainModalState = {
   statusLabel: "Needs Review" | "Ready to Push" | "Push Failed" | "Synced";
   statusBadgeTone: ShopifyCollectionMappingStatusBadgeTone;
   suggestionReady: boolean;
+  conflictSignals: boolean;
   manualChanges: boolean;
   isReviewed: boolean;
   draftUpdatedAt: string | null;
+  collectionConflictFlags: Array<{ id: string; ruleId: string; path: string; message: string }>;
 };
 
 async function readJsonResponse<T>(resp: Response): Promise<T> {
@@ -516,6 +529,7 @@ export default function ShopifyCollectionMapping() {
   const [manualAddedPathsByRow, setManualAddedPathsByRow] = useState<Record<string, Record<string, boolean>>>({});
   const [manualRemovedPathsByRow, setManualRemovedPathsByRow] = useState<Record<string, Record<string, boolean>>>({});
   const [reviewedByRow, setReviewedByRow] = useState<Record<string, boolean>>({});
+  const [holdFromSyncByRow, setHoldFromSyncByRow] = useState<Record<string, boolean>>({});
   const [selectedNodes, setSelectedNodes] = useState<Record<string, boolean>>({});
   const [selectedUnmappedCollectionIds, setSelectedUnmappedCollectionIds] = useState<Record<string, boolean>>({});
   const [dismissedUnmappedCollectionIds, setDismissedUnmappedCollectionIds] = useState<Record<string, boolean>>({});
@@ -536,6 +550,7 @@ export default function ShopifyCollectionMapping() {
   const [draftFilterIncludeSynced, setDraftFilterIncludeSynced] = useState(false);
   const [showCommitMenu, setShowCommitMenu] = useState(false);
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
+  const [showRefreshClearConfirm, setShowRefreshClearConfirm] = useState(false);
   // Default to full loaded product view on first load.
   const [activeQueueTab, setActiveQueueTab] = useState<ShopifyCollectionMappingQueueTab>("all");
   // Reports are consolidated behind a single modal trigger to reduce canvas clutter.
@@ -1007,7 +1022,9 @@ export default function ShopifyCollectionMapping() {
 
       const currentSet = new Set(currentAssigned);
       const autoSet = new Set(autoMappedPaths);
-      const currentDirectCollectionSet = new Set(dedupeCollectionHandles(row.directCollectionsToAssign || []));
+      const liveDirectCollectionSet = new Set(
+        dedupeCollectionHandles([...(row.currentDirectCollections || []), ...(row.directCollectionsToAssign || [])])
+      );
       const manualAddedSet = new Set(manualAddedPaths);
       const suggestionPathBase = dedupeNormalizedPaths(row.suggestedPaths || []);
       const suggestionPathOptions = suggestionPathBase.map((path) => {
@@ -1017,7 +1034,7 @@ export default function ShopifyCollectionMapping() {
       });
       const suggestionCollectionBase = dedupeCollectionHandles(row.suggestedDirectCollections || []);
       const suggestionCollectionOptions = suggestionCollectionBase.map((handle) => {
-        const disabled = currentDirectCollectionSet.has(handle);
+        const disabled = liveDirectCollectionSet.has(handle);
         const selected = selectedSuggestionDirectCollections.includes(handle) && !disabled;
         return {
           kind: "collection" as const,
@@ -1084,7 +1101,10 @@ export default function ShopifyCollectionMapping() {
       }
 
       let mappingDecision: RowStagingState["mappingDecision"] = row.mappingDecision || "MANUAL_REVIEW";
-      if (!hasReview && effectiveSelectedSuggestions.length > 0) {
+      // Prefer SUGGESTED whenever there are actionable suggestion chips (even if the API said AUTO_MAPPED).
+      if (!hasReview && suggestionOptions.some((option) => !option.disabled)) {
+        mappingDecision = "SUGGESTED";
+      } else if (!hasReview && effectiveSelectedSuggestions.length > 0) {
         mappingDecision = "SUGGESTED";
       }
       if (!hasReview && mappingDecision === "MANUAL_REVIEW" && (autoMappedPaths.length > 0 || finalDirectCollections.length > 0)) {
@@ -1093,6 +1113,7 @@ export default function ShopifyCollectionMapping() {
 
       const reasons: string[] = [];
       const isReviewed = Boolean(reviewedByRow[row.id] ?? row.isReviewed);
+      const holdFromSync = Boolean(holdFromSyncByRow[row.id] ?? row.draft?.holdFromSync);
       if (row.reviewReason) reasons.push(row.reviewReason);
       const selectedSuggestionCount = effectiveSelectedSuggestions.length + effectiveSelectedSuggestionCollections.length;
       if (selectedSuggestionCount > 0) reasons.push(`Selected ${selectedSuggestionCount} suggestion(s).`);
@@ -1114,6 +1135,7 @@ export default function ShopifyCollectionMapping() {
         collectionSyncStatus,
         mappingDecision,
         isReviewed,
+        holdFromSync,
         reviewReason,
         suggestionOptions,
       });
@@ -1127,6 +1149,7 @@ export default function ShopifyCollectionMapping() {
     manualAddedPathsByRow,
     manualRemovedPathsByRow,
     reviewedByRow,
+    holdFromSyncByRow,
     nodeKeyByPath,
     nodePathByKey,
     parentMap,
@@ -1170,7 +1193,6 @@ export default function ShopifyCollectionMapping() {
     const out = new Map<string, ShopifyCollectionMappingRowWorkflow>();
     for (const row of rows) {
       const staging = rowStagingById.get(row.id);
-      const suggestionReady = (staging?.suggestionOptions || []).some((option) => !option.disabled);
       const manualChanges =
         (staging?.selectedSuggestionPaths.length || 0) +
           (staging?.selectedSuggestionDirectCollections.length || 0) +
@@ -1183,7 +1205,8 @@ export default function ShopifyCollectionMapping() {
           mappingDecision: staging?.mappingDecision || row.mappingDecision || "MANUAL_REVIEW",
           collectionSyncStatus: staging?.collectionSyncStatus || "REVIEW",
           actionStatus: row.actionStatus || "",
-          suggestionReady,
+          suggestionReady: (staging?.suggestionOptions || []).some((option) => !option.disabled),
+          conflictSignals: (row.collectionConflictFlags?.length ?? 0) > 0,
           manualChanges,
           isReviewed: Boolean(staging?.isReviewed ?? row.isReviewed),
           currentMatchesFinal: staging?.currentMatchesFinal,
@@ -1211,11 +1234,12 @@ export default function ShopifyCollectionMapping() {
         .trim()
         .toUpperCase() as AdvancedDecisionFilter;
       const suggestionReady = (staging?.suggestionOptions || []).some((option) => !option.disabled);
+      const conflictSignals = (row.collectionConflictFlags?.length ?? 0) > 0;
       if (
         appliedFilterDecisions.length > 0 &&
         !appliedFilterDecisions.some((decision) => {
           if (decision === "AUTO_MAPPED") return rowDecision === "AUTO_MAPPED";
-          if (decision === "SUGGESTED") return suggestionReady || rowDecision === "SUGGESTED";
+          if (decision === "SUGGESTED") return suggestionReady || conflictSignals || rowDecision === "SUGGESTED";
           if (decision === "MANUAL_REVIEW") return workflow.needsReview || rowDecision === "MANUAL_REVIEW";
           return false;
         })
@@ -1227,7 +1251,7 @@ export default function ShopifyCollectionMapping() {
         if (!rowType || !appliedFilterTypeSet.has(rowType)) return false;
       }
       if (appliedFilterHasSuggestions) {
-        if (!suggestionReady) return false;
+        if (!suggestionReady && !conflictSignals) return false;
       }
       // Loaded/all view should always reflect the full loaded page size.
       // Keep secondary "Include Synced" filtering for non-all tabs only.
@@ -1259,8 +1283,12 @@ export default function ShopifyCollectionMapping() {
         }
         case "suggested-with":
         case "suggested-without": {
-          const leftHasSuggested = (leftStaging?.suggestionOptions || []).some((option) => !option.disabled);
-          const rightHasSuggested = (rightStaging?.suggestionOptions || []).some((option) => !option.disabled);
+          const leftHasSuggested =
+            (leftStaging?.suggestionOptions || []).some((option) => !option.disabled) ||
+            (left.collectionConflictFlags?.length ?? 0) > 0;
+          const rightHasSuggested =
+            (rightStaging?.suggestionOptions || []).some((option) => !option.disabled) ||
+            (right.collectionConflictFlags?.length ?? 0) > 0;
           if (leftHasSuggested !== rightHasSuggested) {
             const withSuggestedFirst = headerSortMode === "suggested-with";
             return leftHasSuggested === withSuggestedFirst ? -1 : 1;
@@ -1302,6 +1330,13 @@ export default function ShopifyCollectionMapping() {
     appliedFilterIncludeSynced,
     headerSortMode,
   ]);
+
+  const showHoldFromSyncColumn = activeQueueTab === "ready-push";
+  const showApprovedColumn =
+    activeQueueTab === "all" ||
+    activeQueueTab === KPI_NEEDS_REVIEW_UNION_FILTER ||
+    activeQueueTab === "push-failed";
+  const tableColumnCount = 9 + (showHoldFromSyncColumn || showApprovedColumn ? 1 : 0);
 
   const decisionLabelByKey = new Map<AdvancedDecisionFilter, string>([
     ["AUTO_MAPPED", "Auto-mapped"],
@@ -1565,6 +1600,7 @@ export default function ShopifyCollectionMapping() {
           collectionsToAdd: [],
           collectionsToRemove: [],
           noOp: true,
+          holdFromSync: false,
         });
         continue;
       }
@@ -1581,6 +1617,7 @@ export default function ShopifyCollectionMapping() {
       const collectionsToAdd = finalRefs.filter((entry) => !currentSet.has(entry));
       const collectionsToRemove = currentRefs.filter((entry) => !finalSet.has(entry));
       const noOp = collectionsToAdd.length < 1 && collectionsToRemove.length < 1;
+      const holdFromSync = Boolean(staging.holdFromSync);
       let plannerStatus: PlannerStatus = "readyToPush";
       let skippedReason = "";
       const workflow = rowWorkflowById.get(row.id);
@@ -1596,6 +1633,9 @@ export default function ShopifyCollectionMapping() {
       } else if (finalRefs.length < 1) {
         plannerStatus = "skippedMissingData";
         skippedReason = "No final collections resolved.";
+      } else if (holdFromSync) {
+        plannerStatus = "skippedHoldFromSync";
+        skippedReason = "Row is held from sync.";
       } else if (noOp) {
         plannerStatus = "noChange";
         skippedReason = "No add/remove delta.";
@@ -1612,6 +1652,7 @@ export default function ShopifyCollectionMapping() {
         collectionsToAdd,
         collectionsToRemove,
         noOp,
+        holdFromSync,
       });
     }
     return out;
@@ -1827,6 +1868,7 @@ export default function ShopifyCollectionMapping() {
       const nextManualAddedPathsByRow: Record<string, Record<string, boolean>> = {};
       const nextManualRemovedPathsByRow: Record<string, Record<string, boolean>> = {};
       const nextReviewedByRow: Record<string, boolean> = {};
+      const nextHoldFromSyncByRow: Record<string, boolean> = {};
       for (const row of nextRows) {
         const draft = row?.draft;
         if (!draft || typeof draft !== "object") continue;
@@ -1845,6 +1887,7 @@ export default function ShopifyCollectionMapping() {
         if (Object.keys(manualAddedPaths).length > 0) nextManualAddedPathsByRow[rowId] = manualAddedPaths;
         if (Object.keys(manualRemovedPaths).length > 0) nextManualRemovedPathsByRow[rowId] = manualRemovedPaths;
         if (draft.isReviewed === true) nextReviewedByRow[rowId] = true;
+        if (draft.holdFromSync === true) nextHoldFromSyncByRow[rowId] = true;
       }
       setRows(nextRows);
       setSelectedSuggestionPathsByRow(nextSelectedSuggestionPathsByRow);
@@ -1852,6 +1895,7 @@ export default function ShopifyCollectionMapping() {
       setManualAddedPathsByRow(nextManualAddedPathsByRow);
       setManualRemovedPathsByRow(nextManualRemovedPathsByRow);
       setReviewedByRow(nextReviewedByRow);
+      setHoldFromSyncByRow(nextHoldFromSyncByRow);
       syncedDraftClearedRowIdsRef.current.clear();
       draftHydrationDoneRef.current = true;
       const nextCollections = (json.collections || []).map((row) => ({
@@ -2050,6 +2094,43 @@ export default function ShopifyCollectionMapping() {
     setUnmappedCollectionOrder((prev) => prev.filter((id) => id !== collectionId));
   }
 
+  /** True when this menu node has no child items (only "subs" / leaves are directly selectable). */
+  function menuNodeIsLeaf(nodeKey: string): boolean {
+    return (childrenByParent.get(nodeKey) || []).length < 1;
+  }
+
+  /** Root first, then descendants (BFS), all keys under `rootKey` including `rootKey`. */
+  function collectDescendantNodeKeys(rootKey: string): string[] {
+    const out: string[] = [];
+    const stack = [rootKey];
+    const seen = new Set<string>();
+    while (stack.length > 0) {
+      const current = stack.pop();
+      if (!current || seen.has(current)) continue;
+      seen.add(current);
+      out.push(current);
+      for (const child of childrenByParent.get(current) || []) stack.push(child);
+    }
+    return out;
+  }
+
+  /** Keep only leaf selections plus ancestors of those leaves (drops orphan middle-only keys). */
+  function pruneSelectionToLeavesAndAncestors(selected: Set<string>): Set<string> {
+    const closed = new Set<string>();
+    for (const key of selected) {
+      if (!menuNodeIsLeaf(key)) continue;
+      closed.add(key);
+      let current = parentMap.get(key) || null;
+      const seen = new Set<string>();
+      while (current && !seen.has(current)) {
+        closed.add(current);
+        seen.add(current);
+        current = parentMap.get(current) || null;
+      }
+    }
+    return closed;
+  }
+
   function applyNodeSelection(nodeKey: string) {
     if (selectedRowIds.length < 1) return;
     if (selectedRowIds.length > 1) {
@@ -2061,21 +2142,33 @@ export default function ShopifyCollectionMapping() {
       const staging = rowStagingById.get(activeRowId);
       const currentlySelected = Boolean(staging?.finalMenuPathSet.has(nodePath));
       if (currentlySelected) {
-        setManualRemovedPathsByRow((prev) => ({
-          ...prev,
-          [activeRowId]: { ...(prev[activeRowId] || {}), [nodePath]: true },
-        }));
+        const removeKeys = collectDescendantNodeKeys(nodeKey);
+        setManualRemovedPathsByRow((prev) => {
+          const rowPrev = { ...(prev[activeRowId] || {}) };
+          for (const nk of removeKeys) {
+            const p = normalizeMenuPath(nodePathByKey.get(nk) || nodeLabelByKey.get(nk) || "");
+            if (p) rowPrev[p] = true;
+          }
+          return { ...prev, [activeRowId]: rowPrev };
+        });
         setManualAddedPathsByRow((prev) => {
           const current = { ...(prev[activeRowId] || {}) };
-          delete current[nodePath];
+          for (const nk of removeKeys) {
+            const p = normalizeMenuPath(nodePathByKey.get(nk) || nodeLabelByKey.get(nk) || "");
+            if (p) delete current[p];
+          }
           return { ...prev, [activeRowId]: current };
         });
         setSelectedSuggestionPathsByRow((prev) => {
           const current = { ...(prev[activeRowId] || {}) };
-          delete current[nodePath];
+          for (const nk of removeKeys) {
+            const p = normalizeMenuPath(nodePathByKey.get(nk) || nodeLabelByKey.get(nk) || "");
+            if (p) delete current[p];
+          }
           return { ...prev, [activeRowId]: current };
         });
       } else {
+        if (!menuNodeIsLeaf(nodeKey)) return;
         setManualAddedPathsByRow((prev) => ({
           ...prev,
           [activeRowId]: { ...(prev[activeRowId] || {}), [nodePath]: true },
@@ -2104,20 +2197,11 @@ export default function ShopifyCollectionMapping() {
       }
       for (const key of toRemove) next.delete(key);
     } else {
+      if (!menuNodeIsLeaf(nodeKey)) return;
       next.add(nodeKey);
     }
 
-    // Auto-select parent chain for every selected node.
-    const closed = new Set<string>(next);
-    for (const key of Array.from(next)) {
-      let current = parentMap.get(key) || null;
-      const seen = new Set<string>();
-      while (current && !seen.has(current)) {
-        closed.add(current);
-        seen.add(current);
-        current = parentMap.get(current) || null;
-      }
-    }
+    const closed = pruneSelectionToLeavesAndAncestors(next);
 
     const out: Record<string, boolean> = {};
     for (const key of closed) out[key] = true;
@@ -2246,6 +2330,14 @@ export default function ShopifyCollectionMapping() {
       }
       return next;
     });
+    setHoldFromSyncByRow((prev) => {
+      const next: Record<string, boolean> = {};
+      for (const [rowId, value] of Object.entries(prev)) {
+        if (!valid.has(rowId)) continue;
+        next[rowId] = Boolean(value);
+      }
+      return next;
+    });
   }, [rows]);
 
   useEffect(() => {
@@ -2263,8 +2355,10 @@ export default function ShopifyCollectionMapping() {
         const manualRemovedPaths = selectedRecordToList(manualRemovedPathsByRow[rowId]);
         const staging = rowStagingById.get(rowId);
         const isReviewed = Boolean(reviewedByRow[rowId] ?? row.isReviewed);
+        const holdFromSync = Boolean(holdFromSyncByRow[rowId] ?? row.draft?.holdFromSync);
         const hasDraft =
           isReviewed ||
+          holdFromSync ||
           selectedSuggestionPaths.length > 0 ||
           selectedSuggestionCollections.length > 0 ||
           manualAddedPaths.length > 0 ||
@@ -2277,6 +2371,7 @@ export default function ShopifyCollectionMapping() {
           rowId,
           draft: {
             isReviewed,
+            holdFromSync,
             selectedSuggestionPaths,
             selectedSuggestionCollections,
             manualAddedPaths,
@@ -2319,6 +2414,7 @@ export default function ShopifyCollectionMapping() {
     selectedSuggestionCollectionsByRow,
     manualAddedPathsByRow,
     manualRemovedPathsByRow,
+    holdFromSyncByRow,
     rowStagingById,
   ]);
 
@@ -2335,6 +2431,7 @@ export default function ShopifyCollectionMapping() {
         if (syncedDraftClearedRowIdsRef.current.has(rowId)) return false;
         const hasLocalDraft =
           rowId in reviewedByRow ||
+          rowId in holdFromSyncByRow ||
           Boolean(selectedSuggestionPathsByRow[rowId]) ||
           Boolean(selectedSuggestionCollectionsByRow[rowId]) ||
           Boolean(manualAddedPathsByRow[rowId]) ||
@@ -2383,11 +2480,17 @@ export default function ShopifyCollectionMapping() {
       for (const rowId of syncedWithDrafts) delete next[rowId];
       return next;
     });
+    setHoldFromSyncByRow((prev) => {
+      const next = { ...prev };
+      for (const rowId of syncedWithDrafts) delete next[rowId];
+      return next;
+    });
   }, [
     activeShop,
     rows,
     rowWorkflowById,
     reviewedByRow,
+    holdFromSyncByRow,
     selectedSuggestionPathsByRow,
     selectedSuggestionCollectionsByRow,
     manualAddedPathsByRow,
@@ -2441,8 +2544,22 @@ export default function ShopifyCollectionMapping() {
   }, []);
 
   useEffect(() => {
+    // Selection must be scoped to the currently visible filter context.
+    // Changing queue tab / filters should always force explicit re-selection.
     setSelectedProducts({});
-  }, [search, treeSearch, sort]);
+    setActiveRowId("");
+    setSelectedNodes({});
+    setSelectedUnmappedCollectionIds({});
+  }, [
+    activeQueueTab,
+    appliedFilterTypes,
+    appliedFilterDecisions,
+    appliedFilterHasSuggestions,
+    appliedFilterIncludeSynced,
+    search,
+    treeSearch,
+    sort,
+  ]);
 
   useEffect(() => {
     setExpandedNodes((prev) => {
@@ -2957,6 +3074,8 @@ export default function ShopifyCollectionMapping() {
     tableEl.addEventListener("scroll", updateThumb, { passive: true });
     const ro = new ResizeObserver(updateThumb);
     ro.observe(tableEl);
+    const mo = new MutationObserver(updateThumb);
+    mo.observe(tableEl, { childList: true, subtree: true });
     updateThumb();
 
     let dragActive = false;
@@ -2990,6 +3109,7 @@ export default function ShopifyCollectionMapping() {
     return () => {
       tableEl.removeEventListener("scroll", updateThumb);
       ro.disconnect();
+      mo.disconnect();
       thumbEl.removeEventListener("mousedown", onThumbMouseDown);
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
@@ -3556,6 +3676,14 @@ export default function ShopifyCollectionMapping() {
     const beforeNodes = cloneNodes(nodes);
     const afterNodes = removeLocalNodeAndChildren(cloneNodes(nodes), nodeKey);
     setNodes(afterNodes);
+    const removedSelectionKeys = new Set(collectDescendantNodeKeys(nodeKey));
+    setSelectedNodes((prev) => {
+      const next: Record<string, boolean> = {};
+      for (const [k, v] of Object.entries(prev)) {
+        if (v && !removedSelectionKeys.has(k)) next[k] = true;
+      }
+      return next;
+    });
     setPendingTreeOps((prev) => [...prev, { type: "delete", nodeKey }]);
     appendUndoEntry({
       actionType: "delete",
@@ -3738,6 +3866,7 @@ export default function ShopifyCollectionMapping() {
       noChange: 0,
       skippedReview: 0,
       skippedMissingData: 0,
+      skippedHoldFromSync: 0,
       failedPlanning: 0,
     };
     let eligibleRows = 0;
@@ -4203,6 +4332,7 @@ export default function ShopifyCollectionMapping() {
         collectionSyncStatus,
         actionStatus: row.actionStatus || "",
         suggestionReady: (staging?.suggestionOptions || []).some((option) => !option.disabled),
+        conflictSignals: (row.collectionConflictFlags?.length ?? 0) > 0,
         manualChanges:
           (staging?.selectedSuggestionPaths.length || 0) +
             (staging?.selectedSuggestionDirectCollections.length || 0) +
@@ -4238,9 +4368,11 @@ export default function ShopifyCollectionMapping() {
       statusLabel: workflow.statusLabel,
       statusBadgeTone: workflow.statusBadgeTone,
       suggestionReady: workflow.suggestionReady,
+      conflictSignals: workflow.conflictSignals,
       manualChanges: workflow.manualChanges,
       isReviewed: workflow.isReviewed,
       draftUpdatedAt: row.draft?.updatedAt || null,
+      collectionConflictFlags: Array.isArray(row.collectionConflictFlags) ? row.collectionConflictFlags : [],
     });
   }
 
@@ -4268,6 +4400,7 @@ export default function ShopifyCollectionMapping() {
                 collectionSyncStatus: "REVIEW",
                 actionStatus: prev.actionStatus,
                 suggestionReady: prev.suggestionReady,
+                conflictSignals: prev.conflictSignals,
                 manualChanges: prev.manualChanges,
                 isReviewed: false,
               });
@@ -4277,6 +4410,8 @@ export default function ShopifyCollectionMapping() {
                 collectionSyncStatus: "REVIEW",
                 statusLabel: nextWorkflow.statusLabel,
                 statusBadgeTone: nextWorkflow.statusBadgeTone,
+                suggestionReady: nextWorkflow.suggestionReady,
+                conflictSignals: nextWorkflow.conflictSignals,
                 isReviewed: false,
               };
             })(),
@@ -4351,6 +4486,7 @@ export default function ShopifyCollectionMapping() {
                 collectionSyncStatus: prev.collectionSyncStatus,
                 actionStatus: prev.actionStatus,
                 suggestionReady: true,
+                conflictSignals: prev.conflictSignals,
                 manualChanges: true,
                 isReviewed: true,
               });
@@ -4360,6 +4496,7 @@ export default function ShopifyCollectionMapping() {
                 statusLabel: nextWorkflow.statusLabel,
                 statusBadgeTone: nextWorkflow.statusBadgeTone,
                 suggestionReady: true,
+                conflictSignals: nextWorkflow.conflictSignals,
                 manualChanges: true,
                 isReviewed: true,
               };
@@ -4373,7 +4510,27 @@ export default function ShopifyCollectionMapping() {
   }
 
   async function refreshProductsSection() {
+    setShowRefreshClearConfirm(true);
+  }
+
+  async function confirmRefreshAndClearSession() {
+    setShowRefreshClearConfirm(false);
     setSelectedProducts({});
+    setReviewedByRow({});
+    setHoldFromSyncByRow({});
+    setSelectedSuggestionPathsByRow({});
+    setSelectedSuggestionCollectionsByRow({});
+    setManualAddedPathsByRow({});
+    setManualRemovedPathsByRow({});
+    try {
+      await fetch("/api/collection-mapping", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(withShopContext({ action: "clear-my-row-drafts" })),
+      });
+    } catch {
+      // Ignore clear failures; a fresh pull is still attempted.
+    }
     await loadData({ refreshProducts: true });
   }
 
@@ -4938,7 +5095,8 @@ export default function ShopifyCollectionMapping() {
                       </span>
                     </th>
                     <th className="mappingDecisionCol">Decision</th>
-                    <th className="reviewedCol">Approved</th>
+                    {showHoldFromSyncColumn ? <th className="reviewedCol">Hold from Sync</th> : null}
+                    {showApprovedColumn ? <th className="reviewedCol">Approved</th> : null}
                     <th className="syncStatusCol sortHead">
                       <span className="sortHeadText" onClick={cycleStatusHeaderSort}>
                         Status <span className="sortArrow">{getHeaderSortArrow("status")}</span>
@@ -4950,11 +5108,11 @@ export default function ShopifyCollectionMapping() {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={10} className="empty">Loading Shopify products...</td>
+                      <td colSpan={tableColumnCount} className="empty">Loading Shopify products...</td>
                     </tr>
                   ) : filteredRows.length < 1 ? (
                     <tr>
-                      <td colSpan={10} className="empty">No products match the current filter.</td>
+                      <td colSpan={tableColumnCount} className="empty">No products match the current filter.</td>
                     </tr>
                   ) : (
                     filteredRows.map((row) => {
@@ -5061,6 +5219,11 @@ export default function ShopifyCollectionMapping() {
                           <td className="productNameCol stickyProductNameCol">
                             <div>{row.title}</div>
                             <div className="muted tiny">UPC: {row.upc || "-"}</div>
+                            {(row.collectionConflictFlags?.length ?? 0) > 0 ? (
+                              <div className="muted tiny pathConflictBadge" title="Title/type may contradict an assigned category — open details">
+                                Category conflict
+                              </div>
+                            ) : null}
                           </td>
                           <td className="autoMappedCol">
                             {autoPathItems.length > 0 ? (
@@ -5128,20 +5291,38 @@ export default function ShopifyCollectionMapping() {
                               {getUiStatusLabel(mappingDecision)}
                             </span>
                           </td>
-                          <td className="reviewedCol">
-                            <label className="reviewedCheckboxLabel" onClick={(event) => event.stopPropagation()}>
-                              <input
-                                type="checkbox"
-                                checked={Boolean(staging.isReviewed)}
-                                onChange={(event) => {
-                                  event.stopPropagation();
-                                  const checked = event.target.checked;
-                                  setReviewedByRow((prev) => ({ ...prev, [row.id]: checked }));
-                                }}
-                                aria-label={`Approve ${row.title} for push`}
-                              />
-                            </label>
-                          </td>
+                          {showHoldFromSyncColumn ? (
+                            <td className="reviewedCol">
+                              <label className="reviewedCheckboxLabel" onClick={(event) => event.stopPropagation()}>
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(staging.holdFromSync)}
+                                  onChange={(event) => {
+                                    event.stopPropagation();
+                                    const checked = event.target.checked;
+                                    setHoldFromSyncByRow((prev) => ({ ...prev, [row.id]: checked }));
+                                  }}
+                                  aria-label={`Hold ${row.title} from next sync`}
+                                />
+                              </label>
+                            </td>
+                          ) : null}
+                          {showApprovedColumn ? (
+                            <td className="reviewedCol">
+                              <label className="reviewedCheckboxLabel" onClick={(event) => event.stopPropagation()}>
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(staging.isReviewed)}
+                                  onChange={(event) => {
+                                    event.stopPropagation();
+                                    const checked = event.target.checked;
+                                    setReviewedByRow((prev) => ({ ...prev, [row.id]: checked }));
+                                  }}
+                                  aria-label={`Approve ${row.title} for push`}
+                                />
+                              </label>
+                            </td>
+                          ) : null}
                           <td className="syncStatusCol">
                             <span className={`syncBadge sync-${workflow.statusBadgeTone}`}>{workflow.statusLabel}</span>
                           </td>
@@ -5803,6 +5984,34 @@ export default function ShopifyCollectionMapping() {
           </div>
         </div>
       ) : null}
+      {showRefreshClearConfirm ? (
+        <div
+          className="previewOverlay"
+          onClick={() => setShowRefreshClearConfirm(false)}
+          role="dialog"
+          aria-label="Confirm refresh and clear session"
+        >
+          <div className="editorModal" onClick={(event) => event.stopPropagation()}>
+            <h3>Refresh products and clear your session?</h3>
+            <p className="muted" style={{ marginTop: 8 }}>
+              This will clear your saved review session and reload a fresh catalog from Shopify.
+            </p>
+            <div className="modalActions" style={{ marginTop: 16 }}>
+              <button type="button" className="btn" onClick={() => setShowRefreshClearConfirm(false)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="primary"
+                onClick={() => void confirmRefreshAndClearSession()}
+                disabled={loading || saving || executionBusy}
+              >
+                Refresh and Clear Session
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {mappingExplainModal?.open ? (
         <div className="previewOverlay" onClick={() => setMappingExplainModal(null)} role="dialog" aria-label="Mapping decision details">
           <div className="editorModal mappingExplainModal" onClick={(event) => event.stopPropagation()}>
@@ -5886,6 +6095,21 @@ export default function ShopifyCollectionMapping() {
                   <div className="muted tiny">No suggestions available for this product.</div>
                 )}
               </div>
+              {(mappingExplainModal.collectionConflictFlags ?? []).length > 0 ? (
+                <div className="rowInspectorBlock">
+                  <div className="mappingSectionTitle">LIKELY WRONG CATEGORIES (HIGH CONFIDENCE)</div>
+                  <div className="muted tiny">
+                    These are separate from positive subtype suggestions. They flag contradictions between the title/type
+                    and an assigned path — review before pushing.
+                  </div>
+                  {(mappingExplainModal.collectionConflictFlags ?? []).map((entry) => (
+                    <div key={entry.id} className="mappingConflictLine muted tiny">
+                      <b>{entry.path}</b>
+                      <div>{entry.message}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
               <div className="rowInspectorBlock">
                 <div className="mappingSectionTitle">COLLECTION PATH DIFF - CURRENT VS FINAL</div>
                 <div className="stage4ResultLine stage4ResultLineCurrent mappingExplainSummaryLine">
@@ -8386,6 +8610,15 @@ export default function ShopifyCollectionMapping() {
         .mappingExplainModal .tiny {
           font-size: 13px;
           line-height: 1.45;
+        }
+        .mappingConflictLine {
+          margin-top: 10px;
+          padding-top: 8px;
+          border-top: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .pathConflictBadge {
+          color: #fbbf24;
+          font-weight: 600;
         }
         .mappingExplainModal .muted {
           color: #c7d3e8;

@@ -294,7 +294,7 @@ const cases = [
     name: "reviewed unresolved suggestion row is ready to push",
     input: {
       mappingDecision: "AUTO_MAPPED",
-      collectionSyncStatus: "SYNCED",
+      collectionSyncStatus: "ADD_PENDING",
       actionStatus: "",
       suggestionReady: true,
       manualChanges: false,
@@ -369,6 +369,21 @@ const cases = [
   },
 ];
 
+test("conflictSignals alone requires human eye like suggestions", () => {
+  const workflow = classifyShopifyCollectionMappingRow({
+    mappingDecision: "AUTO_MAPPED",
+    collectionSyncStatus: "SYNCED",
+    actionStatus: "",
+    suggestionReady: false,
+    conflictSignals: true,
+    manualChanges: false,
+    isReviewed: false,
+  });
+  assert.equal(workflow.needsReview, true);
+  assert.equal(workflow.conflictSignals, true);
+  assert.equal(matchesShopifyCollectionMappingQueueTab("suggestion-ready", workflow), true);
+});
+
 test("row classification matches the business rules for the KPI buckets", () => {
   for (const rowCase of cases) {
     const workflow = classifyShopifyCollectionMappingRow(rowCase.input);
@@ -407,7 +422,11 @@ test("KPI summary counts match filtered result sets", () => {
 });
 
 test("unreviewed rows with suggestions or manual changes stay in needs review", () => {
-  for (const rowCase of cases.filter((entry) => !entry.input.isReviewed && (entry.input.suggestionReady || entry.input.manualChanges))) {
+  for (const rowCase of cases.filter(
+    (entry) =>
+      !entry.input.isReviewed &&
+      (entry.input.suggestionReady || entry.input.manualChanges || entry.input.conflictSignals)
+  )) {
     const workflow = classifyShopifyCollectionMappingRow(rowCase.input);
     assert.equal(workflow.needsReview, true, `${rowCase.name}: unresolved rows stay in needs review`);
     assert.equal(workflow.pendingPush, false, `${rowCase.name}: unresolved rows are not pending push`);
