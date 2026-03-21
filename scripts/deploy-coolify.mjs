@@ -483,6 +483,9 @@ async function main() {
     console.log(message);
     console.log("Sending Windows completion notification...");
     notifyWindows({ title, message, success });
+    if (!success) {
+      process.exitCode = 1;
+    }
     return;
   }
 

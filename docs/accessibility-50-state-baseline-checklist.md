@@ -17,8 +17,8 @@ This checklist is the implementation baseline for a U.S.-wide ecommerce site:
 ## 2) Widget runtime (supporting controls, not full compliance by itself)
 
 - [x] Keyboard operable launcher and panel controls
-- [x] ARIA state wiring (`aria-expanded`, `aria-controls`, dialog semantics)
-- [x] Escape closes panel and restores focus to launcher
+- [x] ARIA state wiring (`aria-expanded`, `aria-controls`, **non-modal `role="region"`** panel — **no** `aria-modal`, **no** dialog semantics, **no** focus trap; `Tab` may move into page content)
+- [x] **Close / dismiss:** Close button and outside click close the panel and **return focus to the launcher**. **Escape** closes and returns focus to the launcher **only while focus is inside the panel** (expected for non-modal — Esc is not a global dismiss when focus is in the page, e.g. after jump-to-heading)
 - [x] Statement link rendered from configuration
 - [x] Issue-report link rendered from configuration URL/email
 - [x] Feature controls for text scale, contrast, link highlight, readable font, pause motion
@@ -63,7 +63,7 @@ Implemented in code:
 - `app/accessibility/page.tsx`
   - compliance config fields and coverage snapshot
 - `app/accessibility/widget/route.ts`
-  - stronger keyboard/focus/ARIA behavior
+  - keyboard/focus/ARIA aligned with **non-modal region** toolbar (see `docs/accessibility-widget-phase-a-b-spec.md` §1)
   - statement/reporting links driven by config
 
 Pending:
