@@ -5273,24 +5273,33 @@ export default function ShopifyCollectionMapping() {
                               (() => {
                                 const chipClass =
                                   tableSuggestionDenseClass || tableSuggestionLayoutClass;
-                                const chips = staging.suggestionOptions.map((option) => (
-                                  <button
-                                    key={`${row.id}-${option.kind}-${option.value}`}
-                                    type="button"
-                                    className={`suggestionChip${option.selected ? " selected" : ""}`}
-                                    disabled={option.disabled}
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      toggleSuggestionSelection(row.id, option.kind, option.value, option.disabled);
-                                    }}
-                                    data-tooltip={option.disabled ? "" : getSuggestionTooltip(option.kind, option.label)}
-                                    aria-label={option.disabled ? "Already assigned or staged; cannot select." : option.label}
-                                  >
-                                    {option.kind === "collection"
+                                const denseSuggestions = Boolean(tableSuggestionDenseClass);
+                                const chips = staging.suggestionOptions.map((option) => {
+                                  const chipLabel =
+                                    option.kind === "collection"
                                       ? getCollectionDisplayName(option.value)
-                                      : getLastPathSegment(option.value)}
-                                  </button>
-                                ));
+                                      : getLastPathSegment(option.value);
+                                  return (
+                                    <button
+                                      key={`${row.id}-${option.kind}-${option.value}`}
+                                      type="button"
+                                      className={`suggestionChip${option.selected ? " selected" : ""}`}
+                                      disabled={option.disabled}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        toggleSuggestionSelection(row.id, option.kind, option.value, option.disabled);
+                                      }}
+                                      data-tooltip={option.disabled ? "" : getSuggestionTooltip(option.kind, option.label)}
+                                      aria-label={option.disabled ? "Already assigned or staged; cannot select." : option.label}
+                                    >
+                                      {denseSuggestions ? (
+                                        <span className="suggestionChipTextClamp">{chipLabel}</span>
+                                      ) : (
+                                        chipLabel
+                                      )}
+                                    </button>
+                                  );
+                                });
                                 const grid = <div className={chipClass}>{chips}</div>;
                                 return tableSuggestionDenseClass ? (
                                   <div className="tableSuggestionChipsWrapDense">{grid}</div>
@@ -8311,7 +8320,8 @@ export default function ShopifyCollectionMapping() {
           display: flex;
           align-items: stretch;
           justify-content: center;
-          overflow: hidden;
+          /* visible so ::after tooltips above chips are not clipped (overflow:hidden hid them). */
+          overflow: visible;
         }
         .tableSuggestionChips.tableSuggestionChipsMany {
           flex: 1 1 auto;
@@ -8345,12 +8355,20 @@ export default function ShopifyCollectionMapping() {
           align-items: center;
           justify-content: center;
           text-align: center;
+          overflow: visible;
+        }
+        .tableSuggestionChips.tableSuggestionChipsMany .suggestionChip .suggestionChipTextClamp {
+          min-width: 0;
+          max-width: 100%;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
         }
         .tableSuggestionChips.tableSuggestionChipsMany .suggestionChip:hover:not(:disabled) {
           transform: none;
+        }
+        .tableSuggestionChips.tableSuggestionChipsMany .suggestionChip::after {
+          z-index: 100;
         }
         .tableSuggestionChipsMany5 {
           grid-template-rows: repeat(3, minmax(0, 1fr));
