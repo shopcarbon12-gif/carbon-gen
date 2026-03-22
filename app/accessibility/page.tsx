@@ -2,7 +2,11 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
+import { ProfileModeStrip } from "@/components/profile-mode-strip";
+import { PremiumSegmentedNav, type PremiumSegmentedTabId } from "@/components/premium-segmented-nav";
+import { PremiumToggle } from "@/components/premium-toggle";
 import carbonWordmark from "./assets-local/carbon-long-white.png";
+import { RefreshIcon } from "./RefreshIcon";
 import styles from "./page.module.css";
 
 type WidgetPosition = "left" | "right";
@@ -174,7 +178,7 @@ const defaultSettings: AccessibilitySettings = {
   position: "right",
   sideOffset: 18,
   bottomOffset: 18,
-  triggerSize: 52,
+  triggerSize: 76,
   iconSize: 20,
   panelWidth: 300,
   cornerRadius: 14,
@@ -714,13 +718,16 @@ export default function AccessibilityPage() {
     const contrastBg = previewContrast ? "#000000" : "#0b1220";
     return {
       color: contrastText,
+      /* Layer 3 (Preview Surface): solid preview chrome only; outer panel + meta card use Pic2 glass */
       background: contrastBg,
       fontSize: `${previewTextScale}%`,
       fontFamily: previewReadableFont
         ? '"Atkinson Hyperlegible", "Segoe UI", Arial, sans-serif'
         : '"Inter", "Segoe UI", Arial, sans-serif',
-    };
-  }, [previewContrast, previewReadableFont, previewTextScale]);
+      ["--preview-accent" as string]: settings.brandColor,
+      ["--preview-panel" as string]: settings.panelColor,
+    } as React.CSSProperties;
+  }, [previewContrast, previewReadableFont, previewTextScale, settings.brandColor, settings.panelColor]);
 
   function updateFeature(name: keyof AccessibilitySettings["features"], value: boolean) {
     setSettings((prev) => ({
@@ -1122,68 +1129,29 @@ export default function AccessibilityPage() {
           {/* ACCESSIBILITY PANEL */}
           <section className={`${styles.glassPanel} ${styles.primaryPanel}`}>
             <div className={styles.panelUtilityBar}>
-              <div className={styles.tabsRow}>
-                <button
-                  type="button"
-                  className={`${styles.tab} ${activeTopTab === "docs" ? styles.tabActive : ""}`}
-                  onClick={() => activateTopTab("docs")}
-                >
-                  Docs
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.tab} ${activeTopTab === "tickets" ? styles.tabActive : ""}`}
-                  onClick={() => activateTopTab("tickets")}
-                >
-                  Tickets
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.tab} ${activeTopTab === "log-history" ? styles.tabActive : ""}`}
-                  onClick={() => activateTopTab("log-history")}
-                >
-                  Log History
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.tab} ${activeTopTab === "widget" ? styles.tabActive : ""}`}
-                  onClick={() => activateTopTab("widget")}
-                >
-                  Widget
-                </button>
-              </div>
-              <button
-                type="button"
-                className={styles.publishBtn}
-                onClick={saveSettings}
-                disabled={settingsSaving || !canSaveSettings}
-              >
-                {settingsSaving ? "Saving..." : renderGlossyTriangleLabel("Publish Changes")}
-              </button>
+              <PremiumSegmentedNav
+                activeTab={activeTopTab as PremiumSegmentedTabId}
+                onTabChange={(id) => activateTopTab(id)}
+                onPublish={saveSettings}
+                publishDisabled={settingsSaving || !canSaveSettings}
+                publishPending={settingsSaving}
+              />
             </div>
 
             <div className={styles.profileSection}>
-              <div className={styles.profileStrip}>
-                <button type="button" className={styles.pill}>Retail</button>
-                <button type="button" className={styles.pill}>Low Vision</button>
-                <button type="button" className={styles.pill}>Motor</button>
-                <button type="button" className={styles.pill}>Dyslexia</button>
-                <button type="button" className={styles.pill}>ADHD</button>
-                <button type="button" className={styles.pillAdd}>New</button>
-              </div>
+              <ProfileModeStrip />
             </div>
 
             <div
               id="widget-surface"
-              className={`${styles.widgetStage} ${styles.horizontalSurface} ${styles.lightOccupancy} ${styles.featuredHorizontalSurface}`}
+              className={`${styles.widgetStage} ${styles.widgetStagePic1} ${styles.lightOccupancy}`}
             >
               <div className={styles.widgetShell}>
                 <div className={styles.widgetShellHeader}>
                   <div className={styles.widgetShellBrand}>
                     <span className={styles.widgetShellMark} aria-hidden="true" />
                     <span className={styles.widgetShellBrandText}>
-                      <span className={styles.widgetShellBrandLead}>CARBON</span>
-                      <span className={styles.widgetShellBrandTail}>ASSIST</span>
+                      <span className={styles.widgetShellBrandLead}>CARBON</span><span className={styles.widgetShellBrandTail}>ASSIST</span>
                     </span>
                   </div>
                 </div>
@@ -1256,14 +1224,7 @@ export default function AccessibilityPage() {
             {/* Profile strip */}
             <div className={styles.profileSection}>
               <span className={styles.profileLabel}>Accessibility preferences</span>
-              <div className={styles.profileStrip}>
-                <button className={styles.pill}>Retail</button>
-                <button className={styles.pill}>Low Vision</button>
-                <button className={styles.pill}>Motor</button>
-                <button className={styles.pill}>Dyslexia</button>
-                <button className={styles.pill}>ADHD</button>
-                <button className={styles.pillAdd}>New</button>
-              </div>
+              <ProfileModeStrip />
             </div>
 
             {/* Widget preview card */}
@@ -1293,7 +1254,14 @@ export default function AccessibilityPage() {
                   <button className={styles.wpBtn} onClick={installRuntimeWidgetOnPage}>
                     {renderGlossyTriangleLabel(runtimeWidgetMounted ? "Reload Preview" : "Open Preview")}
                   </button>
-                  <button className={styles.wpBtn} onClick={() => setPreviewOpen(!previewOpen)}>R</button>
+                  <button
+                    type="button"
+                    className={styles.wpBtn}
+                    onClick={() => setPreviewOpen(!previewOpen)}
+                    aria-label="Refresh preview"
+                  >
+                    <RefreshIcon size={18} />
+                  </button>
                   <button className={styles.wpBtn} onClick={() => setPreviewOpen(!previewOpen)}>View</button>
                 </div>
                 <div className={styles.wpActionGroup}>
@@ -1341,22 +1309,51 @@ export default function AccessibilityPage() {
                 <div className={styles.previewActions}>
                   {settings.features.textScale && (
                     <>
-                      <button type="button" className={styles.outlineBtn} onClick={() => setPreviewTextScale((size) => Math.max(85, size - 10))}>A-</button>
-                      <button type="button" className={styles.outlineBtn} onClick={() => setPreviewTextScale((size) => Math.min(150, size + 10))}>A+</button>
+                      <button
+                        type="button"
+                        className={[styles.outlineBtn, previewTextScale !== 100 ? styles.previewChipOn : ""].filter(Boolean).join(" ")}
+                        onClick={() => setPreviewTextScale((size) => Math.max(85, size - 10))}
+                        aria-pressed={previewTextScale !== 100}
+                      >
+                        A-
+                      </button>
+                      <button
+                        type="button"
+                        className={[styles.outlineBtn, previewTextScale !== 100 ? styles.previewChipOn : ""].filter(Boolean).join(" ")}
+                        onClick={() => setPreviewTextScale((size) => Math.min(150, size + 10))}
+                        aria-pressed={previewTextScale !== 100}
+                      >
+                        A+
+                      </button>
                     </>
                   )}
                   {settings.features.highContrast && (
-                    <button type="button" className={styles.outlineBtn} onClick={() => setPreviewContrast((value) => !value)}>
+                    <button
+                      type="button"
+                      className={[styles.outlineBtn, previewContrast ? styles.previewChipOn : ""].filter(Boolean).join(" ")}
+                      onClick={() => setPreviewContrast((value) => !value)}
+                      aria-pressed={previewContrast}
+                    >
                       Contrast {toButtonLabel(previewContrast)}
                     </button>
                   )}
                   {settings.features.readableFont && (
-                    <button type="button" className={styles.outlineBtn} onClick={() => setPreviewReadableFont((value) => !value)}>
+                    <button
+                      type="button"
+                      className={[styles.outlineBtn, previewReadableFont ? styles.previewChipOn : ""].filter(Boolean).join(" ")}
+                      onClick={() => setPreviewReadableFont((value) => !value)}
+                      aria-pressed={previewReadableFont}
+                    >
                       Readable Font {toButtonLabel(previewReadableFont)}
                     </button>
                   )}
                   {settings.features.highlightLinks && (
-                    <button type="button" className={styles.outlineBtn} onClick={() => setPreviewLinkHighlight((value) => !value)}>
+                    <button
+                      type="button"
+                      className={[styles.outlineBtn, previewLinkHighlight ? styles.previewChipOn : ""].filter(Boolean).join(" ")}
+                      onClick={() => setPreviewLinkHighlight((value) => !value)}
+                      aria-pressed={previewLinkHighlight}
+                    >
                       Link Highlight {toButtonLabel(previewLinkHighlight)}
                     </button>
                   )}
@@ -1375,7 +1372,9 @@ export default function AccessibilityPage() {
                       Preview link focus style
                     </a>
                   </div>
-                  <div className={styles.previewMetaCard}>
+                  <div
+                    className={`${styles.previewMetaCard} ${styles.horizontalSurface} ${styles.lightOccupancy}`}
+                  >
                     <span className={styles.previewMetaLabel}>Current preview</span>
                     <strong className={styles.previewMetaValue}>{previewTextScale}% scale</strong>
                     <p className={styles.previewMetaText}>
@@ -1456,7 +1455,16 @@ export default function AccessibilityPage() {
             {lawWatchStatus && <p className={styles.lawDesc} style={{color:'rgba(255,255,255,0.7)'}}>{lawWatchStatus}</p>}
           </section>
 
-          <section id="config-console" className={styles.glassPanel}>
+          <section
+            id="config-console"
+            className={styles.glassPanel}
+            style={
+              {
+                ["--config-accent" as string]: settings.brandColor,
+                ["--config-panel" as string]: settings.panelColor,
+              } as React.CSSProperties
+            }
+          >
             <div className={styles.panelHeader}>
               <div>
                 <h2 className={styles.panelTitle}>Configuration Console</h2>
@@ -1591,7 +1599,7 @@ export default function AccessibilityPage() {
                 </label>
                 <label className={styles.fieldGroup}>
                   <span className={styles.fieldLabel}>Trigger size: {settings.triggerSize}px</span>
-                  <input type="range" className={styles.rangeInput} min={40} max={76} value={settings.triggerSize} onChange={(event) => setSettings((prev) => ({ ...prev, triggerSize: Number(event.target.value) }))} />
+                  <input type="range" className={styles.rangeInput} min={40} max={96} value={settings.triggerSize} onChange={(event) => setSettings((prev) => ({ ...prev, triggerSize: Number(event.target.value) }))} />
                 </label>
                 <label className={styles.fieldGroup}>
                   <span className={styles.fieldLabel}>Corner radius: {settings.cornerRadius}px</span>
@@ -1661,13 +1669,22 @@ export default function AccessibilityPage() {
 
               <div className={`${styles.configCard} ${styles.horizontalSurface} ${styles.lightOccupancy}`}>
                 <h3 className={styles.configTitle}>Feature Matrix</h3>
-                <div className={styles.featureList}>
-                  {(Object.entries(settings.features) as Array<[keyof AccessibilitySettings["features"], boolean]>).map(([key, value]) => (
-                    <label key={key} className={styles.fieldToggle}>
-                      <input type="checkbox" checked={value} onChange={(event) => updateFeature(key, event.target.checked)} />
-                      <span>{formatDisplayLabel(key)}</span>
-                    </label>
-                  ))}
+                <div className={styles.featureMatrixList}>
+                  {(Object.entries(settings.features) as Array<[keyof AccessibilitySettings["features"], boolean]>).map(([key, value]) => {
+                    const labelId = `feature-matrix-${key}`;
+                    return (
+                      <div key={key} className={styles.featureMatrixRow}>
+                        <span className={styles.featureMatrixLabel} id={labelId}>
+                          {formatDisplayLabel(key)}
+                        </span>
+                        <PremiumToggle
+                          aria-labelledby={labelId}
+                          checked={value}
+                          onChange={(event) => updateFeature(key, event.target.checked)}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -1688,7 +1705,7 @@ export default function AccessibilityPage() {
                   disabled={integrationsRefreshing}
                   aria-label={integrationsRefreshing ? "Refreshing API status" : "Refresh API status"}
                 >
-                  R
+                  <RefreshIcon size={19} />
                 </button>
               </div>
               <div className={`${styles.railInnerSurface} ${styles.verticalSurface} ${styles.lightOccupancy} ${styles.featuredVerticalSurface}`}>
@@ -1776,7 +1793,7 @@ export default function AccessibilityPage() {
                   disabled={usageLoading}
                   aria-label={usageLoading ? "Refreshing usage snapshot" : "Refresh usage snapshot"}
                 >
-                  R
+                  <RefreshIcon size={19} />
                 </button>
               </div>
               <div className={`${styles.railInnerSurface} ${styles.verticalSurface} ${styles.lightOccupancy}`}>
@@ -1853,7 +1870,7 @@ export default function AccessibilityPage() {
                     disabled={lastReportLoading}
                     aria-label={lastReportLoading ? "Refreshing monthly report status" : "Refresh monthly report status"}
                   >
-                    R
+                    <RefreshIcon size={20} />
                   </button>
                 </div>
                 {monthlyTestStatus && <p className={styles.railStatus}>{monthlyTestStatus}</p>}
@@ -1888,7 +1905,7 @@ export default function AccessibilityPage() {
                     disabled={lawWatchLoading}
                     aria-label={lawWatchLoading ? "Refreshing law watch status" : "Refresh law watch status"}
                   >
-                    R
+                    <RefreshIcon size={20} />
                   </button>
                 </div>
                 {lawWatchStatus && <p className={styles.railStatus}>{lawWatchStatus}</p>}
@@ -1924,7 +1941,7 @@ export default function AccessibilityPage() {
             {settingsStatus && <p className={styles.railStatus}>{settingsStatus}</p>}
           </section>
 
-          <section className={`${styles.railCard} ${styles.complianceCard}`}>
+          <section className={styles.railCard}>
             <div className={styles.railCardHead}>
               <span className={styles.complianceTitle}>Compliance Snapshot</span>
             </div>
@@ -2035,7 +2052,7 @@ export default function AccessibilityPage() {
             {monthlyTestStatus && <p className={styles.railStatus}>{monthlyTestStatus}</p>}
           </section>
 
-          <section className={`${styles.railCard} ${styles.lawWatchCard}`}>
+          <section className={styles.railCard}>
             <div className={styles.railCardHead}>
               <span className={styles.complianceTitle}>Law Watch Status</span>
               <button type="button" className={styles.railActionBtn} onClick={refreshLawWatchStatus} disabled={lawWatchLoading}>
@@ -2102,12 +2119,14 @@ export default function AccessibilityPage() {
           </section>
 
           {/* CHATGPT */}
-          <section className={`${styles.railCard} ${styles.chatCard}`}>
+          <section className={styles.railCard}>
             <div className={styles.chatHead}>
               <div className={styles.chatTitle}>
                 <span>CA</span> ChatGPT
               </div>
-              <button className={styles.chatRefresh}>R</button>
+              <button type="button" className={styles.chatRefresh} aria-label="Refresh chat">
+                <RefreshIcon size={18} />
+              </button>
             </div>
             <p className={styles.chatSub}>Ask anything.</p>
             <div className={styles.chatLog}>No chat messages.</div>
@@ -2122,7 +2141,7 @@ export default function AccessibilityPage() {
           </section>
 
           {/* COMPLIANCE CHECKLIST */}
-          <section className={`${styles.railCard} ${styles.complianceCard}`}>
+          <section className={styles.railCard}>
             <div className={styles.railCardHead}>
               <span className={styles.complianceTitle}>Compliance Checklist</span>
             </div>
@@ -2152,7 +2171,7 @@ export default function AccessibilityPage() {
           </section>
 
           {/* LAW WATCH RAIL */}
-          <section className={`${styles.railCard} ${styles.lawWatchCard}`}>
+          <section className={styles.railCard}>
             <div className={styles.railCardHead}>
               <span className={styles.complianceTitle}>Law Watch Status</span>
             </div>

@@ -5,14 +5,15 @@ alwaysApply: true
 
 # Verify Before Done (LOCKED)
 
-**MANDATORY:** After deploying ANY code change, you MUST open the browser and verify the change works before telling the user it's done.
+**MANDATORY:** Before telling the user a change is done, verify it in the browser (usually the local dev server) unless they skip testing.
 
 ## Verification steps (required)
-1. Deploy to Coolify
-2. Open the relevant page in the browser using MCP browser tools
-3. Take a snapshot and confirm the change is visually correct and functional
-4. Only THEN tell the user it's done
+1. Open the relevant page in the browser using MCP browser tools (or equivalent)
+2. Confirm the change is visually correct and functional
+3. Only then say it's done
 
-Never say "done", "deployed", "live", or similar until you have verified with your own eyes in the browser.
+Do **not** require a Coolify deploy for verification unless the user asked to verify production after a deploy.
+
+Never say "done", "deployed", "live", or similar until you have verified appropriately (or the user skipped testing).
 
 Skip only if the user explicitly says "skip testing" or "no need to test".

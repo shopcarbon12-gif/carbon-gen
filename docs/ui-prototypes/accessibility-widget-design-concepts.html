@@ -1,0 +1,516 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ShopCarbon Accessibility Widget Design Concepts</title>
+    <style>
+      :root {
+        --bg: #07090d;
+        --card: #0f1522;
+        --muted: #93a0b8;
+        --text: #eaf0ff;
+        --line: #232d44;
+        --violet: #6d28d9;
+        --indigo: #4f46e5;
+        --cyan: #0ea5e9;
+        --lime: #84cc16;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font: 14px/1.45 Inter, "Segoe UI", Arial, sans-serif;
+        color: var(--text);
+        background: radial-gradient(1200px 900px at 0% 0%, #121a2b 0%, var(--bg) 55%);
+      }
+
+      .wrap {
+        max-width: 1280px;
+        margin: 0 auto;
+        padding: 24px 18px 56px;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      .hero {
+        display: grid;
+        gap: 10px;
+        padding: 20px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: rgba(15, 21, 34, 0.74);
+      }
+
+      .hero p {
+        color: var(--muted);
+        max-width: 920px;
+      }
+
+      .chip-row {
+        margin-top: 6px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .chip {
+        border: 1px solid #37415d;
+        color: #d6def5;
+        background: #131c31;
+        border-radius: 999px;
+        padding: 6px 10px;
+        font-size: 12px;
+      }
+
+      .grid {
+        margin-top: 16px;
+        display: grid;
+        gap: 14px;
+        grid-template-columns: repeat(2, minmax(320px, 1fr));
+      }
+
+      .concept {
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: linear-gradient(180deg, rgba(16, 23, 38, 0.92), rgba(10, 14, 24, 0.92));
+        overflow: hidden;
+      }
+
+      .concept-head {
+        padding: 14px 14px 10px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .concept-head p {
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .preview {
+        position: relative;
+        min-height: 320px;
+        padding: 16px;
+        background: repeating-linear-gradient(
+          0deg,
+          #0b1220 0,
+          #0b1220 32px,
+          #0f1727 32px,
+          #0f1727 64px
+        );
+      }
+
+      .mock-content {
+        width: min(520px, 100%);
+        border: 1px solid #24324a;
+        border-radius: 12px;
+        background: rgba(15, 23, 39, 0.82);
+        padding: 12px;
+      }
+
+      .mock-title {
+        font-weight: 700;
+        letter-spacing: 0.02em;
+      }
+
+      .mock-lines {
+        margin-top: 8px;
+        display: grid;
+        gap: 6px;
+      }
+
+      .line {
+        height: 8px;
+        border-radius: 999px;
+        background: #33425d;
+      }
+
+      .line.s {
+        width: 42%;
+      }
+
+      .line.m {
+        width: 68%;
+      }
+
+      .line.l {
+        width: 92%;
+      }
+
+      .widget {
+        position: absolute;
+        bottom: 18px;
+        right: 18px;
+        display: grid;
+        gap: 10px;
+      }
+
+      .widget.left {
+        left: 18px;
+        right: auto;
+      }
+
+      .trigger {
+        border: 0;
+        cursor: pointer;
+        color: #fff;
+        font-weight: 700;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+      }
+
+      .trigger.round {
+        width: 56px;
+        height: 56px;
+        border-radius: 999px;
+      }
+
+      .trigger.pill {
+        min-height: 52px;
+        padding: 0 14px;
+        border-radius: 999px;
+      }
+
+      .trigger.square {
+        width: 52px;
+        height: 52px;
+        border-radius: 14px;
+      }
+
+      .trigger.solid-violet {
+        background: linear-gradient(135deg, var(--violet), var(--indigo));
+        box-shadow: 0 10px 24px rgba(55, 23, 121, 0.42);
+      }
+
+      .trigger.outline-dark {
+        background: rgba(0, 0, 0, 0.65);
+        border: 2px solid #5b4cc9;
+      }
+
+      .trigger.glass {
+        border: 1px solid rgba(255, 255, 255, 0.35);
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.08));
+        backdrop-filter: blur(12px);
+      }
+
+      .panel {
+        width: 320px;
+        border: 1px solid #33405d;
+        border-radius: 16px;
+        background: #0f172a;
+        box-shadow: 0 18px 34px rgba(0, 0, 0, 0.48);
+        padding: 12px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .panel.compact {
+        width: 292px;
+      }
+
+      .panel.wide {
+        width: 370px;
+      }
+
+      .panel-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 12px;
+        color: #c8d2ec;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+
+      .btn-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 7px;
+      }
+
+      .btn {
+        border: 1px solid #394664;
+        background: #1a2438;
+        color: #e7ecfc;
+        border-radius: 10px;
+        padding: 8px;
+        text-align: center;
+        font-size: 12px;
+      }
+
+      .btn.active {
+        border-color: #7c3aed;
+        background: #2a1f4d;
+      }
+
+      .section-title {
+        color: #b8c4e2;
+        font-size: 11px;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        margin-top: 2px;
+      }
+
+      .summary {
+        margin-top: 14px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 14px;
+        background: #0c1322;
+      }
+
+      .summary ul {
+        margin: 8px 0 0;
+        padding-left: 18px;
+        color: var(--muted);
+      }
+
+      .tokens {
+        margin-top: 14px;
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(4, minmax(180px, 1fr));
+      }
+
+      .token {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 10px;
+        background: #0f1522;
+      }
+
+      .swatch {
+        width: 100%;
+        height: 34px;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
+
+      .swatch.violet {
+        background: #6d28d9;
+      }
+      .swatch.midnight {
+        background: #0f172a;
+      }
+      .swatch.ink {
+        background: #090b10;
+      }
+      .swatch.cyan {
+        background: #0ea5e9;
+      }
+
+      .token p {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      @media (max-width: 980px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+        .tokens {
+          grid-template-columns: repeat(2, minmax(140px, 1fr));
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <section class="hero">
+        <h1>ShopCarbon Accessibility Widget Concepts</h1>
+        <p>
+          Internet-informed design directions (UserWay/accessiBe pattern set) tailored for ShopCarbon dark
+          storefront identity. Focused on premium streetwear aesthetic, strong visibility, and clear trigger
+          affordance.
+        </p>
+        <div class="chip-row">
+          <span class="chip">Position presets: 8-point + exact px offsets</span>
+          <span class="chip">Desktop/mobile size variants</span>
+          <span class="chip">Trigger style: solid / outline / glass</span>
+          <span class="chip">Icon shape: round / square / pill</span>
+          <span class="chip">Panel width modes: compact / default / wide</span>
+        </div>
+      </section>
+
+      <section class="grid">
+        <article class="concept">
+          <div class="concept-head">
+            <h3>Concept A: Carbon Noir (Recommended Default)</h3>
+            <p>High contrast violet solid trigger, balanced panel density, right-bottom placement.</p>
+          </div>
+          <div class="preview">
+            <div class="mock-content">
+              <div class="mock-title">WINTER SALE</div>
+              <div class="mock-lines">
+                <div class="line l"></div>
+                <div class="line l"></div>
+                <div class="line m"></div>
+              </div>
+            </div>
+            <div class="widget">
+              <button class="trigger pill solid-violet">AA Accessibility</button>
+              <div class="panel">
+                <div class="panel-head"><span>Accessibility</span><span>EN</span></div>
+                <div class="section-title">Profiles</div>
+                <div class="btn-grid">
+                  <div class="btn">Low Vision</div>
+                  <div class="btn">Motor</div>
+                  <div class="btn">Dyslexia</div>
+                  <div class="btn">ADHD</div>
+                </div>
+                <div class="section-title">Quick Controls</div>
+                <div class="btn-grid">
+                  <div class="btn active">Contrast</div>
+                  <div class="btn">Big Cursor</div>
+                  <div class="btn">Reading Guide</div>
+                  <div class="btn">Pause Motion</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="concept">
+          <div class="concept-head">
+            <h3>Concept B: Stealth Outline</h3>
+            <p>Cleaner enterprise look with outline trigger and compact panel for minimal visual weight.</p>
+          </div>
+          <div class="preview">
+            <div class="mock-content">
+              <div class="mock-title">POPULAR PRODUCTS</div>
+              <div class="mock-lines">
+                <div class="line l"></div>
+                <div class="line m"></div>
+                <div class="line s"></div>
+              </div>
+            </div>
+            <div class="widget">
+              <button class="trigger square outline-dark">AA</button>
+              <div class="panel compact">
+                <div class="panel-head"><span>Accessibility</span><span>ES</span></div>
+                <div class="btn-grid">
+                  <div class="btn">Text +</div>
+                  <div class="btn">Text -</div>
+                  <div class="btn">Dark Mode</div>
+                  <div class="btn">Invert</div>
+                </div>
+                <div class="btn-grid">
+                  <div class="btn">Hide Images</div>
+                  <div class="btn">Page Structure</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="concept">
+          <div class="concept-head">
+            <h3>Concept C: Glass Luxe</h3>
+            <p>Fashion-forward translucent trigger and wider panel for feature-rich parity UX.</p>
+          </div>
+          <div class="preview">
+            <div class="mock-content">
+              <div class="mock-title">FEATURED COLLECTIONS</div>
+              <div class="mock-lines">
+                <div class="line l"></div>
+                <div class="line l"></div>
+                <div class="line m"></div>
+              </div>
+            </div>
+            <div class="widget left">
+              <button class="trigger round glass">AA</button>
+              <div class="panel wide">
+                <div class="panel-head"><span>Accessibility</span><span>PT-BR</span></div>
+                <div class="section-title">Profiles + Reading Aids</div>
+                <div class="btn-grid">
+                  <div class="btn">Blind</div>
+                  <div class="btn">Seizure Safe</div>
+                  <div class="btn active">Reading Mask</div>
+                  <div class="btn">Reading Guide</div>
+                </div>
+                <div class="section-title">Typography</div>
+                <div class="btn-grid">
+                  <div class="btn">Text Spacing</div>
+                  <div class="btn">Line Height</div>
+                  <div class="btn">Readable Font</div>
+                  <div class="btn">Text Align</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="concept">
+          <div class="concept-head">
+            <h3>Concept D: Minimal Floating Dot</h3>
+            <p>Small collapsed footprint for merchandising-first pages; expands to full utility panel.</p>
+          </div>
+          <div class="preview">
+            <div class="mock-content">
+              <div class="mock-title">SHOP THE LOOK</div>
+              <div class="mock-lines">
+                <div class="line l"></div>
+                <div class="line m"></div>
+              </div>
+            </div>
+            <div class="widget">
+              <button class="trigger round solid-violet">AA</button>
+              <div class="panel compact">
+                <div class="panel-head"><span>Accessibility</span><span>HE</span></div>
+                <div class="btn-grid">
+                  <div class="btn">Language</div>
+                  <div class="btn">Profiles</div>
+                  <div class="btn">Saturation</div>
+                  <div class="btn">Reset</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section class="summary">
+        <h2>Best Customization Options to Implement</h2>
+        <ul>
+          <li>Position presets (8 anchors) and exact offsets for desktop/mobile separately.</li>
+          <li>Collapsed icon size scale (40-76px), icon glyph size scale, and independent label visibility.</li>
+          <li>Trigger variants: solid, outline, glass; shapes: circle, square, pill.</li>
+          <li>Panel density presets: compact, balanced, expanded; width range 260-420px.</li>
+          <li>Collision avoidance option for chat/cart UI (auto-shift on overlap).</li>
+          <li>Default language selector and locale-aware text direction support.</li>
+        </ul>
+      </section>
+
+      <section class="tokens">
+        <div class="token">
+          <div class="swatch violet"></div>
+          <p>Primary Accent: #6D28D9</p>
+        </div>
+        <div class="token">
+          <div class="swatch midnight"></div>
+          <p>Panel Surface: #0F172A</p>
+        </div>
+        <div class="token">
+          <div class="swatch ink"></div>
+          <p>Backdrop: #090B10</p>
+        </div>
+        <div class="token">
+          <div class="swatch cyan"></div>
+          <p>Optional Highlight: #0EA5E9</p>
+        </div>
+      </section>
+    </div>
+  </body>
+</html>

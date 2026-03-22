@@ -1,17 +1,17 @@
 ---
-description: MUST deploy to Coolify after every code change. No exceptions.
+description: Deploy to Coolify only when the user explicitly asks.
 alwaysApply: true
 ---
 
-# Deploy After Every Change (LOCKED)
+# Deploy On Request Only
 
-**MANDATORY:** After making ANY code changes to this project, you MUST deploy.
+**Do not** run `npm run deploy:coolify` after routine code changes.
 
-## Deploy (required)
+**Deploy** only when the user clearly asks to deploy (e.g. "deploy", "push to Coolify", "ship this", "deploy to prod").
+
+When they ask, run:
 ```
 npm run deploy:coolify
 ```
 
-Run this immediately after completing changes. Do not ask if the user wants to deploy — just deploy.
-
-Skip only if the user explicitly says "don't deploy", "no deploy", or "skip deploy".
+If unsure whether they want a deploy, ask once or wait for explicit instruction.

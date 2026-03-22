@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Premium toggle — standalone demo</title>
+    <link rel="stylesheet" href="./premium-toggle.css" />
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+        background: radial-gradient(
+            120% 80% at 10% 0%,
+            rgba(88, 72, 140, 0.12) 0%,
+            transparent 55%
+          ),
+          linear-gradient(180deg, #0b0d14 0%, #06070c 100%);
+        color: #e2e8f0;
+        padding: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .demo-wrap {
+        width: min(420px, 100%);
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+      .demo-caption {
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: rgba(148, 163, 184, 0.55);
+        margin: 0 0 4px;
+      }
+      .demo-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="demo-wrap pt-scope">
+      <p class="demo-caption">Futuristic panel — settings row</p>
+      <div class="pt-settings-row">
+        <div class="pt-settings-row__text">
+          <p class="pt-settings-row__title" id="row-pause">Pause animations</p>
+          <p class="pt-settings-row__hint">
+            Temporarily stops non-essential motion. Respects reduced-motion when
+            combined with system preferences.
+          </p>
+        </div>
+        <div class="pt-settings-row__control">
+          <label class="pt-switch">
+            <input
+              id="sw-pause"
+              class="pt-switch__input"
+              type="checkbox"
+              role="switch"
+              aria-labelledby="row-pause"
+            />
+            <span class="pt-switch__face" aria-hidden="true">
+              <span class="pt-switch__glow"></span>
+              <span class="pt-switch__track"></span>
+              <span class="pt-switch__thumb"></span>
+            </span>
+          </label>
+        </div>
+      </div>
+
+      <p class="demo-caption">Isolated toggles</p>
+      <div class="demo-stack">
+        <label class="pt-switch">
+          <input
+            class="pt-switch__input"
+            type="checkbox"
+            role="switch"
+            aria-label="Ambient interface glow"
+            checked
+          />
+          <span class="pt-switch__face" aria-hidden="true">
+            <span class="pt-switch__glow"></span>
+            <span class="pt-switch__track"></span>
+            <span class="pt-switch__thumb"></span>
+          </span>
+        </label>
+        <label class="pt-switch">
+          <input
+            class="pt-switch__input"
+            type="checkbox"
+            role="switch"
+            aria-label="Disabled example"
+            disabled
+          />
+          <span class="pt-switch__face" aria-hidden="true">
+            <span class="pt-switch__glow"></span>
+            <span class="pt-switch__track"></span>
+            <span class="pt-switch__thumb"></span>
+          </span>
+        </label>
+      </div>
+    </div>
+    <script src="./premium-toggle.vanilla.js" defer></script>
+  </body>
+</html>

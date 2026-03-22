@@ -1,0 +1,420 @@
+/**
+ * Premium dark UI toggle — luxury sci-fi glass / control-panel aesthetic.
+ * Layered depth, carved track, glossy ceramic thumb, restrained violet bloom.
+ */
+
+.pt-scope {
+  --pt-graphite-a: #1a1e2a;
+  --pt-graphite-b: #12151e;
+  --pt-void: #05060c;
+  --pt-blue-black: #0a0c12;
+  --pt-violet-core: #6b5a9e;
+  --pt-violet-mid: #9b87d4;
+  --pt-violet-soft: rgba(130, 110, 190, 0.14);
+  --pt-violet-bloom: rgba(155, 135, 212, 0.22);
+  --pt-violet-rim: rgba(140, 120, 200, 0.28);
+  /* Wider travel so ON/OFF reads instantly */
+  --pt-track-w: 3rem;
+  --pt-track-h: 1.375rem;
+  --pt-thumb: 1.125rem;
+  --pt-pad-x: 3px;
+  --pt-dur: 0.2s;
+  --pt-ease: cubic-bezier(0.25, 0.82, 0.32, 1);
+  --pt-ease-glow: cubic-bezier(0.33, 1, 0.36, 1);
+}
+
+/* ---- Switch ---- */
+.pt-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pt-switch__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+  opacity: 0;
+}
+
+.pt-switch__input:focus-visible + .pt-switch__face {
+  outline: 2px solid color-mix(in srgb, var(--pt-violet-mid) 55%, rgba(255, 255, 255, 0.35));
+  outline-offset: 3px;
+}
+
+.pt-switch__input:disabled + .pt-switch__face {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: saturate(0.65);
+}
+
+.pt-switch:has(.pt-switch__input:disabled) {
+  cursor: not-allowed;
+}
+
+/* Capsule chassis: sits above panel, holds carved track */
+.pt-switch__face {
+  position: relative;
+  display: block;
+  width: var(--pt-track-w);
+  height: var(--pt-track-h);
+  border-radius: 999px;
+  flex-shrink: 0;
+  transition:
+    box-shadow var(--pt-dur) var(--pt-ease-glow),
+    filter var(--pt-dur) ease-out;
+}
+
+/* OFF: dormant lip — no violet bloom */
+.pt-switch__face::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    168deg,
+    rgba(255, 255, 255, 0.03) 0%,
+    rgba(255, 255, 255, 0.01) 40%,
+    transparent 65%
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.72),
+    0 1px 0 rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  z-index: 3;
+  transition: box-shadow var(--pt-dur) var(--pt-ease-glow);
+}
+
+/* Inner violet rim when ON — hugs capsule, not neon */
+.pt-switch__input:checked ~ .pt-switch__face::before {
+  background: linear-gradient(
+    168deg,
+    rgba(255, 255, 255, 0.06) 0%,
+    rgba(120, 100, 170, 0.06) 45%,
+    transparent 70%
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 0 0 1px color-mix(in srgb, var(--pt-violet-rim) 35%, transparent),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.55),
+    0 0 14px color-mix(in srgb, var(--pt-violet-bloom) 28%, transparent);
+}
+
+/* OFF track: darker, lower contrast, fully recessed */
+.pt-switch__track {
+  position: absolute;
+  inset: var(--pt-pad-x);
+  border-radius: inherit;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0%, rgba(255, 255, 255, 0) 12%),
+    linear-gradient(188deg, #141820 0%, #0a0c12 48%, #020308 100%),
+    radial-gradient(ellipse 130% 90% at 50% 0%, rgba(255, 255, 255, 0.02), transparent 55%);
+  box-shadow:
+    inset 0 6px 18px rgba(0, 0, 0, 0.92),
+    inset 0 2px 5px rgba(0, 0, 0, 0.65),
+    inset 0 -2px 8px rgba(0, 0, 0, 0.75),
+    inset 0 1px 0 rgba(255, 255, 255, 0.02),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.95);
+  overflow: visible;
+  z-index: 0;
+  transition:
+    box-shadow var(--pt-dur) var(--pt-ease),
+    background var(--pt-dur) ease-out;
+}
+
+/* OFF: faint hairline only */
+.pt-switch__track::before {
+  content: "";
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  top: 3px;
+  height: 1px;
+  border-radius: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.06) 45%,
+    rgba(255, 255, 255, 0.02) 100%
+  );
+  opacity: 0.4;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Floor shadow + side falloff */
+.pt-switch__track::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 4px 14px rgba(0, 0, 0, 0.55),
+    inset 0 0 20px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+
+/* OFF: almost no outer glow — purple is for ON only */
+.pt-switch__glow {
+  position: absolute;
+  inset: -5px -4px -5px -6px;
+  border-radius: inherit;
+  background: radial-gradient(
+    70% 85% at 45% 50%,
+    transparent 0%,
+    rgba(4, 6, 12, 0.5) 100%
+  );
+  opacity: 0.35;
+  z-index: -1;
+  pointer-events: none;
+  transition:
+    opacity var(--pt-dur) var(--pt-ease-glow),
+    background var(--pt-dur) var(--pt-ease-glow),
+    filter var(--pt-dur) var(--pt-ease-glow);
+}
+
+/* ON: violet bloom — visible only when active */
+.pt-switch__input:checked ~ .pt-switch__face .pt-switch__glow {
+  opacity: 1;
+  background:
+    radial-gradient(
+      ellipse 72% 95% at 82% 48%,
+      color-mix(in srgb, var(--pt-violet-soft) 90%, transparent) 0%,
+      rgba(20, 18, 35, 0.12) 48%,
+      transparent 72%
+    ),
+    radial-gradient(
+      ellipse 55% 75% at 68% 50%,
+      rgba(110, 90, 160, 0.1) 0%,
+      transparent 60%
+    );
+  filter: blur(0.75px);
+}
+
+/* Face outer bloom — restrained, hugs capsule */
+.pt-switch__input:checked ~ .pt-switch__face {
+  box-shadow:
+    0 0 0 1px rgba(75, 65, 105, 0.22),
+    0 0 10px color-mix(in srgb, var(--pt-violet-bloom) 22%, transparent),
+    0 0 22px color-mix(in srgb, var(--pt-violet-soft) 45%, transparent),
+    -2px 0 18px color-mix(in srgb, var(--pt-violet-bloom) 12%, transparent);
+}
+
+.pt-switch__input:checked ~ .pt-switch__face .pt-switch__track {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(180, 160, 230, 0.05) 0%,
+      rgba(255, 255, 255, 0) 16%
+    ),
+    linear-gradient(
+      188deg,
+      color-mix(in srgb, #1e2230 92%, #2a1f3a 8%) 0%,
+      color-mix(in srgb, #0f111a 94%, #1a1428 6%) 48%,
+      #05060c 100%
+    ),
+    radial-gradient(ellipse 120% 100% at 75% 0%, rgba(130, 110, 190, 0.07), transparent 52%);
+  box-shadow:
+    inset 0 5px 18px rgba(0, 0, 0, 0.82),
+    inset 0 2px 3px rgba(0, 0, 0, 0.5),
+    inset 0 -2px 5px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(140, 120, 200, 0.06),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.85),
+    0 0 12px color-mix(in srgb, var(--pt-violet-soft) 20%, transparent);
+}
+
+/* OFF thumb: dimmer, sits in shadow */
+.pt-switch__thumb {
+  position: absolute;
+  top: 50%;
+  left: var(--pt-pad-x);
+  width: var(--pt-thumb);
+  height: var(--pt-thumb);
+  margin-top: calc(var(--pt-thumb) / -2);
+  border-radius: 999px;
+  background:
+    radial-gradient(
+      circle at 30% 18%,
+      rgba(255, 255, 255, 0.55) 0%,
+      rgba(255, 255, 255, 0.12) 8%,
+      transparent 44%
+    ),
+    radial-gradient(
+      circle at 50% 58%,
+      #9aa4b4 0%,
+      #6a7384 42%,
+      #3e4450 88%,
+      #2a2e36 100%
+    );
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.22) inset,
+    0 -3px 7px rgba(0, 0, 0, 0.45) inset,
+    0 2px 5px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(0, 0, 0, 0.35);
+  filter: brightness(0.88) saturate(0.82);
+  transform: translateX(0);
+  z-index: 4;
+  transition:
+    transform var(--pt-dur) var(--pt-ease),
+    box-shadow var(--pt-dur) var(--pt-ease),
+    background var(--pt-dur) ease-out,
+    filter var(--pt-dur) ease-out;
+}
+
+.pt-switch__thumb::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    circle at 28% 22%,
+    rgba(255, 255, 255, 0.35) 0%,
+    rgba(255, 255, 255, 0.05) 22%,
+    transparent 48%
+  );
+  opacity: 0.55;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+
+/* ON: thumb right, brighter, violet edge light */
+.pt-switch__input:checked ~ .pt-switch__face .pt-switch__thumb {
+  transform: translateX(calc(var(--pt-track-w) - var(--pt-thumb) - var(--pt-pad-x) * 2));
+  filter: brightness(1.06) saturate(1.1);
+  background:
+    radial-gradient(
+      circle at 30% 18%,
+      rgba(255, 255, 255, 0.92) 0%,
+      rgba(210, 195, 245, 0.2) 8%,
+      transparent 44%
+    ),
+    radial-gradient(
+      circle at 48% 55%,
+      #eef2f8 0%,
+      #c5cedc 38%,
+      #8894a8 100%
+    );
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.58) inset,
+    0 -3px 7px rgba(0, 0, 0, 0.22) inset,
+    0 0 0 1px color-mix(in srgb, var(--pt-violet-mid) 30%, rgba(0, 0, 0, 0.2)),
+    0 0 14px color-mix(in srgb, var(--pt-violet-mid) 26%, transparent),
+    0 2px 6px rgba(0, 0, 0, 0.38),
+    0 0 12px rgba(200, 190, 245, 0.12);
+}
+
+.pt-switch__input:checked ~ .pt-switch__face .pt-switch__thumb::after {
+  opacity: 0.78;
+}
+
+/* Hover */
+.pt-switch:hover:not(:has(.pt-switch__input:disabled)) .pt-switch__face {
+  filter: brightness(1.04);
+}
+
+.pt-switch:hover:not(:has(.pt-switch__input:disabled)) .pt-switch__thumb {
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.62) inset,
+    0 -3px 6px rgba(0, 0, 0, 0.26) inset,
+    0 2px 6px rgba(0, 0, 0, 0.42),
+    0 0 0 1px rgba(0, 0, 0, 0.1),
+    0 0 8px rgba(255, 255, 255, 0.07);
+}
+
+.pt-switch:hover:not(:has(.pt-switch__input:disabled))
+  .pt-switch__input:checked
+  ~ .pt-switch__face
+  .pt-switch__thumb {
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.55) inset,
+    0 -3px 7px rgba(0, 0, 0, 0.24) inset,
+    0 0 0 1px color-mix(in srgb, var(--pt-violet-mid) 28%, rgba(0, 0, 0, 0.22)),
+    0 0 12px color-mix(in srgb, var(--pt-violet-mid) 22%, transparent),
+    0 2px 5px rgba(0, 0, 0, 0.4);
+}
+
+/* Active */
+.pt-switch:active:not(:has(.pt-switch__input:disabled)) .pt-switch__thumb {
+  transform: translateX(0) scale(0.97);
+  transition-duration: calc(var(--pt-dur) * 0.85);
+}
+
+.pt-switch:active:not(:has(.pt-switch__input:disabled))
+  .pt-switch__input:checked
+  ~ .pt-switch__face
+  .pt-switch__thumb {
+  transform: translateX(calc(var(--pt-track-w) - var(--pt-thumb) - var(--pt-pad-x) * 2)) scale(0.97);
+  transition-duration: calc(var(--pt-dur) * 0.85);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pt-switch__face,
+  .pt-switch__face::before,
+  .pt-switch__track,
+  .pt-switch__thumb,
+  .pt-switch__glow {
+    transition: none;
+  }
+}
+
+/* ---- Example settings row (panel chrome) — matches feature matrix language ---- */
+.pt-settings-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.875rem 1rem;
+  border-radius: 1rem;
+  border: 1px solid color-mix(in srgb, rgba(255, 255, 255, 0.09) 40%, rgba(20, 22, 32, 0.85));
+  background:
+    linear-gradient(
+      175deg,
+      rgba(42, 46, 58, 0.22) 0%,
+      rgba(18, 20, 30, 0.55) 45%,
+      rgba(8, 9, 14, 0.92) 100%
+    ),
+    radial-gradient(120% 80% at 10% 0%, rgba(90, 80, 120, 0.06), transparent 55%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.58),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.35),
+    0 10px 36px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(18px);
+}
+
+.pt-settings-row__text {
+  min-width: 0;
+  flex: 1;
+}
+
+.pt-settings-row__title {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgba(248, 250, 252, 0.92);
+}
+
+.pt-settings-row__hint {
+  margin: 0.25rem 0 0;
+  font-size: 0.6875rem;
+  font-weight: 450;
+  line-height: 1.4;
+  color: rgba(148, 163, 184, 0.55);
+  max-width: 36ch;
+}
+
+.pt-settings-row__control {
+  flex-shrink: 0;
+  padding-top: 0.125rem;
+}

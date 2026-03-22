@@ -1,0 +1,150 @@
+/**
+ * Connected profile / mode selector — accessibility page only.
+ * Softer, larger glass rail than top nav; segments share one outer shell.
+ */
+
+.shell {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  padding: 4px;
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, rgba(255, 255, 255, 0.14) 55%, rgba(60, 48, 88, 0.45));
+  background:
+    linear-gradient(168deg, rgba(255, 255, 255, 0.07) 0%, transparent 42%),
+    linear-gradient(180deg, rgba(48, 38, 72, 0.42) 0%, rgba(26, 20, 44, 0.72) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.45),
+    0 14px 40px rgba(12, 6, 28, 0.45);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  gap: 0;
+  overflow: hidden;
+}
+
+.segment {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 15px 10px 14px;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  background: linear-gradient(180deg, rgba(38, 32, 56, 0.28) 0%, rgba(22, 18, 36, 0.42) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.35);
+  color: color-mix(in srgb, rgba(255, 255, 255, 0.92) 78%, rgba(200, 190, 230, 0.38));
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 550;
+  letter-spacing: 0.06em;
+  text-transform: none;
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.segment:not(:last-child) {
+  border-right: 1px solid color-mix(in srgb, rgba(255, 255, 255, 0.08) 60%, transparent);
+}
+
+.segment:first-child {
+  border-top-left-radius: 14px;
+  border-bottom-left-radius: 14px;
+}
+
+.segment:last-child {
+  border-top-right-radius: 14px;
+  border-bottom-right-radius: 14px;
+}
+
+.segment:hover:not(.segmentActive) {
+  background: linear-gradient(180deg, rgba(50, 42, 72, 0.4) 0%, rgba(30, 26, 48, 0.52) 100%);
+  color: rgba(255, 255, 255, 0.94);
+}
+
+.segment:focus-visible {
+  outline: 2px solid color-mix(in srgb, rgba(180, 160, 240, 0.55), transparent);
+  outline-offset: 2px;
+  z-index: 2;
+}
+
+.segmentActive {
+  z-index: 1;
+  color: #fff;
+  background:
+    linear-gradient(175deg, rgba(255, 255, 255, 0.1) 0%, transparent 45%),
+    linear-gradient(180deg, rgba(88, 72, 128, 0.55) 0%, rgba(52, 42, 82, 0.72) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(30, 22, 50, 0.4),
+    0 0 28px color-mix(in srgb, rgba(160, 130, 220, 0.35), transparent),
+    0 0 1px rgba(210, 195, 250, 0.35);
+}
+
+.iconWrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid color-mix(in srgb, rgba(255, 255, 255, 0.14) 55%, transparent);
+  color: rgba(255, 255, 255, 0.64);
+  flex-shrink: 0;
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.iconWrap svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+  flex-shrink: 0;
+}
+
+.segmentActive .iconWrap {
+  color: rgba(238, 228, 255, 0.96);
+  border-color: color-mix(in srgb, rgba(210, 190, 255, 0.34), transparent);
+  background: rgba(44, 36, 74, 0.5);
+}
+
+.label {
+  line-height: 1.15;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.segmentNew .iconWrap {
+  color: rgba(195, 175, 238, 0.82);
+}
+
+@media (max-width: 1100px) {
+  .shell {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+  }
+
+  .segment {
+    flex: 0 0 auto;
+    min-width: 92px;
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+}

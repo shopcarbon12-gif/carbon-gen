@@ -27,6 +27,10 @@
   --ca-pill-border: rgba(255, 255, 255, 0.22);
   --ca-surface-horizontal: url('./assets-local/surface-horizontal-reference.png');
   --ca-surface-vertical: url('./assets-local/surface-vertical-reference.png');
+  /* Pic1: full-bleed texture for widget preview strip only (not inner CARBON ASSIST card) */
+  --ca-widget-stage-pic1: url('./assets-local/widget-stage-pic1.png');
+  /* Pic3: right-rail second layer only — full-bleed texture (API, compliance, usage, etc.) */
+  --ca-rail-second-pic3: url('./assets-local/rail-second-layer-pic3.png');
 
   font-family: var(--ca-font);
   min-height: 100vh;
@@ -38,7 +42,11 @@
   box-sizing: border-box;
 }
 
-.page :global(*, *::before, *::after) {
+.page :global(*) {
+  box-sizing: border-box;
+}
+.page :global(*::before),
+.page :global(*::after) {
   box-sizing: border-box;
 }
 
@@ -75,56 +83,161 @@
   gap: 12px;
 }
 
+/* Segmented nav: rounded-rectangle track, not capsule — smoked glass, subtle separators */
 .tabsRow {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  background: rgba(255, 255, 255, 0.035);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 99px;
+  display: inline-flex;
+  align-items: stretch;
+  gap: 0;
+  border-radius: 10px;
   padding: 3px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, rgba(255, 255, 255, 0.11) 55%, rgba(30, 28, 40, 0.9));
+  background:
+    linear-gradient(168deg, rgba(255, 255, 255, 0.055) 0%, transparent 38%),
+    linear-gradient(180deg, rgba(38, 34, 52, 0.58) 0%, rgba(14, 12, 22, 0.86) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.52),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.28),
+    0 2px 14px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
 
 .tab {
+  position: relative;
+  z-index: 0;
+  flex: 0 0 auto;
   background: transparent;
   border: none;
-  color: var(--ca-text-dim);
-  font-size: 16px;
+  color: rgba(255, 255, 255, 0.46);
+  font-size: 14px;
+  font-weight: 450;
   font-family: var(--ca-font);
-  padding: 11px 18px;
-  border-radius: 12px;
+  letter-spacing: 0.03em;
+  padding: 8px 16px;
+  border-radius: 0;
   cursor: pointer;
-  transition: all 0.15s;
-  line-height: 1;
+  transition:
+    color 0.18s ease,
+    background 0.18s ease,
+    box-shadow 0.18s ease;
+  line-height: 1.25;
+  margin: 0;
 }
-.tab:hover { color: rgba(255,255,255,0.8); }
 
+.tab:first-child {
+  border-top-left-radius: 7px;
+  border-bottom-left-radius: 7px;
+}
+
+.tab:last-child {
+  border-top-right-radius: 7px;
+  border-bottom-right-radius: 7px;
+}
+
+.tab:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 20%;
+  bottom: 20%;
+  width: 1px;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.09) 45%,
+    rgba(255, 255, 255, 0.05) 100%
+  );
+  pointer-events: none;
+  z-index: 2;
+}
+
+.tab:hover:not(.tabActive) {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.tab:focus-visible {
+  outline: 2px solid color-mix(in srgb, rgba(167, 139, 250, 0.45), rgba(255, 255, 255, 0.2));
+  outline-offset: 2px;
+  z-index: 2;
+}
+
+/* Integrated segment — not a floating inner pill */
 .tabActive {
-  background: var(--ca-button-surface);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  color: #fff !important;
+  z-index: 1;
+  color: rgba(248, 250, 252, 0.96) !important;
   font-weight: 500;
+  background: linear-gradient(180deg, rgba(52, 46, 70, 0.62) 0%, rgba(26, 24, 38, 0.78) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.42),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.22);
 }
 
 .publishBtn {
-  background: var(--ca-button-surface);
-  border: 1px solid rgba(255,255,255,0.16);
-  border-radius: 12px;
-  color: #fff;
-  padding: 11px 18px;
-  font-size: 16px;
-  font-weight: 600;
+  border-radius: 10px;
+  padding: 8px 15px;
+  font-size: 14px;
+  font-weight: 500;
   font-family: var(--ca-font);
+  letter-spacing: 0.03em;
+  color: rgba(250, 250, 250, 0.94);
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.15s;
-  letter-spacing: 0.01em;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
+  border: 1px solid color-mix(in srgb, rgba(255, 255, 255, 0.1) 50%, rgba(32, 30, 44, 0.85));
+  background:
+    linear-gradient(168deg, rgba(255, 255, 255, 0.05) 0%, transparent 36%),
+    linear-gradient(180deg, rgba(42, 38, 54, 0.62) 0%, rgba(16, 14, 24, 0.9) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.48),
+    4px 0 22px color-mix(in srgb, rgba(100, 80, 150, 0.2), transparent);
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
 }
-.publishBtn:hover { background: var(--ca-button-surface-hover); }
-.publishBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.publishBtn:hover:not(:disabled) {
+  background:
+    linear-gradient(168deg, rgba(255, 255, 255, 0.07) 0%, transparent 36%),
+    linear-gradient(180deg, rgba(48, 44, 62, 0.68) 0%, rgba(20, 18, 30, 0.92) 100%);
+  border-color: color-mix(in srgb, rgba(255, 255, 255, 0.14) 50%, rgba(32, 30, 44, 0.85));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.45),
+    5px 0 26px color-mix(in srgb, rgba(110, 88, 165, 0.22), transparent);
+}
+
+.publishBtn:focus-visible {
+  outline: 2px solid color-mix(in srgb, rgba(167, 139, 250, 0.4), transparent);
+  outline-offset: 2px;
+}
+
+.publishBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Slimmer chevron inside Publish — minimal, matches control panel */
+.publishBtn .buttonLabelWithTriangle {
+  gap: 8px;
+}
+
+.publishBtn .glossyTriangle {
+  width: 9px;
+  height: 9px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1px 0 rgba(54, 20, 114, 0.28),
+    0 1px 0 rgba(255, 255, 255, 0.1),
+    0 2px 8px rgba(93, 35, 185, 0.22);
+}
 
 .buttonLabelWithTriangle {
   display: inline-flex;
@@ -212,8 +325,8 @@
 /* ─── Layout ─────────────────────────────────────────── */
 .layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 255px;
-  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) clamp(300px, 34vw, 420px);
+  gap: 20px;
   align-items: start;
 }
 
@@ -285,15 +398,16 @@
 
 .panelUtilityBar {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
+  width: 100%;
+  align-items: stretch;
+  justify-content: stretch;
+  gap: 0;
+  flex-wrap: nowrap;
 }
 
 .widgetStage {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
+  grid-template-columns: minmax(0, 1fr) clamp(280px, 31vw, 400px);
   gap: 18px;
   border-radius: 18px;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -304,15 +418,58 @@
   padding: 18px;
 }
 
+/* Pic1 stretched on outer strip only; inner .widgetShell keeps solid panel */
+.widgetStagePic1 {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: rgba(8, 6, 14, 0.42);
+}
+
+.widgetStagePic1::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-image: var(--ca-widget-stage-pic1);
+  background-position: center center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.widgetStagePic1::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    185deg,
+    rgba(10, 8, 18, 0.38) 0%,
+    rgba(6, 4, 12, 0.52) 45%,
+    rgba(4, 3, 10, 0.58) 100%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+.widgetStagePic1 > * {
+  position: relative;
+  z-index: 1;
+}
+
 .widgetShell {
   display: flex;
   flex-direction: column;
   min-height: 0;
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(16, 10, 24, 0.9);
+  background: rgba(16, 10, 24, 0.92);
   overflow: hidden;
-  max-width: 420px;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
 }
 
 .widgetShellHeader {
@@ -355,21 +512,24 @@
 .widgetShellBrandText {
   display: inline-flex;
   align-items: baseline;
+  gap: 0;
   line-height: 1;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .widgetShellBrandLead {
-  font-size: 17px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: #fff;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: inherit;
+  color: #f4f4f5;
 }
 
 .widgetShellBrandTail {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 500;
-  letter-spacing: 0.018em;
-  color: rgba(255, 255, 255, 0.58);
+  letter-spacing: inherit;
+  color: rgba(244, 244, 245, 0.72);
 }
 
 .widgetShellClose {
@@ -405,17 +565,26 @@
 
 .widgetShellPills {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
+  width: 100%;
+  min-width: 0;
 }
 
 .widgetShellPill {
+  flex: 1 1 0;
+  min-width: 0;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.07);
-  padding: 8px 12px;
-  font-size: 15px;
+  padding: 9px 6px;
+  font-size: 13px;
+  font-weight: 450;
   color: rgba(255, 255, 255, 0.9);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .widgetActionRail {
@@ -491,34 +660,61 @@
 
 .profileStrip {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-wrap: nowrap;
+  justify-content: center;
+  align-items: stretch;
+  gap: 10px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  padding: 4px 0;
 }
 
 .pill {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
   background: var(--ca-button-surface);
   border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 12px;
-  padding: 10px 16px;
-  font-size: 16px;
+  border-radius: 10px;
+  padding: 12px 8px;
+  font-size: 17px;
+  font-weight: 450;
+  letter-spacing: 0.07em;
   font-family: var(--ca-font);
-  color: rgba(255,255,255,0.88);
+  color: rgba(255, 255, 255, 0.9);
   cursor: pointer;
   transition: all 0.15s;
-  line-height: 1;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .pill:hover { background: var(--ca-button-surface-hover); border-color: rgba(255,255,255,0.24); color: #fff; }
 
 .pillAdd {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: var(--ca-button-surface);
   border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 12px;
-  padding: 10px 16px;
-  font-size: 16px;
+  border-radius: 10px;
+  padding: 12px 8px;
+  font-size: 17px;
+  font-weight: 450;
+  letter-spacing: 0.07em;
   font-family: var(--ca-font);
   color: rgba(255, 255, 255, 0.86);
   cursor: pointer;
   transition: background 0.15s;
+  white-space: nowrap;
 }
 .pillAdd:hover { background: var(--ca-button-surface-hover); }
 
@@ -664,6 +860,16 @@
 .outlineBtn:hover { background: var(--ca-button-surface-hover); }
 .outlineBtn:disabled { opacity: 0.4; cursor: not-allowed; }
 
+/* Preview toolbar: clear ON state (contrast / font / links / scaled text) */
+.previewChipOn {
+  background: linear-gradient(180deg, rgba(110, 75, 170, 0.4) 0%, rgba(40, 28, 72, 0.58) 100%);
+  border-color: rgba(196, 181, 253, 0.48);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 0 22px rgba(130, 100, 200, 0.28);
+  color: #faf5ff;
+}
+
 /* ─── Snippet section ───────────────────────────────── */
 .snippetSection {
   display: flex;
@@ -738,15 +944,16 @@
   display: none;
 }
 
+/* First layer (outer shell): same material as main column .glassPanel — dark, not saturated purple */
 .railCard {
-  background: var(--ca-shell-rail);
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: var(--ca-shell-surface);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 18px 32px rgba(0, 0, 0, 0.16);
+    0 18px 34px rgba(0, 0, 0, 0.18);
   padding: 18px 16px;
   display: flex;
   flex-direction: column;
@@ -808,12 +1015,6 @@
   box-shadow: 0 0 6px var(--ca-green-glow);
 }
 
-/* ChatGPT card */
-.chatCard {
-  background: linear-gradient(160deg, rgba(70,20,150,0.65) 0%, rgba(30,8,70,0.5) 100%);
-  border-color: rgba(130,70,255,0.25);
-}
-
 .chatHead {
   display: flex;
   align-items: center;
@@ -835,6 +1036,11 @@
   color: var(--ca-text-dim);
   font-size: 16px;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  line-height: 0;
 }
 .chatRefresh:hover { color: #fff; }
 
@@ -897,11 +1103,6 @@
   transition: background 0.15s;
 }
 .chatClearBtn:hover { background: rgba(255,255,255,0.07); }
-
-/* Compliance checklist card */
-.complianceCard {
-  background: rgba(22, 12, 38, 0.7);
-}
 
 .complianceTitle {
   font-size: 14px;
@@ -994,11 +1195,6 @@
   padding: 0;
 }
 .logLink:hover { color: #fff; }
-
-/* Law watch rail card */
-.lawWatchCard {
-  background: rgba(18, 10, 30, 0.7);
-}
 
 .lawStatusBox {
   background: rgba(0,0,0,0.2);
@@ -1168,12 +1364,20 @@
   gap: 8px;
 }
 
+/* Layer 3 — Preview Surface: solid preview document (restored); not textured */
 .previewCanvas {
   border-radius: 14px;
   padding: 18px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 190px;
   gap: 16px;
+  border: 1px solid color-mix(in srgb, var(--preview-accent, #6d28d9) 32%, rgba(255, 255, 255, 0.08));
+  background: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--preview-panel, #0b1220) 92%, #020617) 0%,
+    color-mix(in srgb, var(--preview-panel, #0b1220) 88%, #0f172a) 100%
+  );
+  isolation: isolate;
 }
 
 .previewEyebrow {
@@ -1201,7 +1405,7 @@
 .previewLink {
   display: inline-flex;
   margin-top: 12px;
-  color: inherit;
+  color: color-mix(in srgb, var(--preview-accent, #93c5fd) 82%, #f8fafc);
   text-decoration: underline;
 }
 
@@ -1215,11 +1419,15 @@
 .previewMetaCard {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
   padding: 14px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.previewMetaCard.horizontalSurface {
+  background: color-mix(in srgb, var(--preview-panel, #0d0915) 88%, transparent);
+  border-color: color-mix(in srgb, var(--preview-accent, #a78bfa) 28%, rgba(255, 255, 255, 0.12));
 }
 
 .previewMetaLabel {
@@ -1393,11 +1601,57 @@
 }
 
 .fieldStack,
-.featureList,
 .checklistGrid {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.featureMatrixList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Dark glass strips: embedded, beveled, smoked graphite edge — matches premium toggle mood */
+.featureMatrixRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0.65rem 0.9rem;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, rgba(255, 255, 255, 0.07) 35%, rgba(18, 20, 30, 0.9));
+  background:
+    linear-gradient(
+      180deg,
+      rgba(48, 52, 66, 0.18) 0%,
+      rgba(22, 24, 34, 0.42) 28%,
+      rgba(10, 11, 18, 0.88) 100%
+    ),
+    linear-gradient(
+      165deg,
+      rgba(38, 42, 56, 0.35) 0%,
+      rgba(14, 16, 24, 0.75) 55%,
+      rgba(5, 6, 11, 0.95) 100%
+    ),
+    radial-gradient(ellipse 90% 70% at 12% 0%, rgba(100, 90, 140, 0.05), transparent 60%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.065),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.52),
+    inset 0 2px 8px rgba(0, 0, 0, 0.22),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.28),
+    0 4px 16px rgba(0, 0, 0, 0.35),
+    0 1px 0 rgba(255, 255, 255, 0.02);
+}
+
+.featureMatrixLabel {
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: rgba(248, 250, 252, 0.93);
+  min-width: 0;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
 .fieldGroup {
@@ -1431,6 +1685,29 @@
   line-height: 1.35;
   padding: 14px 16px;
   letter-spacing: 0.01em;
+}
+
+.fieldSelect {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 44px;
+  cursor: pointer;
+  color-scheme: dark;
+  background-color: var(--ca-field-surface);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.55)' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat, no-repeat;
+  background-position: right 14px center;
+  background-size: 16px;
+}
+
+#config-console .fieldSelect:focus {
+  border-color: color-mix(in srgb, var(--config-accent, #a78bfa) 45%, rgba(255, 255, 255, 0.28));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--config-accent, #a78bfa) 35%, transparent);
+}
+
+#config-console .rangeInput {
+  accent-color: var(--config-accent, #c084fc);
 }
 
 .fieldInput::placeholder,
@@ -1564,7 +1841,7 @@
 }
 
 .apiList {
-  max-height: calc((3 * 48px) + (2 * 10px));
+  max-height: calc((3 * 58px) + (2 * 10px));
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
@@ -1584,7 +1861,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 50px;
+  min-height: 58px;
   padding: 12px 14px;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.14);
@@ -1639,9 +1916,8 @@
   font-size: 13px;
 }
 
-.metricCard {
-  background: transparent;
-}
+/* .metricCard is layout/typography only — never set background here: it would override
+   .railCard and strip the first-layer shell on section.railCard.metricCard */
 
 .horizontalSurface {
   position: relative;
@@ -1673,16 +1949,20 @@
   z-index: 0;
 }
 
+/* Pic 2 horizontal texture — full-bleed (no side bands) */
 .horizontalSurface::before {
   background-image: var(--ca-surface-horizontal);
   background-position: center center;
   background-size: cover;
+  background-repeat: no-repeat;
 }
 
+/* Pic 1 vertical texture — ~85% occupancy (height), centered */
 .verticalSurface::before {
   background-image: var(--ca-surface-vertical);
-  background-position: center top;
-  background-size: cover;
+  background-position: center center;
+  background-size: auto 85%;
+  background-repeat: no-repeat;
 }
 
 .horizontalSurface::after,
@@ -1708,8 +1988,9 @@
 
 .featuredHorizontalSurface::before {
   background-image: var(--ca-surface-horizontal);
-  background-position: right top;
+  background-position: center center;
   background-size: cover;
+  background-repeat: no-repeat;
   opacity: 1;
 }
 
@@ -1718,16 +1999,44 @@
     linear-gradient(180deg, rgba(12, 8, 20, 0.06), rgba(12, 8, 20, 0.03) 28%, rgba(12, 8, 20, 0.1) 100%);
 }
 
-.featuredVerticalSurface::before {
-  background-image: var(--ca-surface-horizontal);
-  background-position: right top;
+/*
+ * Configuration Console — Pic1 on all four cards.
+ * Root cause of “cut” bands: 85% width left empty side margins; use cover for full-bleed texture.
+ * #id must stay :global(...) so CSS Modules hashes don’t break the selector.
+ */
+.page :global(#config-console) .configCard.horizontalSurface::before {
+  background-image: var(--ca-widget-stage-pic1);
+  background-position: center center;
   background-size: cover;
+  background-repeat: no-repeat;
+  opacity: 1;
+}
+
+.page :global(#config-console) .configCard.horizontalSurface::after {
+  background:
+    linear-gradient(180deg, rgba(12, 8, 20, 0.035), rgba(12, 8, 20, 0.02) 35%, rgba(12, 8, 20, 0.055) 100%);
+}
+
+.featuredVerticalSurface::before {
+  background-image: var(--ca-surface-vertical);
+  background-position: center center;
+  background-size: auto 85%;
+  background-repeat: no-repeat;
   opacity: 1;
 }
 
 .featuredVerticalSurface::after {
   background:
     linear-gradient(180deg, rgba(12, 8, 20, 0.06), rgba(12, 8, 20, 0.03) 28%, rgba(12, 8, 20, 0.1) 100%);
+}
+
+/* Right column: second layer — Pic3 stretched to fill entire inner surface */
+.railInnerSurface.verticalSurface::before {
+  background-image: var(--ca-rail-second-pic3);
+  background-position: center center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  opacity: 1;
 }
 
 .snippetBox.horizontalSurface::after {
@@ -1827,11 +2136,14 @@
 }
 
 .metricIconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 54px;
   flex: 0 0 54px;
-  justify-content: center;
   padding-inline: 0;
   font-size: 18px;
+  line-height: 0;
 }
 
 .metricFooterIcon {
@@ -1891,7 +2203,7 @@
   color: rgba(255, 255, 255, 0.86);
   font: inherit;
   font-size: 20px;
-  line-height: 1;
+  line-height: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1979,6 +2291,21 @@
 
 .readinessDotOff {
   background: rgba(255, 255, 255, 0.18);
+}
+
+@media (max-width: 1100px) {
+  .profileStrip {
+    justify-content: flex-start;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+  }
+
+  .widgetShellPills {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+  }
 }
 
 @media (max-width: 980px) {

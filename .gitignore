@@ -58,3 +58,11 @@ backups/
 /public/_piny
 playwright-report/
 test-results/
+
+# local DB / dumps / one-off artifacts (do not commit)
+neon-backup.dump
+pg_dump.log
+postgresql/
+.playwright-mcp/
+build-accessibility.log
+build-capture.log
