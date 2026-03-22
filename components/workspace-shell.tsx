@@ -119,7 +119,13 @@ function getCurrentTitle(pathname: string) {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-export function WorkspaceShell({ children }: { children: ReactNode }) {
+export function WorkspaceShell({
+  children,
+  rightRailExtra,
+}: {
+  children: ReactNode;
+  rightRailExtra?: ReactNode;
+}) {
   const pathname = usePathname() || "/";
   const router = useRouter();
   const isCollectionMappingRoute =
@@ -363,7 +369,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className={`shell ${chatExpanded && showChatPanel ? "chat-expanded" : ""}`}>
+    <div className={`shell ${chatExpanded && showChatPanel ? "chat-expanded" : ""} ${rightRailExtra ? "has-right-extra" : ""}`}>
       <svg
         aria-hidden
         focusable="false"
@@ -811,6 +817,12 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
               </div>
             </div>
           </section>
+        </aside>
+      ) : null}
+
+      {rightRailExtra ? (
+        <aside className="right-rail-extra-wrap" aria-label="Accessibility status panels">
+          {rightRailExtra}
         </aside>
       ) : null}
 
@@ -1961,6 +1973,26 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
             width: min(var(--integration-panel-width), calc(100vw - 26px));
           }
         }
+        .has-right-extra .chat-panel-wrap {
+          max-height: 260px;
+        }
+        .right-rail-extra-wrap {
+          position: fixed;
+          right: var(--page-edge-gap);
+          top: calc(89px + min(var(--integration-panel-height), calc(100vh - 102px)) + var(--content-api-gap) + 260px + var(--content-api-gap));
+          bottom: var(--page-edge-gap);
+          width: min(var(--integration-panel-width), calc(100vw - 26px));
+          z-index: 44;
+          overflow-y: auto;
+          overflow-x: hidden;
+          display: flex;
+          flex-direction: column;
+          gap: var(--content-api-gap);
+          pointer-events: auto;
+          scrollbar-width: none;
+        }
+        .right-rail-extra-wrap::-webkit-scrollbar { display: none; }
+        .shell.chat-expanded .right-rail-extra-wrap { display: none; }
       `}</style>
     </div>
   );

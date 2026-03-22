@@ -660,10 +660,10 @@ export default function AccessibilityPage() {
       {/* B: Tab bar + Publish Changes */}
       <nav className={styles.tabBar}>
         <div className={styles.tabs}>
-          <button className={`${styles.tab} ${styles.tabActive}`}>Widget</button>
           <button className={styles.tab}>Docs</button>
           <button className={styles.tab}>Tickets</button>
           <button className={styles.tab}>Log History</button>
+          <button className={`${styles.tab} ${styles.tabActive}`}>Widget</button>
         </div>
         <button
           className={styles.publishBtn}
@@ -681,11 +681,8 @@ export default function AccessibilityPage() {
         </div>
       )}
 
-      {/* D: Two-column content */}
-      <div className={styles.contentGrid}>
-
-        {/* LEFT COLUMN */}
-        <div className={styles.mainCol}>
+      {/* D: Main content — single column */}
+      <div className={styles.mainCol}>
 
           {/* CARD 1: Main Accessibility panel */}
           <section className={styles.card} aria-label="Widget overview">
@@ -709,14 +706,14 @@ export default function AccessibilityPage() {
             <div className={styles.profileSection}>
               <span className={styles.profileLabel}>Accessibility preferences</span>
               <div className={styles.profileStrip}>
-                {["Low Vision", "Motor", "Dyslexia", "ADHD"].map((p) => (
+                {["Retail", "Low Vision", "Motor", "Dyslexia", "ADHD"].map((p) => (
                   <span key={p} className={styles.profilePill}>{p}</span>
                 ))}
                 <button className={styles.profilePillAdd}>New +</button>
               </div>
             </div>
 
-            {/* Embedded widget preview sub-card */}
+            {/* Embedded widget preview sub-card — split layout */}
             <div className={styles.widgetPreviewCard}>
               <div className={styles.wpHead}>
                 <div className={styles.wpBrand}>
@@ -726,38 +723,58 @@ export default function AccessibilityPage() {
                 <button className={styles.wpClose} aria-label="Close"
                   onClick={() => removeRuntimeWidgetFromPage()}>×</button>
               </div>
-              <div className={styles.wpBody}>
-                <p className={styles.wpEyebrow}>Accessibility preferences</p>
-                <p className={styles.wpSubtitle}>
-                  {settings.widgetLabel || "Carbon Assist"} — configure your accessibility experience
-                </p>
-                <div className={styles.wpProfiles}>
-                  {["Blind", "Low Vision", "Motor", "Dyslexia", "ADHD", "Seizure Safe"].map((p) => (
-                    <span key={p} className={styles.wpProfilePill}>{p}</span>
-                  ))}
+              <div className={styles.wpSplit}>
+                <div className={styles.wpBody}>
+                  <p className={styles.wpEyebrow}>Accessibility preferences</p>
+                  <p className={styles.wpSubtitle}>
+                    {settings.widgetLabel || "Carbon Assist"} — configure your accessibility experience
+                  </p>
+                  <div className={styles.wpProfiles}>
+                    {["Blind", "Low Vision", "Motor", "Dyslexia", "ADHD", "Seizure Safe"].map((p) => (
+                      <span key={p} className={styles.wpProfilePill}>{p}</span>
+                    ))}
+                  </div>
+                </div>
+                <div className={styles.wpActionsCol}>
+                  <button className={styles.wpActionBtn} onClick={installRuntimeWidgetOnPage}>
+                    {runtimeWidgetMounted ? "Reload Preview \u203a" : "Open Preview \u203a"}
+                  </button>
+                  <button className={styles.wpActionBtn}
+                    onClick={() => { removeRuntimeWidgetFromPage(); setRuntimeWidgetMounted(false); }}
+                    title="Remove widget from page">↺</button>
+                  <button className={styles.wpActionBtn}
+                    onClick={() => setPreviewOpen((v) => !v)}>
+                    View {previewOpen ? "↑" : "↓"}
+                  </button>
+                  <button className={styles.wpActionBtn}
+                    onClick={() => document.getElementById("snippets-card")?.scrollIntoView({ behavior: "smooth" })}>
+                    Installation Snippets ↓
+                  </button>
+                  <button
+                    className={`${styles.wpActionBtn} ${styles.wpActionBtnDanger}`}
+                    onClick={() => { removeRuntimeWidgetFromPage(); setRuntimeWidgetMounted(false); }}>
+                    Uninstall
+                  </button>
                 </div>
               </div>
-              <div className={styles.wpActions}>
-                <button className={styles.wpActionBtn} onClick={installRuntimeWidgetOnPage}>
-                  {runtimeWidgetMounted ? "Reload Preview \u203a" : "Open Preview \u203a"}
-                </button>
-                <button className={styles.wpActionBtn}
-                  onClick={() => { removeRuntimeWidgetFromPage(); setRuntimeWidgetMounted(false); }}
-                  title="Remove widget from page">↺</button>
-                <button className={styles.wpActionBtn}
-                  onClick={() => setPreviewOpen((v) => !v)}>
-                  {previewOpen ? "Hide Preview" : "View \u2193"}
-                </button>
-                <button className={styles.wpActionBtn}
-                  onClick={() => document.getElementById("snippets-card")?.scrollIntoView({ behavior: "smooth" })}>
-                  Installation Snippets \u2193
-                </button>
-                <button
-                  className={`${styles.wpActionBtn} ${styles.wpActionBtnDanger}`}
-                  onClick={() => { removeRuntimeWidgetFromPage(); setRuntimeWidgetMounted(false); }}>
-                  Uninstall
-                </button>
-              </div>
+            </div>
+
+            {/* Bottom action row below the preview card */}
+            <div className={styles.actionRow}>
+              <button className={styles.btn} onClick={installRuntimeWidgetOnPage}>
+                Open Preview
+              </button>
+              <button className={styles.btn} onClick={() => setPreviewOpen((v) => !v)}>
+                View {previewOpen ? "↑" : "↓"}
+              </button>
+              <button className={styles.iconBtn}
+                onClick={() => { removeRuntimeWidgetFromPage(); setRuntimeWidgetMounted(false); }}>
+                ↺
+              </button>
+              <button className={styles.btn}
+                onClick={() => document.getElementById("snippets-card")?.scrollIntoView({ behavior: "smooth" })}>
+                Installation Snippets ↓
+              </button>
             </div>
 
             {/* Inline behavior preview */}
@@ -822,20 +839,20 @@ export default function AccessibilityPage() {
               </div>
             </div>
             <div className={styles.snippetBlock}>
-              <p className={styles.snippetLabel}>App Snippet (managed scope)</p>
-              <div className={styles.codeWrap}>
-                <code className={styles.codeBlock}>{managedInstallSnippet}</code>
-                <button className={styles.copyBtn} onClick={copyManagedSnippet}>
-                  {copyManagedState ? "Copied" : "Copy"}
-                </button>
-              </div>
-            </div>
-            <div className={styles.snippetBlock}>
               <p className={styles.snippetLabel}>Site Snippet (static config)</p>
               <div className={styles.codeWrap}>
                 <code className={styles.codeBlock}>{installSnippet}</code>
                 <button className={styles.copyBtn} onClick={copySnippet}>
                   {copied ? "Copied" : "Copy"}
+                </button>
+              </div>
+            </div>
+            <div className={styles.snippetBlock}>
+              <p className={styles.snippetLabel}>App Snippet (managed scope)</p>
+              <div className={styles.codeWrap}>
+                <code className={styles.codeBlock}>{managedInstallSnippet}</code>
+                <button className={styles.copyBtn} onClick={copyManagedSnippet}>
+                  {copyManagedState ? "Copied" : "Copy"}
                 </button>
               </div>
             </div>
@@ -1069,92 +1086,6 @@ export default function AccessibilityPage() {
             </div>
           </details>
 
-        </div>
-
-        {/* RIGHT SIDEBAR */}
-        <aside className={styles.sideCol}>
-
-          {/* Compliance Checklist */}
-          <section className={styles.sideCard} aria-label="Compliance checklist">
-            <h3 className={styles.sideCardTitle}>Compliance Checklist</h3>
-            <p className={styles.sideCardSub}>Remediation progress</p>
-            <div className={styles.progressWrap}
-              role="meter" aria-valuenow={checklistCompletion.percent}
-              aria-valuemin={0} aria-valuemax={100}>
-              <div className={styles.progressBar}
-                style={{ width: `${checklistCompletion.percent}%` }} />
-            </div>
-            <p className={styles.progressLabel}>
-              {checklistCompletion.done} / {checklistCompletion.total} ({checklistCompletion.percent}%)
-            </p>
-            <div className={styles.checklistList}>
-              {checklistItems.map((item) => (
-                <label key={item.key} className={styles.checkRow}>
-                  <input type="checkbox" className={styles.srOnly}
-                    checked={settings.complianceChecklist[item.key]}
-                    onChange={(e) => updateChecklist(item.key, e.target.checked)} />
-                  <span className={`${styles.checkDot} ${settings.complianceChecklist[item.key] ? styles.checkDotOn : ""}`}
-                    aria-hidden />
-                  <span className={styles.checkLabel}>{item.label}</span>
-                </label>
-              ))}
-            </div>
-            {usageSummary && (
-              <div className={styles.usageStats}>
-                <p className={styles.usageStat}>
-                  Events (30d): <strong>{usageSummary.totalEvents}</strong>
-                </p>
-                {usageSummary.byEvent.slice(0, 3).map((e) => (
-                  <p key={e.eventName} className={styles.usageStat}>
-                    {e.eventName}: <strong>{e.count}</strong>
-                  </p>
-                ))}
-              </div>
-            )}
-            <button className={styles.sideBtn} onClick={refreshUsageSummary} disabled={usageLoading}>
-              {usageLoading ? "Loading..." : "View Log History ①"}
-            </button>
-          </section>
-
-          {/* Law Watch + Monthly Report compact */}
-          <section className={styles.sideCard} aria-label="Law watch and compliance status">
-            <h3 className={styles.sideCardTitle}>Law Watch Status</h3>
-            <p className={styles.muted}>
-              Daily automated checks for accessibility regulation updates
-              (ADA.gov, Federal Register, Florida statutes).
-            </p>
-            {lawWatchState ? (
-              <p className={styles.muted}>
-                Current Compliance:{" "}
-                <span className={lawWatchState.lastRunOk ? styles.statusOk : styles.statusFail}>
-                  {lawWatchState.lastRunOk ? "●● OK" : "●● Issues"}
-                </span>
-              </p>
-            ) : (
-              <p className={styles.muted}>No law watch run recorded yet.</p>
-            )}
-            {lastReportState && (
-              <p className={styles.muted}>
-                Last report: {lastReportState.month} to {lastReportState.sentTo} —{" "}
-                <span className={lastReportState.ok ? styles.statusOk : styles.statusFail}>
-                  {lastReportState.ok ? "Sent" : "Failed"}
-                </span>
-              </p>
-            )}
-            <div className={styles.sideActions}>
-              <button className={styles.sideBtnPrimary} onClick={sendMonthlyTestReport}
-                disabled={sendingMonthlyTest}>
-                {sendingMonthlyTest ? "Sending..." : "Send Test Report"}
-              </button>
-              <button className={styles.sideBtn} onClick={refreshLastReportState}
-                disabled={lastReportLoading}>
-                {lastReportLoading ? "Loading..." : "Refresh"}
-              </button>
-            </div>
-            {monthlyTestStatus && <p className={styles.statusText} role="status">{monthlyTestStatus}</p>}
-          </section>
-
-        </aside>
       </div>
     </main>
   );
