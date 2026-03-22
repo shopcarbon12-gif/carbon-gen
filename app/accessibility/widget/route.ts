@@ -263,6 +263,19 @@ var widgetCss='' +
   '.ca-assist-block > .ca-assist-sec{margin-bottom:0}' +
   '.ca-assist-sheet{display:flex;flex-direction:column;gap:0;border:1px solid rgba(255,255,255,.06);border-radius:14px;background:rgba(255,255,255,.02);overflow:hidden}' +
   '.ca-assist-sheet > .ca-assist-sec{padding:12px 14px 0;margin:0}' +
+  '.ca-assist-stack{display:flex;flex-direction:column;gap:0;border:0;border-radius:0;background:transparent;overflow:visible}' +
+  '.ca-assist-stack > .ca-assist-sec{margin:0 0 6px 2px;padding:0}' +
+  '.ca-assist-launcher__cluster{display:inline-flex;align-items:center;gap:10px;min-width:0;flex:1}' +
+  '.ca-assist-strip-cluster{display:flex;align-items:center;gap:10px;min-width:0;flex:1}' +
+  '.ca-assist-logo-img--launcher{max-height:28px!important;width:auto!important}' +
+  '.ca-assist-logo-img--strip{max-height:40px!important;width:auto!important}' +
+  '.ca-assist-panel-sub{margin-top:5px;font-size:11px;font-weight:500;letter-spacing:.03em;color:rgba(212,212,216,.52);line-height:1.35}' +
+  '.ca-assist-field--compact{padding:8px 0}' +
+  '.ca-assist-field__name--compact{font-size:8.5px;font-weight:600;letter-spacing:.12em;margin-bottom:6px}' +
+  '.ca-assist-seg--tight{gap:4px}' +
+  '.ca-assist-field--compact .ca-assist-seg__btn{padding:5px 11px;border-radius:999px;min-height:30px;font-size:10.5px;font-weight:500;border-color:rgba(255,255,255,.08);background:rgba(0,0,0,.22)}' +
+  '.ca-assist-field--compact .ca-assist-seg__btn:hover{background:rgba(255,255,255,.035)}' +
+  '.ca-assist-field--compact .ca-assist-seg__btn[aria-checked="true"]{border-color:rgba(255,255,255,.16);background:rgba(255,255,255,.045);color:#f4f4f5;font-weight:520}' +
   '.ca-assist-sec{font-size:9px;font-weight:650;letter-spacing:.18em !important;text-transform:uppercase !important;color:rgba(212,212,216,.38);margin:0 0 8px 2px}' +
   '.ca-assist-field{padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.05)}' +
   '.ca-assist-field:last-child{border-bottom:0}' +
@@ -278,11 +291,11 @@ var widgetCss='' +
   '.ca-assist-toggle__text{display:flex;flex-direction:column;gap:3px;align-items:flex-start;min-width:0;flex:1}' +
   '.ca-assist-toggle__label{font-size:13px;font-weight:520;line-height:1.25;color:rgba(244,244,245,.95)}' +
   '.ca-assist-toggle__hint{font-size:11px;font-weight:450;line-height:1.35;color:rgba(212,212,216,.42)}' +
-  '.ca-assist-switch{flex:0 0 auto;padding-top:2px}' +
-  '.ca-assist-switch__track{position:relative;display:block;width:36px;height:20px;border-radius:999px;background:rgba(255,255,255,.1);transition:background .18s ease}' +
-  '.ca-assist-toggle.is-on .ca-assist-switch__track{background:color-mix(in srgb,var(--ca-accent,#7c3aed) 55%,rgba(255,255,255,.12))}' +
-  '.ca-assist-switch__thumb{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:999px;background:#f8fafc;box-shadow:0 1px 4px rgba(0,0,0,.45);transition:transform .18s cubic-bezier(.2,.85,.25,1)}' +
-  '.ca-assist-toggle.is-on .ca-assist-switch__thumb{transform:translateX(16px)}' +
+  '.ca-assist-switch{flex:0 0 auto;padding-top:1px}' +
+  '.ca-assist-switch__track{position:relative;display:block;width:32px;height:17px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.06);transition:background .18s ease,border-color .18s ease}' +
+  '.ca-assist-toggle.is-on .ca-assist-switch__track{background:color-mix(in srgb,var(--ca-accent,#7c3aed) 48%,rgba(255,255,255,.08));border-color:color-mix(in srgb,var(--ca-accent,#7c3aed) 35%,rgba(255,255,255,.12))}' +
+  '.ca-assist-switch__thumb{position:absolute;top:1.5px;left:2px;width:13px;height:13px;border-radius:999px;background:linear-gradient(180deg,#f8fafc,#e2e8f0);box-shadow:0 1px 3px rgba(0,0,0,.4);transition:transform .18s cubic-bezier(.2,.85,.25,1)}' +
+  '.ca-assist-toggle.is-on .ca-assist-switch__thumb{transform:translateX(14px)}' +
   '.ca-assist-navrow{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;text-align:left;border:0;border-bottom:1px solid rgba(255,255,255,.05);background:transparent;color:#e4e4e7;padding:11px 14px;min-height:44px;cursor:pointer;transition:background .12s ease}' +
   '.ca-assist-navrow:last-child{border-bottom:0}' +
   '.ca-assist-navrow:hover{background:rgba(255,255,255,.025)}' +
@@ -868,19 +881,20 @@ function makeCommandAction(label,badgeText,onClick,dataKey){
   return btn;
 }
 
-function makeRadioGroup(labelText,key,options,onToggle,annKey){
+function makeRadioGroup(labelText,key,options,onToggle,annKey,compact){
+  compact=Boolean(compact);
   var wrap=document.createElement('div');
-  wrap.className='ca-assist-field';
+  wrap.className='ca-assist-field'+(compact?' ca-assist-field--compact':'');
   var lid='ca-assist-rg-lbl-'+String(key);
   var text=document.createElement('div');
   text.id=lid;
-  text.className='ca-assist-field__name';
+  text.className='ca-assist-field__name'+(compact?' ca-assist-field__name--compact':'');
   text.textContent=labelText;
   var group=document.createElement('div');
   group.setAttribute('role','radiogroup');
   group.setAttribute('aria-labelledby',lid);
   var optsEl=document.createElement('div');
-  optsEl.className='ca-assist-seg';
+  optsEl.className='ca-assist-seg'+(compact?' ca-assist-seg--tight':'');
   var radios=[];
   function labelForValue(val){
     for(var j=0;j<options.length;j++){
@@ -1195,6 +1209,57 @@ function buildMarkwordStack(mod){
   w.appendChild(a);
   return w;
 }
+function buildLauncherBrand(){
+  var box=document.createElement('span');
+  box.className='ca-assist-launcher__cluster';
+  var url=String(config.logoUrl||'').trim();
+  if(url){
+    var img=document.createElement('img');
+    img.className='ca-assist-logo-img ca-assist-logo-img--launcher';
+    img.alt=String(config.logoAlt||'Carbon Assist');
+    img.decoding='async';
+    img.loading='lazy';
+    img.referrerPolicy='no-referrer';
+    img.src=url;
+    var mh=Number(config.logoMaxHeight);
+    if(!isFinite(mh)||mh<12){mh=26;}
+    var v=String(config.logoVariant||'wordmark');
+    if(v==='symbol'){mh=Math.min(mh,24);}
+    else if(v==='full'){mh=Math.min(mh,30);}
+    else{mh=Math.min(mh,28);}
+    img.style.maxHeight=mh+'px';
+    img.style.width='auto';
+    img.style.objectFit='contain';
+    img.addEventListener('error',function(){try{box.removeChild(img);}catch(_e){}});
+    box.appendChild(img);
+  }
+  box.appendChild(buildMarkwordStack('ca-assist-markword--launcher'));
+  return box;
+}
+function buildHeaderBrandStrip(){
+  var box=document.createElement('div');
+  box.className='ca-assist-strip-cluster';
+  var url=String(config.logoUrl||'').trim();
+  if(url){
+    var img=document.createElement('img');
+    img.className='ca-assist-logo-img ca-assist-logo-img--strip';
+    img.alt=String(config.logoAlt||'Carbon Assist');
+    img.decoding='async';
+    img.loading='lazy';
+    img.referrerPolicy='no-referrer';
+    img.src=url;
+    var mh=Number(config.logoMaxHeight);
+    if(!isFinite(mh)||mh<12){mh=36;}
+    mh=Math.min(mh,48);
+    img.style.maxHeight=mh+'px';
+    img.style.width='auto';
+    img.style.objectFit='contain';
+    img.addEventListener('error',function(){try{box.removeChild(img);}catch(_e){}});
+    box.appendChild(img);
+  }
+  box.appendChild(buildMarkwordStack('ca-assist-markword--strip'));
+  return box;
+}
 function buildLogoBrand(slot){
   slot=slot||'header';
   var wrap=document.createElement('span');
@@ -1281,7 +1346,7 @@ function createWidget(){
   if(config.showTextLabel){
     var brand=document.createElement('span');
     brand.className='ca-assist-launcher__brand';
-    brand.appendChild(buildLogoBrand('launcher'));
+    brand.appendChild(buildLauncherBrand());
     if(String(config.logoUrl||'').trim() && String(config.label||'').trim()){
       var cap=document.createElement('span');
       cap.className='ca-assist-launcher__caption';
@@ -1304,7 +1369,7 @@ function createWidget(){
       var brand2=document.createElement('span');
       brand2.className='ca-assist-launcher__brand';
       brand2.style.justifyContent='center';
-      brand2.appendChild(buildLogoBrand('launcher'));
+      brand2.appendChild(buildLauncherBrand());
       inner.appendChild(brand2);
     }else{
       var glyph2=document.createElement('span');
@@ -1333,7 +1398,7 @@ function createWidget(){
   brandRow.className='ca-assist-brand-row';
   var brandLeft=document.createElement('div');
   brandLeft.className='ca-assist-brand-left';
-  brandLeft.appendChild(buildLogoBrand('header'));
+  brandLeft.appendChild(buildHeaderBrandStrip());
   var closeBtn=document.createElement('button');
   closeBtn.type='button';
   closeBtn.id='ca-assist-close';
@@ -1346,19 +1411,19 @@ function createWidget(){
   brandRow.appendChild(closeBtn);
   var titles=document.createElement('div');
   titles.className='ca-assist-head-titles';
-  var eyebrow=document.createElement('div');
-  eyebrow.className='ca-assist-eyebrow';
-  eyebrow.textContent=t('panelSubtitle');
   var title=document.createElement('div');
   title.id='ca-assist-panel-title';
   title.className='ca-assist-title';
   title.textContent=config.label;
+  var subEl=document.createElement('div');
+  subEl.className='ca-assist-panel-sub';
+  subEl.textContent=t('panelSubtitle');
   var hel=document.createElement('div');
   hel.id='ca-assist-panel-desc';
   hel.className='ca-assist-helper';
   hel.textContent=t('panelHelper');
-  titles.appendChild(eyebrow);
   titles.appendChild(title);
+  titles.appendChild(subEl);
   titles.appendChild(hel);
   head.appendChild(brandRow);
   head.appendChild(titles);
@@ -1393,7 +1458,7 @@ function createWidget(){
 
     if(config.features.profiles){
       var profSheet=document.createElement('div');
-      profSheet.className='ca-assist-sheet';
+      profSheet.className='ca-assist-stack';
       profSheet.appendChild(makeSectionTitle(t('profiles')));
       var profilesWrap=document.createElement('div');
       profilesWrap.className='ca-assist-profile-strip';
@@ -1428,7 +1493,7 @@ function createWidget(){
     }
 
     var reading=document.createElement('div');
-    reading.className='ca-assist-sheet';
+    reading.className='ca-assist-stack';
     if(config.features.textScale){reading.appendChild(makeTextScaleRow());}
     if(config.features.contrastModes){reading.appendChild(makeRadioGroup(t('contrastMode'),'contrastMode',[
       {value:'none',label:t('contrastNone')},
@@ -1436,29 +1501,29 @@ function createWidget(){
       {value:'light',label:t('contrastLight')},
       {value:'invert',label:t('contrastInvert')},
       {value:'smart',label:t('contrastSmart')}
-    ],renderGlobalStyles,'contrastModeSet'));}
+    ],renderGlobalStyles,'contrastModeSet',true));}
     if(config.features.textSpacing){reading.appendChild(makeRadioGroup(t('textSpacing'),'textSpacing',[
       {value:'normal',label:t('spacingNormal')},
       {value:'moderate',label:t('spacingModerate')},
       {value:'heavy',label:t('spacingHeavy')}
-    ],renderGlobalStyles,'textSpacingSet'));}
+    ],renderGlobalStyles,'textSpacingSet',true));}
     if(config.features.lineHeight){reading.appendChild(makeRadioGroup(t('lineHeight'),'lineHeight',[
       {value:'normal',label:t('lineNormal')},
       {value:'relaxed',label:t('lineRelaxed')},
       {value:'loose',label:t('lineLoose')}
-    ],renderGlobalStyles,'lineHeightSet'));}
+    ],renderGlobalStyles,'lineHeightSet',true));}
     if(config.features.textAlign){reading.appendChild(makeRadioGroup(t('textAlign'),'textAlign',[
       {value:'default',label:t('alignDefault')},
       {value:'left',label:t('alignLeft')},
       {value:'center',label:t('alignCenter')},
       {value:'justify',label:t('alignJustify')}
-    ],renderGlobalStyles,'textAlignSet'));}
+    ],renderGlobalStyles,'textAlignSet',true));}
     if(config.features.saturation){reading.appendChild(makeRadioGroup(t('saturation'),'saturation',[
       {value:'normal',label:t('saturationNormal')},
       {value:'low',label:t('saturationLow')},
       {value:'high',label:t('saturationHigh')},
       {value:'mono',label:t('saturationMono')}
-    ],renderGlobalStyles,'saturationSet'));}
+    ],renderGlobalStyles,'saturationSet',true));}
     if(reading.children.length){
       var readBlock=document.createElement('div');
       readBlock.className='ca-assist-block';
@@ -1468,7 +1533,7 @@ function createWidget(){
     }
 
     var motion=document.createElement('div');
-    motion.className='ca-assist-sheet';
+    motion.className='ca-assist-stack';
     if(config.features.highContrast){motion.appendChild(makeAction(t('highContrast'),'highContrast',renderGlobalStyles));}
     if(config.features.readableFont){motion.appendChild(makeAction(t('readableFont'),'readableFont',renderGlobalStyles));}
     if(config.features.pauseAnimations){motion.appendChild(makeAction(t('pauseAnimations'),'pauseAnimations',renderGlobalStyles,t('hintPauseAnimations')));}
@@ -1486,7 +1551,7 @@ function createWidget(){
     }
 
     var nav=document.createElement('div');
-    nav.className='ca-assist-sheet';
+    nav.className='ca-assist-stack';
     if(config.features.pageStructure){
       nav.appendChild(makeCommandAction('Jump to headings','GO',function(){jumpToSelector('h1,h2,h3,h4,h5,h6',ann('jumpHeadingsOk'),ann('jumpHeadingsNone'));track('jump_headings',{});},'cmd-jump-headings'));
       nav.appendChild(makeCommandAction('Jump to links','GO',function(){jumpToSelector('a[href]',ann('jumpLinksOk'),ann('jumpLinksNone'));track('jump_links',{});},'cmd-jump-links'));
@@ -1507,11 +1572,11 @@ function createWidget(){
       globe.innerHTML='<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>';
       langRow.appendChild(globe);
       langRow.appendChild(makeRadioGroup(t('language'),'language',[
-        {value:'en',label:'English'},
-        {value:'es',label:'Espanol'},
-        {value:'pt-BR',label:'Portugues (Brasil)'},
-        {value:'he',label:'Hebrew'}
-      ],function(){saveState();rerenderPanel();renderGlobalStyles();track('language_change',{value:state.language});},'languageSet'));
+        {value:'en',label:'EN'},
+        {value:'es',label:'ES'},
+        {value:'pt-BR',label:'BR'},
+        {value:'he',label:'HE'}
+      ],function(){saveState();rerenderPanel();renderGlobalStyles();track('language_change',{value:state.language});},'languageSet',true));
       footerDynamic.appendChild(langRow);
     }
 

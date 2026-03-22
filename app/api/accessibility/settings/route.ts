@@ -24,7 +24,7 @@ function parseScope(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  if (!isRequestAuthed(req)) return unauthorized();
+  // Public read: same config served by /accessibility/widget; needed for anonymous builder page.
   try {
     const scope = parseScope(req);
     const config = await loadAccessibilityWidgetConfig(scope);
