@@ -332,6 +332,11 @@ var widgetCss='' +
   '.ca-assist-shell.ca-assist-reduce-motion .ca-assist-close{transition:none !important}' +
   '.ca-assist-shell.ca-assist-reduce-motion .ca-assist-switch__track,.ca-assist-shell.ca-assist-reduce-motion .ca-assist-switch__thumb{transition:none !important}' +
   '.ca-assist-shell.ca-assist-reduce-motion .ca-assist-toggle,.ca-assist-shell.ca-assist-reduce-motion .ca-assist-navrow,.ca-assist-shell.ca-assist-reduce-motion .ca-assist-seg__btn,.ca-assist-shell.ca-assist-reduce-motion .ca-assist-profile-pill,.ca-assist-shell.ca-assist-reduce-motion .ca-assist-step__btn{transition:none !important}' +
+  '.ca-assist-sec-group{display:flex;flex-direction:column;gap:0;border:1px solid rgba(255,255,255,.06);border-radius:14px;overflow:hidden;background:rgba(255,255,255,.02);margin-bottom:8px}' +
+  '.ca-assist-sec-group-header{padding:8px 14px 4px;font-size:9px;font-weight:650;letter-spacing:.18em;text-transform:uppercase !important;color:rgba(212,212,216,.32);border-bottom:1px solid rgba(255,255,255,.04)}' +
+  '.ca-assist-sec-group>.ca-assist-toggle{border-radius:0;border-bottom:1px solid rgba(255,255,255,.04)}' +
+  '.ca-assist-sec-group>.ca-assist-toggle:last-child{border-bottom:0}' +
+  '.ca-assist-panel--mono{background:linear-gradient(180deg,rgba(18,18,22,.99) 0%,rgba(10,10,14,1) 100%)}' +
   '';
 var guideLine=document.createElement('div');
 guideLine.id='carbon-a11y-guide-line';

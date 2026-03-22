@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import styles from "./page.module.css";
 
 type WidgetPosition = "left" | "right";
 
@@ -637,7 +638,8 @@ export default function AccessibilityPage() {
   }
 
   return (
-    <main className="page">
+    <main className={styles.page}>
+      {/* PRESERVED — background photo reveal */}
       <style jsx global>{`
         .app-bg-top-photo,
         .app-bg-top-fade {
@@ -647,1074 +649,514 @@ export default function AccessibilityPage() {
         }
       `}</style>
 
-      <section className="header-card">
-        <div>
-          <h1>Accessibility Widget Builder</h1>
-          <p>
-            This is a custom in-house implementation for `app.shopcarbon.com/accessibility`, built from
-            scratch so design and behavior are fully controlled by your team.
-          </p>
-        </div>
-        <div className="header-badges">
-          <div className="pill">Legal-safe custom build</div>
-          <div className={`pill status-pill ${readiness.ready ? "ready" : "blocked"}`}>
-            {readiness.ready ? "Compliance readiness: Ready" : "Compliance readiness: Blocked"}
-          </div>
-        </div>
-      </section>
-
-      <section className="grid">
-        <article className="card">
-          <h2>Brand & Layout</h2>
-          <label>
-            Settings scope
-            <input
-              value={settingsScope}
-              onChange={(e) => setSettingsScope(e.target.value)}
-              placeholder="default"
-            />
-          </label>
-          <label>
-            Profile name
-            <input
-              value={settings.profileName}
-              onChange={(e) => setSettings((prev) => ({ ...prev, profileName: e.target.value }))}
-            />
-          </label>
-
-          <label>
-            Widget label
-            <input
-              value={settings.widgetLabel}
-              onChange={(e) => setSettings((prev) => ({ ...prev, widgetLabel: e.target.value }))}
-            />
-          </label>
-          <p style={{ fontSize: 13, opacity: 0.85, margin: "0 0 8px" }}>
-            Runtime widget logo (HTTPS URL to PNG/SVG). Shown only inside the floating widget; does not affect store
-            theme CSS.
-          </p>
-          <label>
-            Widget logo URL (optional)
-            <input
-              value={settings.logoUrl}
-              onChange={(e) => setSettings((prev) => ({ ...prev, logoUrl: e.target.value }))}
-              placeholder="https://cdn.example.com/carbon-assist-logo.svg"
-            />
-          </label>
-          <label>
-            Logo alt text
-            <input
-              value={settings.logoAlt}
-              onChange={(e) => setSettings((prev) => ({ ...prev, logoAlt: e.target.value }))}
-              placeholder="Carbon Assist"
-            />
-          </label>
-          <div className="row">
-            <label>
-              Logo variant
-              <select
-                value={settings.logoVariant}
-                onChange={(e) =>
-                  setSettings((prev) => ({
-                    ...prev,
-                    logoVariant: e.target.value as AccessibilitySettings["logoVariant"],
-                  }))
-                }
-              >
-                <option value="wordmark">Wordmark / balanced</option>
-                <option value="symbol">Symbol / compact</option>
-                <option value="full">Full / header emphasis</option>
-              </select>
-            </label>
-            <label>
-              Logo max height (px)
-              <input
-                type="number"
-                min={12}
-                max={120}
-                value={settings.logoMaxHeight}
-                onChange={(e) =>
-                  setSettings((prev) => ({
-                    ...prev,
-                    logoMaxHeight: Number(e.target.value) || prev.logoMaxHeight,
-                  }))
-                }
-              />
-            </label>
-          </div>
-          <label>
-            Default widget language
-            <select
-              value={settings.language}
-              onChange={(e) =>
-                setSettings((prev) => ({
-                  ...prev,
-                  language: e.target.value as AccessibilitySettings["language"],
-                }))
-              }
-            >
-              <option value="en">English</option>
-              <option value="es">Espanol</option>
-              <option value="pt-BR">Portugues (Brasil)</option>
-              <option value="he">Hebrew</option>
-            </select>
-          </label>
-
-          <div className="row">
-            <label>
-              Brand color
-              <input
-                type="color"
-                value={settings.brandColor}
-                onChange={(e) => setSettings((prev) => ({ ...prev, brandColor: e.target.value }))}
-              />
-            </label>
-            <label>
-              Panel color
-              <input
-                type="color"
-                value={settings.panelColor}
-                onChange={(e) => setSettings((prev) => ({ ...prev, panelColor: e.target.value }))}
-              />
-            </label>
-          </div>
-
-          <div className="row">
-            <label>
-              Position
-              <select
-                value={settings.position}
-                onChange={(e) =>
-                  setSettings((prev) => ({ ...prev, position: e.target.value as WidgetPosition }))
-                }
-              >
-                <option value="right">Right</option>
-                <option value="left">Left</option>
-              </select>
-            </label>
-          </div>
-
-          <label className="switch">
-            <input
-              type="checkbox"
-              checked={settings.showTextLabel}
-              onChange={(e) => setSettings((prev) => ({ ...prev, showTextLabel: e.target.checked }))}
-            />
-            Show text label next to icon
-          </label>
-
-          <label>
-            Accessibility statement URL
-            <input
-              type="url"
-              value={settings.statementUrl}
-              onChange={(e) => setSettings((prev) => ({ ...prev, statementUrl: e.target.value }))}
-              placeholder="https://www.shopcarbon.com/pages/accessibility"
-            />
-          </label>
-
-          <label>
-            Accessibility feedback URL
-            <input
-              type="url"
-              value={settings.feedbackUrl}
-              onChange={(e) => setSettings((prev) => ({ ...prev, feedbackUrl: e.target.value }))}
-              placeholder="https://www.shopcarbon.com/pages/contact"
-            />
-          </label>
-
-          <label>
-            Accessibility support email
-            <input
-              type="email"
-              value={settings.supportEmail}
-              onChange={(e) => setSettings((prev) => ({ ...prev, supportEmail: e.target.value }))}
-              placeholder="elior@carbonjeanscompany.com"
-            />
-          </label>
-
-          <label>
-            Monthly compliance report email
-            <input
-              type="email"
-              value={settings.monthlyReportEmail}
-              onChange={(e) => setSettings((prev) => ({ ...prev, monthlyReportEmail: e.target.value }))}
-              placeholder="elior@carbonjeanscompany.com"
-            />
-          </label>
-          <label>
-            Accessibility owner
-            <input
-              value={settings.accessibilityOwner}
-              onChange={(e) => setSettings((prev) => ({ ...prev, accessibilityOwner: e.target.value }))}
-              placeholder="Owner name"
-            />
-          </label>
-          <label>
-            Owner role/title
-            <input
-              value={settings.accessibilityOwnerRole}
-              onChange={(e) => setSettings((prev) => ({ ...prev, accessibilityOwnerRole: e.target.value }))}
-              placeholder="Accessibility owner"
-            />
-          </label>
-          <label>
-            Response SLA (hours)
-            <input
-              type="number"
-              min={1}
-              max={720}
-              value={settings.responseSlaHours}
-              onChange={(e) =>
-                setSettings((prev) => ({
-                  ...prev,
-                  responseSlaHours: Math.max(1, Math.min(720, Number(e.target.value) || 1)),
-                }))
-              }
-            />
-          </label>
-          <label>
-            Remediation log URL
-            <input
-              type="url"
-              value={settings.remediationLogUrl}
-              onChange={(e) => setSettings((prev) => ({ ...prev, remediationLogUrl: e.target.value }))}
-              placeholder="https://..."
-            />
-          </label>
-        </article>
-
-        <article className="card">
-          <h2>Design</h2>
-          <p className="muted">
-            Configure widget appearance, collapsed icon size, panel size, and exact site placement.
-          </p>
-          <div className="row">
-            <label>
-              Trigger style
-              <select
-                value={settings.triggerStyle}
-                onChange={(e) =>
-                  setSettings((prev) => ({
-                    ...prev,
-                    triggerStyle: e.target.value as AccessibilitySettings["triggerStyle"],
-                  }))
-                }
-              >
-                <option value="solid">Solid</option>
-                <option value="outline">Outline</option>
-                <option value="glass">Glass</option>
-              </select>
-            </label>
-            <label>
-              Corner radius: {settings.cornerRadius}px
-              <input
-                type="range"
-                min={8}
-                max={22}
-                value={settings.cornerRadius}
-                onChange={(e) =>
-                  setSettings((prev) => ({ ...prev, cornerRadius: Number(e.target.value) }))
-                }
-              />
-            </label>
-          </div>
-          <div className="row">
-            <label>
-              Side offset: {settings.sideOffset}px
-              <input
-                type="range"
-                min={8}
-                max={72}
-                value={settings.sideOffset}
-                onChange={(e) =>
-                  setSettings((prev) => ({ ...prev, sideOffset: Number(e.target.value) }))
-                }
-              />
-            </label>
-            <label>
-              Bottom offset: {settings.bottomOffset}px
-              <input
-                type="range"
-                min={8}
-                max={72}
-                value={settings.bottomOffset}
-                onChange={(e) =>
-                  setSettings((prev) => ({ ...prev, bottomOffset: Number(e.target.value) }))
-                }
-              />
-            </label>
-          </div>
-          <div className="row">
-            <label>
-              Collapsed button size: {settings.triggerSize}px
-              <input
-                type="range"
-                min={40}
-                max={76}
-                value={settings.triggerSize}
-                onChange={(e) =>
-                  setSettings((prev) => ({ ...prev, triggerSize: Number(e.target.value) }))
-                }
-              />
-            </label>
-            <label>
-              Icon size: {settings.iconSize}px
-              <input
-                type="range"
-                min={14}
-                max={34}
-                value={settings.iconSize}
-                onChange={(e) =>
-                  setSettings((prev) => ({ ...prev, iconSize: Number(e.target.value) }))
-                }
-              />
-            </label>
-          </div>
-          <label>
-            Panel width: {settings.panelWidth}px
-            <input
-              type="range"
-              min={260}
-              max={420}
-              value={settings.panelWidth}
-              onChange={(e) =>
-                setSettings((prev) => ({ ...prev, panelWidth: Number(e.target.value) }))
-              }
-            />
-          </label>
-          <div className="actions">
-            <button className="btn primary" onClick={installRuntimeWidgetOnPage}>
-              {runtimeWidgetMounted ? "Reload widget on this page" : "Install widget on this page"}
-            </button>
-            <button
-              className="btn"
-              onClick={() => {
-                removeRuntimeWidgetFromPage();
-                setRuntimeWidgetMounted(false);
-              }}
-            >
-              Remove widget from this page
-            </button>
-          </div>
-          <p className="muted status-text">
-            {runtimeWidgetMounted
-              ? "Runtime widget is mounted on this page. Save settings and click reload to see latest managed config."
-              : "Widget is not mounted on this page yet."}
-          </p>
-        </article>
-
-        <article className="card">
-          <h2>Feature Matrix</h2>
-          <p className="muted">Pick which controls will be available in your widget panel.</p>
-          <div className="feature-list">
-            <label className="switch">
-              <input
-                type="checkbox"
-                checked={settings.features.textScale}
-                onChange={(e) => updateFeature("textScale", e.target.checked)}
-              />
-              Text scaling controls
-            </label>
-            <label className="switch">
-              <input
-                type="checkbox"
-                checked={settings.features.highContrast}
-                onChange={(e) => updateFeature("highContrast", e.target.checked)}
-              />
-              High contrast mode
-            </label>
-            <label className="switch">
-              <input
-                type="checkbox"
-                checked={settings.features.profiles}
-                onChange={(e) => updateFeature("profiles", e.target.checked)}
-              />
-              Accessibility profiles
-            </label>
-            <label className="switch">
-              <input
-                type="checkbox"
-                checked={settings.features.contrastModes}
-                onChange={(e) => updateFeature("contrastModes", e.target.checked)}
-              />
-              Contrast variants (dark/light/invert/smart)
-            </label>
-            <label className="switch">
-              <input
-                type="checkbox"
-                checked={settings.features.readableFont}
-                onChange={(e) => updateFeature("readableFont", e.target.checked)}
-              />
-              Readable font mode
-            </label>
-            <label className="switch">
-              <input
-                type="checkbox"
-                checked={settings.features.pauseAnimations}
-                onChange={(e) => updateFeature("pauseAnimations", e.target.checked)}
-              />
-              Pause animations mode
-            </label>
-            <label className="switch">
-              <input
-                type="checkbox"
-                checked={settings.features.highlightLinks}
-                onChange={(e) => updateFeature("highlightLinks", e.target.checked)}
-              />
-              Highlight links mode
-            </label>
-            <label className="switch">
-              <input
-                type="checkbox"
-                checked={settings.features.textSpacing}
-                onChange={(e) => updateFeature("textSpacing", e.target.checked)}
-              />
-              Text spacing controls
-            </label>
-            <label className="switch">
-              <input
-                type="checkbox"
-                checked={settings.features.lineHeight}
-                onChange={(e) => updateFeature("lineHeight", e.target.checked)}
-              />
-              Line height controls
-            </label>
-            <label className="switch">
-              <input
-                type="checkbox"
-                checked={settings.features.textAlign}
-                onChange={(e) => updateFeature("textAlign", e.target.checked)}
-              />
-              Text alignment controls
-            </label>
-            <label className="switch">
-              <input
-                type="checkbox"
-                checked={settings.features.saturation}
-                onChange={(e) => updateFeature("saturation", e.target.checked)}
-              />
-              Color saturation controls
-            </label>
-            <label className="switch">
-              <input
-                type="checkbox"
-                checked={settings.features.hideImages}
-                onChange={(e) => updateFeature("hideImages", e.target.checked)}
-              />
-              Hide images mode
-            </label>
-            <label className="switch">
-              <input
-                type="checkbox"
-                checked={settings.features.readingGuide}
-                onChange={(e) => updateFeature("readingGuide", e.target.checked)}
-              />
-              Reading guide
-            </label>
-            <label className="switch">
-              <input
-                type="checkbox"
-                checked={settings.features.readingMask}
-                onChange={(e) => updateFeature("readingMask", e.target.checked)}
-              />
-              Reading mask
-            </label>
-            <label className="switch">
-              <input
-                type="checkbox"
-                checked={settings.features.bigCursor}
-                onChange={(e) => updateFeature("bigCursor", e.target.checked)}
-              />
-              Big cursor
-            </label>
-            <label className="switch">
-              <input
-                type="checkbox"
-                checked={settings.features.pageStructure}
-                onChange={(e) => updateFeature("pageStructure", e.target.checked)}
-              />
-              Page structure quick navigation
-            </label>
-            <label className="switch">
-              <input
-                type="checkbox"
-                checked={settings.features.languageSelector}
-                onChange={(e) => updateFeature("languageSelector", e.target.checked)}
-              />
-              Language selector
-            </label>
-          </div>
-        </article>
-      </section>
-
-      <section className="card">
-        <h2>Install Snippet</h2>
-        <p className="muted">
-          Paste this script in your storefront head section. It loads your custom widget from your own app
-          domain.
+      {/* A: Hero */}
+      <header className={styles.hero}>
+        <h1 className={styles.heroTitle}>Accessibility</h1>
+        <p className={styles.heroSub}>
+          Manage the accessibility assistant and site compliance status.
         </p>
-        <p className="muted">
-          Recommended: managed scope snippet (loads latest saved settings server-side).
-        </p>
-        <textarea readOnly value={managedInstallSnippet} rows={2} />
-        <div className="actions">
-          <button className="btn primary" onClick={copyManagedSnippet}>
-            {copyManagedState ? "Copied" : "Copy managed snippet"}
-          </button>
+      </header>
+
+      {/* B: Tab bar + Publish Changes */}
+      <nav className={styles.tabBar}>
+        <div className={styles.tabs}>
+          <button className={`${styles.tab} ${styles.tabActive}`}>Widget</button>
+          <button className={styles.tab}>Docs</button>
+          <button className={styles.tab}>Tickets</button>
+          <button className={styles.tab}>Log History</button>
         </div>
-        <p className="muted">Static snapshot snippet (embeds current settings in URL):</p>
-        <textarea readOnly value={installSnippet} rows={3} />
-        <div className="actions">
-          <button className="btn primary" onClick={copySnippet}>
-            {copied ? "Copied" : "Copy Snippet"}
-          </button>
-          <button className="btn" onClick={saveSettings} disabled={settingsSaving || !canSaveSettings}>
-            {settingsSaving ? "Saving..." : "Save settings"}
-          </button>
-        </div>
-        <p className="muted status-text">
-          {userLoading
-            ? "Checking permissions..."
-            : canSaveSettings
-              ? "You can save settings (admin)."
-              : "Save settings is admin-only. You can still test locally, but writes are blocked for non-admin users."}
-        </p>
-        {settingsLoading ? <p className="muted status-text">Loading saved settings...</p> : null}
-        {!settingsLoading && settingsLoaded && settingsStatus ? (
-          <p className="muted status-text">{settingsStatus}</p>
-        ) : null}
-      </section>
-
-      <section className="card preview-card" style={previewStyles}>
-        <h2>Live Preview (Behavior)</h2>
-        <p>
-          This preview demonstrates your selected controls on sample content before pushing into a live
-          storefront.
-        </p>
-        <p>
-          Carbon can deliver this exact feature set while keeping your dedicated design language, spacing,
-          color palette, and icon style.
-        </p>
-        <a href="#accessibility-preview-anchor" className={previewLinkHighlight ? "link-highlight" : ""}>
-          Preview link focus style
-        </a>
-
-        <div className="actions">
-          {settings.features.textScale ? (
-            <>
-              <button className="btn" onClick={() => setPreviewTextScale((s) => Math.max(85, s - 10))}>
-                A-
-              </button>
-              <button className="btn" onClick={() => setPreviewTextScale((s) => Math.min(150, s + 10))}>
-                A+
-              </button>
-            </>
-          ) : null}
-
-          {settings.features.highContrast ? (
-            <button className="btn" onClick={() => setPreviewContrast((v) => !v)}>
-              Contrast {toButtonLabel(previewContrast)}
-            </button>
-          ) : null}
-
-          {settings.features.readableFont ? (
-            <button className="btn" onClick={() => setPreviewReadableFont((v) => !v)}>
-              Readable Font {toButtonLabel(previewReadableFont)}
-            </button>
-          ) : null}
-
-          {settings.features.highlightLinks ? (
-            <button className="btn" onClick={() => setPreviewLinkHighlight((v) => !v)}>
-              Link Highlight {toButtonLabel(previewLinkHighlight)}
-            </button>
-          ) : null}
-
-          <button className="btn ghost" onClick={resetPreview}>
-            Reset Preview
-          </button>
-        </div>
-
         <button
-          className={`widget-trigger ${settings.position}`}
-          style={{
-            background: settings.brandColor,
-            borderRadius: `${settings.cornerRadius}px`,
-          }}
-          onClick={() => setPreviewOpen((v) => !v)}
-          aria-expanded={previewOpen}
-          aria-label="Open accessibility panel preview"
+          className={styles.publishBtn}
+          onClick={saveSettings}
+          disabled={settingsSaving || !canSaveSettings}
         >
-          <span aria-hidden>AA</span>
-          {settings.showTextLabel ? <span>{settings.widgetLabel}</span> : null}
+          {settingsSaving ? "Saving..." : "Publish Changes \u203a"}
         </button>
+      </nav>
 
-        {previewOpen ? (
-          <aside
-            className={`widget-panel ${settings.position}`}
-            style={{
-              background: settings.panelColor,
-              borderRadius: `${settings.cornerRadius}px`,
-            }}
-          >
-            <h3>{settings.widgetLabel}</h3>
-            <ul>
-              {settings.features.textScale ? <li>Text scaling</li> : null}
-              {settings.features.highContrast ? <li>High contrast</li> : null}
-              {settings.features.readableFont ? <li>Readable fonts</li> : null}
-              {settings.features.pauseAnimations ? <li>Pause animations</li> : null}
-              {settings.features.highlightLinks ? <li>Highlight links</li> : null}
-            </ul>
-          </aside>
-        ) : null}
-      </section>
-
-      <section className="card">
-        <h2>Delivery Plan</h2>
-        <ol>
-          <li>Finalize visual language (button shape, icon, spacing, typography, motion).</li>
-          <li>Hook settings to tenant storage so each shop has its own profile.</li>
-          <li>Add analytics events for every feature toggle to measure adoption.</li>
-          <li>Run QA for keyboard-only navigation, screen reader labels, and mobile viewport behavior.</li>
-          <li>Launch staged rollout and compare accessibility engagement against your baseline.</li>
-        </ol>
-      </section>
-
-      <section className="card">
-        <h2>Compliance Coverage Snapshot (U.S. + Florida)</h2>
-        <p className="muted">
-          This widget helps with controls and reporting paths, but legal compliance still requires site-level
-          remediation of templates, content, forms, media captions/transcripts, and keyboard navigation.
-        </p>
-        <ul className="coverage-list">
-          <li>
-            <strong>Widget keyboard support:</strong> Covered in widget runtime (button semantics + focus/escape
-            handling).
-          </li>
-          <li>
-            <strong>Accessibility statement:</strong>{" "}
-            {settings.statementUrl.trim() ? "Configured in install config." : "Missing - add statement URL."}
-          </li>
-          <li>
-            <strong>Issue reporting path:</strong>{" "}
-            {settings.feedbackUrl.trim() || settings.supportEmail.trim()
-              ? "Configured (URL and/or support email)."
-              : "Missing - add feedback URL or support email."}
-          </li>
-          <li>
-            <strong>Accessibility ownership + SLA:</strong>{" "}
-            {readiness.hasOwner && readiness.hasSla
-              ? `${settings.accessibilityOwner || "Owner"} assigned with ${settings.responseSlaHours}h response SLA.`
-              : "Missing - assign owner and set response SLA."}
-          </li>
-          <li>
-            <strong>Remediation log:</strong>{" "}
-            {settings.remediationLogUrl.trim() ? "Configured and ready for audit evidence." : "Missing - add remediation log URL."}
-          </li>
-          <li>
-            <strong>WCAG content/media/forms fixes:</strong> Not handled by widget alone - must be remediated in
-            storefront code/content.
-          </li>
-        </ul>
-        <div className="actions">
-          <button className="btn primary" onClick={sendMonthlyTestReport} disabled={sendingMonthlyTest}>
-            {sendingMonthlyTest ? "Sending..." : "Send test monthly report now"}
-          </button>
+      {/* C: Success banner */}
+      {settings.complianceChecklist.monthlyRetestDone && (
+        <div className={styles.successBanner} role="status">
+          ✓ Monthly retest and evidence log completed
         </div>
-        {monthlyTestStatus ? <p className="muted status-text">{monthlyTestStatus}</p> : null}
-      </section>
+      )}
 
-      <section className="card">
-        <h2>Compliance Checklist Tracker</h2>
-        <p className="muted">
-          Track legal-readiness tasks for ADA/WCAG operations. This status is persisted and included in monthly report
-          reminders.
-        </p>
-        <p>
-          Completion:{" "}
-          <strong>
-            {checklistCompletion.done}/{checklistCompletion.total} ({checklistCompletion.percent}%)
-          </strong>
-        </p>
-        <div className="feature-list">
-          {checklistItems.map((item) => (
-            <label key={item.key} className="switch">
+      {/* D: Two-column content */}
+      <div className={styles.contentGrid}>
+
+        {/* LEFT COLUMN */}
+        <div className={styles.mainCol}>
+
+          {/* CARD 1: Main Accessibility panel */}
+          <section className={styles.card} aria-label="Widget overview">
+            <div className={styles.cardHeaderRow}>
+              <h2 className={styles.cardTitle}>Accessibility</h2>
               <input
-                type="checkbox"
-                checked={settings.complianceChecklist[item.key]}
-                onChange={(e) => updateChecklist(item.key, e.target.checked)}
+                className={styles.scopeInput}
+                value={settingsScope}
+                onChange={(e) => setSettingsScope(e.target.value)}
+                placeholder="default"
+                aria-label="Settings scope"
               />
-              {item.label}
-            </label>
-          ))}
-        </div>
-      </section>
+            </div>
 
-      <section className="card">
-        <h2>Widget Usage (Last 30 Days)</h2>
-        <p className="muted">
-          This summary comes from runtime widget events and is included in the monthly compliance email.
-        </p>
-        <div className="actions">
-          <button className="btn" onClick={refreshUsageSummary} disabled={usageLoading}>
-            {usageLoading ? "Refreshing..." : "Refresh usage snapshot"}
-          </button>
-        </div>
-        {usageSummary ? (
-          <div className="usage-summary">
-            <p>
-              Total events: <strong>{usageSummary.totalEvents}</strong>
-            </p>
-            {usageSummary.byEvent.length > 0 ? (
-              <table className="usage-table">
-                <thead>
-                  <tr>
-                    <th>Event</th>
-                    <th>Count</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {usageSummary.byEvent.slice(0, 10).map((entry) => (
-                    <tr key={entry.eventName}>
-                      <td>{entry.eventName}</td>
-                      <td>{entry.count}</td>
-                    </tr>
+            <div className={styles.brandRow}>
+              <span className={styles.hexGlyph} aria-hidden>⬡</span>
+              <span className={styles.brandName}>CARBON ASSIST</span>
+              <span className={styles.activeDot}>Active</span>
+            </div>
+
+            <div className={styles.profileSection}>
+              <span className={styles.profileLabel}>Accessibility preferences</span>
+              <div className={styles.profileStrip}>
+                {["Low Vision", "Motor", "Dyslexia", "ADHD"].map((p) => (
+                  <span key={p} className={styles.profilePill}>{p}</span>
+                ))}
+                <button className={styles.profilePillAdd}>New +</button>
+              </div>
+            </div>
+
+            {/* Embedded widget preview sub-card */}
+            <div className={styles.widgetPreviewCard}>
+              <div className={styles.wpHead}>
+                <div className={styles.wpBrand}>
+                  <span className={styles.wpHex} aria-hidden>⬡</span>
+                  <span className={styles.wpBrandText}>CARBON ASSIST</span>
+                </div>
+                <button className={styles.wpClose} aria-label="Close"
+                  onClick={() => removeRuntimeWidgetFromPage()}>×</button>
+              </div>
+              <div className={styles.wpBody}>
+                <p className={styles.wpEyebrow}>Accessibility preferences</p>
+                <p className={styles.wpSubtitle}>
+                  {settings.widgetLabel || "Carbon Assist"} — configure your accessibility experience
+                </p>
+                <div className={styles.wpProfiles}>
+                  {["Blind", "Low Vision", "Motor", "Dyslexia", "ADHD", "Seizure Safe"].map((p) => (
+                    <span key={p} className={styles.wpProfilePill}>{p}</span>
                   ))}
-                </tbody>
-              </table>
-            ) : (
-              <p className="muted">No events tracked yet.</p>
+                </div>
+              </div>
+              <div className={styles.wpActions}>
+                <button className={styles.wpActionBtn} onClick={installRuntimeWidgetOnPage}>
+                  {runtimeWidgetMounted ? "Reload Preview \u203a" : "Open Preview \u203a"}
+                </button>
+                <button className={styles.wpActionBtn}
+                  onClick={() => { removeRuntimeWidgetFromPage(); setRuntimeWidgetMounted(false); }}
+                  title="Remove widget from page">↺</button>
+                <button className={styles.wpActionBtn}
+                  onClick={() => setPreviewOpen((v) => !v)}>
+                  {previewOpen ? "Hide Preview" : "View \u2193"}
+                </button>
+                <button className={styles.wpActionBtn}
+                  onClick={() => document.getElementById("snippets-card")?.scrollIntoView({ behavior: "smooth" })}>
+                  Installation Snippets \u2193
+                </button>
+                <button
+                  className={`${styles.wpActionBtn} ${styles.wpActionBtnDanger}`}
+                  onClick={() => { removeRuntimeWidgetFromPage(); setRuntimeWidgetMounted(false); }}>
+                  Uninstall
+                </button>
+              </div>
+            </div>
+
+            {/* Inline behavior preview */}
+            {previewOpen && (
+              <div style={{
+                position: "relative", border: "1px solid rgba(255,255,255,.15)",
+                borderRadius: 14, padding: 16, minHeight: 180,
+                background: "rgba(0,0,0,.3)", marginTop: 8,
+                ...(previewContrast ? { background: "#000", color: "#fff" } : {}),
+                ...(previewReadableFont ? { fontFamily: "Georgia, serif" } : {}),
+                fontSize: `${previewTextScale}%`,
+              }}>
+                <div className={styles.actionRow} style={{ marginBottom: 12 }}>
+                  {settings.features.textScale && (
+                    <>
+                      <button className={styles.btn}
+                        onClick={() => setPreviewTextScale((s) => Math.max(85, s - 10))}>A-</button>
+                      <button className={styles.btn}
+                        onClick={() => setPreviewTextScale((s) => Math.min(150, s + 10))}>A+</button>
+                    </>
+                  )}
+                  {settings.features.highContrast && (
+                    <button className={styles.btn}
+                      onClick={() => setPreviewContrast((v) => !v)}>
+                      Contrast {toButtonLabel(previewContrast)}
+                    </button>
+                  )}
+                  {settings.features.readableFont && (
+                    <button className={styles.btn}
+                      onClick={() => setPreviewReadableFont((v) => !v)}>
+                      Readable Font {toButtonLabel(previewReadableFont)}
+                    </button>
+                  )}
+                  {settings.features.highlightLinks && (
+                    <button className={styles.btn}
+                      onClick={() => setPreviewLinkHighlight((v) => !v)}>
+                      Link Highlight {toButtonLabel(previewLinkHighlight)}
+                    </button>
+                  )}
+                  <button className={styles.iconBtn} onClick={resetPreview}>Reset</button>
+                </div>
+                <p>Preview sample text at {previewTextScale}% scale.</p>
+                <a href="#accessibility-preview-anchor"
+                  style={previewLinkHighlight ? { border: "2px dashed #fbbf24", borderRadius: 6, padding: "2px 6px" } : {}}>
+                  Preview link focus style
+                </a>
+              </div>
             )}
-          </div>
-        ) : null}
-        {usageStatus ? <p className="muted status-text">{usageStatus}</p> : null}
-      </section>
 
-      <section className="card">
-        <h2>Last Monthly Report Status</h2>
-        <div className="actions">
-          <button className="btn" onClick={refreshLastReportState} disabled={lastReportLoading}>
-            {lastReportLoading ? "Refreshing..." : "Refresh report status"}
-          </button>
-        </div>
-        {lastReportState ? (
-          <div className="usage-summary">
-            <p>
-              Last attempt: <strong>{new Date(lastReportState.sentAt).toLocaleString()}</strong>
-            </p>
-            <p>
-              Recipient: <strong>{lastReportState.sentTo}</strong>
-            </p>
-            <p>
-              Month: <strong>{lastReportState.month}</strong>
-            </p>
-            <p>
-              Status:{" "}
-              <strong className={lastReportState.ok ? "status-ok" : "status-fail"}>
-                {lastReportState.ok ? "Sent" : "Failed"}
-              </strong>
-            </p>
-            {lastReportState.messageId ? (
-              <p>
-                Message ID: <code>{lastReportState.messageId}</code>
+            {settingsStatus && (
+              <p className={styles.statusText} role="status">{settingsStatus}</p>
+            )}
+          </section>
+
+          {/* CARD 2: Installation Snippets */}
+          <section id="snippets-card" className={styles.card} aria-label="Installation snippets">
+            <div className={styles.cardHeaderRow}>
+              <h2 className={styles.cardTitle}>Installation Snippets</h2>
+              <div className={styles.cardHeaderActions}>
+                <span className={styles.iconBtn}>···</span>
+                <span className={styles.iconBtn}>↺ Refresh</span>
+              </div>
+            </div>
+            <div className={styles.snippetBlock}>
+              <p className={styles.snippetLabel}>App Snippet (managed scope)</p>
+              <div className={styles.codeWrap}>
+                <code className={styles.codeBlock}>{managedInstallSnippet}</code>
+                <button className={styles.copyBtn} onClick={copyManagedSnippet}>
+                  {copyManagedState ? "Copied" : "Copy"}
+                </button>
+              </div>
+            </div>
+            <div className={styles.snippetBlock}>
+              <p className={styles.snippetLabel}>Site Snippet (static config)</p>
+              <div className={styles.codeWrap}>
+                <code className={styles.codeBlock}>{installSnippet}</code>
+                <button className={styles.copyBtn} onClick={copySnippet}>
+                  {copied ? "Copied" : "Copy"}
+                </button>
+              </div>
+            </div>
+            <button className={styles.btn} onClick={installRuntimeWidgetOnPage}>
+              Check Installation
+            </button>
+            {!canSaveSettings && (
+              <p className={styles.statusText}>
+                {userLoading ? "Checking permissions..." : "Admin role required to save settings."}
               </p>
-            ) : null}
-            {lastReportState.error ? <p className="muted">Error: {lastReportState.error}</p> : null}
-          </div>
-        ) : (
-          <p className="muted">No monthly report attempt has been recorded yet.</p>
-        )}
-      </section>
+            )}
+          </section>
 
-      <section className="card">
-        <h2>Law Watch Status</h2>
-        <p className="muted">
-          Daily automated check for accessibility law/regulation source updates (ADA.gov, Federal Register, Florida
-          statutes, WCAG pages).
-        </p>
-        <div className="actions">
-          <button className="btn" onClick={refreshLawWatchStatus} disabled={lawWatchLoading}>
-            {lawWatchLoading ? "Refreshing..." : "Refresh law watch status"}
-          </button>
-          <button className="btn primary" onClick={runLawWatchNow} disabled={lawWatchRunning}>
-            {lawWatchRunning ? "Running..." : "Run law watch now"}
-          </button>
+          {/* CARD 3: Law Watch Status */}
+          <section className={styles.card} aria-label="Law watch status">
+            <div className={styles.cardHeaderRow}>
+              <h2 className={styles.cardTitle}>Law Watch Status</h2>
+              <div className={styles.cardHeaderActions}>
+                <span className={styles.iconBtn}>···</span>
+                <button className={styles.iconBtn} onClick={refreshLawWatchStatus}
+                  disabled={lawWatchLoading}>↺ Reset</button>
+              </div>
+            </div>
+            <p className={styles.muted}>
+              Daily automated check for accessibility law/regulation source updates
+              (ADA.gov, Federal Register, Florida statutes, WCAG pages).
+              {lawWatchState && ` Last check: ${new Date(lawWatchState.checkedAt).toLocaleDateString()}.
+                Sources: ${lawWatchState.sources.length}. Changes: ${lawWatchState.lastChanges.length}.`}
+            </p>
+            <div className={styles.actionRow}>
+              <button className={styles.btn} onClick={refreshLawWatchStatus} disabled={lawWatchLoading}>
+                {lawWatchLoading ? "Refreshing..." : "Refresh Status"}
+              </button>
+              <button className={`${styles.btn} ${styles.btnPrimary}`}
+                onClick={runLawWatchNow} disabled={lawWatchRunning}>
+                {lawWatchRunning ? "Running..." : "Run Law Watch now"}
+              </button>
+            </div>
+            {lawWatchState && (
+              <p className={styles.statusText}>
+                Last run:{" "}
+                <span className={lawWatchState.lastRunOk ? styles.statusOk : styles.statusFail}>
+                  {lawWatchState.lastRunOk ? "OK" : "Issues detected"}
+                </span>
+                {lawWatchState.lastError && ` — ${lawWatchState.lastError}`}
+              </p>
+            )}
+            {lawWatchStatus && <p className={styles.statusText} role="status">{lawWatchStatus}</p>}
+          </section>
+
+          {/* CARD 4: Configure (all settings forms — collapsible) */}
+          <details className={`${styles.card} ${styles.configureDetails}`}>
+            <summary className={styles.configureSummary}>
+              <span>Configure Widget</span>
+              <span className={styles.configureCaret}>▾</span>
+            </summary>
+            <div className={styles.configureBody}>
+
+              {/* Identity */}
+              <div className={styles.configureSection}>
+                <p className={styles.configureSectionTitle}>Identity</p>
+                <div className={styles.formRow}>
+                  <div className={styles.formGroup}>
+                    <label className={styles.formLabel}>Profile name</label>
+                    <input className={styles.formInput} value={settings.profileName}
+                      onChange={(e) => setSettings((prev) => ({ ...prev, profileName: e.target.value }))} />
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label className={styles.formLabel}>Widget label</label>
+                    <input className={styles.formInput} value={settings.widgetLabel}
+                      onChange={(e) => setSettings((prev) => ({ ...prev, widgetLabel: e.target.value }))} />
+                  </div>
+                </div>
+                <div className={styles.formGroup}>
+                  <label className={styles.formLabel}>Logo URL (optional)</label>
+                  <input className={styles.formInput} value={settings.logoUrl}
+                    onChange={(e) => setSettings((prev) => ({ ...prev, logoUrl: e.target.value }))}
+                    placeholder="https://cdn.example.com/logo.svg" />
+                </div>
+                <div className={styles.formRow}>
+                  <div className={styles.formGroup}>
+                    <label className={styles.formLabel}>Logo variant</label>
+                    <select className={styles.formSelect} value={settings.logoVariant}
+                      onChange={(e) => setSettings((prev) => ({ ...prev, logoVariant: e.target.value as AccessibilitySettings["logoVariant"] }))}>
+                      <option value="wordmark">Wordmark</option>
+                      <option value="symbol">Symbol</option>
+                      <option value="full">Full</option>
+                    </select>
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label className={styles.formLabel}>Logo max height (px)</label>
+                    <input type="number" className={styles.formInput} min={12} max={120}
+                      value={settings.logoMaxHeight}
+                      onChange={(e) => setSettings((prev) => ({ ...prev, logoMaxHeight: Number(e.target.value) || prev.logoMaxHeight }))} />
+                  </div>
+                </div>
+                <div className={styles.formRow}>
+                  <div className={styles.formGroup}>
+                    <label className={styles.formLabel}>Language</label>
+                    <select className={styles.formSelect} value={settings.language}
+                      onChange={(e) => setSettings((prev) => ({ ...prev, language: e.target.value as AccessibilitySettings["language"] }))}>
+                      <option value="en">English</option>
+                      <option value="es">Español</option>
+                      <option value="pt-BR">Português (Brasil)</option>
+                      <option value="he">Hebrew</option>
+                    </select>
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label className={styles.featureToggle} style={{ paddingTop: 24 }}>
+                      <input type="checkbox" checked={settings.showTextLabel}
+                        onChange={(e) => setSettings((prev) => ({ ...prev, showTextLabel: e.target.checked }))} />
+                      Show text label
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Brand & Placement */}
+              <div className={styles.configureSection}>
+                <p className={styles.configureSectionTitle}>Brand & Placement</p>
+                <div className={styles.formRow}>
+                  <div className={styles.formGroup}>
+                    <label className={styles.formLabel}>Brand color</label>
+                    <input type="color" className={styles.formInput} value={settings.brandColor}
+                      onChange={(e) => setSettings((prev) => ({ ...prev, brandColor: e.target.value }))} />
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label className={styles.formLabel}>Panel color</label>
+                    <input type="color" className={styles.formInput} value={settings.panelColor}
+                      onChange={(e) => setSettings((prev) => ({ ...prev, panelColor: e.target.value }))} />
+                  </div>
+                </div>
+                <div className={styles.formRow}>
+                  <div className={styles.formGroup}>
+                    <label className={styles.formLabel}>Position</label>
+                    <select className={styles.formSelect} value={settings.position}
+                      onChange={(e) => setSettings((prev) => ({ ...prev, position: e.target.value as WidgetPosition }))}>
+                      <option value="right">Right</option>
+                      <option value="left">Left</option>
+                    </select>
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label className={styles.formLabel}>Trigger style</label>
+                    <select className={styles.formSelect} value={settings.triggerStyle}
+                      onChange={(e) => setSettings((prev) => ({ ...prev, triggerStyle: e.target.value as AccessibilitySettings["triggerStyle"] }))}>
+                      <option value="solid">Solid</option>
+                      <option value="outline">Outline</option>
+                      <option value="glass">Glass</option>
+                    </select>
+                  </div>
+                </div>
+                <div className={styles.formRow}>
+                  <div className={styles.formGroup}>
+                    <label className={styles.formLabel}>Side offset: {settings.sideOffset}px</label>
+                    <input type="range" className={styles.formInput} min={8} max={72}
+                      value={settings.sideOffset}
+                      onChange={(e) => setSettings((prev) => ({ ...prev, sideOffset: Number(e.target.value) }))} />
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label className={styles.formLabel}>Bottom offset: {settings.bottomOffset}px</label>
+                    <input type="range" className={styles.formInput} min={8} max={72}
+                      value={settings.bottomOffset}
+                      onChange={(e) => setSettings((prev) => ({ ...prev, bottomOffset: Number(e.target.value) }))} />
+                  </div>
+                </div>
+                <div className={styles.formRow}>
+                  <div className={styles.formGroup}>
+                    <label className={styles.formLabel}>Button size: {settings.triggerSize}px</label>
+                    <input type="range" className={styles.formInput} min={40} max={76}
+                      value={settings.triggerSize}
+                      onChange={(e) => setSettings((prev) => ({ ...prev, triggerSize: Number(e.target.value) }))} />
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label className={styles.formLabel}>Corner radius: {settings.cornerRadius}px</label>
+                    <input type="range" className={styles.formInput} min={8} max={22}
+                      value={settings.cornerRadius}
+                      onChange={(e) => setSettings((prev) => ({ ...prev, cornerRadius: Number(e.target.value) }))} />
+                  </div>
+                </div>
+                <div className={styles.formGroup}>
+                  <label className={styles.formLabel}>Panel width: {settings.panelWidth}px</label>
+                  <input type="range" className={styles.formInput} min={260} max={420}
+                    value={settings.panelWidth}
+                    onChange={(e) => setSettings((prev) => ({ ...prev, panelWidth: Number(e.target.value) }))} />
+                </div>
+              </div>
+
+              {/* Compliance & Contact */}
+              <div className={styles.configureSection}>
+                <p className={styles.configureSectionTitle}>Compliance & Contact</p>
+                {[
+                  { key: "statementUrl", label: "Accessibility statement URL", type: "url" },
+                  { key: "feedbackUrl", label: "Feedback URL", type: "url" },
+                  { key: "supportEmail", label: "Support email", type: "email" },
+                  { key: "monthlyReportEmail", label: "Monthly report email", type: "email" },
+                  { key: "accessibilityOwner", label: "Accessibility owner", type: "text" },
+                  { key: "accessibilityOwnerRole", label: "Owner role", type: "text" },
+                  { key: "remediationLogUrl", label: "Remediation log URL", type: "url" },
+                ].map(({ key, label, type }) => (
+                  <div key={key} className={styles.formGroup}>
+                    <label className={styles.formLabel}>{label}</label>
+                    <input type={type} className={styles.formInput}
+                      value={(settings as Record<string, unknown>)[key] as string}
+                      onChange={(e) => setSettings((prev) => ({ ...prev, [key]: e.target.value }))} />
+                  </div>
+                ))}
+                <div className={styles.formGroup}>
+                  <label className={styles.formLabel}>Response SLA (hours)</label>
+                  <input type="number" className={styles.formInput} min={1} max={720}
+                    value={settings.responseSlaHours}
+                    onChange={(e) => setSettings((prev) => ({
+                      ...prev, responseSlaHours: Math.max(1, Math.min(720, Number(e.target.value) || 1))
+                    }))} />
+                </div>
+              </div>
+
+              {/* Feature Matrix */}
+              <div className={styles.configureSection}>
+                <p className={styles.configureSectionTitle}>Feature Matrix</p>
+                <div className={styles.featureGrid}>
+                  {(Object.entries(settings.features) as Array<[keyof typeof settings.features, boolean]>).map(([key, val]) => (
+                    <label key={key} className={styles.featureToggle}>
+                      <input type="checkbox" checked={val}
+                        onChange={(e) => updateFeature(key, e.target.checked)} />
+                      {key.replace(/([A-Z])/g, " $1").trim()}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+          </details>
+
         </div>
-        {lawWatchState ? (
-          <div className="usage-summary">
-            <p>
-              Last check: <strong>{new Date(lawWatchState.checkedAt).toLocaleString()}</strong>
-            </p>
-            <p>
-              Sources tracked: <strong>{lawWatchState.sources.length}</strong>
-            </p>
-            <p>
-              Last detected changes: <strong>{lawWatchState.lastChanges.length}</strong>
-            </p>
-            <p>
-              Last run status:{" "}
-              <strong className={lawWatchState.lastRunOk ? "status-ok" : "status-fail"}>
-                {lawWatchState.lastRunOk ? "OK" : "Issues detected"}
-              </strong>
-            </p>
-            {lawWatchState.lastError ? <p className="muted">Error: {lawWatchState.lastError}</p> : null}
-          </div>
-        ) : (
-          <p className="muted">No law watch run recorded yet.</p>
-        )}
-        {lawWatchStatus ? <p className="muted status-text">{lawWatchStatus}</p> : null}
-      </section>
 
-      <style jsx>{`
-        .page {
-          max-width: 1120px;
-          margin: 0 auto;
-          padding: 22px 8px 26px;
-          display: grid;
-          gap: 14px;
-          color: #f8fafc;
-        }
-        .header-card,
-        .card {
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          border-radius: 16px;
-          padding: 18px;
-          background: rgba(255, 255, 255, 0.035);
-          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-          backdrop-filter: blur(16px);
-          -webkit-backdrop-filter: blur(16px);
-          display: grid;
-          gap: 10px;
-        }
-        .header-card {
-          grid-template-columns: 1fr auto;
-          align-items: center;
-          gap: 16px;
-        }
-        h1 {
-          margin: 0;
-          font-size: 1.35rem;
-        }
-        h2 {
-          margin: 0;
-          font-size: 1.06rem;
-        }
-        h3 {
-          margin: 0;
-          font-size: 0.98rem;
-        }
-        p {
-          margin: 0;
-          line-height: 1.45;
-        }
-        .muted {
-          color: rgba(226, 232, 240, 0.86);
-        }
-        .pill {
-          border-radius: 999px;
-          border: 1px solid rgba(255, 255, 255, 0.3);
-          padding: 7px 12px;
-          font-size: 0.78rem;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.04em;
-        }
-        .header-badges {
-          display: grid;
-          gap: 8px;
-          justify-items: end;
-        }
-        .status-pill.ready {
-          border-color: rgba(16, 185, 129, 0.8);
-          color: #a7f3d0;
-        }
-        .status-pill.blocked {
-          border-color: rgba(248, 113, 113, 0.8);
-          color: #fecaca;
-        }
-        .grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 14px;
-        }
-        label {
-          display: grid;
-          gap: 6px;
-          color: rgba(248, 250, 252, 0.95);
-          font-weight: 600;
-          font-size: 0.9rem;
-        }
-        input,
-        select,
-        textarea {
-          border-radius: 10px;
-          border: 1px solid rgba(255, 255, 255, 0.24);
-          background: rgba(17, 24, 39, 0.6);
-          color: #f8fafc;
-          padding: 10px 12px;
-          font-size: 0.9rem;
-        }
-        input[type="range"],
-        input[type="color"] {
-          padding: 0;
-          min-height: 36px;
-        }
-        textarea {
-          resize: vertical;
-          min-height: 88px;
-        }
-        .row {
-          display: grid;
-          gap: 10px;
-          grid-template-columns: 1fr 1fr;
-        }
-        .feature-list {
-          display: grid;
-          gap: 8px;
-        }
-        .switch {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          font-weight: 600;
-        }
-        .switch input {
-          width: 18px;
-          height: 18px;
-          margin: 0;
-        }
-        .actions {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 10px;
-        }
-        .btn {
-          border: 1px solid rgba(255, 255, 255, 0.3);
-          background: rgba(255, 255, 255, 0.08);
-          color: #f8fafc;
-          border-radius: 10px;
-          padding: 8px 12px;
-          font-weight: 700;
-          cursor: pointer;
-        }
-        .btn.primary {
-          background: #f3f4f6;
-          color: #050505;
-          border-color: #f3f4f6;
-        }
-        .btn.ghost {
-          background: transparent;
-        }
-        .preview-card {
-          position: relative;
-          min-height: 280px;
-          overflow: hidden;
-        }
-        .link-highlight {
-          display: inline-block;
-          border: 2px dashed #fbbf24;
-          border-radius: 8px;
-          padding: 3px 6px;
-        }
-        .widget-trigger {
-          position: absolute;
-          bottom: 18px;
-          border: 0;
-          color: #fff;
-          padding: 10px 14px;
-          font-weight: 700;
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          cursor: pointer;
-        }
-        .widget-trigger.right {
-          right: 18px;
-        }
-        .widget-trigger.left {
-          left: 18px;
-        }
-        .widget-panel {
-          position: absolute;
-          bottom: 72px;
-          width: min(320px, calc(100% - 36px));
-          border: 1px solid rgba(255, 255, 255, 0.2);
-          padding: 12px;
-          display: grid;
-          gap: 8px;
-          color: #f8fafc;
-        }
-        .widget-panel.right {
-          right: 18px;
-        }
-        .widget-panel.left {
-          left: 18px;
-        }
-        .widget-panel ul {
-          margin: 0;
-          padding-left: 18px;
-          display: grid;
-          gap: 4px;
-        }
-        ol {
-          margin: 0;
-          padding-left: 18px;
-          display: grid;
-          gap: 6px;
-        }
-        .coverage-list {
-          margin: 0;
-          padding-left: 18px;
-          display: grid;
-          gap: 8px;
-          line-height: 1.45;
-        }
-        .status-text {
-          margin-top: 4px;
-          font-size: 0.88rem;
-        }
-        .usage-summary p {
-          margin: 4px 0;
-        }
-        .status-ok {
-          color: #86efac;
-        }
-        .status-fail {
-          color: #fca5a5;
-        }
-        .usage-table {
-          width: 100%;
-          max-width: 480px;
-          border-collapse: collapse;
-          margin-top: 6px;
-        }
-        .usage-table th,
-        .usage-table td {
-          border: 1px solid rgba(255, 255, 255, 0.24);
-          padding: 6px 8px;
-          text-align: left;
-        }
-        .usage-table th:last-child,
-        .usage-table td:last-child {
-          text-align: right;
-        }
-        .btn:disabled {
-          opacity: 0.65;
-          cursor: not-allowed;
-        }
-        @media (max-width: 920px) {
-          .grid {
-            grid-template-columns: 1fr;
-          }
-          .header-card {
-            grid-template-columns: 1fr;
-            gap: 12px;
-          }
-          .row {
-            grid-template-columns: 1fr;
-          }
-        }
-      `}</style>
+        {/* RIGHT SIDEBAR */}
+        <aside className={styles.sideCol}>
+
+          {/* Compliance Checklist */}
+          <section className={styles.sideCard} aria-label="Compliance checklist">
+            <h3 className={styles.sideCardTitle}>Compliance Checklist</h3>
+            <p className={styles.sideCardSub}>Remediation progress</p>
+            <div className={styles.progressWrap}
+              role="meter" aria-valuenow={checklistCompletion.percent}
+              aria-valuemin={0} aria-valuemax={100}>
+              <div className={styles.progressBar}
+                style={{ width: `${checklistCompletion.percent}%` }} />
+            </div>
+            <p className={styles.progressLabel}>
+              {checklistCompletion.done} / {checklistCompletion.total} ({checklistCompletion.percent}%)
+            </p>
+            <div className={styles.checklistList}>
+              {checklistItems.map((item) => (
+                <label key={item.key} className={styles.checkRow}>
+                  <input type="checkbox" className={styles.srOnly}
+                    checked={settings.complianceChecklist[item.key]}
+                    onChange={(e) => updateChecklist(item.key, e.target.checked)} />
+                  <span className={`${styles.checkDot} ${settings.complianceChecklist[item.key] ? styles.checkDotOn : ""}`}
+                    aria-hidden />
+                  <span className={styles.checkLabel}>{item.label}</span>
+                </label>
+              ))}
+            </div>
+            {usageSummary && (
+              <div className={styles.usageStats}>
+                <p className={styles.usageStat}>
+                  Events (30d): <strong>{usageSummary.totalEvents}</strong>
+                </p>
+                {usageSummary.byEvent.slice(0, 3).map((e) => (
+                  <p key={e.eventName} className={styles.usageStat}>
+                    {e.eventName}: <strong>{e.count}</strong>
+                  </p>
+                ))}
+              </div>
+            )}
+            <button className={styles.sideBtn} onClick={refreshUsageSummary} disabled={usageLoading}>
+              {usageLoading ? "Loading..." : "View Log History ①"}
+            </button>
+          </section>
+
+          {/* Law Watch + Monthly Report compact */}
+          <section className={styles.sideCard} aria-label="Law watch and compliance status">
+            <h3 className={styles.sideCardTitle}>Law Watch Status</h3>
+            <p className={styles.muted}>
+              Daily automated checks for accessibility regulation updates
+              (ADA.gov, Federal Register, Florida statutes).
+            </p>
+            {lawWatchState ? (
+              <p className={styles.muted}>
+                Current Compliance:{" "}
+                <span className={lawWatchState.lastRunOk ? styles.statusOk : styles.statusFail}>
+                  {lawWatchState.lastRunOk ? "●● OK" : "●● Issues"}
+                </span>
+              </p>
+            ) : (
+              <p className={styles.muted}>No law watch run recorded yet.</p>
+            )}
+            {lastReportState && (
+              <p className={styles.muted}>
+                Last report: {lastReportState.month} to {lastReportState.sentTo} —{" "}
+                <span className={lastReportState.ok ? styles.statusOk : styles.statusFail}>
+                  {lastReportState.ok ? "Sent" : "Failed"}
+                </span>
+              </p>
+            )}
+            <div className={styles.sideActions}>
+              <button className={styles.sideBtnPrimary} onClick={sendMonthlyTestReport}
+                disabled={sendingMonthlyTest}>
+                {sendingMonthlyTest ? "Sending..." : "Send Test Report"}
+              </button>
+              <button className={styles.sideBtn} onClick={refreshLastReportState}
+                disabled={lastReportLoading}>
+                {lastReportLoading ? "Loading..." : "Refresh"}
+              </button>
+            </div>
+            {monthlyTestStatus && <p className={styles.statusText} role="status">{monthlyTestStatus}</p>}
+          </section>
+
+        </aside>
+      </div>
     </main>
   );
 }
+
