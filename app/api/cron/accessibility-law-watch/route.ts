@@ -20,6 +20,8 @@ type LawSource = {
 };
 
 const DEFAULT_REPORT_EMAIL = "elior@carbonjeanscompany.com";
+const ACCESSIBILITY_FROM_EMAIL = "compliance@carbonjeanscompany.com";
+const ACCESSIBILITY_FROM_NAME = "Carbon Compliance";
 
 const DEFAULT_SOURCES: LawSource[] = [
   {
@@ -194,8 +196,6 @@ async function sendLawWatchEmail(args: {
     return { ok: false, error: "RESEND_API_KEY not configured" as const };
   }
   const resend = new Resend(resendApiKey);
-  const fromEmail = (process.env.EMAIL_FROM || "").trim() || "sync@carbonjeanscompany.com";
-  const fromName = (process.env.EMAIL_FROM_NAME || "").trim() || "Carbon Accessibility";
   const subject = `Accessibility law-watch update: ${args.changes.length} source change(s) detected`;
   const html = `<!doctype html>
 <html><head><meta charset="utf-8"><title>${subject}</title></head>
@@ -231,7 +231,7 @@ async function sendLawWatchEmail(args: {
 </body>
 </html>`;
   const result = await resend.emails.send({
-    from: `${fromName} <${fromEmail}>`,
+    from: `${ACCESSIBILITY_FROM_NAME} <${ACCESSIBILITY_FROM_EMAIL}>`,
     to: args.to,
     subject,
     html,
@@ -304,4 +304,3 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   return GET(req);
 }
-

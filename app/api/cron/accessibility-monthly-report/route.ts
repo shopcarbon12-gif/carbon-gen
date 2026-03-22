@@ -13,6 +13,8 @@ export const maxDuration = 60;
 const DEFAULT_REPORT_EMAIL = "elior@carbonjeanscompany.com";
 const DEFAULT_STATEMENT_URL = "https://www.shopcarbon.com/pages/accessibility";
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const ACCESSIBILITY_FROM_EMAIL = "compliance@carbonjeanscompany.com";
+const ACCESSIBILITY_FROM_NAME = "Carbon Compliance";
 const CHECKLIST_LABELS: Array<{ key: string; label: string }> = [
   { key: "statementPublished", label: "Accessibility statement published" },
   { key: "issueChannelActive", label: "Issue channel active" },
@@ -160,8 +162,6 @@ export async function GET(req: NextRequest) {
     sentAt: now.toISOString(),
   };
   const subject = `Monthly Accessibility Compliance Review - ${monthLabel}`;
-  const fromEmail = (process.env.EMAIL_FROM || "").trim() || "sync@carbonjeanscompany.com";
-  const fromName = (process.env.EMAIL_FROM_NAME || "").trim() || "Carbon Accessibility";
   const resendApiKey = (process.env.RESEND_API_KEY || "").trim();
   if (!resendApiKey) {
     upsertAccessibilityChecklistHistory({ ...historyEntryBase, ok: false });
@@ -231,7 +231,7 @@ export async function GET(req: NextRequest) {
 
   const resend = new Resend(resendApiKey);
   const result = await resend.emails.send({
-    from: `${fromName} <${fromEmail}>`,
+    from: `${ACCESSIBILITY_FROM_NAME} <${ACCESSIBILITY_FROM_EMAIL}>`,
     to: reportTo,
     subject,
     html,
@@ -275,4 +275,3 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   return GET(req);
 }
-

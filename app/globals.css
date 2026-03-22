@@ -17,7 +17,6 @@
   --control-height: 52px;
   --control-padding-x: 14px;
 }
-
 * {
   box-sizing: border-box;
 }
@@ -110,6 +109,25 @@ body:has(.collection-mapping-standalone-route) .app-bg-fade,
 body:has(.collection-mapping-standalone-route) .app-bg-top-photo,
 body:has(.collection-mapping-standalone-route) .app-bg-top-fade {
   display: none !important;
+}
+
+body:has(.accessibility-standalone-route) .app-bg-top-photo,
+body:has(.accessibility-standalone-route) .app-bg-top-fade {
+  display: none !important;
+}
+
+body:has(.accessibility-standalone-route) .integration-panel-wrap,
+body:has(.accessibility-standalone-route) .chat-panel-wrap,
+body:has(.accessibility-standalone-route) .right-rail-extra-wrap {
+  display: none !important;
+}
+
+body:has(.accessibility-standalone-route) .shell .content,
+body:has(.accessibility-standalone-route) .shell.chat-expanded .content,
+body:has(.accessibility-standalone-route) .shell .content.no-integration-panel,
+body:has(.accessibility-standalone-route) .shell.chat-expanded .content.no-integration-panel {
+  --content-right-pad: var(--page-edge-gap) !important;
+  padding-right: var(--page-edge-gap) !important;
 }
 
 /* FOUC guard: keep header logo bounded even if route-scoped styles are delayed briefly. */
@@ -356,5 +374,3 @@ button:disabled,
     flex-wrap: wrap;
   }
 }
-
-
