@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenAI Generator — Improved UI</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: Inter, system-ui, -apple-system, sans-serif;
+    background: #f1f5f9;
+    color: #1e293b;
+    min-height: 100vh;
+  }
+
+  .app { display: flex; min-height: 100vh; }
+
+  /* ─── Sidebar ─────────────────────────────────────────── */
+  .sidebar {
+    width: 280px; min-width: 280px;
+    background: #0f172a; color: #cbd5e1;
+    display: flex; flex-direction: column;
+    padding: 24px 0;
+  }
+  .sidebar-logo {
+    display: flex; align-items: center; gap: 10px;
+    padding: 0 24px 28px;
+    border-bottom: 1px solid #1e293b;
+  }
+  .logo-icon {
+    width: 32px; height: 32px;
+    background: linear-gradient(135deg, #4bc99a, #0d9488);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+  }
+  .logo-text { font-size: 15px; font-weight: 600; color: #f8fafc; }
+
+  .status-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    margin: 20px 24px 8px;
+    padding: 6px 12px; border-radius: 20px;
+    font-size: 12px; font-weight: 500;
+    background: #1e293b;
+  }
+  .status-chip .dot { width: 7px; height: 7px; border-radius: 50%; }
+  .status-chip.idle   .dot { background: #64748b; }
+  .status-chip.idle        { color: #94a3b8; }
+  .status-chip.success .dot{ background: #4bc99a; box-shadow: 0 0 6px #4bc99a88; }
+  .status-chip.success     { color: #4bc99a; }
+
+  .step-nav { padding: 16px 0; flex: 1; }
+  .step-item {
+    display: flex; align-items: flex-start; gap: 14px;
+    padding: 12px 24px; cursor: pointer;
+    transition: background .15s; position: relative;
+  }
+  .step-item:hover { background: #1e293b; }
+  .step-item.active { background: #1e293b; border-left: 3px solid #4bc99a; padding-left: 21px; }
+  .step-icon {
+    width: 28px; height: 28px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700;
+    flex-shrink: 0; margin-top: 1px;
+    border: 2px solid #334155; color: #64748b;
+    background: transparent; transition: all .2s;
+  }
+  .step-item.complete .step-icon { background: #0d9488; border-color: #0d9488; color: #fff; }
+  .step-item.active   .step-icon { background: #4bc99a; border-color: #4bc99a; color: #0f172a; }
+  .step-meta { display: flex; flex-direction: column; gap: 2px; }
+  .step-label { font-size: 13px; font-weight: 600; color: #e2e8f0; }
+  .step-item:not(.active):not(.complete) .step-label { color: #64748b; }
+  .step-sublabel { font-size: 11px; color: #475569; }
+  .step-item.active .step-sublabel { color: #94a3b8; }
+
+  .step-connector { width: 2px; height: 20px; background: #1e293b; margin-left: 37px; }
+  .step-connector.done { background: #0d9488; }
+
+  .model-preview {
+    margin: 0 16px 20px; padding: 12px;
+    background: #1e293b; border-radius: 12px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .model-avatar {
+    width: 40px; height: 40px; border-radius: 8px;
+    background: linear-gradient(135deg, #1e3a5f, #0d9488);
+    display: flex; align-items: center; justify-content: center; font-size: 18px;
+  }
+  .model-info { font-size: 12px; }
+  .model-name { font-weight: 600; color: #e2e8f0; }
+  .model-gender { color: #64748b; margin-top: 2px; }
+
+  /* ─── Main ─────────────────────────────────────────────── */
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 32px; background: #fff;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .topbar-title { font-size: 16px; font-weight: 600; }
+  .topbar-sub { font-size: 13px; color: #64748b; margin-top: 2px; }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 16px; border-radius: 8px;
+    font-size: 13px; font-weight: 600;
+    cursor: pointer; border: none; transition: opacity .15s;
+  }
+  .btn:hover { opacity: .88; }
+  .btn-ghost { background: transparent; color: #64748b; border: 1px solid #e2e8f0; }
+  .btn-primary { background: linear-gradient(135deg, #4bc99a, #38a87e); color: #fff; }
+  .btn-secondary { background: #f1f5f9; color: #374151; border: 1px solid #e2e8f0; }
+  .btn-lg { padding: 12px 28px; font-size: 15px; border-radius: 10px; }
+
+  .content-area {
+    flex: 1; padding: 32px;
+    overflow-y: auto;
+    display: flex; flex-direction: column; gap: 24px;
+  }
+
+  /* Cards */
+  .card { background: #fff; border-radius: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.06); overflow: hidden; }
+  .card-header {
+    padding: 20px 24px 16px; border-bottom: 1px solid #f1f5f9;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .card-title { font-size: 15px; font-weight: 700; }
+  .card-body { padding: 24px; }
+
+  /* Forms */
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  .form-label { font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: .05em; }
+  .form-input {
+    padding: 9px 12px; border: 1px solid #e2e8f0; border-radius: 8px;
+    font-size: 14px; outline: none; transition: border-color .15s; font-family: inherit;
+  }
+  .form-input:focus { border-color: #4bc99a; }
+
+  /* Dropzone */
+  .dropzone {
+    border: 2px dashed #cbd5e1; border-radius: 12px;
+    padding: 40px 24px; text-align: center;
+    cursor: pointer; transition: all .2s; background: #f8fafc;
+  }
+  .dropzone:hover { border-color: #4bc99a; background: #f0fdf8; }
+  .dropzone-icon { font-size: 36px; margin-bottom: 10px; }
+  .dropzone-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+  .dropzone-sub { font-size: 12px; color: #94a3b8; }
+  .dropzone-sub span { color: #0d9488; font-weight: 600; cursor: pointer; }
+
+  /* Photo grid */
+  .photo-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 16px; }
+  .photo-thumb {
+    aspect-ratio: 1; border-radius: 8px; overflow: hidden;
+    position: relative; background: #f1f5f9;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; color: #cbd5e1;
+  }
+  .photo-thumb.filled { background: linear-gradient(135deg, #e0f2fe, #d1fae5); }
+  .photo-thumb .remove {
+    position: absolute; top: 3px; right: 3px;
+    width: 18px; height: 18px; background: rgba(0,0,0,.5);
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-size: 10px; color: #fff; cursor: pointer; opacity: 0; transition: opacity .15s;
+  }
+  .photo-thumb:hover .remove { opacity: 1; }
+
+  /* Tabs */
+  .tab-bar {
+    display: flex; gap: 4px; background: #f1f5f9;
+    padding: 4px; border-radius: 10px; margin-bottom: 20px;
+  }
+  .tab {
+    flex: 1; padding: 8px 12px; border-radius: 8px;
+    text-align: center; font-size: 13px; font-weight: 500;
+    cursor: pointer; color: #64748b; transition: all .15s;
+  }
+  .tab.active { background: #fff; color: #0f172a; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+
+  /* Barcode */
+  .barcode-row { display: flex; gap: 10px; margin-bottom: 20px; }
+  .barcode-input {
+    flex: 1; padding: 10px 14px; border: 1.5px solid #e2e8f0;
+    border-radius: 10px; font-size: 14px; outline: none; font-family: inherit;
+  }
+  .barcode-input:focus { border-color: #4bc99a; }
+
+  /* Product grid */
+  .product-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .product-card {
+    border: 1.5px solid #e2e8f0; border-radius: 10px;
+    overflow: hidden; cursor: pointer; transition: all .15s;
+  }
+  .product-card:hover { border-color: #4bc99a; box-shadow: 0 0 0 3px #4bc99a22; }
+  .product-card.selected { border-color: #4bc99a; box-shadow: 0 0 0 3px #4bc99a33; }
+  .product-img {
+    aspect-ratio: 1; background: linear-gradient(135deg, #f8fafc, #e0f2fe);
+    display: flex; align-items: center; justify-content: center; font-size: 28px;
+  }
+  .product-info { padding: 8px 10px; }
+  .product-name { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .product-sku { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+
+  /* Pose grid */
+  .pose-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 24px; }
+  .pose-thumb {
+    aspect-ratio: 3/4; border-radius: 10px;
+    background: linear-gradient(135deg, #f1f5f9, #e0f2fe);
+    border: 2px solid transparent;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px; cursor: pointer; transition: all .15s; position: relative;
+  }
+  .pose-thumb:hover { border-color: #4bc99a44; }
+  .pose-thumb.selected { border-color: #4bc99a; box-shadow: 0 0 0 3px #4bc99a22; }
+  .pose-thumb .check {
+    position: absolute; top: 5px; right: 5px;
+    width: 18px; height: 18px; background: #4bc99a; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; color: #fff; opacity: 0; transition: opacity .15s;
+  }
+  .pose-thumb.selected .check { opacity: 1; }
+
+  .textarea {
+    width: 100%; padding: 12px; border: 1.5px solid #e2e8f0;
+    border-radius: 10px; font-size: 14px; resize: vertical;
+    min-height: 80px; outline: none; transition: border-color .15s; font-family: inherit;
+  }
+  .textarea:focus { border-color: #4bc99a; }
+
+  .generate-footer {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-top: 20px; padding-top: 20px; border-top: 1px solid #f1f5f9;
+  }
+  .generate-meta { font-size: 12px; color: #94a3b8; }
+  .generate-meta strong { color: #0d9488; }
+
+  /* Result grid */
+  .result-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .result-card { border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
+  .result-img {
+    aspect-ratio: 3/4; background: linear-gradient(135deg, #dbeafe, #d1fae5);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 48px; position: relative;
+  }
+  .result-badge {
+    position: absolute; top: 8px; left: 8px;
+    background: #4bc99a; color: #fff;
+    font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 20px;
+  }
+  .result-actions { padding: 10px 12px; display: flex; gap: 6px; }
+  .result-actions .btn { flex: 1; justify-content: center; font-size: 12px; padding: 7px 10px; }
+
+  /* Action bar */
+  .action-bar {
+    display: flex; align-items: center; justify-content: flex-end; gap: 10px;
+    padding: 16px 32px; background: #fff; border-top: 1px solid #e2e8f0;
+  }
+
+  /* Utilities */
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .badge-green { background: #d1fae5; color: #065f46; }
+  .badge-amber { background: #fef3c7; color: #92400e; }
+  .badge-gray  { background: #f1f5f9; color: #64748b; }
+  .helper-text { font-size: 12px; color: #94a3b8; margin-top: 6px; }
+  .section-title { font-size: 13px; font-weight: 700; color: #374151; margin-bottom: 12px; text-transform: uppercase; letter-spacing: .06em; }
+
+  /* ═══ MOBILE (< 900px) ═══════════════════════════════ */
+  .mobile-stepper { display: none; }
+
+  @media (max-width: 899px) {
+    .sidebar { display: none; }
+    .mobile-stepper {
+      display: flex; align-items: center; width: 100%;
+      overflow-x: auto; padding: 12px 16px;
+      background: #fff; border-bottom: 1px solid #e2e8f0;
+      scrollbar-width: none;
+    }
+    .mobile-stepper::-webkit-scrollbar { display: none; }
+    .mobile-step {
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      flex-shrink: 0; cursor: pointer; min-width: 64px;
+    }
+    .mobile-step-icon {
+      width: 32px; height: 32px; border-radius: 50%;
+      border: 2px solid #cbd5e1;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700; color: #94a3b8; transition: all .2s;
+    }
+    .mobile-step.complete .mobile-step-icon { background: #0d9488; border-color: #0d9488; color: #fff; }
+    .mobile-step.active   .mobile-step-icon { background: #4bc99a; border-color: #4bc99a; color: #fff; }
+    .mobile-step-label { font-size: 10px; color: #94a3b8; text-align: center; }
+    .mobile-step.active .mobile-step-label { color: #0d9488; font-weight: 600; }
+    .mobile-connector { height: 2px; flex: 1; background: #e2e8f0; min-width: 20px; }
+    .mobile-connector.done { background: #0d9488; }
+
+    .topbar { padding: 16px; }
+    .content-area { padding: 16px; }
+    .form-grid { grid-template-columns: 1fr; }
+    .photo-grid { grid-template-columns: repeat(4, 1fr); }
+    .product-grid { grid-template-columns: repeat(2, 1fr); }
+    .pose-grid { grid-template-columns: repeat(3, 1fr); }
+    .result-grid { grid-template-columns: repeat(2, 1fr); }
+    .action-bar { padding: 12px 16px; position: sticky; bottom: 0; }
+    .action-bar .btn-primary { flex: 1; justify-content: center; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ════ SIDEBAR ════ -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">✦</div>
+      <span class="logo-text">CarbonGen Studio</span>
+    </div>
+
+    <div class="status-chip success">
+      <span class="dot"></span>
+      Model ready
+    </div>
+
+    <nav class="step-nav" id="stepNav">
+      <div class="step-item complete" data-step="1" onclick="setStep(1)">
+        <div class="step-icon">✓</div>
+        <div class="step-meta">
+          <span class="step-label">Model</span>
+          <span class="step-sublabel">Jasmine · Female</span>
+        </div>
+      </div>
+      <div class="step-connector done"></div>
+
+      <div class="step-item active" data-step="2" onclick="setStep(2)">
+        <div class="step-icon">2</div>
+        <div class="step-meta">
+          <span class="step-label">Product</span>
+          <span class="step-sublabel">Select item to wear</span>
+        </div>
+      </div>
+      <div class="step-connector"></div>
+
+      <div class="step-item" data-step="3" onclick="setStep(3)">
+        <div class="step-icon">3</div>
+        <div class="step-meta">
+          <span class="step-label">Generate</span>
+          <span class="step-sublabel">Choose pose &amp; prompt</span>
+        </div>
+      </div>
+      <div class="step-connector"></div>
+
+      <div class="step-item" data-step="4" onclick="setStep(4)">
+        <div class="step-icon">4</div>
+        <div class="step-meta">
+          <span class="step-label">Results</span>
+          <span class="step-sublabel">Push to Shopify</span>
+        </div>
+      </div>
+    </nav>
+
+    <div class="model-preview">
+      <div class="model-avatar">👩</div>
+      <div class="model-info">
+        <div class="model-name">Jasmine</div>
+        <div class="model-gender">Female · 8 photos</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ════ MAIN ════ -->
+  <div class="main">
+
+    <!-- Mobile stepper -->
+    <div class="mobile-stepper">
+      <div class="mobile-step complete" onclick="setStep(1)">
+        <div class="mobile-step-icon">✓</div>
+        <span class="mobile-step-label">Model</span>
+      </div>
+      <div class="mobile-connector done"></div>
+      <div class="mobile-step active" onclick="setStep(2)">
+        <div class="mobile-step-icon">2</div>
+        <span class="mobile-step-label">Product</span>
+      </div>
+      <div class="mobile-connector"></div>
+      <div class="mobile-step" onclick="setStep(3)">
+        <div class="mobile-step-icon">3</div>
+        <span class="mobile-step-label">Generate</span>
+      </div>
+      <div class="mobile-connector"></div>
+      <div class="mobile-step" onclick="setStep(4)">
+        <div class="mobile-step-icon">4</div>
+        <span class="mobile-step-label">Results</span>
+      </div>
+    </div>
+
+    <header class="topbar">
+      <div>
+        <div class="topbar-title">AI Image Generator</div>
+        <div class="topbar-sub">Create on-model product photos in seconds</div>
+      </div>
+      <button class="btn btn-ghost">⚙ Settings</button>
+    </header>
+
+    <div class="content-area">
+
+      <!-- Step 1 -->
+      <div id="step-1" class="step-panel">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Model Details</span>
+            <span class="badge badge-green">✓ Saved</span>
+          </div>
+          <div class="card-body">
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">Model Name</label>
+                <input class="form-input" type="text" value="Jasmine" placeholder="e.g. Alex">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Gender</label>
+                <input class="form-input" type="text" value="Female" placeholder="Male / Female / Non-binary">
+              </div>
+            </div>
+            <div class="section-title">Training Photos</div>
+            <div class="dropzone">
+              <div class="dropzone-icon">📷</div>
+              <div class="dropzone-title">Drop photos here or <span>browse files</span></div>
+              <div class="dropzone-sub">JPG · PNG · WEBP &nbsp;·&nbsp; Min 8 photos recommended</div>
+            </div>
+            <div class="photo-grid">
+              <div class="photo-thumb filled">👩<div class="remove">✕</div></div>
+              <div class="photo-thumb filled">👩<div class="remove">✕</div></div>
+              <div class="photo-thumb filled">👩<div class="remove">✕</div></div>
+              <div class="photo-thumb filled">👩<div class="remove">✕</div></div>
+              <div class="photo-thumb filled">👩<div class="remove">✕</div></div>
+              <div class="photo-thumb filled">👩<div class="remove">✕</div></div>
+              <div class="photo-thumb filled">👩<div class="remove">✕</div></div>
+              <div class="photo-thumb filled">👩<div class="remove">✕</div></div>
+              <div class="photo-thumb">＋</div>
+              <div class="photo-thumb">＋</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2 -->
+      <div id="step-2" class="step-panel" style="display:none">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Select Product</span>
+            <span class="badge badge-amber">Required</span>
+          </div>
+          <div class="card-body">
+            <div class="tab-bar">
+              <div class="tab active" onclick="switchTab(this)">Barcode / SKU</div>
+              <div class="tab" onclick="switchTab(this)">Shopify Catalog</div>
+              <div class="tab" onclick="switchTab(this)">Upload Image</div>
+            </div>
+            <div class="barcode-row">
+              <input class="barcode-input" type="text" placeholder="Scan or type barcode / SKU…">
+              <button class="btn btn-secondary">📷 Scan</button>
+              <button class="btn btn-primary">Search</button>
+            </div>
+            <p class="helper-text">Scan the product barcode with your camera or type the SKU manually.</p>
+            <div style="margin-top:20px;">
+              <div class="section-title">Recent Products</div>
+              <div class="product-grid">
+                <div class="product-card selected" onclick="selectProduct(this)">
+                  <div class="product-img">👗</div>
+                  <div class="product-info">
+                    <div class="product-name">Floral Midi Dress</div>
+                    <div class="product-sku">SKU-004821</div>
+                  </div>
+                </div>
+                <div class="product-card" onclick="selectProduct(this)">
+                  <div class="product-img">👔</div>
+                  <div class="product-info">
+                    <div class="product-name">Slim Fit Shirt</div>
+                    <div class="product-sku">SKU-003102</div>
+                  </div>
+                </div>
+                <div class="product-card" onclick="selectProduct(this)">
+                  <div class="product-img">🧥</div>
+                  <div class="product-info">
+                    <div class="product-name">Puffer Jacket</div>
+                    <div class="product-sku">SKU-009903</div>
+                  </div>
+                </div>
+                <div class="product-card" onclick="selectProduct(this)">
+                  <div class="product-img">👖</div>
+                  <div class="product-info">
+                    <div class="product-name">Straight Jeans</div>
+                    <div class="product-sku">SKU-001234</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 3 -->
+      <div id="step-3" class="step-panel" style="display:none">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Pose &amp; Prompt</span>
+            <span class="badge badge-gray">Step 3 of 4</span>
+          </div>
+          <div class="card-body">
+            <div class="section-title">Choose a Pose</div>
+            <div class="pose-grid">
+              <div class="pose-thumb selected" onclick="selectPose(this)">🧍<div class="check">✓</div></div>
+              <div class="pose-thumb" onclick="selectPose(this)">🚶</div>
+              <div class="pose-thumb" onclick="selectPose(this)">🧘</div>
+              <div class="pose-thumb" onclick="selectPose(this)">💃</div>
+              <div class="pose-thumb" onclick="selectPose(this)">🧎</div>
+              <div class="pose-thumb" onclick="selectPose(this)">🤸</div>
+              <div class="pose-thumb" onclick="selectPose(this)">🏃</div>
+              <div class="pose-thumb" onclick="selectPose(this)">🤳</div>
+              <div class="pose-thumb" onclick="selectPose(this)">🛋️</div>
+              <div class="pose-thumb" onclick="selectPose(this)">✨</div>
+            </div>
+            <div class="section-title" style="margin-top:20px;">Extra Instructions (optional)</div>
+            <textarea class="textarea" placeholder="e.g. Outdoor setting, golden hour lighting, editorial style…"></textarea>
+            <p class="helper-text">Leave blank to use the default prompt optimised for your selected pose.</p>
+            <div class="generate-footer">
+              <div class="generate-meta">Estimated: <strong>~30 sec</strong> · 3 images</div>
+              <button class="btn btn-primary btn-lg">✦ Generate Images</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 4 -->
+      <div id="step-4" class="step-panel" style="display:none">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Generated Images</span>
+            <span class="badge badge-green">3 ready</span>
+          </div>
+          <div class="card-body">
+            <div class="result-grid">
+              <div class="result-card">
+                <div class="result-img"><div class="result-badge">New</div>👩‍🦱</div>
+                <div class="result-actions">
+                  <button class="btn btn-primary">↑ Push</button>
+                  <button class="btn btn-ghost">↓</button>
+                </div>
+              </div>
+              <div class="result-card">
+                <div class="result-img">👩</div>
+                <div class="result-actions">
+                  <button class="btn btn-primary">↑ Push</button>
+                  <button class="btn btn-ghost">↓</button>
+                </div>
+              </div>
+              <div class="result-card">
+                <div class="result-img">👩‍🦰</div>
+                <div class="result-actions">
+                  <button class="btn btn-primary">↑ Push</button>
+                  <button class="btn btn-ghost">↓</button>
+                </div>
+              </div>
+            </div>
+            <div style="margin-top:20px; display:flex; gap:10px; justify-content:flex-end;">
+              <button class="btn btn-secondary">⟳ Regenerate</button>
+              <button class="btn btn-primary">↑ Push All to Shopify</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /content-area -->
+
+    <footer class="action-bar">
+      <button class="btn btn-ghost" id="btnBack" onclick="prevStep()">← Back</button>
+      <button class="btn btn-primary" id="btnNext" onclick="nextStep()">Next →</button>
+    </footer>
+  </div>
+</div>
+
+<script>
+  let currentStep = 2;
+
+  function setStep(n) { currentStep = n; render(); }
+  function nextStep() { if (currentStep < 4) { currentStep++; render(); } }
+  function prevStep() { if (currentStep > 1) { currentStep--; render(); } }
+
+  function render() {
+    document.querySelectorAll('.step-panel').forEach((el, i) => {
+      el.style.display = (i + 1 === currentStep) ? '' : 'none';
+    });
+
+    document.querySelectorAll('#stepNav .step-item').forEach((el) => {
+      const s = parseInt(el.dataset.step);
+      el.classList.remove('active', 'complete');
+      if (s < currentStep) el.classList.add('complete');
+      else if (s === currentStep) el.classList.add('active');
+    });
+
+    document.querySelectorAll('.step-connector').forEach((c, i) => {
+      c.classList.toggle('done', i + 1 < currentStep);
+    });
+
+    document.querySelectorAll('.mobile-step').forEach((el, i) => {
+      const s = i + 1;
+      el.classList.remove('active', 'complete');
+      if (s < currentStep) el.classList.add('complete');
+      else if (s === currentStep) el.classList.add('active');
+      el.querySelector('.mobile-step-icon').textContent = s < currentStep ? '✓' : s;
+    });
+
+    document.querySelectorAll('.mobile-connector').forEach((c, i) => {
+      c.classList.toggle('done', i + 1 < currentStep);
+    });
+
+    document.getElementById('btnBack').style.visibility = currentStep > 1 ? 'visible' : 'hidden';
+    const btnNext = document.getElementById('btnNext');
+    btnNext.textContent = currentStep === 3 ? '✦ Generate' : currentStep === 4 ? '↑ Push All' : 'Next →';
+  }
+
+  function switchTab(el) {
+    el.closest('.tab-bar').querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+  }
+
+  function selectProduct(el) {
+    el.closest('.product-grid').querySelectorAll('.product-card').forEach(c => c.classList.remove('selected'));
+    el.classList.add('selected');
+  }
+
+  function selectPose(el) {
+    el.closest('.pose-grid').querySelectorAll('.pose-thumb').forEach(p => {
+      p.classList.remove('selected');
+      const c = p.querySelector('.check');
+      if (c) c.style.opacity = '0';
+    });
+    el.classList.add('selected');
+    const check = el.querySelector('.check');
+    if (!check) {
+      const d = document.createElement('div');
+      d.className = 'check'; d.textContent = '✓';
+      el.appendChild(d);
+    } else { check.style.opacity = '1'; }
+  }
+
+  render();
+</script>
+</body>
+</html>
