@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenAI Generator — Studio UI v2</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --accent:    #7c3aed;
+    --accent-lt: #a78bfa;
+    --accent-dk: #5b21b6;
+    --surface:   #ffffff;
+    --bg:        #f5f3ff;
+    --border:    #e5e7eb;
+    --text:      #111827;
+    --muted:     #6b7280;
+    --canvas-bg: #0d0d14;
+  }
+
+  body {
+    font-family: Inter, system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ── Top Nav ───────────────────────────────────── */
+  .nav {
+    height: 52px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 16px;
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+  }
+  .nav-logo {
+    display: flex; align-items: center; gap: 8px;
+    font-weight: 700; font-size: 15px; color: var(--accent);
+    margin-right: 8px;
+  }
+  .nav-logo-icon {
+    width: 28px; height: 28px; border-radius: 7px;
+    background: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; color: #fff;
+  }
+  .nav-divider { width: 1px; height: 20px; background: var(--border); }
+  .nav-crumb { font-size: 13px; color: var(--muted); }
+  .nav-crumb span { color: var(--text); font-weight: 600; }
+  .nav-spacer { flex: 1; }
+  .nav-credits {
+    display: flex; align-items: center; gap: 6px;
+    background: #f3f0ff; border: 1px solid #ddd6fe;
+    padding: 5px 12px; border-radius: 20px;
+    font-size: 12px; font-weight: 600; color: var(--accent);
+  }
+  .nav-avatar {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), #db2777);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; color: #fff; font-weight: 700;
+  }
+
+  /* ── Layout ────────────────────────────────────── */
+  .studio {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    height: calc(100vh - 52px);
+    margin-top: 52px;
+  }
+
+  /* ── Config Panel (left) ───────────────────────── */
+  .config-panel {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+  .config-panel::-webkit-scrollbar { width: 4px; }
+  .config-panel::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 4px; }
+
+  /* Accordion */
+  .acc { border-bottom: 1px solid var(--border); }
+  .acc-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 16px 20px;
+    cursor: pointer; user-select: none;
+    transition: background .1s;
+  }
+  .acc-header:hover { background: #fafafa; }
+  .acc-num {
+    width: 24px; height: 24px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700;
+    border: 2px solid var(--border); color: var(--muted);
+    flex-shrink: 0;
+  }
+  .acc.done .acc-num { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .acc.open .acc-num { background: var(--accent-lt); border-color: var(--accent-lt); color: var(--accent-dk); }
+  .acc-title { font-size: 14px; font-weight: 600; flex: 1; }
+  .acc.done .acc-title { color: var(--text); }
+  .acc:not(.done):not(.open) .acc-title { color: var(--muted); }
+  .acc-meta { font-size: 12px; color: var(--muted); }
+  .acc.done .acc-meta { color: var(--accent); font-weight: 500; }
+  .acc-arrow { font-size: 11px; color: var(--muted); transition: transform .2s; }
+  .acc.open .acc-arrow { transform: rotate(180deg); }
+
+  .acc-body { padding: 0 20px 20px; display: none; }
+  .acc.open .acc-body { display: block; }
+
+  /* Form elements */
+  .field { margin-bottom: 14px; }
+  .field:last-child { margin-bottom: 0; }
+  .label {
+    display: block; font-size: 11px; font-weight: 600;
+    color: var(--muted); text-transform: uppercase;
+    letter-spacing: .05em; margin-bottom: 6px;
+  }
+  .input {
+    width: 100%; padding: 9px 12px;
+    border: 1.5px solid var(--border); border-radius: 8px;
+    font-size: 14px; outline: none;
+    transition: border-color .15s; font-family: inherit;
+  }
+  .input:focus { border-color: var(--accent-lt); }
+
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  /* Model card strip */
+  .model-strip {
+    display: flex; gap: 10px; overflow-x: auto;
+    padding-bottom: 4px; scrollbar-width: none;
+  }
+  .model-strip::-webkit-scrollbar { display: none; }
+  .model-card {
+    flex-shrink: 0; width: 80px;
+    border: 2px solid var(--border); border-radius: 10px;
+    overflow: hidden; cursor: pointer; transition: all .15s;
+    background: #fafafa;
+  }
+  .model-card:hover { border-color: var(--accent-lt); }
+  .model-card.sel { border-color: var(--accent); box-shadow: 0 0 0 3px #7c3aed22; }
+  .model-face {
+    aspect-ratio: 1; background: linear-gradient(135deg, #ede9fe, #fce7f3);
+    display: flex; align-items: center; justify-content: center; font-size: 28px;
+  }
+  .model-name-tag { font-size: 10px; font-weight: 600; text-align: center; padding: 5px 4px; color: var(--text); }
+  .model-add {
+    flex-shrink: 0; width: 80px;
+    border: 2px dashed var(--border); border-radius: 10px;
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 4px;
+    cursor: pointer; color: var(--muted); font-size: 11px;
+    transition: all .15s; padding: 10px 4px; text-align: center;
+    min-height: 90px;
+  }
+  .model-add:hover { border-color: var(--accent); color: var(--accent); background: #f5f3ff; }
+
+  /* Product search */
+  .search-box {
+    display: flex; gap: 8px; margin-bottom: 12px;
+  }
+  .search-input {
+    flex: 1; padding: 9px 12px;
+    border: 1.5px solid var(--border); border-radius: 8px;
+    font-size: 14px; outline: none; font-family: inherit;
+  }
+  .search-input:focus { border-color: var(--accent-lt); }
+  .icon-btn {
+    width: 38px; height: 38px; border-radius: 8px;
+    border: 1.5px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; font-size: 16px; background: var(--surface);
+    transition: all .15s; flex-shrink: 0;
+  }
+  .icon-btn:hover { border-color: var(--accent); background: #f5f3ff; }
+
+  .product-list { display: flex; flex-direction: column; gap: 6px; }
+  .product-row {
+    display: flex; align-items: center; gap: 10px;
+    border: 1.5px solid var(--border); border-radius: 8px;
+    padding: 8px 10px; cursor: pointer; transition: all .15s;
+  }
+  .product-row:hover { border-color: var(--accent-lt); }
+  .product-row.sel { border-color: var(--accent); background: #f5f3ff; }
+  .product-thumb {
+    width: 40px; height: 40px; border-radius: 6px;
+    background: linear-gradient(135deg, #ede9fe, #dbeafe);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; flex-shrink: 0;
+  }
+  .product-info { flex: 1; min-width: 0; }
+  .product-title { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .product-sku { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .radio-dot {
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 2px solid var(--border); flex-shrink: 0;
+    transition: all .15s;
+  }
+  .product-row.sel .radio-dot { border-color: var(--accent); background: var(--accent); box-shadow: inset 0 0 0 3px #fff; }
+
+  /* Prompt builder */
+  .prompt-area {
+    border: 1.5px solid var(--border); border-radius: 10px;
+    padding: 12px; margin-bottom: 10px;
+    min-height: 90px; outline: none; font-size: 14px;
+    font-family: inherit; resize: none; width: 100%;
+    transition: border-color .15s;
+  }
+  .prompt-area:focus { border-color: var(--accent-lt); }
+
+  .chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .chip {
+    padding: 5px 10px; border-radius: 20px; font-size: 12px; font-weight: 500;
+    border: 1.5px solid var(--border); cursor: pointer;
+    transition: all .15s; color: var(--muted); background: var(--surface);
+    user-select: none;
+  }
+  .chip:hover { border-color: var(--accent-lt); color: var(--accent); }
+  .chip.on { border-color: var(--accent); background: #f5f3ff; color: var(--accent); font-weight: 600; }
+
+  /* Sliders */
+  .slider-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .slider-label { font-size: 12px; color: var(--muted); width: 80px; }
+  input[type=range] {
+    flex: 1; accent-color: var(--accent); height: 4px; cursor: pointer;
+  }
+  .slider-val { font-size: 12px; font-weight: 600; color: var(--accent); width: 28px; text-align: right; }
+
+  /* Generate button */
+  .gen-btn {
+    width: 100%; padding: 13px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-dk));
+    color: #fff; font-size: 15px; font-weight: 700;
+    border: none; border-radius: 10px; cursor: pointer;
+    transition: opacity .15s; display: flex; align-items: center;
+    justify-content: center; gap: 8px;
+  }
+  .gen-btn:hover { opacity: .9; }
+  .gen-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+  .gen-footer-meta { font-size: 11px; color: var(--muted); text-align: center; margin-top: 8px; }
+  .gen-footer-meta strong { color: var(--accent); }
+
+  /* ── Canvas / Preview (right) ──────────────────── */
+  .canvas-panel {
+    background: var(--canvas-bg);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .canvas-toolbar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 16px;
+    background: #16161f;
+    border-bottom: 1px solid #252530;
+  }
+  .canvas-toolbar-label { font-size: 12px; color: #6b7280; font-weight: 500; }
+  .tbar-sep { width: 1px; height: 16px; background: #252530; margin: 0 2px; }
+  .tbar-btn {
+    padding: 5px 10px; border-radius: 6px;
+    font-size: 12px; font-weight: 500; cursor: pointer;
+    border: 1px solid #252530; transition: all .15s;
+    color: #9ca3af; background: transparent;
+  }
+  .tbar-btn:hover { background: #252530; color: #e5e7eb; }
+  .tbar-btn.active { background: #252530; color: var(--accent-lt); border-color: #3d3d5c; }
+  .tbar-spacer { flex: 1; }
+  .tbar-gen-count { font-size: 11px; color: #4b5563; }
+
+  .canvas-area {
+    flex: 1; overflow-y: auto; overflow-x: hidden;
+    padding: 24px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+    align-content: start;
+  }
+  .canvas-area::-webkit-scrollbar { width: 4px; }
+  .canvas-area::-webkit-scrollbar-thumb { background: #252530; border-radius: 4px; }
+
+  /* Result cards */
+  .result-card {
+    border-radius: 12px; overflow: hidden;
+    border: 2px solid transparent;
+    transition: all .2s; cursor: pointer; position: relative;
+    background: #1a1a26;
+  }
+  .result-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .result-card.picked { border-color: var(--accent); box-shadow: 0 0 0 3px #7c3aed33; }
+
+  .result-img {
+    aspect-ratio: 3/4;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 64px; position: relative;
+  }
+  .result-img.gen-1 { background: linear-gradient(160deg, #1e1433 0%, #0f2027 100%); }
+  .result-img.gen-2 { background: linear-gradient(160deg, #12192b 0%, #1a1033 100%); }
+  .result-img.gen-3 { background: linear-gradient(160deg, #0d1f1a 0%, #1a1433 100%); }
+
+  .result-corner-badge {
+    position: absolute; top: 8px; left: 8px;
+    background: var(--accent); color: #fff;
+    font-size: 9px; font-weight: 700; padding: 2px 7px;
+    border-radius: 20px; letter-spacing: .04em;
+  }
+  .result-select-btn {
+    position: absolute; top: 8px; right: 8px;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: rgba(0,0,0,.55); border: 2px solid rgba(255,255,255,.3);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; color: #fff; transition: all .15s;
+  }
+  .result-card.picked .result-select-btn { background: var(--accent); border-color: var(--accent); }
+
+  .result-footer {
+    padding: 10px 12px;
+    background: #1a1a26;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .result-score { font-size: 11px; color: #6b7280; flex: 1; }
+  .result-score strong { color: #a78bfa; }
+  .result-action {
+    padding: 5px 10px; border-radius: 6px;
+    font-size: 11px; font-weight: 600;
+    cursor: pointer; border: none; transition: opacity .15s;
+  }
+  .result-action.push { background: var(--accent); color: #fff; }
+  .result-action.dl { background: #252530; color: #9ca3af; }
+  .result-action:hover { opacity: .85; }
+
+  /* Empty state */
+  .canvas-empty {
+    grid-column: 1 / -1;
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; padding: 80px 20px; text-align: center;
+  }
+  .canvas-empty-icon { font-size: 56px; margin-bottom: 16px; opacity: .25; }
+  .canvas-empty-title { font-size: 16px; font-weight: 600; color: #374151; margin-bottom: 6px; }
+  .canvas-empty-sub { font-size: 13px; color: #4b5563; max-width: 260px; }
+
+  /* Generating animation */
+  .gen-card {
+    border-radius: 12px; overflow: hidden;
+    background: #1a1a26; border: 2px solid #252530;
+  }
+  .gen-card-inner {
+    aspect-ratio: 3/4;
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 12px;
+  }
+  .spinner {
+    width: 32px; height: 32px; border-radius: 50%;
+    border: 3px solid #252530;
+    border-top-color: var(--accent-lt);
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .gen-label { font-size: 12px; color: #6b7280; }
+
+  /* Bottom action bar */
+  .canvas-bottom {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 20px;
+    background: #16161f; border-top: 1px solid #252530;
+  }
+  .sel-count { font-size: 13px; color: #6b7280; }
+  .sel-count strong { color: var(--accent-lt); }
+  .canvas-bottom-spacer { flex: 1; }
+  .push-all-btn {
+    padding: 9px 20px; border-radius: 8px;
+    font-size: 13px; font-weight: 700;
+    background: linear-gradient(135deg, var(--accent), var(--accent-dk));
+    color: #fff; border: none; cursor: pointer;
+    transition: opacity .15s; display: flex; align-items: center; gap: 6px;
+  }
+  .push-all-btn:hover { opacity: .9; }
+  .regen-btn {
+    padding: 9px 16px; border-radius: 8px;
+    font-size: 13px; font-weight: 600;
+    background: #252530; color: #9ca3af;
+    border: 1px solid #343444; cursor: pointer;
+    transition: all .15s;
+  }
+  .regen-btn:hover { background: #343444; color: #e5e7eb; }
+
+  /* ── Mobile ─────────────────────────────────────── */
+  @media (max-width: 860px) {
+    body { overflow: auto; }
+    .studio { grid-template-columns: 1fr; height: auto; overflow: visible; }
+    .config-panel { max-height: none; overflow: visible; }
+    .canvas-panel { height: 60vh; }
+    .canvas-area { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Nav ── -->
+<nav class="nav">
+  <div class="nav-logo">
+    <div class="nav-logo-icon">✦</div>
+    CarbonGen
+  </div>
+  <div class="nav-divider"></div>
+  <div class="nav-crumb">Workspace / <span>Studio</span></div>
+  <div class="nav-spacer"></div>
+  <div class="nav-credits">✦ 48 credits</div>
+  <div class="nav-avatar">J</div>
+</nav>
+
+<div class="studio">
+
+  <!-- ══ LEFT: CONFIG ══ -->
+  <aside class="config-panel">
+
+    <!-- 1. Model -->
+    <div class="acc done open" id="acc1">
+      <div class="acc-header" onclick="toggleAcc('acc1')">
+        <div class="acc-num">✓</div>
+        <span class="acc-title">Model</span>
+        <span class="acc-meta">Jasmine · Female</span>
+        <span class="acc-arrow">▼</span>
+      </div>
+      <div class="acc-body">
+        <div class="model-strip" style="margin-bottom:14px;">
+          <div class="model-card sel">
+            <div class="model-face">👩</div>
+            <div class="model-name-tag">Jasmine</div>
+          </div>
+          <div class="model-card">
+            <div class="model-face">👱‍♂️</div>
+            <div class="model-name-tag">Marcus</div>
+          </div>
+          <div class="model-card">
+            <div class="model-face">🧑‍🦱</div>
+            <div class="model-name-tag">Riley</div>
+          </div>
+          <div class="model-add" onclick="">
+            <span style="font-size:20px;">＋</span>
+            New model
+          </div>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label class="label">Name</label>
+            <input class="input" type="text" value="Jasmine">
+          </div>
+          <div class="field">
+            <label class="label">Gender</label>
+            <input class="input" type="text" value="Female">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. Product -->
+    <div class="acc done" id="acc2">
+      <div class="acc-header" onclick="toggleAcc('acc2')">
+        <div class="acc-num">✓</div>
+        <span class="acc-title">Product</span>
+        <span class="acc-meta">Floral Midi Dress</span>
+        <span class="acc-arrow">▼</span>
+      </div>
+      <div class="acc-body">
+        <div class="search-box">
+          <input class="search-input" type="text" placeholder="Search by name or SKU…" value="floral">
+          <div class="icon-btn" title="Scan barcode">📷</div>
+        </div>
+        <div class="product-list">
+          <div class="product-row sel" onclick="selectProd(this)">
+            <div class="product-thumb">👗</div>
+            <div class="product-info">
+              <div class="product-title">Floral Midi Dress</div>
+              <div class="product-sku">SKU-004821 · S / M / L</div>
+            </div>
+            <div class="radio-dot"></div>
+          </div>
+          <div class="product-row" onclick="selectProd(this)">
+            <div class="product-thumb">👔</div>
+            <div class="product-info">
+              <div class="product-title">Slim Fit Linen Shirt</div>
+              <div class="product-sku">SKU-003102 · XS–XL</div>
+            </div>
+            <div class="radio-dot"></div>
+          </div>
+          <div class="product-row" onclick="selectProd(this)">
+            <div class="product-thumb">🧥</div>
+            <div class="product-info">
+              <div class="product-title">Puffer Jacket</div>
+              <div class="product-sku">SKU-009903 · S / M / L / XL</div>
+            </div>
+            <div class="radio-dot"></div>
+          </div>
+          <div class="product-row" onclick="selectProd(this)">
+            <div class="product-thumb">👖</div>
+            <div class="product-info">
+              <div class="product-title">Straight Leg Jeans</div>
+              <div class="product-sku">SKU-001234 · 28–36</div>
+            </div>
+            <div class="radio-dot"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Style & Prompt -->
+    <div class="acc open" id="acc3">
+      <div class="acc-header" onclick="toggleAcc('acc3')">
+        <div class="acc-num">3</div>
+        <span class="acc-title">Style &amp; Prompt</span>
+        <span class="acc-meta">Outdoor · Editorial</span>
+        <span class="acc-arrow">▼</span>
+      </div>
+      <div class="acc-body">
+        <div class="field">
+          <label class="label">Setting</label>
+          <div class="chip-row" id="chips-setting">
+            <div class="chip on" onclick="toggleChip(this)">Outdoor</div>
+            <div class="chip" onclick="toggleChip(this)">Studio</div>
+            <div class="chip" onclick="toggleChip(this)">Urban Street</div>
+            <div class="chip" onclick="toggleChip(this)">Beach</div>
+            <div class="chip" onclick="toggleChip(this)">Café</div>
+          </div>
+        </div>
+        <div class="field">
+          <label class="label">Lighting</label>
+          <div class="chip-row">
+            <div class="chip on" onclick="toggleChip(this)">Golden hour</div>
+            <div class="chip" onclick="toggleChip(this)">Soft box</div>
+            <div class="chip" onclick="toggleChip(this)">Natural</div>
+            <div class="chip" onclick="toggleChip(this)">Neon</div>
+          </div>
+        </div>
+        <div class="field">
+          <label class="label">Style</label>
+          <div class="chip-row">
+            <div class="chip on" onclick="toggleChip(this)">Editorial</div>
+            <div class="chip" onclick="toggleChip(this)">Catalogue</div>
+            <div class="chip" onclick="toggleChip(this)">Lifestyle</div>
+            <div class="chip" onclick="toggleChip(this)">Minimalist</div>
+          </div>
+        </div>
+        <div class="field">
+          <label class="label">Pose</label>
+          <div class="chip-row">
+            <div class="chip on" onclick="toggleChip(this)">Standing</div>
+            <div class="chip" onclick="toggleChip(this)">Walking</div>
+            <div class="chip" onclick="toggleChip(this)">Sitting</div>
+            <div class="chip" onclick="toggleChip(this)">Dynamic</div>
+          </div>
+        </div>
+        <div class="field" style="margin-bottom:14px;">
+          <label class="label">Custom prompt (optional)</label>
+          <textarea class="prompt-area" placeholder="e.g. standing on a rooftop at sunset, wind in hair, editorial magazine style…"></textarea>
+        </div>
+        <div class="field">
+          <label class="label">Number of images</label>
+          <div class="slider-row">
+            <span class="slider-label">Count</span>
+            <input type="range" min="1" max="6" value="3" oninput="document.getElementById('imgCount').textContent=this.value">
+            <span class="slider-val" id="imgCount">3</span>
+          </div>
+          <div class="slider-row">
+            <span class="slider-label">Creativity</span>
+            <input type="range" min="1" max="10" value="7" oninput="document.getElementById('creativity').textContent=this.value">
+            <span class="slider-val" id="creativity">7</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Generate -->
+    <div style="padding: 16px 20px 24px;">
+      <button class="gen-btn" onclick="startGenerate()">
+        ✦ Generate Images
+      </button>
+      <div class="gen-footer-meta">~<strong>30 sec</strong> · uses <strong>3 credits</strong></div>
+    </div>
+
+  </aside>
+
+  <!-- ══ RIGHT: CANVAS ══ -->
+  <section class="canvas-panel">
+
+    <div class="canvas-toolbar">
+      <span class="canvas-toolbar-label">Output</span>
+      <div class="tbar-sep"></div>
+      <button class="tbar-btn active" onclick="tbSelect(this)">3:4 Portrait</button>
+      <button class="tbar-btn" onclick="tbSelect(this)">1:1 Square</button>
+      <button class="tbar-btn" onclick="tbSelect(this)">4:3 Landscape</button>
+      <div class="tbar-sep"></div>
+      <button class="tbar-btn active" onclick="tbSelect(this)">Grid</button>
+      <button class="tbar-btn" onclick="tbSelect(this)">Compare</button>
+      <div class="tbar-spacer"></div>
+      <span class="tbar-gen-count" id="genCount">0 images generated</span>
+    </div>
+
+    <div class="canvas-area" id="canvasArea">
+      <div class="canvas-empty" id="emptyState">
+        <div class="canvas-empty-icon">🖼️</div>
+        <div class="canvas-empty-title">No images yet</div>
+        <div class="canvas-empty-sub">Configure your model, pick a product, set your style, then hit Generate.</div>
+      </div>
+    </div>
+
+    <div class="canvas-bottom">
+      <span class="sel-count">Selected: <strong id="selCount">0</strong> images</span>
+      <div class="canvas-bottom-spacer"></div>
+      <button class="regen-btn" onclick="startGenerate()">⟳ Regenerate</button>
+      <button class="push-all-btn" onclick="">↑ Push to Shopify</button>
+    </div>
+
+  </section>
+
+</div>
+
+<script>
+  // Accordion
+  function toggleAcc(id) {
+    const el = document.getElementById(id);
+    el.classList.toggle('open');
+  }
+
+  // Product selection
+  function selectProd(row) {
+    row.closest('.product-list').querySelectorAll('.product-row').forEach(r => r.classList.remove('sel'));
+    row.classList.add('sel');
+  }
+
+  // Chip toggle
+  function toggleChip(chip) { chip.classList.toggle('on'); }
+
+  // Toolbar exclusive
+  function tbSelect(btn) {
+    btn.closest('.canvas-toolbar').querySelectorAll('.tbar-btn').forEach(b => {
+      if (b === btn || (b !== btn && b.classList.contains('active') && sameGroup(b, btn))) b.classList.remove('active');
+    });
+    btn.classList.toggle('active');
+  }
+  function sameGroup(a, b) {
+    const groups = [['3:4 Portrait','1:1 Square','4:3 Landscape'],['Grid','Compare']];
+    return groups.some(g => g.includes(a.textContent.trim()) && g.includes(b.textContent.trim()));
+  }
+
+  // Result card selection
+  let selectedCards = new Set();
+  function toggleCard(card) {
+    card.classList.toggle('picked');
+    const id = card.dataset.id;
+    if (card.classList.contains('picked')) selectedCards.add(id);
+    else selectedCards.delete(id);
+    document.getElementById('selCount').textContent = selectedCards.size;
+  }
+
+  // Generate
+  const EMOJIS = ['👩‍🦱','👩','👩‍🦰','🧍‍♀️','💃','🧘‍♀️'];
+  let genId = 0;
+
+  function startGenerate() {
+    const area = document.getElementById('canvasArea');
+    const empty = document.getElementById('emptyState');
+    if (empty) empty.remove();
+
+    const count = parseInt(document.querySelector('input[type=range]').value) || 3;
+
+    // Add spinner cards
+    const spinners = [];
+    for (let i = 0; i < count; i++) {
+      const gc = document.createElement('div');
+      gc.className = 'gen-card';
+      gc.innerHTML = `<div class="gen-card-inner"><div class="spinner"></div><div class="gen-label">Generating…</div></div>`;
+      area.appendChild(gc);
+      spinners.push(gc);
+    }
+
+    // Simulate generation
+    spinners.forEach((gc, i) => {
+      setTimeout(() => {
+        const id = 'r' + (++genId);
+        const emoji = EMOJIS[genId % EMOJIS.length];
+        const gradClass = ['gen-1','gen-2','gen-3'][i % 3];
+        const score = (85 + Math.floor(Math.random() * 14)).toFixed(1);
+        const card = document.createElement('div');
+        card.className = 'result-card';
+        card.dataset.id = id;
+        card.onclick = () => toggleCard(card);
+        card.innerHTML = `
+          <div class="result-img ${gradClass}">
+            ${emoji}
+            <div class="result-corner-badge">NEW</div>
+            <div class="result-select-btn">✓</div>
+          </div>
+          <div class="result-footer">
+            <span class="result-score">Score <strong>${score}%</strong></span>
+            <button class="result-action dl" onclick="event.stopPropagation()">↓</button>
+            <button class="result-action push" onclick="event.stopPropagation()">↑ Push</button>
+          </div>`;
+        gc.replaceWith(card);
+        document.getElementById('genCount').textContent = genId + ' images generated';
+      }, 1200 + i * 600);
+    });
+  }
+</script>
+</body>
+</html>
