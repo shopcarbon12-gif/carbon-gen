@@ -1108,7 +1108,7 @@ export default function AccessibilityPage() {
       {/* SUCCESS BANNER */}
       {settings.complianceChecklist.monthlyRetestDone && (
         <div className={styles.successBanner}>
-          <div className={styles.bannerCheck}>✓</div>
+          <div className={styles.bannerCheck}>OK</div>
           Monthly retest and evidence log completed
         </div>
       )}
@@ -1231,7 +1231,7 @@ export default function AccessibilityPage() {
             </div>
             <div className={styles.panelHeader}>
               <h2 className={styles.panelTitle}>Accessibility</h2>
-              <button className={styles.panelAction}>Crees Festens ▾</button>
+              <button className={styles.panelAction}>Crees Festens v</button>
             </div>
 
             <div className={styles.headerCluster}>
@@ -1247,7 +1247,7 @@ export default function AccessibilityPage() {
             <div className={styles.brandRow}>
               <div className={styles.brandLeft}>
                 <Image src={carbonWordmark} alt="Carbon Assist" className={styles.brandLogo} />
-                <span className={styles.brandHex}>⬡</span>
+                <span className={styles.brandHex}>CA</span>
                 <span>CARBON ASSIST</span>
               </div>
               <div className={styles.activeBadge}>Active</div>
@@ -1272,9 +1272,9 @@ export default function AccessibilityPage() {
               <div className={styles.wpLeft}>
                 <div className={styles.wpMiniHead}>
                   <div className={styles.wpMiniBrand}>
-                    <span>⬡</span> CARBON ASSIST
+                    <span>CA</span> CARBON ASSIST
                   </div>
-                  <button className={styles.wpMiniClose} onClick={removeRuntimeWidgetFromPage}>×</button>
+                  <button className={styles.wpMiniClose} onClick={removeRuntimeWidgetFromPage}>X</button>
                 </div>
                 <div className={styles.wpMiniTitle}>Accessibility preferences</div>
                 <div className={styles.wpMiniSub}>Tune display, motion, and navigation for this site.</div>
@@ -1293,12 +1293,12 @@ export default function AccessibilityPage() {
                   <button className={styles.wpBtn} onClick={installRuntimeWidgetOnPage}>
                     {renderGlossyTriangleLabel(runtimeWidgetMounted ? "Reload Preview" : "Open Preview")}
                   </button>
-                  <button className={styles.wpBtn} onClick={() => setPreviewOpen(!previewOpen)}>↺</button>
-                  <button className={styles.wpBtn} onClick={() => setPreviewOpen(!previewOpen)}>View ↓</button>
+                  <button className={styles.wpBtn} onClick={() => setPreviewOpen(!previewOpen)}>R</button>
+                  <button className={styles.wpBtn} onClick={() => setPreviewOpen(!previewOpen)}>View</button>
                 </div>
                 <div className={styles.wpActionGroup}>
                   <button className={styles.wpBtn} onClick={() => document.getElementById('snippets')?.scrollIntoView({behavior:'smooth'})}>
-                    Installation Snippets ▾
+                    Installation Snippets
                   </button>
                   <button className={styles.wpBtn} onClick={() => { removeRuntimeWidgetFromPage(); setRuntimeWidgetMounted(false); }}>
                     Uninstall
@@ -1314,9 +1314,9 @@ export default function AccessibilityPage() {
                 {renderGlossyTriangleLabel("View")}
               </button>
               <button className={styles.outlineBtn} onClick={() => document.getElementById('snippets')?.scrollIntoView({behavior:'smooth'})}>
-                ↺ Installation Snippets
+                Installation Snippets
               </button>
-              <button className={styles.outlineBtn} style={{border:'none',background:'transparent',color:'rgba(255,255,255,0.4)'}}>✐</button>
+              <button className={styles.outlineBtn} style={{border:'none',background:'transparent',color:'rgba(255,255,255,0.4)'}}>Edit</button>
             </div>
 
             <div className={styles.inlineGrid}>
@@ -1395,7 +1395,7 @@ export default function AccessibilityPage() {
             <div className={styles.panelHeader}>
               <h2 className={styles.panelTitle}>Installation Snippets</h2>
               <button className={styles.panelAction} onClick={copySnippet}>
-                {copied ? '✓ Copied' : '••• ↺ Refresh'}
+                {copied ? "Copied" : "Refresh"}
               </button>
             </div>
 
@@ -1438,7 +1438,7 @@ export default function AccessibilityPage() {
           <section id="law-watch-panel" className={styles.glassPanel}>
             <div className={styles.panelHeader}>
               <h2 className={styles.panelTitle}>Law Watch Status</h2>
-              <button className={styles.panelAction} onClick={runLawWatchNow}>••• ↺ Reset</button>
+              <button className={styles.panelAction} onClick={runLawWatchNow}>Reset</button>
             </div>
             <p className={styles.lawDesc}>
               Daily automated checks for accessibility law/regulation source updates (ADA.gov, Federal regulators,
@@ -1448,7 +1448,7 @@ export default function AccessibilityPage() {
               <button className={styles.outlineBtn} onClick={runLawWatchNow} disabled={lawWatchRunning}>
                 {lawWatchRunning ? 'Refreshing...' : 'Refresh Status'}
               </button>
-              <button className={styles.outlineBtn} style={{width:'42px',justifyContent:'center'}}>✓</button>
+              <button className={styles.outlineBtn} style={{width:'42px',justifyContent:'center'}}>OK</button>
               <button className={styles.outlineBtn} onClick={runLawWatchNow} disabled={lawWatchRunning}>
                 Run Law watch now
               </button>
@@ -1688,7 +1688,7 @@ export default function AccessibilityPage() {
                   disabled={integrationsRefreshing}
                   aria-label={integrationsRefreshing ? "Refreshing API status" : "Refresh API status"}
                 >
-                  ↻
+                  R
                 </button>
               </div>
               <div className={`${styles.railInnerSurface} ${styles.verticalSurface} ${styles.lightOccupancy} ${styles.featuredVerticalSurface}`}>
@@ -1732,7 +1732,7 @@ export default function AccessibilityPage() {
             <section className={`${styles.railCard} ${styles.metricCard}`}>
               <div className={styles.metricCardHead}>
                 <span className={styles.metricCardTitleWrap}>
-                  <span className={styles.metricCardGlyph}>▦</span>
+                  <span className={styles.metricCardGlyph}>LOG</span>
                   <span className={styles.metricCardTitleText}>Compliance Checklist</span>
                 </span>
               </div>
@@ -1761,7 +1761,7 @@ export default function AccessibilityPage() {
                 </div>
                 <button type="button" className={styles.metricFooterBtn} onClick={() => void openLogHistoryModal()}>
                   <span>View Log History</span>
-                  <span className={styles.metricFooterIcon}>↗</span>
+                  <span className={styles.metricFooterIcon}>&gt;</span>
                 </button>
               </div>
             </section>
@@ -1776,7 +1776,7 @@ export default function AccessibilityPage() {
                   disabled={usageLoading}
                   aria-label={usageLoading ? "Refreshing usage snapshot" : "Refresh usage snapshot"}
                 >
-                  ↻
+                  R
                 </button>
               </div>
               <div className={`${styles.railInnerSurface} ${styles.verticalSurface} ${styles.lightOccupancy}`}>
@@ -1853,7 +1853,7 @@ export default function AccessibilityPage() {
                     disabled={lastReportLoading}
                     aria-label={lastReportLoading ? "Refreshing monthly report status" : "Refresh monthly report status"}
                   >
-                    ↻
+                    R
                   </button>
                 </div>
                 {monthlyTestStatus && <p className={styles.railStatus}>{monthlyTestStatus}</p>}
@@ -1888,7 +1888,7 @@ export default function AccessibilityPage() {
                     disabled={lawWatchLoading}
                     aria-label={lawWatchLoading ? "Refreshing law watch status" : "Refresh law watch status"}
                   >
-                    ↻
+                    R
                   </button>
                 </div>
                 {lawWatchStatus && <p className={styles.railStatus}>{lawWatchStatus}</p>}
@@ -2085,7 +2085,7 @@ export default function AccessibilityPage() {
           <section className={styles.railCard}>
             <div className={styles.railCardHead}>
               <span className={styles.railCardTitle}>API STATUS</span>
-              <button className={styles.railCloseBtn}>×</button>
+              <button className={styles.railCloseBtn}>X</button>
             </div>
             <div className={styles.railRow}>
               <span>Shopify</span>
@@ -2105,15 +2105,15 @@ export default function AccessibilityPage() {
           <section className={`${styles.railCard} ${styles.chatCard}`}>
             <div className={styles.chatHead}>
               <div className={styles.chatTitle}>
-                <span>⬡</span> ChatGPT
+                <span>CA</span> ChatGPT
               </div>
-              <button className={styles.chatRefresh}>↺</button>
+              <button className={styles.chatRefresh}>R</button>
             </div>
             <p className={styles.chatSub}>Ask anything.</p>
             <div className={styles.chatLog}>No chat messages.</div>
             <div className={styles.chatInputRow}>
               <span>Message ChatGPT...</span>
-              <span>›</span>
+              <span>&gt;</span>
             </div>
             <div className={styles.chatBtns}>
               <button className={styles.chatSendBtn}>Send</button>
@@ -2124,7 +2124,7 @@ export default function AccessibilityPage() {
           {/* COMPLIANCE CHECKLIST */}
           <section className={`${styles.railCard} ${styles.complianceCard}`}>
             <div className={styles.railCardHead}>
-              <span className={styles.complianceTitle}>🌐 Compliance Checklist</span>
+              <span className={styles.complianceTitle}>Compliance Checklist</span>
             </div>
             <div className={styles.progressWrap}>
               <span className={styles.progressLabel}>Remediation progress</span>
@@ -2148,13 +2148,13 @@ export default function AccessibilityPage() {
                 <span className={styles.statMetaLabel}>Assist Clickthrough<br/>Rate</span>
               </div>
             </div>
-            <button className={styles.logLink}>View log history ⓘ</button>
+            <button className={styles.logLink}>View log history</button>
           </section>
 
           {/* LAW WATCH RAIL */}
           <section className={`${styles.railCard} ${styles.lawWatchCard}`}>
             <div className={styles.railCardHead}>
-              <span className={styles.complianceTitle}>⏱ Law Watch Status</span>
+              <span className={styles.complianceTitle}>Law Watch Status</span>
             </div>
             <p className={styles.lawDesc} style={{fontSize:'12px',marginTop:'-4px'}}>
               Daily automated checks for accessibility law/regulation source updates (ADA.gov, Federal regulations, Florida statutes).
@@ -2190,12 +2190,12 @@ export default function AccessibilityPage() {
                     </p>
                   </div>
                   <button type="button" className={styles.modalCloseBtn} onClick={closeModal} aria-label="Close log history">
-                    ×
+                    X
                   </button>
                 </div>
 
                 {logHistoryLoading ? (
-                  <div className={styles.modalStateBox}>Loading log history…</div>
+                  <div className={styles.modalStateBox}>Loading log history...</div>
                 ) : logHistoryData ? (
                   <>
                     <div className={styles.modalSummaryGrid}>
@@ -2269,7 +2269,7 @@ export default function AccessibilityPage() {
                     </p>
                   </div>
                   <button type="button" className={styles.modalCloseBtn} onClick={closeModal} aria-label="Close recipient editor">
-                    ×
+                    X
                   </button>
                 </div>
                 <label className={styles.fieldGroup}>
@@ -2306,3 +2306,4 @@ export default function AccessibilityPage() {
     </main>
   );
 }
+
