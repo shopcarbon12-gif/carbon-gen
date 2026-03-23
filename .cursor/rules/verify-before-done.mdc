@@ -8,7 +8,7 @@ alwaysApply: true
 **MANDATORY:** Before telling the user a change is done, verify it in the browser (usually the local dev server) unless they skip testing.
 
 ## Verification steps (required)
-1. Open the relevant page in the browser using MCP browser tools (or equivalent)
+1. Open the relevant page in the browser using **Playwright MCP** tools when they appear in your tool list (navigate to `http://localhost:…`, then snapshot or screenshot as needed). Config: user `~/.cursor/mcp.json` with `@playwright/mcp`; **restart Cursor** after MCP changes. If Playwright tools are not available, say so and ask the user to reload MCP or use manual verification.
 2. Confirm the change is visually correct and functional
 3. Only then say it's done
 

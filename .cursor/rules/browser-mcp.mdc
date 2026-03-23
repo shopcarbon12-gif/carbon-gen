@@ -1,0 +1,12 @@
+---
+description: Browser MCP / Playwright — visible control and tab discipline.
+alwaysApply: true
+---
+
+# Browser MCP and Playwright
+
+When the user asks to use MCP browser, Playwright, or to "go to" a URL for review:
+
+1. **Visible session:** Operate the browser tools so the user can follow what is happening; avoid "silent only" automation when they expect to see the flow.
+2. **Tab discipline:** Before opening a new tab, consider existing MCP browser tabs. Prefer reusing a tab that already matches the target site or task. Open a new tab only when no suitable tab exists.
+3. **Avoid tab spam:** Do not open duplicate tabs for the same destination without reason.

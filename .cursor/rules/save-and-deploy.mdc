@@ -1,17 +1,20 @@
 ---
-description: Deploy to Coolify only when the user explicitly asks.
+description: Never deploy to Coolify or production without explicit user permission.
 alwaysApply: true
 ---
 
-# Deploy On Request Only
+# Deploy Only With Explicit Permission (hard lock)
 
-**Do not** run `npm run deploy:coolify` after routine code changes.
+**Forbidden:** Running `npm run deploy:coolify`, `deploy`, production pushes, or any remote deploy command **unless the user clearly and explicitly asks** (e.g. "deploy", "push to Coolify", "ship this", "deploy to prod").
 
-**Deploy** only when the user clearly asks to deploy (e.g. "deploy", "push to Coolify", "ship this", "deploy to prod").
+**Do not** deploy after routine code changes, after fixes, or "to verify" unless the user asked for a deploy.
 
-When they ask, run:
+**Do not** assume implied consent. If unsure, **ask once** or wait.
+
+When the user explicitly asks to deploy, run:
+
 ```
 npm run deploy:coolify
 ```
 
-If unsure whether they want a deploy, ask once or wait for explicit instruction.
+Other deploy targets or scripts: same rule — only when the user names them.

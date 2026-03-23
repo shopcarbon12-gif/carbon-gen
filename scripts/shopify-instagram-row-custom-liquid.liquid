@@ -1,0 +1,82 @@
+{% comment %}
+  Replace the entire contents of your "Custom Liquid" section on the homepage
+  (the one under "FOLLOW US ON INSTAGRAM") with this file.
+
+  Section title "FOLLOW US ON INSTAGRAM" lives in this theme section.
+  Hero image + overlay: Carbon app → /studio/instagram-widget/layout (copy snippet).
+  Overlay typeface: Neuzeit Grotesk W01 Regular — add @font-face in theme pointing to the same OTF
+  (see public/fonts/neuzeit-grotesk-regular.otf in the repo, or upload that file to Shopify Files).
+
+  Steps in Shopify:
+  1. Online Store → Themes → Customize → Home page
+  2. Click the Custom Liquid section that contains the Instagram banner + feed
+  3. Remove any separate "Elfsight Instagram Feed" app block if it duplicates the widget
+  4. Paste this code into that section and Save
+
+  Layout: left = large banner image + @shopcarbon link | right = Elfsight embed (Untitled Instagram Feed)
+{% endcomment %}
+
+<div class="row full-width-row-full">
+  <div class="small-12 columns">
+    <div class="banner_row">
+      <div class="column">
+        <div class="banner relative">
+          <img
+            style="width: 100%; object-fit: cover;"
+            alt="Instagram banner for @shopcarbon"
+            loading="lazy"
+            class="bl"
+            src="https://cdn.shopify.com/s/files/1/0680/6572/2620/files/DZ__3128.jpg?v=1733764412"
+            width="2000"
+            height="1200"
+          >
+          <div class="instagram-link test">
+            <a class="color-wh lbold" href="https://www.instagram.com/shopcarbon/" target="_blank" rel="noopener noreferrer">@shopcarbon</a>
+          </div>
+        </div>
+      </div>
+      <div class="column ca-elfsight-col">
+        {% comment %}
+          Hide Elfsight free-tier “Free Instagram Feed Widget” branding (link strip).
+          If a future update changes markup, the bottom cover still masks it.
+        {% endcomment %}
+        <style>
+          .ca-elfsight-col {
+            position: relative;
+            overflow: hidden;
+          }
+          .ca-elfsight-col a[href*="elfsight.com"],
+          .ca-elfsight-col [class*="Powered"],
+          .ca-elfsight-col [class*="powered"],
+          .ca-elfsight-col [class*="branding"],
+          .ca-elfsight-col [class*="Branding"],
+          .ca-elfsight-col .eapps-widget__powered,
+          .ca-elfsight-col .eapps-widget__powered-by,
+          .ca-elfsight-col [data-eapps-link="poweredBy"] {
+            display: none !important;
+            visibility: hidden !important;
+            height: 0 !important;
+            max-height: 0 !important;
+            overflow: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+          }
+          .ca-elfsight-col::after {
+            content: "";
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: 40px;
+            background: #ffffff;
+            z-index: 5;
+            pointer-events: none;
+          }
+        </style>
+        <!-- Elfsight Instagram Feed | Untitled Instagram Feed -->
+        <script src="https://elfsightcdn.com/platform.js" async></script>
+        <div class="elfsight-app-d881cb77-4507-46ba-aa42-ae82cdabf435" data-elfsight-app-lazy></div>
+      </div>
+    </div>
+  </div>
+</div>
