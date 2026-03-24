@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --version)",
+      "Bash(npm run:*)",
+      "Bash(grep -E '\\\\.\\(ts|tsx|js|css|mjs\\)$')",
+      "Bash(find 'd:/Projects/My project/carbon-gen/app/accessibility' -type f -name *.tsx -o -name *.ts -o -name *.css -o -name *.module.css)",
+      "Bash(python3 -c \":*)",
+      "Bash(node -e \":*)",
+      "Bash(node scripts/inject-ca-assist-css.mjs)",
+      "Bash(grep -n \"}\\\\`}\\\\</style\\\\>\\\\|^\\\\`}\\\\</style\\\\>\" \"d:/Projects/My project/carbon-gen/components/workspace-shell.tsx\")",
+      "Bash(npx next:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx playwright run-mcp-server:*)",
+      "Bash(npx playwright run-mcp-server)",
+      "Bash(npx @playwright/mcp:*)",
+      "Bash(npx @playwright/mcp)",
+      "mcp(*)",
+      "mcp:*",
+      "Playwright(*)",
+      "Playwright:*"
+    ]
+  }
+}

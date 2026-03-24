@@ -1,0 +1,2076 @@
+- generic [ref=e1]:
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - button "Open menu" [ref=e5] [cursor=pointer]
+      - generic [ref=e10]:
+        - img "Carbon" [ref=e12]
+        - generic [ref=e13]: /
+        - generic [ref=e14]: Collection Mapping
+    - complementary:
+      - navigation "Carbon menu":
+        - generic: MENU
+        - generic:
+          - generic:
+            - button "Pictures Generator":
+              - generic: Pictures Generator
+              - generic:
+                - img
+            - button "SEO Manager"
+            - button "Accessibility"
+            - button "RFID Price Tag"
+            - button "Lightspeed Catalog"
+            - button "Shopify Mapping Inventory"
+            - button "Collection Mapping"
+            - button "Create New Items"
+            - button "Social Ads & Meta"
+            - button "Ops Inventory"
+            - button "Workspace Dashboard"
+          - region "Shopify Mapping Inventory submenu":
+            - button "Back to main menu":
+              - img
+            - generic:
+              - button "Shopify Mapping Inventory"
+              - button "Workset"
+              - button "Sales"
+              - button "Inventory"
+              - button "Carts Inventory"
+              - button "Configurations":
+                - generic: Configurations
+                - generic:
+                  - img
+        - generic:
+          - button "SETTINGS"
+          - generic:
+            - button "LOGOUT"
+            - button "Pin menu":
+              - img
+    - main [ref=e15]:
+      - generic [ref=e16]:
+        - generic "Collection mapping summary":
+          - button "Loaded 50" [ref=e635] [cursor=pointer]:
+            - generic [ref=e18]: Loaded
+            - generic [ref=e19]: "50"
+          - button "Needs Review 20" [ref=e636] [cursor=pointer]:
+            - generic [ref=e21]: Needs Review
+            - generic [ref=e22]: "20"
+          - button "Ready to Push 14" [ref=e637] [cursor=pointer]:
+            - generic [ref=e24]: Ready to Push
+            - generic [ref=e25]: "14"
+          - button "Push Failed 0" [ref=e26] [cursor=pointer]:
+            - generic [ref=e27]: Push Failed
+            - generic [ref=e28]: "0"
+          - button "Synced 16" [ref=e638] [cursor=pointer]:
+            - generic [ref=e30]: Synced
+            - generic [ref=e31]: "16"
+        - main [ref=e40]:
+          - generic [ref=e41]:
+            - generic [ref=e43]:
+              - generic [ref=e45]:
+                - generic [ref=e46]:
+                  - button "Collapse tree menu" [ref=e47] [cursor=pointer]:
+                    - img [ref=e48]
+                    - text: Collapse tree menu
+                  - button "refresh" [ref=e52] [cursor=pointer]: ⟳ Refresh menu tree
+                  - button "Collapse tree cards" [ref=e53] [cursor=pointer]: ↶ Collapse tree cards
+                  - textbox "Search menu tree" [ref=e54]:
+                    - /placeholder: Search menu items...
+                  - button "Save menu tree" [ref=e55] [cursor=pointer]:
+                    - img [ref=e56]
+                    - text: Save menu tree
+                - generic [ref=e58]:
+                  - generic [ref=e59]:
+                    - button "Expand menu item MEN Men Hide this menu branch on live website (save required) Edit menu item Delete menu item" [ref=e165]:
+                      - button "Move menu item" [ref=e166]:
+                        - img [ref=e167]
+                      - button "Expand menu item" [ref=e174] [cursor=pointer]:
+                        - img [ref=e175]
+                      - generic [ref=e177]:
+                        - generic [ref=e178]: MEN
+                        - generic [ref=e179]: Men
+                      - generic [ref=e180]:
+                        - button "Hide this menu branch on live website (save required)" [ref=e181] [cursor=pointer]:
+                          - img [ref=e182]
+                        - button "Edit menu item" [ref=e184] [cursor=pointer]:
+                          - img [ref=e185]
+                        - button "Delete menu item" [ref=e187] [cursor=pointer]:
+                          - img [ref=e188]
+                    - button "Expand menu item WOMEN Women Hide this menu branch on live website (save required) Edit menu item Delete menu item" [ref=e191]:
+                      - button "Move menu item" [ref=e192]:
+                        - img [ref=e193]
+                      - button "Expand menu item" [ref=e200] [cursor=pointer]:
+                        - img [ref=e201]
+                      - generic [ref=e203]:
+                        - generic [ref=e204]: WOMEN
+                        - generic [ref=e205]: Women
+                      - generic [ref=e206]:
+                        - button "Hide this menu branch on live website (save required)" [ref=e207] [cursor=pointer]:
+                          - img [ref=e208]
+                        - button "Edit menu item" [ref=e210] [cursor=pointer]:
+                          - img [ref=e211]
+                        - button "Delete menu item" [ref=e213] [cursor=pointer]:
+                          - img [ref=e214]
+                    - button "Expand menu item JEANS jeans.html Hide this menu branch on live website (save required) Edit menu item Delete menu item" [ref=e217]:
+                      - button "Move menu item" [ref=e218]:
+                        - img [ref=e219]
+                      - button "Expand menu item" [ref=e226] [cursor=pointer]:
+                        - img [ref=e227]
+                      - generic [ref=e229]:
+                        - generic [ref=e230]: JEANS
+                        - generic [ref=e231]: jeans.html
+                      - generic [ref=e232]:
+                        - button "Hide this menu branch on live website (save required)" [ref=e233] [cursor=pointer]:
+                          - img [ref=e234]
+                        - button "Edit menu item" [ref=e236] [cursor=pointer]:
+                          - img [ref=e237]
+                        - button "Delete menu item" [ref=e239] [cursor=pointer]:
+                          - img [ref=e240]
+                    - button "REWARDS rewards.html Hide this menu branch on live website (save required) Edit menu item Delete menu item" [ref=e243]:
+                      - button "Move menu item" [ref=e244]:
+                        - img [ref=e245]
+                      - generic [ref=e253]:
+                        - generic [ref=e254]: REWARDS
+                        - generic [ref=e255]: rewards.html
+                      - generic [ref=e256]:
+                        - button "Hide this menu branch on live website (save required)" [ref=e257] [cursor=pointer]:
+                          - img [ref=e258]
+                        - button "Edit menu item" [ref=e260] [cursor=pointer]:
+                          - img [ref=e261]
+                        - button "Delete menu item" [ref=e263] [cursor=pointer]:
+                          - img [ref=e264]
+                    - button "BECOME AFFILIATE become-affiliate.html Hide this menu branch on live website (save required) Edit menu item Delete menu item" [ref=e267]:
+                      - button "Move menu item" [ref=e268]:
+                        - img [ref=e269]
+                      - generic [ref=e277]:
+                        - generic [ref=e278]: BECOME AFFILIATE
+                        - generic [ref=e279]: become-affiliate.html
+                      - generic [ref=e280]:
+                        - button "Hide this menu branch on live website (save required)" [ref=e281] [cursor=pointer]:
+                          - img [ref=e282]
+                        - button "Edit menu item" [ref=e284] [cursor=pointer]:
+                          - img [ref=e285]
+                        - button "Delete menu item" [ref=e287] [cursor=pointer]:
+                          - img [ref=e288]
+                    - button "Add menu item" [ref=e61] [cursor=pointer]:
+                      - img [ref=e63]
+                      - generic [ref=e65]: Add menu item
+                  - generic [ref=e66]:
+                    - generic [ref=e68]:
+                      - generic [ref=e69]: UNMAPPED COLLECTIONS
+                      - generic [ref=e70]: "9"
+                    - generic [ref=e71]:
+                      - button "All Products (ChatGPT-AI) Edit collection name Delete unmapped collection card" [ref=e290] [cursor=pointer]:
+                        - button [ref=e292]:
+                          - img [ref=e293]
+                        - generic [ref=e300]: All Products (ChatGPT-AI)
+                        - generic [ref=e301]:
+                          - button "Edit collection name" [ref=e302]:
+                            - img [ref=e303]
+                          - button "Delete unmapped collection card" [ref=e305]:
+                            - img [ref=e306]
+                      - button "GRAPHIC T-SHIRTS (WINTER men) Edit collection name Delete unmapped collection card" [ref=e308] [cursor=pointer]:
+                        - button [ref=e310]:
+                          - img [ref=e311]
+                        - generic [ref=e318]: GRAPHIC T-SHIRTS (WINTER men)
+                        - generic [ref=e319]:
+                          - button "Edit collection name" [ref=e320]:
+                            - img [ref=e321]
+                          - button "Delete unmapped collection card" [ref=e323]:
+                            - img [ref=e324]
+                      - button "LEGGINGS (women) Edit collection name Delete unmapped collection card" [ref=e326] [cursor=pointer]:
+                        - button [ref=e328]:
+                          - img [ref=e329]
+                        - generic [ref=e336]: LEGGINGS (women)
+                        - generic [ref=e337]:
+                          - button "Edit collection name" [ref=e338]:
+                            - img [ref=e339]
+                          - button "Delete unmapped collection card" [ref=e341]:
+                            - img [ref=e342]
+                      - button "MAXI DRESSES Edit collection name Delete unmapped collection card" [ref=e344] [cursor=pointer]:
+                        - button [ref=e346]:
+                          - img [ref=e347]
+                        - generic [ref=e354]: MAXI DRESSES
+                        - generic [ref=e355]:
+                          - button "Edit collection name" [ref=e356]:
+                            - img [ref=e357]
+                          - button "Delete unmapped collection card" [ref=e359]:
+                            - img [ref=e360]
+                      - button "MEN JEANS Edit collection name Delete unmapped collection card" [ref=e362] [cursor=pointer]:
+                        - button [ref=e364]:
+                          - img [ref=e365]
+                        - generic [ref=e372]: MEN JEANS
+                        - generic [ref=e373]:
+                          - button "Edit collection name" [ref=e374]:
+                            - img [ref=e375]
+                          - button "Delete unmapped collection card" [ref=e377]:
+                            - img [ref=e378]
+                      - button "MIDI DRESSES Edit collection name Delete unmapped collection card" [ref=e380] [cursor=pointer]:
+                        - button [ref=e382]:
+                          - img [ref=e383]
+                        - generic [ref=e390]: MIDI DRESSES
+                        - generic [ref=e391]:
+                          - button "Edit collection name" [ref=e392]:
+                            - img [ref=e393]
+                          - button "Delete unmapped collection card" [ref=e395]:
+                            - img [ref=e396]
+                      - button "MINI DRESSES Edit collection name Delete unmapped collection card" [ref=e398] [cursor=pointer]:
+                        - button [ref=e400]:
+                          - img [ref=e401]
+                        - generic [ref=e408]: MINI DRESSES
+                        - generic [ref=e409]:
+                          - button "Edit collection name" [ref=e410]:
+                            - img [ref=e411]
+                          - button "Delete unmapped collection card" [ref=e413]:
+                            - img [ref=e414]
+                      - button "NIGHT DRESSES Edit collection name Delete unmapped collection card" [ref=e416] [cursor=pointer]:
+                        - button [ref=e418]:
+                          - img [ref=e419]
+                        - generic [ref=e426]: NIGHT DRESSES
+                        - generic [ref=e427]:
+                          - button "Edit collection name" [ref=e428]:
+                            - img [ref=e429]
+                          - button "Delete unmapped collection card" [ref=e431]:
+                            - img [ref=e432]
+                      - button "WOMEN JEANS Edit collection name Delete unmapped collection card" [ref=e434] [cursor=pointer]:
+                        - button [ref=e436]:
+                          - img [ref=e437]
+                        - generic [ref=e444]: WOMEN JEANS
+                        - generic [ref=e445]:
+                          - button "Edit collection name" [ref=e446]:
+                            - img [ref=e447]
+                          - button "Delete unmapped collection card" [ref=e449]:
+                            - img [ref=e450]
+                - status [ref=e73]
+              - button "Resize menu tree panel" [ref=e74]
+              - main [ref=e76]:
+                - generic [ref=e77]:
+                  - textbox "Search products" [active] [ref=e78]:
+                    - /placeholder: Search products (title / sku / upc / type)
+                  - button "Search products" [ref=e79] [cursor=pointer]:
+                    - img [ref=e80]
+                    - text: Search products
+                  - button "Refresh products" [ref=e82] [cursor=pointer]:
+                    - img [ref=e83]
+                    - text: Refresh products
+                  - button "Open more filters" [ref=e85] [cursor=pointer]:
+                    - img [ref=e86]
+                    - text: More filters
+                  - button "Open reports" [ref=e88] [cursor=pointer]:
+                    - img [ref=e89]
+                    - text: Reports
+                  - button "COMMIT CHANGES ▼" [ref=e92] [cursor=pointer]:
+                    - text: COMMIT CHANGES
+                    - generic [ref=e93]: ▼
+                - table [ref=e95]:
+                  - rowgroup [ref=e96]:
+                    - row "Select all products View Picture ↕ Product ↑ Auto Path Suggested ↕ Decision Approved Status ↕ Current → Final" [ref=e97]:
+                      - columnheader "Select all products" [ref=e98]:
+                        - checkbox "Select all products" [ref=e99]
+                      - columnheader "View" [ref=e100]
+                      - columnheader "Picture ↕" [ref=e101]:
+                        - generic [ref=e102] [cursor=pointer]:
+                          - text: Picture
+                          - generic [ref=e103]: ↕
+                      - columnheader "Product ↑" [ref=e104]:
+                        - generic [ref=e105] [cursor=pointer]:
+                          - text: Product
+                          - generic [ref=e106]: ↑
+                      - columnheader "Auto Path" [ref=e107]
+                      - columnheader "Suggested ↕" [ref=e108]:
+                        - generic [ref=e109] [cursor=pointer]:
+                          - text: Suggested
+                          - generic [ref=e110]: ↕
+                      - columnheader "Decision" [ref=e111]
+                      - columnheader "Approved" [ref=e112]
+                      - columnheader "Status ↕" [ref=e113]:
+                        - generic [ref=e114] [cursor=pointer]:
+                          - text: Status
+                          - generic [ref=e115]: ↕
+                      - columnheader "Current → Final" [ref=e116]
+                  - rowgroup [ref=e117]:
+                    - 'row "Open row details Open product image preview 2 PIECES ANN SET UPC: 2123561 - - Needs Review Approve 2 PIECES ANN SET for push Ready to Push Current: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS Final: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e644]':
+                      - cell [ref=e645]:
+                        - checkbox [ref=e646]
+                      - cell "Open row details" [ref=e647]:
+                        - button "Open row details" [ref=e648] [cursor=pointer]:
+                          - img [ref=e649]
+                      - cell "Open product image preview" [ref=e651]:
+                        - button "Open product image preview" [ref=e652] [cursor=pointer]:
+                          - img "2 PIECES ANN SET" [ref=e653]
+                      - 'cell "2 PIECES ANN SET UPC: 2123561" [ref=e654]':
+                        - generic [ref=e655]: 2 PIECES ANN SET
+                        - generic [ref=e656]: "UPC: 2123561"
+                      - cell "-" [ref=e657]
+                      - cell "-" [ref=e658]
+                      - cell "Needs Review" [ref=e659]:
+                        - generic [ref=e660]: Needs Review
+                      - cell "Approve 2 PIECES ANN SET for push" [ref=e661]:
+                        - checkbox "Approve 2 PIECES ANN SET for push" [checked] [ref=e663]
+                      - cell "Ready to Push" [ref=e664]:
+                        - generic [ref=e665]: Ready to Push
+                      - 'cell "Current: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS Final: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e666]':
+                        - generic [ref=e667]:
+                          - generic [ref=e668]: "Current: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS"
+                          - generic [ref=e669]: "Final: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS"
+                          - generic [ref=e670]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e671]:
+                            - text: "Changed:"
+                            - generic [ref=e672]: "+0"
+                            - text: /
+                            - generic [ref=e673]: "-0"
+                    - 'row "Open row details Open product image preview 2 PIECES GYDA TOP UPC: 2123526 - - Needs Review Approve 2 PIECES GYDA TOP for push Needs Review Current: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS Final: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e674]':
+                      - cell [ref=e675]:
+                        - checkbox [ref=e676]
+                      - cell "Open row details" [ref=e677]:
+                        - button "Open row details" [ref=e678] [cursor=pointer]:
+                          - img [ref=e679]
+                      - cell "Open product image preview" [ref=e681]:
+                        - button "Open product image preview" [ref=e682] [cursor=pointer]:
+                          - img "2 PIECES GYDA TOP" [ref=e683]
+                      - 'cell "2 PIECES GYDA TOP UPC: 2123526" [ref=e684]':
+                        - generic [ref=e685]: 2 PIECES GYDA TOP
+                        - generic [ref=e686]: "UPC: 2123526"
+                      - cell "-" [ref=e687]
+                      - cell "-" [ref=e688]
+                      - cell "Needs Review" [ref=e689]:
+                        - generic [ref=e690]: Needs Review
+                      - cell "Approve 2 PIECES GYDA TOP for push" [ref=e691]:
+                        - checkbox "Approve 2 PIECES GYDA TOP for push" [ref=e693]
+                      - cell "Needs Review" [ref=e694]:
+                        - generic [ref=e695]: Needs Review
+                      - 'cell "Current: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS Final: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e696]':
+                        - generic [ref=e697]:
+                          - generic [ref=e698]: "Current: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS"
+                          - generic [ref=e699]: "Final: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS"
+                          - generic [ref=e700]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e701]:
+                            - text: "Changed:"
+                            - generic [ref=e702]: "+0"
+                            - text: /
+                            - generic [ref=e703]: "-0"
+                    - 'row "Open row details Open product image preview 2 PIECES RORRI DRESS UPC: 2122114 DRESSES COLLECTION: midi-dresses-women COLLECTION: maxi-dresses-women COLLECTION: mini-dresses COLLECTION: night-dresses Mapped Approve 2 PIECES RORRI DRESS for push Needs Review Current: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS, DRESSES Final: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS, DRESSES Final Collections: All Products (ChatGPT-AI) Changed: +1 / -0" [ref=e704]':
+                      - cell [ref=e705]:
+                        - checkbox [ref=e706]
+                      - cell "Open row details" [ref=e707]:
+                        - button "Open row details" [ref=e708] [cursor=pointer]:
+                          - img [ref=e709]
+                      - cell "Open product image preview" [ref=e711]:
+                        - button "Open product image preview" [ref=e712] [cursor=pointer]:
+                          - img "2 PIECES RORRI DRESS" [ref=e713]
+                      - 'cell "2 PIECES RORRI DRESS UPC: 2122114" [ref=e714]':
+                        - generic [ref=e715]: 2 PIECES RORRI DRESS
+                        - generic [ref=e716]: "UPC: 2122114"
+                      - cell "DRESSES" [ref=e717]:
+                        - generic [ref=e719]: DRESSES
+                      - 'cell "COLLECTION: midi-dresses-women COLLECTION: maxi-dresses-women COLLECTION: mini-dresses COLLECTION: night-dresses" [ref=e720]':
+                        - generic [ref=e721]:
+                          - 'button "COLLECTION: midi-dresses-women" [ref=e722] [cursor=pointer]': MIDI DRESSES
+                          - 'button "COLLECTION: maxi-dresses-women" [ref=e723] [cursor=pointer]': MAXI DRESSES
+                          - 'button "COLLECTION: mini-dresses" [ref=e724] [cursor=pointer]': MINI DRESSES
+                          - 'button "COLLECTION: night-dresses" [ref=e725] [cursor=pointer]': NIGHT DRESSES
+                      - cell "Mapped" [ref=e726]:
+                        - generic [ref=e727]: Mapped
+                      - cell "Approve 2 PIECES RORRI DRESS for push" [ref=e728]:
+                        - checkbox "Approve 2 PIECES RORRI DRESS for push" [ref=e730]
+                      - cell "Needs Review" [ref=e731]:
+                        - generic [ref=e732]: Needs Review
+                      - 'cell "Current: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS, DRESSES Final: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS, DRESSES Final Collections: All Products (ChatGPT-AI) Changed: +1 / -0" [ref=e733]':
+                        - generic [ref=e734]:
+                          - generic [ref=e735]: "Current: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS, DRESSES"
+                          - generic [ref=e736]: "Final: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS, DRESSES"
+                          - generic [ref=e737]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e738]:
+                            - text: "Changed:"
+                            - generic [ref=e739]: "+1"
+                            - text: /
+                            - generic [ref=e740]: "-0"
+                    - 'row "Open row details Open product image preview 3 PIECES TRACKSUITS UPC: 2222773 JUMPSUITS & ROMPERS - Mapped Approve 3 PIECES TRACKSUITS for push Ready to Push Current: WOMEN > NEW & NOW > WINTER SETS, CLOTHING > MATCHING SETS, JUMPSUITS & ROMPERS, TRACKSUITS Final: WOMEN > NEW & NOW > WINTER SETS, CLOTHING > MATCHING SETS, JUMPSUITS & ROMPERS, TRACKSUITS Final Collections: All Products (ChatGPT-AI) Changed: +1 / -0" [ref=e741]':
+                      - cell [ref=e742]:
+                        - checkbox [ref=e743]
+                      - cell "Open row details" [ref=e744]:
+                        - button "Open row details" [ref=e745] [cursor=pointer]:
+                          - img [ref=e746]
+                      - cell "Open product image preview" [ref=e748]:
+                        - button "Open product image preview" [ref=e749] [cursor=pointer]:
+                          - img "3 PIECES TRACKSUITS" [ref=e750]
+                      - 'cell "3 PIECES TRACKSUITS UPC: 2222773" [ref=e751]':
+                        - generic [ref=e752]: 3 PIECES TRACKSUITS
+                        - generic [ref=e753]: "UPC: 2222773"
+                      - cell "JUMPSUITS & ROMPERS" [ref=e754]:
+                        - generic [ref=e756]: JUMPSUITS & ROMPERS
+                      - cell "-" [ref=e757]
+                      - cell "Mapped" [ref=e758]:
+                        - generic [ref=e759]: Mapped
+                      - cell "Approve 3 PIECES TRACKSUITS for push" [ref=e760]:
+                        - checkbox "Approve 3 PIECES TRACKSUITS for push" [ref=e762]
+                      - cell "Ready to Push" [ref=e763]:
+                        - generic [ref=e764]: Ready to Push
+                      - 'cell "Current: WOMEN > NEW & NOW > WINTER SETS, CLOTHING > MATCHING SETS, JUMPSUITS & ROMPERS, TRACKSUITS Final: WOMEN > NEW & NOW > WINTER SETS, CLOTHING > MATCHING SETS, JUMPSUITS & ROMPERS, TRACKSUITS Final Collections: All Products (ChatGPT-AI) Changed: +1 / -0" [ref=e765]':
+                        - generic [ref=e766]:
+                          - generic [ref=e767]: "Current: WOMEN > NEW & NOW > WINTER SETS, CLOTHING > MATCHING SETS, JUMPSUITS & ROMPERS, TRACKSUITS"
+                          - generic [ref=e768]: "Final: WOMEN > NEW & NOW > WINTER SETS, CLOTHING > MATCHING SETS, JUMPSUITS & ROMPERS, TRACKSUITS"
+                          - generic [ref=e769]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e770]:
+                            - text: "Changed:"
+                            - generic [ref=e771]: "+1"
+                            - text: /
+                            - generic [ref=e772]: "-0"
+                    - 'row "Open row details 21 COLLEGE JACKET UPC: 1222353 JACKETS & COATS - Mapped Approve 21 COLLEGE JACKET for push Synced Current: MEN > CLOTHING > JACKETS & COATS Final: MEN > CLOTHING > JACKETS & COATS Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e773]':
+                      - cell [ref=e774]:
+                        - checkbox [ref=e775]
+                      - cell "Open row details" [ref=e776]:
+                        - button "Open row details" [ref=e777] [cursor=pointer]:
+                          - img [ref=e778]
+                      - cell [ref=e780]
+                      - 'cell "21 COLLEGE JACKET UPC: 1222353" [ref=e782]':
+                        - generic [ref=e783]: 21 COLLEGE JACKET
+                        - generic [ref=e784]: "UPC: 1222353"
+                      - cell "JACKETS & COATS" [ref=e785]:
+                        - generic [ref=e787]: JACKETS & COATS
+                      - cell "-" [ref=e788]
+                      - cell "Mapped" [ref=e789]:
+                        - generic [ref=e790]: Mapped
+                      - cell "Approve 21 COLLEGE JACKET for push" [ref=e791]:
+                        - checkbox "Approve 21 COLLEGE JACKET for push" [ref=e793]
+                      - cell "Synced" [ref=e794]:
+                        - generic [ref=e795]: Synced
+                      - 'cell "Current: MEN > CLOTHING > JACKETS & COATS Final: MEN > CLOTHING > JACKETS & COATS Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e796]':
+                        - generic [ref=e797]:
+                          - generic [ref=e798]: "Current: MEN > CLOTHING > JACKETS & COATS"
+                          - generic [ref=e799]: "Final: MEN > CLOTHING > JACKETS & COATS"
+                          - generic [ref=e800]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e801]:
+                            - text: "Changed:"
+                            - generic [ref=e802]: "+0"
+                            - text: /
+                            - generic [ref=e803]: "-0"
+                    - 'row "Open row details Open product image preview 73 SHORTS SET UPC: 1125306 SHORTS - Mapped Approve 73 SHORTS SET for push Ready to Push Current: MEN > NEW & NOW > SUMMER SETS, CLOTHING > SHORTS Final: MEN > NEW & NOW > SUMMER SETS, CLOTHING > SHORTS Final Collections: All Products (ChatGPT-AI) Changed: +1 / -0" [ref=e804]':
+                      - cell [ref=e805]:
+                        - checkbox [ref=e806]
+                      - cell "Open row details" [ref=e807]:
+                        - button "Open row details" [ref=e808] [cursor=pointer]:
+                          - img [ref=e809]
+                      - cell "Open product image preview" [ref=e811]:
+                        - button "Open product image preview" [ref=e812] [cursor=pointer]:
+                          - img "73 SHORTS SET" [ref=e813]
+                      - 'cell "73 SHORTS SET UPC: 1125306" [ref=e814]':
+                        - generic [ref=e815]: 73 SHORTS SET
+                        - generic [ref=e816]: "UPC: 1125306"
+                      - cell "SHORTS" [ref=e817]:
+                        - generic [ref=e819]: SHORTS
+                      - cell "-" [ref=e820]
+                      - cell "Mapped" [ref=e821]:
+                        - generic [ref=e822]: Mapped
+                      - cell "Approve 73 SHORTS SET for push" [ref=e823]:
+                        - checkbox "Approve 73 SHORTS SET for push" [ref=e825]
+                      - cell "Ready to Push" [ref=e826]:
+                        - generic [ref=e827]: Ready to Push
+                      - 'cell "Current: MEN > NEW & NOW > SUMMER SETS, CLOTHING > SHORTS Final: MEN > NEW & NOW > SUMMER SETS, CLOTHING > SHORTS Final Collections: All Products (ChatGPT-AI) Changed: +1 / -0" [ref=e828]':
+                        - generic [ref=e829]:
+                          - generic [ref=e830]: "Current: MEN > NEW & NOW > SUMMER SETS, CLOTHING > SHORTS"
+                          - generic [ref=e831]: "Final: MEN > NEW & NOW > SUMMER SETS, CLOTHING > SHORTS"
+                          - generic [ref=e832]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e833]:
+                            - text: "Changed:"
+                            - generic [ref=e834]: "+1"
+                            - text: /
+                            - generic [ref=e835]: "-0"
+                    - 'row "Open row details Open product image preview 73 T-SHIRT SET UPC: 1125406 T-SHIRTS - Mapped Approve 73 T-SHIRT SET for push Ready to Push Current: MEN > NEW & NOW > SUMMER SETS, CLOTHING > TOPS, T-SHIRTS, SHIRT SHOP > GRAPHIC T-SHIRTS Final: MEN > NEW & NOW > SUMMER SETS, CLOTHING > TOPS, T-SHIRTS, SHIRT SHOP > GRAPHIC T-SHIRTS Final Collections: All Products (ChatGPT-AI) Changed: +1 / -0" [ref=e836]':
+                      - cell [ref=e837]:
+                        - checkbox [ref=e838]
+                      - cell "Open row details" [ref=e839]:
+                        - button "Open row details" [ref=e840] [cursor=pointer]:
+                          - img [ref=e841]
+                      - cell "Open product image preview" [ref=e843]:
+                        - button "Open product image preview" [ref=e844] [cursor=pointer]:
+                          - img "73 T-SHIRT SET" [ref=e845]
+                      - 'cell "73 T-SHIRT SET UPC: 1125406" [ref=e846]':
+                        - generic [ref=e847]: 73 T-SHIRT SET
+                        - generic [ref=e848]: "UPC: 1125406"
+                      - cell "T-SHIRTS" [ref=e849]:
+                        - generic [ref=e851]: T-SHIRTS
+                      - cell "-" [ref=e852]
+                      - cell "Mapped" [ref=e853]:
+                        - generic [ref=e854]: Mapped
+                      - cell "Approve 73 T-SHIRT SET for push" [ref=e855]:
+                        - checkbox "Approve 73 T-SHIRT SET for push" [ref=e857]
+                      - cell "Ready to Push" [ref=e858]:
+                        - generic [ref=e859]: Ready to Push
+                      - 'cell "Current: MEN > NEW & NOW > SUMMER SETS, CLOTHING > TOPS, T-SHIRTS, SHIRT SHOP > GRAPHIC T-SHIRTS Final: MEN > NEW & NOW > SUMMER SETS, CLOTHING > TOPS, T-SHIRTS, SHIRT SHOP > GRAPHIC T-SHIRTS Final Collections: All Products (ChatGPT-AI) Changed: +1 / -0" [ref=e860]':
+                        - generic [ref=e861]:
+                          - generic [ref=e862]: "Current: MEN > NEW & NOW > SUMMER SETS, CLOTHING > TOPS, T-SHIRTS, SHIRT SHOP > GRAPHIC T-SHIRTS"
+                          - generic [ref=e863]: "Final: MEN > NEW & NOW > SUMMER SETS, CLOTHING > TOPS, T-SHIRTS, SHIRT SHOP > GRAPHIC T-SHIRTS"
+                          - generic [ref=e864]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e865]:
+                            - text: "Changed:"
+                            - generic [ref=e866]: "+1"
+                            - text: /
+                            - generic [ref=e867]: "-0"
+                    - 'row "Open row details Open product image preview AARON JEANS UPC: 1123014 JEANS MEN JEANS > MEN > BAGGY JEANS > MEN > SLIM JEANS Mapped Approve AARON JEANS for push Needs Review Current: MEN > CLOTHING, JEANS > MEN > SKINNY JEANS, JEANS > MEN > SUPER SKINNY JEANS Final: JEANS > MEN > SKINNY JEANS, JEANS > MEN > SUPER SKINNY JEANS, MEN > CLOTHING > JEANS Final Collections: MEN JEANS, All Products (ChatGPT-AI) Changed: +3 / -0" [ref=e868]':
+                      - cell [ref=e869]:
+                        - checkbox [ref=e870]
+                      - cell "Open row details" [ref=e871]:
+                        - button "Open row details" [ref=e872] [cursor=pointer]:
+                          - img [ref=e873]
+                      - cell "Open product image preview" [ref=e875]:
+                        - button "Open product image preview" [ref=e876] [cursor=pointer]:
+                          - img "AARON JEANS" [ref=e877]
+                      - 'cell "AARON JEANS UPC: 1123014" [ref=e878]':
+                        - generic [ref=e879]: AARON JEANS
+                        - generic [ref=e880]: "UPC: 1123014"
+                      - cell "JEANS MEN" [ref=e881]:
+                        - generic [ref=e882]:
+                          - generic [ref=e883]: JEANS
+                          - generic [ref=e884]: MEN
+                      - cell "JEANS > MEN > BAGGY JEANS > MEN > SLIM JEANS" [ref=e885]:
+                        - generic [ref=e886]:
+                          - button "JEANS > MEN > BAGGY" [ref=e887] [cursor=pointer]: BAGGY
+                          - button "JEANS > MEN > SLIM JEANS" [ref=e888] [cursor=pointer]: SLIM JEANS
+                      - cell "Mapped" [ref=e889]:
+                        - generic [ref=e890]: Mapped
+                      - cell "Approve AARON JEANS for push" [ref=e891]:
+                        - checkbox "Approve AARON JEANS for push" [ref=e893]
+                      - cell "Needs Review" [ref=e894]:
+                        - generic [ref=e895]: Needs Review
+                      - 'cell "Current: MEN > CLOTHING, JEANS > MEN > SKINNY JEANS, JEANS > MEN > SUPER SKINNY JEANS Final: JEANS > MEN > SKINNY JEANS, JEANS > MEN > SUPER SKINNY JEANS, MEN > CLOTHING > JEANS Final Collections: MEN JEANS, All Products (ChatGPT-AI) Changed: +3 / -0" [ref=e896]':
+                        - generic [ref=e897]:
+                          - generic [ref=e898]: "Current: MEN > CLOTHING, JEANS > MEN > SKINNY JEANS, JEANS > MEN > SUPER SKINNY JEANS"
+                          - generic [ref=e899]: "Final: JEANS > MEN > SKINNY JEANS, JEANS > MEN > SUPER SKINNY JEANS, MEN > CLOTHING > JEANS"
+                          - generic [ref=e900]: "Final Collections: MEN JEANS, All Products (ChatGPT-AI)"
+                          - generic [ref=e901]:
+                            - text: "Changed:"
+                            - generic [ref=e902]: "+3"
+                            - text: /
+                            - generic [ref=e903]: "-0"
+                    - 'row "Open row details Open product image preview ACE JEANS UPC: 1171080 JEANS MEN JEANS > MEN > SKINNY JEANS JEANS > MEN > BAGGY JEANS > MEN > SLIM JEANS Mapped Approve ACE JEANS for push Needs Review Current: MEN > CLOTHING, JEANS > MEN > SUPER SKINNY JEANS Final: JEANS > MEN > SUPER SKINNY JEANS, MEN > CLOTHING > JEANS Final Collections: MEN JEANS, All Products (ChatGPT-AI) Changed: +3 / -0" [ref=e904]':
+                      - cell [ref=e905]:
+                        - checkbox [ref=e906]
+                      - cell "Open row details" [ref=e907]:
+                        - button "Open row details" [ref=e908] [cursor=pointer]:
+                          - img [ref=e909]
+                      - cell "Open product image preview" [ref=e911]:
+                        - button "Open product image preview" [ref=e912] [cursor=pointer]:
+                          - img "ACE JEANS" [ref=e913]
+                      - 'cell "ACE JEANS UPC: 1171080" [ref=e914]':
+                        - generic [ref=e915]: ACE JEANS
+                        - generic [ref=e916]: "UPC: 1171080"
+                      - cell "JEANS MEN" [ref=e917]:
+                        - generic [ref=e918]:
+                          - generic [ref=e919]: JEANS
+                          - generic [ref=e920]: MEN
+                      - cell "JEANS > MEN > SKINNY JEANS JEANS > MEN > BAGGY JEANS > MEN > SLIM JEANS" [ref=e921]:
+                        - generic [ref=e922]:
+                          - button "JEANS > MEN > SKINNY JEANS" [ref=e923] [cursor=pointer]: SKINNY JEANS
+                          - button "JEANS > MEN > BAGGY" [ref=e924] [cursor=pointer]: BAGGY
+                          - button "JEANS > MEN > SLIM JEANS" [ref=e925] [cursor=pointer]: SLIM JEANS
+                      - cell "Mapped" [ref=e926]:
+                        - generic [ref=e927]: Mapped
+                      - cell "Approve ACE JEANS for push" [ref=e928]:
+                        - checkbox "Approve ACE JEANS for push" [ref=e930]
+                      - cell "Needs Review" [ref=e931]:
+                        - generic [ref=e932]: Needs Review
+                      - 'cell "Current: MEN > CLOTHING, JEANS > MEN > SUPER SKINNY JEANS Final: JEANS > MEN > SUPER SKINNY JEANS, MEN > CLOTHING > JEANS Final Collections: MEN JEANS, All Products (ChatGPT-AI) Changed: +3 / -0" [ref=e933]':
+                        - generic [ref=e934]:
+                          - generic [ref=e935]: "Current: MEN > CLOTHING, JEANS > MEN > SUPER SKINNY JEANS"
+                          - generic [ref=e936]: "Final: JEANS > MEN > SUPER SKINNY JEANS, MEN > CLOTHING > JEANS"
+                          - generic [ref=e937]: "Final Collections: MEN JEANS, All Products (ChatGPT-AI)"
+                          - generic [ref=e938]:
+                            - text: "Changed:"
+                            - generic [ref=e939]: "+3"
+                            - text: /
+                            - generic [ref=e940]: "-0"
+                    - 'row "Open row details Open product image preview ADA CROP TOP UPC: 2541417 TOPS WOMEN > NEW & NOW > SUMMER SETS WOMEN > NEW & NOW > WINTER SETS WOMEN > CLOTHING > MATCHING SETS Mapped Approve ADA CROP TOP for push Needs Review Current: WOMEN > CLOTHING > TOPS, TANK TOPS Final: WOMEN > CLOTHING > TOPS, TANK TOPS Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e941]':
+                      - cell [ref=e942]:
+                        - checkbox [ref=e943]
+                      - cell "Open row details" [ref=e944]:
+                        - button "Open row details" [ref=e945] [cursor=pointer]:
+                          - img [ref=e946]
+                      - cell "Open product image preview" [ref=e948]:
+                        - button "Open product image preview" [ref=e949] [cursor=pointer]:
+                          - img "ADA CROP TOP" [ref=e950]
+                      - 'cell "ADA CROP TOP UPC: 2541417" [ref=e951]':
+                        - generic [ref=e952]: ADA CROP TOP
+                        - generic [ref=e953]: "UPC: 2541417"
+                      - cell "TOPS" [ref=e954]:
+                        - generic [ref=e956]: TOPS
+                      - cell "WOMEN > NEW & NOW > SUMMER SETS WOMEN > NEW & NOW > WINTER SETS WOMEN > CLOTHING > MATCHING SETS" [ref=e957]:
+                        - generic [ref=e958]:
+                          - button "WOMEN > NEW & NOW > SUMMER SETS" [ref=e959] [cursor=pointer]: SUMMER SETS
+                          - button "WOMEN > NEW & NOW > WINTER SETS" [ref=e960] [cursor=pointer]: WINTER SETS
+                          - button "WOMEN > CLOTHING > MATCHING SETS" [ref=e961] [cursor=pointer]: MATCHING SETS
+                      - cell "Mapped" [ref=e962]:
+                        - generic [ref=e963]: Mapped
+                      - cell "Approve ADA CROP TOP for push" [ref=e964]:
+                        - checkbox "Approve ADA CROP TOP for push" [ref=e966]
+                      - cell "Needs Review" [ref=e967]:
+                        - generic [ref=e968]: Needs Review
+                      - 'cell "Current: WOMEN > CLOTHING > TOPS, TANK TOPS Final: WOMEN > CLOTHING > TOPS, TANK TOPS Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e969]':
+                        - generic [ref=e970]:
+                          - generic [ref=e971]: "Current: WOMEN > CLOTHING > TOPS, TANK TOPS"
+                          - generic [ref=e972]: "Final: WOMEN > CLOTHING > TOPS, TANK TOPS"
+                          - generic [ref=e973]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e974]:
+                            - text: "Changed:"
+                            - generic [ref=e975]: "+0"
+                            - text: /
+                            - generic [ref=e976]: "-0"
+                    - 'row "Open row details ADALYN SEQUIN DRESS UPC: 2531109 DRESSES COLLECTION: midi-dresses-women COLLECTION: maxi-dresses-women COLLECTION: mini-dresses COLLECTION: night-dresses Mapped Approve ADALYN SEQUIN DRESS for push Needs Review Current: WOMEN > CLOTHING > DRESSES Final: WOMEN > CLOTHING > DRESSES Final Collections: NIGHT DRESSES, All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e977]':
+                      - cell [ref=e978]:
+                        - checkbox [ref=e979]
+                      - cell "Open row details" [ref=e980]:
+                        - button "Open row details" [ref=e981] [cursor=pointer]:
+                          - img [ref=e982]
+                      - cell [ref=e984]
+                      - 'cell "ADALYN SEQUIN DRESS UPC: 2531109" [ref=e986]':
+                        - generic [ref=e987]: ADALYN SEQUIN DRESS
+                        - generic [ref=e988]: "UPC: 2531109"
+                      - cell "DRESSES" [ref=e989]:
+                        - generic [ref=e991]: DRESSES
+                      - 'cell "COLLECTION: midi-dresses-women COLLECTION: maxi-dresses-women COLLECTION: mini-dresses COLLECTION: night-dresses" [ref=e992]':
+                        - generic [ref=e993]:
+                          - 'button "COLLECTION: midi-dresses-women" [ref=e994] [cursor=pointer]': MIDI DRESSES
+                          - 'button "COLLECTION: maxi-dresses-women" [ref=e995] [cursor=pointer]': MAXI DRESSES
+                          - 'button "COLLECTION: mini-dresses" [ref=e996] [cursor=pointer]': MINI DRESSES
+                          - 'button "COLLECTION: night-dresses" [ref=e997] [cursor=pointer]': NIGHT DRESSES
+                      - cell "Mapped" [ref=e998]:
+                        - generic [ref=e999]: Mapped
+                      - cell "Approve ADALYN SEQUIN DRESS for push" [ref=e1000]:
+                        - checkbox "Approve ADALYN SEQUIN DRESS for push" [ref=e1002]
+                      - cell "Needs Review" [ref=e1003]:
+                        - generic [ref=e1004]: Needs Review
+                      - 'cell "Current: WOMEN > CLOTHING > DRESSES Final: WOMEN > CLOTHING > DRESSES Final Collections: NIGHT DRESSES, All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e1005]':
+                        - generic [ref=e1006]:
+                          - generic [ref=e1007]: "Current: WOMEN > CLOTHING > DRESSES"
+                          - generic [ref=e1008]: "Final: WOMEN > CLOTHING > DRESSES"
+                          - generic [ref=e1009]: "Final Collections: NIGHT DRESSES, All Products (ChatGPT-AI)"
+                          - generic [ref=e1010]:
+                            - text: "Changed:"
+                            - generic [ref=e1011]: "+0"
+                            - text: /
+                            - generic [ref=e1012]: "-0"
+                    - 'row "Open row details ADAM SUNGLASSES UPC: 1721909 ALL ACCESSORIES - Mapped Approve ADAM SUNGLASSES for push Ready to Push Current: - Final: MEN > ACCESSORIES & SHOES > ALL ACCESSORIES Final Collections: All Products (ChatGPT-AI) Changed: +3 / -0" [ref=e1013]':
+                      - cell [ref=e1014]:
+                        - checkbox [ref=e1015]
+                      - cell "Open row details" [ref=e1016]:
+                        - button "Open row details" [ref=e1017] [cursor=pointer]:
+                          - img [ref=e1018]
+                      - cell [ref=e1020]
+                      - 'cell "ADAM SUNGLASSES UPC: 1721909" [ref=e1022]':
+                        - generic [ref=e1023]: ADAM SUNGLASSES
+                        - generic [ref=e1024]: "UPC: 1721909"
+                      - cell "ALL ACCESSORIES" [ref=e1025]:
+                        - generic [ref=e1027]: ALL ACCESSORIES
+                      - cell "-" [ref=e1028]
+                      - cell "Mapped" [ref=e1029]:
+                        - generic [ref=e1030]: Mapped
+                      - cell "Approve ADAM SUNGLASSES for push" [ref=e1031]:
+                        - checkbox "Approve ADAM SUNGLASSES for push" [ref=e1033]
+                      - cell "Ready to Push" [ref=e1034]:
+                        - generic [ref=e1035]: Ready to Push
+                      - 'cell "Current: - Final: MEN > ACCESSORIES & SHOES > ALL ACCESSORIES Final Collections: All Products (ChatGPT-AI) Changed: +3 / -0" [ref=e1036]':
+                        - generic [ref=e1037]:
+                          - generic [ref=e1038]: "Current: -"
+                          - generic [ref=e1039]: "Final: MEN > ACCESSORIES & SHOES > ALL ACCESSORIES"
+                          - generic [ref=e1040]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e1041]:
+                            - text: "Changed:"
+                            - generic [ref=e1042]: "+3"
+                            - text: /
+                            - generic [ref=e1043]: "-0"
+                    - 'row "Open row details Open product image preview ADJUSTABLE FACE MASK UPC: 1991945 - - Needs Review Approve ADJUSTABLE FACE MASK for push Needs Review Current: MEN > ACCESSORIES & SHOES > ALL ACCESSORIES, WOMEN > ACCESSORIES & SHOES > ALL ACCESSORIES Final: MEN > ACCESSORIES & SHOES > ALL ACCESSORIES, WOMEN > ACCESSORIES & SHOES > ALL ACCESSORIES Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e1044]':
+                      - cell [ref=e1045]:
+                        - checkbox [ref=e1046]
+                      - cell "Open row details" [ref=e1047]:
+                        - button "Open row details" [ref=e1048] [cursor=pointer]:
+                          - img [ref=e1049]
+                      - cell "Open product image preview" [ref=e1051]:
+                        - button "Open product image preview" [ref=e1052] [cursor=pointer]:
+                          - img "ADJUSTABLE FACE MASK" [ref=e1053]
+                      - 'cell "ADJUSTABLE FACE MASK UPC: 1991945" [ref=e1054]':
+                        - generic [ref=e1055]: ADJUSTABLE FACE MASK
+                        - generic [ref=e1056]: "UPC: 1991945"
+                      - cell "-" [ref=e1057]
+                      - cell "-" [ref=e1058]
+                      - cell "Needs Review" [ref=e1059]:
+                        - generic [ref=e1060]: Needs Review
+                      - cell "Approve ADJUSTABLE FACE MASK for push" [ref=e1061]:
+                        - checkbox "Approve ADJUSTABLE FACE MASK for push" [ref=e1063]
+                      - cell "Needs Review" [ref=e1064]:
+                        - generic [ref=e1065]: Needs Review
+                      - 'cell "Current: MEN > ACCESSORIES & SHOES > ALL ACCESSORIES, WOMEN > ACCESSORIES & SHOES > ALL ACCESSORIES Final: MEN > ACCESSORIES & SHOES > ALL ACCESSORIES, WOMEN > ACCESSORIES & SHOES > ALL ACCESSORIES Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e1066]':
+                        - generic [ref=e1067]:
+                          - generic [ref=e1068]: "Current: MEN > ACCESSORIES & SHOES > ALL ACCESSORIES, WOMEN > ACCESSORIES & SHOES > ALL ACCESSORIES"
+                          - generic [ref=e1069]: "Final: MEN > ACCESSORIES & SHOES > ALL ACCESSORIES, WOMEN > ACCESSORIES & SHOES > ALL ACCESSORIES"
+                          - generic [ref=e1070]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e1071]:
+                            - text: "Changed:"
+                            - generic [ref=e1072]: "+0"
+                            - text: /
+                            - generic [ref=e1073]: "-0"
+                    - 'row "Open row details Open product image preview ADOREYOU HOODIE UPC: 2222362 SWEATSHIRTS & HOODIES - Mapped Approve ADOREYOU HOODIE for push Synced Current: WOMEN > CLOTHING > TOPS, JACKETS & COATS, SWEATSHIRTS & HOODIES Final: WOMEN > CLOTHING > TOPS, JACKETS & COATS, SWEATSHIRTS & HOODIES Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e1074]':
+                      - cell [ref=e1075]:
+                        - checkbox [ref=e1076]
+                      - cell "Open row details" [ref=e1077]:
+                        - button "Open row details" [ref=e1078] [cursor=pointer]:
+                          - img [ref=e1079]
+                      - cell "Open product image preview" [ref=e1081]:
+                        - button "Open product image preview" [ref=e1082] [cursor=pointer]:
+                          - img "ADOREYOU HOODIE" [ref=e1083]
+                      - 'cell "ADOREYOU HOODIE UPC: 2222362" [ref=e1084]':
+                        - generic [ref=e1085]: ADOREYOU HOODIE
+                        - generic [ref=e1086]: "UPC: 2222362"
+                      - cell "SWEATSHIRTS & HOODIES" [ref=e1087]:
+                        - generic [ref=e1089]: SWEATSHIRTS & HOODIES
+                      - cell "-" [ref=e1090]
+                      - cell "Mapped" [ref=e1091]:
+                        - generic [ref=e1092]: Mapped
+                      - cell "Approve ADOREYOU HOODIE for push" [ref=e1093]:
+                        - checkbox "Approve ADOREYOU HOODIE for push" [ref=e1095]
+                      - cell "Synced" [ref=e1096]:
+                        - generic [ref=e1097]: Synced
+                      - 'cell "Current: WOMEN > CLOTHING > TOPS, JACKETS & COATS, SWEATSHIRTS & HOODIES Final: WOMEN > CLOTHING > TOPS, JACKETS & COATS, SWEATSHIRTS & HOODIES Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e1098]':
+                        - generic [ref=e1099]:
+                          - generic [ref=e1100]: "Current: WOMEN > CLOTHING > TOPS, JACKETS & COATS, SWEATSHIRTS & HOODIES"
+                          - generic [ref=e1101]: "Final: WOMEN > CLOTHING > TOPS, JACKETS & COATS, SWEATSHIRTS & HOODIES"
+                          - generic [ref=e1102]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e1103]:
+                            - text: "Changed:"
+                            - generic [ref=e1104]: "+0"
+                            - text: /
+                            - generic [ref=e1105]: "-0"
+                    - 'row "Open row details Open product image preview ADRIAN CARGO PANTS UPC: 1223802 SWEATPANTS - Mapped Approve ADRIAN CARGO PANTS for push Ready to Push Current: MEN > CLOTHING > PANTS Final: MEN > CLOTHING > PANTS, SWEATPANTS Final Collections: All Products (ChatGPT-AI) Changed: +1 / -0" [ref=e1106]':
+                      - cell [ref=e1107]:
+                        - checkbox [ref=e1108]
+                      - cell "Open row details" [ref=e1109]:
+                        - button "Open row details" [ref=e1110] [cursor=pointer]:
+                          - img [ref=e1111]
+                      - cell "Open product image preview" [ref=e1113]:
+                        - button "Open product image preview" [ref=e1114] [cursor=pointer]:
+                          - img "ADRIAN CARGO PANTS" [ref=e1115]
+                      - 'cell "ADRIAN CARGO PANTS UPC: 1223802" [ref=e1116]':
+                        - generic [ref=e1117]: ADRIAN CARGO PANTS
+                        - generic [ref=e1118]: "UPC: 1223802"
+                      - cell "SWEATPANTS" [ref=e1119]:
+                        - generic [ref=e1121]: SWEATPANTS
+                      - cell "-" [ref=e1122]
+                      - cell "Mapped" [ref=e1123]:
+                        - generic [ref=e1124]: Mapped
+                      - cell "Approve ADRIAN CARGO PANTS for push" [ref=e1125]:
+                        - checkbox "Approve ADRIAN CARGO PANTS for push" [ref=e1127]
+                      - cell "Ready to Push" [ref=e1128]:
+                        - generic [ref=e1129]: Ready to Push
+                      - 'cell "Current: MEN > CLOTHING > PANTS Final: MEN > CLOTHING > PANTS, SWEATPANTS Final Collections: All Products (ChatGPT-AI) Changed: +1 / -0" [ref=e1130]':
+                        - generic [ref=e1131]:
+                          - generic [ref=e1132]: "Current: MEN > CLOTHING > PANTS"
+                          - generic [ref=e1133]: "Final: MEN > CLOTHING > PANTS, SWEATPANTS"
+                          - generic [ref=e1134]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e1135]:
+                            - text: "Changed:"
+                            - generic [ref=e1136]: "+1"
+                            - text: /
+                            - generic [ref=e1137]: "-0"
+                    - 'row "Open row details Open product image preview ADRIANA SWEATER UPC: 2222415 TOPS WOMEN > NEW & NOW > SUMMER SETS WOMEN > NEW & NOW > WINTER SETS WOMEN > CLOTHING > MATCHING SETS Mapped Approve ADRIANA SWEATER for push Needs Review Current: WOMEN > CLOTHING > TOPS, SWEATERS Final: WOMEN > CLOTHING > TOPS, SWEATERS Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e1138]':
+                      - cell [ref=e1139]:
+                        - checkbox [ref=e1140]
+                      - cell "Open row details" [ref=e1141]:
+                        - button "Open row details" [ref=e1142] [cursor=pointer]:
+                          - img [ref=e1143]
+                      - cell "Open product image preview" [ref=e1145]:
+                        - button "Open product image preview" [ref=e1146] [cursor=pointer]:
+                          - img "ADRIANA SWEATER" [ref=e1147]
+                      - 'cell "ADRIANA SWEATER UPC: 2222415" [ref=e1148]':
+                        - generic [ref=e1149]: ADRIANA SWEATER
+                        - generic [ref=e1150]: "UPC: 2222415"
+                      - cell "TOPS" [ref=e1151]:
+                        - generic [ref=e1153]: TOPS
+                      - cell "WOMEN > NEW & NOW > SUMMER SETS WOMEN > NEW & NOW > WINTER SETS WOMEN > CLOTHING > MATCHING SETS" [ref=e1154]:
+                        - generic [ref=e1155]:
+                          - button "WOMEN > NEW & NOW > SUMMER SETS" [ref=e1156] [cursor=pointer]: SUMMER SETS
+                          - button "WOMEN > NEW & NOW > WINTER SETS" [ref=e1157] [cursor=pointer]: WINTER SETS
+                          - button "WOMEN > CLOTHING > MATCHING SETS" [ref=e1158] [cursor=pointer]: MATCHING SETS
+                      - cell "Mapped" [ref=e1159]:
+                        - generic [ref=e1160]: Mapped
+                      - cell "Approve ADRIANA SWEATER for push" [ref=e1161]:
+                        - checkbox "Approve ADRIANA SWEATER for push" [ref=e1163]
+                      - cell "Needs Review" [ref=e1164]:
+                        - generic [ref=e1165]: Needs Review
+                      - 'cell "Current: WOMEN > CLOTHING > TOPS, SWEATERS Final: WOMEN > CLOTHING > TOPS, SWEATERS Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e1166]':
+                        - generic [ref=e1167]:
+                          - generic [ref=e1168]: "Current: WOMEN > CLOTHING > TOPS, SWEATERS"
+                          - generic [ref=e1169]: "Final: WOMEN > CLOTHING > TOPS, SWEATERS"
+                          - generic [ref=e1170]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e1171]:
+                            - text: "Changed:"
+                            - generic [ref=e1172]: "+0"
+                            - text: /
+                            - generic [ref=e1173]: "-0"
+                    - 'row "Open row details Open product image preview ALEENA KNOT T-SHIRT UPC: 2521417 TOPS WOMEN > NEW & NOW > SUMMER SETS WOMEN > NEW & NOW > WINTER SETS WOMEN > CLOTHING > MATCHING SETS WOMEN > CLOTHING > T-SHIRTS Mapped Approve ALEENA KNOT T-SHIRT for push Needs Review Current: WOMEN > CLOTHING > TOPS, TANK TOPS Final: WOMEN > CLOTHING > TOPS, TANK TOPS Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e1174]':
+                      - cell [ref=e1175]:
+                        - checkbox [ref=e1176]
+                      - cell "Open row details" [ref=e1177]:
+                        - button "Open row details" [ref=e1178] [cursor=pointer]:
+                          - img [ref=e1179]
+                      - cell "Open product image preview" [ref=e1181]:
+                        - button "Open product image preview" [ref=e1182] [cursor=pointer]:
+                          - img "ALEENA KNOT T-SHIRT" [ref=e1183]
+                      - 'cell "ALEENA KNOT T-SHIRT UPC: 2521417" [ref=e1184]':
+                        - generic [ref=e1185]: ALEENA KNOT T-SHIRT
+                        - generic [ref=e1186]: "UPC: 2521417"
+                      - cell "TOPS" [ref=e1187]:
+                        - generic [ref=e1189]: TOPS
+                      - cell "WOMEN > NEW & NOW > SUMMER SETS WOMEN > NEW & NOW > WINTER SETS WOMEN > CLOTHING > MATCHING SETS WOMEN > CLOTHING > T-SHIRTS" [ref=e1190]:
+                        - generic [ref=e1191]:
+                          - button "WOMEN > NEW & NOW > SUMMER SETS" [ref=e1192] [cursor=pointer]: SUMMER SETS
+                          - button "WOMEN > NEW & NOW > WINTER SETS" [ref=e1193] [cursor=pointer]: WINTER SETS
+                          - button "WOMEN > CLOTHING > MATCHING SETS" [ref=e1194] [cursor=pointer]: MATCHING SETS
+                          - button "WOMEN > CLOTHING > T-SHIRTS" [ref=e1195] [cursor=pointer]: T-SHIRTS
+                      - cell "Mapped" [ref=e1196]:
+                        - generic [ref=e1197]: Mapped
+                      - cell "Approve ALEENA KNOT T-SHIRT for push" [ref=e1198]:
+                        - checkbox "Approve ALEENA KNOT T-SHIRT for push" [ref=e1200]
+                      - cell "Needs Review" [ref=e1201]:
+                        - generic [ref=e1202]: Needs Review
+                      - 'cell "Current: WOMEN > CLOTHING > TOPS, TANK TOPS Final: WOMEN > CLOTHING > TOPS, TANK TOPS Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e1203]':
+                        - generic [ref=e1204]:
+                          - generic [ref=e1205]: "Current: WOMEN > CLOTHING > TOPS, TANK TOPS"
+                          - generic [ref=e1206]: "Final: WOMEN > CLOTHING > TOPS, TANK TOPS"
+                          - generic [ref=e1207]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e1208]:
+                            - text: "Changed:"
+                            - generic [ref=e1209]: "+0"
+                            - text: /
+                            - generic [ref=e1210]: "-0"
+                    - 'row "Open row details Open product image preview ALEXIA TOP UPC: 2541409 TOPS WOMEN > NEW & NOW > SUMMER SETS WOMEN > NEW & NOW > WINTER SETS WOMEN > CLOTHING > MATCHING SETS Mapped Approve ALEXIA TOP for push Needs Review Current: WOMEN > CLOTHING > TOPS, TANK TOPS Final: WOMEN > CLOTHING > TOPS, TANK TOPS Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e1211]':
+                      - cell [ref=e1212]:
+                        - checkbox [ref=e1213]
+                      - cell "Open row details" [ref=e1214]:
+                        - button "Open row details" [ref=e1215] [cursor=pointer]:
+                          - img [ref=e1216]
+                      - cell "Open product image preview" [ref=e1218]:
+                        - button "Open product image preview" [ref=e1219] [cursor=pointer]:
+                          - img "ALEXIA TOP" [ref=e1220]
+                      - 'cell "ALEXIA TOP UPC: 2541409" [ref=e1221]':
+                        - generic [ref=e1222]: ALEXIA TOP
+                        - generic [ref=e1223]: "UPC: 2541409"
+                      - cell "TOPS" [ref=e1224]:
+                        - generic [ref=e1226]: TOPS
+                      - cell "WOMEN > NEW & NOW > SUMMER SETS WOMEN > NEW & NOW > WINTER SETS WOMEN > CLOTHING > MATCHING SETS" [ref=e1227]:
+                        - generic [ref=e1228]:
+                          - button "WOMEN > NEW & NOW > SUMMER SETS" [ref=e1229] [cursor=pointer]: SUMMER SETS
+                          - button "WOMEN > NEW & NOW > WINTER SETS" [ref=e1230] [cursor=pointer]: WINTER SETS
+                          - button "WOMEN > CLOTHING > MATCHING SETS" [ref=e1231] [cursor=pointer]: MATCHING SETS
+                      - cell "Mapped" [ref=e1232]:
+                        - generic [ref=e1233]: Mapped
+                      - cell "Approve ALEXIA TOP for push" [ref=e1234]:
+                        - checkbox "Approve ALEXIA TOP for push" [ref=e1236]
+                      - cell "Needs Review" [ref=e1237]:
+                        - generic [ref=e1238]: Needs Review
+                      - 'cell "Current: WOMEN > CLOTHING > TOPS, TANK TOPS Final: WOMEN > CLOTHING > TOPS, TANK TOPS Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e1239]':
+                        - generic [ref=e1240]:
+                          - generic [ref=e1241]: "Current: WOMEN > CLOTHING > TOPS, TANK TOPS"
+                          - generic [ref=e1242]: "Final: WOMEN > CLOTHING > TOPS, TANK TOPS"
+                          - generic [ref=e1243]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e1244]:
+                            - text: "Changed:"
+                            - generic [ref=e1245]: "+0"
+                            - text: /
+                            - generic [ref=e1246]: "-0"
+                    - 'row "Open row details Open product image preview ALEXIS SWEATER UPC: 2222429 TOPS WOMEN > NEW & NOW > SUMMER SETS WOMEN > NEW & NOW > WINTER SETS WOMEN > CLOTHING > MATCHING SETS Mapped Approve ALEXIS SWEATER for push Needs Review Current: WOMEN > CLOTHING > TOPS, SWEATERS Final: WOMEN > CLOTHING > TOPS, SWEATERS Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e1247]':
+                      - cell [ref=e1248]:
+                        - checkbox [ref=e1249]
+                      - cell "Open row details" [ref=e1250]:
+                        - button "Open row details" [ref=e1251] [cursor=pointer]:
+                          - img [ref=e1252]
+                      - cell "Open product image preview" [ref=e1254]:
+                        - button "Open product image preview" [ref=e1255] [cursor=pointer]:
+                          - img "ALEXIS SWEATER" [ref=e1256]
+                      - 'cell "ALEXIS SWEATER UPC: 2222429" [ref=e1257]':
+                        - generic [ref=e1258]: ALEXIS SWEATER
+                        - generic [ref=e1259]: "UPC: 2222429"
+                      - cell "TOPS" [ref=e1260]:
+                        - generic [ref=e1262]: TOPS
+                      - cell "WOMEN > NEW & NOW > SUMMER SETS WOMEN > NEW & NOW > WINTER SETS WOMEN > CLOTHING > MATCHING SETS" [ref=e1263]:
+                        - generic [ref=e1264]:
+                          - button "WOMEN > NEW & NOW > SUMMER SETS" [ref=e1265] [cursor=pointer]: SUMMER SETS
+                          - button "WOMEN > NEW & NOW > WINTER SETS" [ref=e1266] [cursor=pointer]: WINTER SETS
+                          - button "WOMEN > CLOTHING > MATCHING SETS" [ref=e1267] [cursor=pointer]: MATCHING SETS
+                      - cell "Mapped" [ref=e1268]:
+                        - generic [ref=e1269]: Mapped
+                      - cell "Approve ALEXIS SWEATER for push" [ref=e1270]:
+                        - checkbox "Approve ALEXIS SWEATER for push" [ref=e1272]
+                      - cell "Needs Review" [ref=e1273]:
+                        - generic [ref=e1274]: Needs Review
+                      - 'cell "Current: WOMEN > CLOTHING > TOPS, SWEATERS Final: WOMEN > CLOTHING > TOPS, SWEATERS Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e1275]':
+                        - generic [ref=e1276]:
+                          - generic [ref=e1277]: "Current: WOMEN > CLOTHING > TOPS, SWEATERS"
+                          - generic [ref=e1278]: "Final: WOMEN > CLOTHING > TOPS, SWEATERS"
+                          - generic [ref=e1279]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e1280]:
+                            - text: "Changed:"
+                            - generic [ref=e1281]: "+0"
+                            - text: /
+                            - generic [ref=e1282]: "-0"
+                    - 'row "Open row details ALFRED CARGO PANTS UPC: 1124856 PANTS - Mapped Approve ALFRED CARGO PANTS for push Synced Current: MEN > CLOTHING > PANTS Final: MEN > CLOTHING > PANTS Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e1283]':
+                      - cell [ref=e1284]:
+                        - checkbox [ref=e1285]
+                      - cell "Open row details" [ref=e1286]:
+                        - button "Open row details" [ref=e1287] [cursor=pointer]:
+                          - img [ref=e1288]
+                      - cell [ref=e1290]
+                      - 'cell "ALFRED CARGO PANTS UPC: 1124856" [ref=e1292]':
+                        - generic [ref=e1293]: ALFRED CARGO PANTS
+                        - generic [ref=e1294]: "UPC: 1124856"
+                      - cell "PANTS" [ref=e1295]:
+                        - generic [ref=e1297]: PANTS
+                      - cell "-" [ref=e1298]
+                      - cell "Mapped" [ref=e1299]:
+                        - generic [ref=e1300]: Mapped
+                      - cell "Approve ALFRED CARGO PANTS for push" [ref=e1301]:
+                        - checkbox "Approve ALFRED CARGO PANTS for push" [ref=e1303]
+                      - cell "Synced" [ref=e1304]:
+                        - generic [ref=e1305]: Synced
+                      - 'cell "Current: MEN > CLOTHING > PANTS Final: MEN > CLOTHING > PANTS Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e1306]':
+                        - generic [ref=e1307]:
+                          - generic [ref=e1308]: "Current: MEN > CLOTHING > PANTS"
+                          - generic [ref=e1309]: "Final: MEN > CLOTHING > PANTS"
+                          - generic [ref=e1310]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e1311]:
+                            - text: "Changed:"
+                            - generic [ref=e1312]: "+0"
+                            - text: /
+                            - generic [ref=e1313]: "-0"
+                    - 'row "Open row details Open product image preview ALIA CROP TANK UPC: 2521426 TOPS WOMEN > NEW & NOW > WINTER SETS Mapped Approve ALIA CROP TANK for push Needs Review Current: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS, TOPS, TANK TOPS Final: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS, TOPS, TANK TOPS Final Collections: All Products (ChatGPT-AI) Changed: +1 / -0" [ref=e1314]':
+                      - cell [ref=e1315]:
+                        - checkbox [ref=e1316]
+                      - cell "Open row details" [ref=e1317]:
+                        - button "Open row details" [ref=e1318] [cursor=pointer]:
+                          - img [ref=e1319]
+                      - cell "Open product image preview" [ref=e1321]:
+                        - button "Open product image preview" [ref=e1322] [cursor=pointer]:
+                          - img "ALIA CROP TANK" [ref=e1323]
+                      - 'cell "ALIA CROP TANK UPC: 2521426" [ref=e1324]':
+                        - generic [ref=e1325]: ALIA CROP TANK
+                        - generic [ref=e1326]: "UPC: 2521426"
+                      - cell "TOPS" [ref=e1327]:
+                        - generic [ref=e1329]: TOPS
+                      - cell "WOMEN > NEW & NOW > WINTER SETS" [ref=e1330]:
+                        - button "WOMEN > NEW & NOW > WINTER SETS" [ref=e1332] [cursor=pointer]: WINTER SETS
+                      - cell "Mapped" [ref=e1333]:
+                        - generic [ref=e1334]: Mapped
+                      - cell "Approve ALIA CROP TANK for push" [ref=e1335]:
+                        - checkbox "Approve ALIA CROP TANK for push" [ref=e1337]
+                      - cell "Needs Review" [ref=e1338]:
+                        - generic [ref=e1339]: Needs Review
+                      - 'cell "Current: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS, TOPS, TANK TOPS Final: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS, TOPS, TANK TOPS Final Collections: All Products (ChatGPT-AI) Changed: +1 / -0" [ref=e1340]':
+                        - generic [ref=e1341]:
+                          - generic [ref=e1342]: "Current: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS, TOPS, TANK TOPS"
+                          - generic [ref=e1343]: "Final: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS, TOPS, TANK TOPS"
+                          - generic [ref=e1344]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e1345]:
+                            - text: "Changed:"
+                            - generic [ref=e1346]: "+1"
+                            - text: /
+                            - generic [ref=e1347]: "-0"
+                    - 'row "Open row details Open product image preview ALIA SHORT LEGGING UPC: 2521327 SHORTS - Mapped Approve ALIA SHORT LEGGING for push Ready to Push Current: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS, SHORTS Final: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS, SHORTS Final Collections: All Products (ChatGPT-AI) Changed: +1 / -0" [ref=e1348]':
+                      - cell [ref=e1349]:
+                        - checkbox [ref=e1350]
+                      - cell "Open row details" [ref=e1351]:
+                        - button "Open row details" [ref=e1352] [cursor=pointer]:
+                          - img [ref=e1353]
+                      - cell "Open product image preview" [ref=e1355]:
+                        - button "Open product image preview" [ref=e1356] [cursor=pointer]:
+                          - img "ALIA SHORT LEGGING" [ref=e1357]
+                      - 'cell "ALIA SHORT LEGGING UPC: 2521327" [ref=e1358]':
+                        - generic [ref=e1359]: ALIA SHORT LEGGING
+                        - generic [ref=e1360]: "UPC: 2521327"
+                      - cell "SHORTS" [ref=e1361]:
+                        - generic [ref=e1363]: SHORTS
+                      - cell "-" [ref=e1364]
+                      - cell "Mapped" [ref=e1365]:
+                        - generic [ref=e1366]: Mapped
+                      - cell "Approve ALIA SHORT LEGGING for push" [ref=e1367]:
+                        - checkbox "Approve ALIA SHORT LEGGING for push" [ref=e1369]
+                      - cell "Ready to Push" [ref=e1370]:
+                        - generic [ref=e1371]: Ready to Push
+                      - 'cell "Current: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS, SHORTS Final: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS, SHORTS Final Collections: All Products (ChatGPT-AI) Changed: +1 / -0" [ref=e1372]':
+                        - generic [ref=e1373]:
+                          - generic [ref=e1374]: "Current: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS, SHORTS"
+                          - generic [ref=e1375]: "Final: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS, SHORTS"
+                          - generic [ref=e1376]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e1377]:
+                            - text: "Changed:"
+                            - generic [ref=e1378]: "+1"
+                            - text: /
+                            - generic [ref=e1379]: "-0"
+                    - 'row "Open row details Open product image preview ALIA SHORT LEGGING UPC: 2521303 SHORTS - Mapped Approve ALIA SHORT LEGGING for push Ready to Push Current: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS, SHORTS Final: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS, SHORTS Final Collections: All Products (ChatGPT-AI) Changed: +1 / -0" [ref=e1380]':
+                      - cell [ref=e1381]:
+                        - checkbox [ref=e1382]
+                      - cell "Open row details" [ref=e1383]:
+                        - button "Open row details" [ref=e1384] [cursor=pointer]:
+                          - img [ref=e1385]
+                      - cell "Open product image preview" [ref=e1387]:
+                        - button "Open product image preview" [ref=e1388] [cursor=pointer]:
+                          - img "ALIA SHORT LEGGING" [ref=e1389]
+                      - 'cell "ALIA SHORT LEGGING UPC: 2521303" [ref=e1390]':
+                        - generic [ref=e1391]: ALIA SHORT LEGGING
+                        - generic [ref=e1392]: "UPC: 2521303"
+                      - cell "SHORTS" [ref=e1393]:
+                        - generic [ref=e1395]: SHORTS
+                      - cell "-" [ref=e1396]
+                      - cell "Mapped" [ref=e1397]:
+                        - generic [ref=e1398]: Mapped
+                      - cell "Approve ALIA SHORT LEGGING for push" [ref=e1399]:
+                        - checkbox "Approve ALIA SHORT LEGGING for push" [ref=e1401]
+                      - cell "Ready to Push" [ref=e1402]:
+                        - generic [ref=e1403]: Ready to Push
+                      - 'cell "Current: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS, SHORTS Final: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS, SHORTS Final Collections: All Products (ChatGPT-AI) Changed: +1 / -0" [ref=e1404]':
+                        - generic [ref=e1405]:
+                          - generic [ref=e1406]: "Current: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS, SHORTS"
+                          - generic [ref=e1407]: "Final: WOMEN > NEW & NOW > SUMMER SETS, CLOTHING > MATCHING SETS, SHORTS"
+                          - generic [ref=e1408]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e1409]:
+                            - text: "Changed:"
+                            - generic [ref=e1410]: "+1"
+                            - text: /
+                            - generic [ref=e1411]: "-0"
+                    - 'row "Open row details ALLEN SHORTS UPC: 1124353 SHORTS - Mapped Approve ALLEN SHORTS for push Synced Current: MEN > CLOTHING > SHORTS Final: MEN > CLOTHING > SHORTS Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e1412]':
+                      - cell [ref=e1413]:
+                        - checkbox [ref=e1414]
+                      - cell "Open row details" [ref=e1415]:
+                        - button "Open row details" [ref=e1416] [cursor=pointer]:
+                          - img [ref=e1417]
+                      - cell [ref=e1419]
+                      - 'cell "ALLEN SHORTS UPC: 1124353" [ref=e1421]':
+                        - generic [ref=e1422]: ALLEN SHORTS
+                        - generic [ref=e1423]: "UPC: 1124353"
+                      - cell "SHORTS" [ref=e1424]:
+                        - generic [ref=e1426]: SHORTS
+                      - cell "-" [ref=e1427]
+                      - cell "Mapped" [ref=e1428]:
+                        - generic [ref=e1429]: Mapped
+                      - cell "Approve ALLEN SHORTS for push" [ref=e1430]:
+                        - checkbox "Approve ALLEN SHORTS for push" [ref=e1432]
+                      - cell "Synced" [ref=e1433]:
+                        - generic [ref=e1434]: Synced
+                      - 'cell "Current: MEN > CLOTHING > SHORTS Final: MEN > CLOTHING > SHORTS Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e1435]':
+                        - generic [ref=e1436]:
+                          - generic [ref=e1437]: "Current: MEN > CLOTHING > SHORTS"
+                          - generic [ref=e1438]: "Final: MEN > CLOTHING > SHORTS"
+                          - generic [ref=e1439]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e1440]:
+                            - text: "Changed:"
+                            - generic [ref=e1441]: "+0"
+                            - text: /
+                            - generic [ref=e1442]: "-0"
+                    - 'row "Open row details Open product image preview ALO PANTS SET UPC: 1223803 SWEATPANTS - Mapped Approve ALO PANTS SET for push Ready to Push Current: MEN > NEW & NOW > WINTER SETS, CLOTHING > TRACKSUITS, PANTS, SWEATPANTS Final: MEN > NEW & NOW > WINTER SETS, CLOTHING > TRACKSUITS, PANTS, SWEATPANTS Final Collections: All Products (ChatGPT-AI) Changed: +1 / -0" [ref=e1443]':
+                      - cell [ref=e1444]:
+                        - checkbox [ref=e1445]
+                      - cell "Open row details" [ref=e1446]:
+                        - button "Open row details" [ref=e1447] [cursor=pointer]:
+                          - img [ref=e1448]
+                      - cell "Open product image preview" [ref=e1450]:
+                        - button "Open product image preview" [ref=e1451] [cursor=pointer]:
+                          - img "ALO PANTS SET" [ref=e1452]
+                      - 'cell "ALO PANTS SET UPC: 1223803" [ref=e1453]':
+                        - generic [ref=e1454]: ALO PANTS SET
+                        - generic [ref=e1455]: "UPC: 1223803"
+                      - cell "SWEATPANTS" [ref=e1456]:
+                        - generic [ref=e1458]: SWEATPANTS
+                      - cell "-" [ref=e1459]
+                      - cell "Mapped" [ref=e1460]:
+                        - generic [ref=e1461]: Mapped
+                      - cell "Approve ALO PANTS SET for push" [ref=e1462]:
+                        - checkbox "Approve ALO PANTS SET for push" [ref=e1464]
+                      - cell "Ready to Push" [ref=e1465]:
+                        - generic [ref=e1466]: Ready to Push
+                      - 'cell "Current: MEN > NEW & NOW > WINTER SETS, CLOTHING > TRACKSUITS, PANTS, SWEATPANTS Final: MEN > NEW & NOW > WINTER SETS, CLOTHING > TRACKSUITS, PANTS, SWEATPANTS Final Collections: All Products (ChatGPT-AI) Changed: +1 / -0" [ref=e1467]':
+                        - generic [ref=e1468]:
+                          - generic [ref=e1469]: "Current: MEN > NEW & NOW > WINTER SETS, CLOTHING > TRACKSUITS, PANTS, SWEATPANTS"
+                          - generic [ref=e1470]: "Final: MEN > NEW & NOW > WINTER SETS, CLOTHING > TRACKSUITS, PANTS, SWEATPANTS"
+                          - generic [ref=e1471]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e1472]:
+                            - text: "Changed:"
+                            - generic [ref=e1473]: "+1"
+                            - text: /
+                            - generic [ref=e1474]: "-0"
+                    - 'row "Open row details Open product image preview ALO TOP SET UPC: 1223303 JACKETS & COATS - Mapped Approve ALO TOP SET for push Ready to Push Current: MEN > NEW & NOW > WINTER SETS, CLOTHING > TOPS, SWEATSHIRTS & HOODIES, JACKETS & COATS, TRACKSUITS Final: MEN > NEW & NOW > WINTER SETS, CLOTHING > TOPS, SWEATSHIRTS & HOODIES, JACKETS & COATS, TRACKSUITS Final Collections: All Products (ChatGPT-AI) Changed: +1 / -0" [ref=e1475]':
+                      - cell [ref=e1476]:
+                        - checkbox [ref=e1477]
+                      - cell "Open row details" [ref=e1478]:
+                        - button "Open row details" [ref=e1479] [cursor=pointer]:
+                          - img [ref=e1480]
+                      - cell "Open product image preview" [ref=e1482]:
+                        - button "Open product image preview" [ref=e1483] [cursor=pointer]:
+                          - img "ALO TOP SET" [ref=e1484]
+                      - 'cell "ALO TOP SET UPC: 1223303" [ref=e1485]':
+                        - generic [ref=e1486]: ALO TOP SET
+                        - generic [ref=e1487]: "UPC: 1223303"
+                      - cell "JACKETS & COATS" [ref=e1488]:
+                        - generic [ref=e1490]: JACKETS & COATS
+                      - cell "-" [ref=e1491]
+                      - cell "Mapped" [ref=e1492]:
+                        - generic [ref=e1493]: Mapped
+                      - cell "Approve ALO TOP SET for push" [ref=e1494]:
+                        - checkbox "Approve ALO TOP SET for push" [ref=e1496]
+                      - cell "Ready to Push" [ref=e1497]:
+                        - generic [ref=e1498]: Ready to Push
+                      - 'cell "Current: MEN > NEW & NOW > WINTER SETS, CLOTHING > TOPS, SWEATSHIRTS & HOODIES, JACKETS & COATS, TRACKSUITS Final: MEN > NEW & NOW > WINTER SETS, CLOTHING > TOPS, SWEATSHIRTS & HOODIES, JACKETS & COATS, TRACKSUITS Final Collections: All Products (ChatGPT-AI) Changed: +1 / -0" [ref=e1499]':
+                        - generic [ref=e1500]:
+                          - generic [ref=e1501]: "Current: MEN > NEW & NOW > WINTER SETS, CLOTHING > TOPS, SWEATSHIRTS & HOODIES, JACKETS & COATS, TRACKSUITS"
+                          - generic [ref=e1502]: "Final: MEN > NEW & NOW > WINTER SETS, CLOTHING > TOPS, SWEATSHIRTS & HOODIES, JACKETS & COATS, TRACKSUITS"
+                          - generic [ref=e1503]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e1504]:
+                            - text: "Changed:"
+                            - generic [ref=e1505]: "+1"
+                            - text: /
+                            - generic [ref=e1506]: "-0"
+                    - 'row "Open row details Open product image preview ALPES TOP UPC: 2222459 TOPS WOMEN > NEW & NOW > SUMMER SETS WOMEN > NEW & NOW > WINTER SETS WOMEN > CLOTHING > MATCHING SETS Mapped Approve ALPES TOP for push Needs Review Current: WOMEN > CLOTHING > TOPS, TANK TOPS, JACKETS & COATS, TRACKSUITS, SWEATSHIRTS & HOODIES Final: WOMEN > CLOTHING > TOPS, TANK TOPS, JACKETS & COATS, TRACKSUITS, SWEATSHIRTS & HOODIES Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e1507]':
+                      - cell [ref=e1508]:
+                        - checkbox [ref=e1509]
+                      - cell "Open row details" [ref=e1510]:
+                        - button "Open row details" [ref=e1511] [cursor=pointer]:
+                          - img [ref=e1512]
+                      - cell "Open product image preview" [ref=e1514]:
+                        - button "Open product image preview" [ref=e1515] [cursor=pointer]:
+                          - img "ALPES TOP" [ref=e1516]
+                      - 'cell "ALPES TOP UPC: 2222459" [ref=e1517]':
+                        - generic [ref=e1518]: ALPES TOP
+                        - generic [ref=e1519]: "UPC: 2222459"
+                      - cell "TOPS" [ref=e1520]:
+                        - generic [ref=e1522]: TOPS
+                      - cell "WOMEN > NEW & NOW > SUMMER SETS WOMEN > NEW & NOW > WINTER SETS WOMEN > CLOTHING > MATCHING SETS" [ref=e1523]:
+                        - generic [ref=e1524]:
+                          - button "WOMEN > NEW & NOW > SUMMER SETS" [ref=e1525] [cursor=pointer]: SUMMER SETS
+                          - button "WOMEN > NEW & NOW > WINTER SETS" [ref=e1526] [cursor=pointer]: WINTER SETS
+                          - button "WOMEN > CLOTHING > MATCHING SETS" [ref=e1527] [cursor=pointer]: MATCHING SETS
+                      - cell "Mapped" [ref=e1528]:
+                        - generic [ref=e1529]: Mapped
+                      - cell "Approve ALPES TOP for push" [ref=e1530]:
+                        - checkbox "Approve ALPES TOP for push" [ref=e1532]
+                      - cell "Needs Review" [ref=e1533]:
+                        - generic [ref=e1534]: Needs Review
+                      - 'cell "Current: WOMEN > CLOTHING > TOPS, TANK TOPS, JACKETS & COATS, TRACKSUITS, SWEATSHIRTS & HOODIES Final: WOMEN > CLOTHING > TOPS, TANK TOPS, JACKETS & COATS, TRACKSUITS, SWEATSHIRTS & HOODIES Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e1535]':
+                        - generic [ref=e1536]:
+                          - generic [ref=e1537]: "Current: WOMEN > CLOTHING > TOPS, TANK TOPS, JACKETS & COATS, TRACKSUITS, SWEATSHIRTS & HOODIES"
+                          - generic [ref=e1538]: "Final: WOMEN > CLOTHING > TOPS, TANK TOPS, JACKETS & COATS, TRACKSUITS, SWEATSHIRTS & HOODIES"
+                          - generic [ref=e1539]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e1540]:
+                            - text: "Changed:"
+                            - generic [ref=e1541]: "+0"
+                            - text: /
+                            - generic [ref=e1542]: "-0"
+                    - 'row "Open row details ALVIN JEANS UPC: 1125014 JEANS MEN JEANS > MEN > SKINNY JEANS JEANS > MEN > BAGGY JEANS > MEN > SLIM JEANS Mapped Approve ALVIN JEANS for push Needs Review Current: MEN > CLOTHING, JEANS > MEN > SUPER SKINNY JEANS Final: JEANS > MEN > SUPER SKINNY JEANS, MEN > CLOTHING > JEANS Final Collections: MEN JEANS, All Products (ChatGPT-AI) Changed: +3 / -0" [ref=e1543]':
+                      - cell [ref=e1544]:
+                        - checkbox [ref=e1545]
+                      - cell "Open row details" [ref=e1546]:
+                        - button "Open row details" [ref=e1547] [cursor=pointer]:
+                          - img [ref=e1548]
+                      - cell [ref=e1550]
+                      - 'cell "ALVIN JEANS UPC: 1125014" [ref=e1552]':
+                        - generic [ref=e1553]: ALVIN JEANS
+                        - generic [ref=e1554]: "UPC: 1125014"
+                      - cell "JEANS MEN" [ref=e1555]:
+                        - generic [ref=e1556]:
+                          - generic [ref=e1557]: JEANS
+                          - generic [ref=e1558]: MEN
+                      - cell "JEANS > MEN > SKINNY JEANS JEANS > MEN > BAGGY JEANS > MEN > SLIM JEANS" [ref=e1559]:
+                        - generic [ref=e1560]:
+                          - button "JEANS > MEN > SKINNY JEANS" [ref=e1561] [cursor=pointer]: SKINNY JEANS
+                          - button "JEANS > MEN > BAGGY" [ref=e1562] [cursor=pointer]: BAGGY
+                          - button "JEANS > MEN > SLIM JEANS" [ref=e1563] [cursor=pointer]: SLIM JEANS
+                      - cell "Mapped" [ref=e1564]:
+                        - generic [ref=e1565]: Mapped
+                      - cell "Approve ALVIN JEANS for push" [ref=e1566]:
+                        - checkbox "Approve ALVIN JEANS for push" [ref=e1568]
+                      - cell "Needs Review" [ref=e1569]:
+                        - generic [ref=e1570]: Needs Review
+                      - 'cell "Current: MEN > CLOTHING, JEANS > MEN > SUPER SKINNY JEANS Final: JEANS > MEN > SUPER SKINNY JEANS, MEN > CLOTHING > JEANS Final Collections: MEN JEANS, All Products (ChatGPT-AI) Changed: +3 / -0" [ref=e1571]':
+                        - generic [ref=e1572]:
+                          - generic [ref=e1573]: "Current: MEN > CLOTHING, JEANS > MEN > SUPER SKINNY JEANS"
+                          - generic [ref=e1574]: "Final: JEANS > MEN > SUPER SKINNY JEANS, MEN > CLOTHING > JEANS"
+                          - generic [ref=e1575]: "Final Collections: MEN JEANS, All Products (ChatGPT-AI)"
+                          - generic [ref=e1576]:
+                            - text: "Changed:"
+                            - generic [ref=e1577]: "+3"
+                            - text: /
+                            - generic [ref=e1578]: "-0"
+                    - 'row "Open row details AMANDA DRESS UPC: 2122115 DRESSES COLLECTION: midi-dresses-women COLLECTION: maxi-dresses-women COLLECTION: mini-dresses COLLECTION: night-dresses Mapped Approve AMANDA DRESS for push Needs Review Current: WOMEN > CLOTHING > DRESSES Final: WOMEN > CLOTHING > DRESSES Final Collections: NIGHT DRESSES, All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e1579]':
+                      - cell [ref=e1580]:
+                        - checkbox [ref=e1581]
+                      - cell "Open row details" [ref=e1582]:
+                        - button "Open row details" [ref=e1583] [cursor=pointer]:
+                          - img [ref=e1584]
+                      - cell [ref=e1586]
+                      - 'cell "AMANDA DRESS UPC: 2122115" [ref=e1588]':
+                        - generic [ref=e1589]: AMANDA DRESS
+                        - generic [ref=e1590]: "UPC: 2122115"
+                      - cell "DRESSES" [ref=e1591]:
+                        - generic [ref=e1593]: DRESSES
+                      - 'cell "COLLECTION: midi-dresses-women COLLECTION: maxi-dresses-women COLLECTION: mini-dresses COLLECTION: night-dresses" [ref=e1594]':
+                        - generic [ref=e1595]:
+                          - 'button "COLLECTION: midi-dresses-women" [ref=e1596] [cursor=pointer]': MIDI DRESSES
+                          - 'button "COLLECTION: maxi-dresses-women" [ref=e1597] [cursor=pointer]': MAXI DRESSES
+                          - 'button "COLLECTION: mini-dresses" [ref=e1598] [cursor=pointer]': MINI DRESSES
+                          - 'button "COLLECTION: night-dresses" [ref=e1599] [cursor=pointer]': NIGHT DRESSES
+                      - cell "Mapped" [ref=e1600]:
+                        - generic [ref=e1601]: Mapped
+                      - cell "Approve AMANDA DRESS for push" [ref=e1602]:
+                        - checkbox "Approve AMANDA DRESS for push" [ref=e1604]
+                      - cell "Needs Review" [ref=e1605]:
+                        - generic [ref=e1606]: Needs Review
+                      - 'cell "Current: WOMEN > CLOTHING > DRESSES Final: WOMEN > CLOTHING > DRESSES Final Collections: NIGHT DRESSES, All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e1607]':
+                        - generic [ref=e1608]:
+                          - generic [ref=e1609]: "Current: WOMEN > CLOTHING > DRESSES"
+                          - generic [ref=e1610]: "Final: WOMEN > CLOTHING > DRESSES"
+                          - generic [ref=e1611]: "Final Collections: NIGHT DRESSES, All Products (ChatGPT-AI)"
+                          - generic [ref=e1612]:
+                            - text: "Changed:"
+                            - generic [ref=e1613]: "+0"
+                            - text: /
+                            - generic [ref=e1614]: "-0"
+                    - 'row "Open row details Open product image preview AMANI BODYSUIT UPC: 2581709 BODYSUITS - Mapped Approve AMANI BODYSUIT for push Synced Current: WOMEN > CLOTHING > TOPS, BODYSUITS Final: WOMEN > CLOTHING > TOPS, BODYSUITS Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e1615]':
+                      - cell [ref=e1616]:
+                        - checkbox [ref=e1617]
+                      - cell "Open row details" [ref=e1618]:
+                        - button "Open row details" [ref=e1619] [cursor=pointer]:
+                          - img [ref=e1620]
+                      - cell "Open product image preview" [ref=e1622]:
+                        - button "Open product image preview" [ref=e1623] [cursor=pointer]:
+                          - img "AMANI BODYSUIT" [ref=e1624]
+                      - 'cell "AMANI BODYSUIT UPC: 2581709" [ref=e1625]':
+                        - generic [ref=e1626]: AMANI BODYSUIT
+                        - generic [ref=e1627]: "UPC: 2581709"
+                      - cell "BODYSUITS" [ref=e1628]:
+                        - generic [ref=e1630]: BODYSUITS
+                      - cell "-" [ref=e1631]
+                      - cell "Mapped" [ref=e1632]:
+                        - generic [ref=e1633]: Mapped
+                      - cell "Approve AMANI BODYSUIT for push" [ref=e1634]:
+                        - checkbox "Approve AMANI BODYSUIT for push" [ref=e1636]
+                      - cell "Synced" [ref=e1637]:
+                        - generic [ref=e1638]: Synced
+                      - 'cell "Current: WOMEN > CLOTHING > TOPS, BODYSUITS Final: WOMEN > CLOTHING > TOPS, BODYSUITS Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e1639]':
+                        - generic [ref=e1640]:
+                          - generic [ref=e1641]: "Current: WOMEN > CLOTHING > TOPS, BODYSUITS"
+                          - generic [ref=e1642]: "Final: WOMEN > CLOTHING > TOPS, BODYSUITS"
+                          - generic [ref=e1643]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e1644]:
+                            - text: "Changed:"
+                            - generic [ref=e1645]: "+0"
+                            - text: /
+                            - generic [ref=e1646]: "-0"
+                    - 'row "Open row details AMELIA BODYSUIT UPC: 2123751 BODYSUITS - Mapped Approve AMELIA BODYSUIT for push Ready to Push Current: WOMEN > CLOTHING Final: WOMEN > CLOTHING > BODYSUITS Final Collections: All Products (ChatGPT-AI) Changed: +1 / -0" [ref=e1647]':
+                      - cell [ref=e1648]:
+                        - checkbox [ref=e1649]
+                      - cell "Open row details" [ref=e1650]:
+                        - button "Open row details" [ref=e1651] [cursor=pointer]:
+                          - img [ref=e1652]
+                      - cell [ref=e1654]
+                      - 'cell "AMELIA BODYSUIT UPC: 2123751" [ref=e1656]':
+                        - generic [ref=e1657]: AMELIA BODYSUIT
+                        - generic [ref=e1658]: "UPC: 2123751"
+                      - cell "BODYSUITS" [ref=e1659]:
+                        - generic [ref=e1661]: BODYSUITS
+                      - cell "-" [ref=e1662]
+                      - cell "Mapped" [ref=e1663]:
+                        - generic [ref=e1664]: Mapped
+                      - cell "Approve AMELIA BODYSUIT for push" [ref=e1665]:
+                        - checkbox "Approve AMELIA BODYSUIT for push" [ref=e1667]
+                      - cell "Ready to Push" [ref=e1668]:
+                        - generic [ref=e1669]: Ready to Push
+                      - 'cell "Current: WOMEN > CLOTHING Final: WOMEN > CLOTHING > BODYSUITS Final Collections: All Products (ChatGPT-AI) Changed: +1 / -0" [ref=e1670]':
+                        - generic [ref=e1671]:
+                          - generic [ref=e1672]: "Current: WOMEN > CLOTHING"
+                          - generic [ref=e1673]: "Final: WOMEN > CLOTHING > BODYSUITS"
+                          - generic [ref=e1674]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e1675]:
+                            - text: "Changed:"
+                            - generic [ref=e1676]: "+1"
+                            - text: /
+                            - generic [ref=e1677]: "-0"
+                    - 'row "Open row details Open product image preview AMIRA BODYSUIT UPC: 2511717 BODYSUITS - Mapped Approve AMIRA BODYSUIT for push Ready to Push Current: WOMEN > CLOTHING Final: WOMEN > CLOTHING > BODYSUITS Final Collections: All Products (ChatGPT-AI) Changed: +1 / -0" [ref=e1678]':
+                      - cell [ref=e1679]:
+                        - checkbox [ref=e1680]
+                      - cell "Open row details" [ref=e1681]:
+                        - button "Open row details" [ref=e1682] [cursor=pointer]:
+                          - img [ref=e1683]
+                      - cell "Open product image preview" [ref=e1685]:
+                        - button "Open product image preview" [ref=e1686] [cursor=pointer]:
+                          - img "AMIRA BODYSUIT" [ref=e1687]
+                      - 'cell "AMIRA BODYSUIT UPC: 2511717" [ref=e1688]':
+                        - generic [ref=e1689]: AMIRA BODYSUIT
+                        - generic [ref=e1690]: "UPC: 2511717"
+                      - cell "BODYSUITS" [ref=e1691]:
+                        - generic [ref=e1693]: BODYSUITS
+                      - cell "-" [ref=e1694]
+                      - cell "Mapped" [ref=e1695]:
+                        - generic [ref=e1696]: Mapped
+                      - cell "Approve AMIRA BODYSUIT for push" [ref=e1697]:
+                        - checkbox "Approve AMIRA BODYSUIT for push" [ref=e1699]
+                      - cell "Ready to Push" [ref=e1700]:
+                        - generic [ref=e1701]: Ready to Push
+                      - 'cell "Current: WOMEN > CLOTHING Final: WOMEN > CLOTHING > BODYSUITS Final Collections: All Products (ChatGPT-AI) Changed: +1 / -0" [ref=e1702]':
+                        - generic [ref=e1703]:
+                          - generic [ref=e1704]: "Current: WOMEN > CLOTHING"
+                          - generic [ref=e1705]: "Final: WOMEN > CLOTHING > BODYSUITS"
+                          - generic [ref=e1706]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e1707]:
+                            - text: "Changed:"
+                            - generic [ref=e1708]: "+1"
+                            - text: /
+                            - generic [ref=e1709]: "-0"
+                    - 'row "Open row details Open product image preview ANAYA JEANS UPC: 2511007 JEANS WOMEN JEANS > WOMEN > SKINNY JEANS JEANS > WOMEN > RELAXED JEANS JEANS > WOMEN > FLARE & WIDE LEG JEANS Mapped Approve ANAYA JEANS for push Needs Review Current: WOMEN > CLOTHING Final: WOMEN > CLOTHING > JEANS, JEANS > WOMEN Final Collections: WOMEN JEANS, All Products (ChatGPT-AI) Changed: +3 / -0" [ref=e1710]':
+                      - cell [ref=e1711]:
+                        - checkbox [ref=e1712]
+                      - cell "Open row details" [ref=e1713]:
+                        - button "Open row details" [ref=e1714] [cursor=pointer]:
+                          - img [ref=e1715]
+                      - cell "Open product image preview" [ref=e1717]:
+                        - button "Open product image preview" [ref=e1718] [cursor=pointer]:
+                          - img "ANAYA JEANS" [ref=e1719]
+                      - 'cell "ANAYA JEANS UPC: 2511007" [ref=e1720]':
+                        - generic [ref=e1721]: ANAYA JEANS
+                        - generic [ref=e1722]: "UPC: 2511007"
+                      - cell "JEANS WOMEN" [ref=e1723]:
+                        - generic [ref=e1724]:
+                          - generic [ref=e1725]: JEANS
+                          - generic [ref=e1726]: WOMEN
+                      - cell "JEANS > WOMEN > SKINNY JEANS JEANS > WOMEN > RELAXED JEANS JEANS > WOMEN > FLARE & WIDE LEG JEANS" [ref=e1727]:
+                        - generic [ref=e1728]:
+                          - button "JEANS > WOMEN > SKINNY JEANS" [ref=e1729] [cursor=pointer]: SKINNY JEANS
+                          - button "JEANS > WOMEN > RELAXED JEANS" [ref=e1730] [cursor=pointer]: RELAXED JEANS
+                          - button "JEANS > WOMEN > FLARE & WIDE LEG JEANS" [ref=e1731] [cursor=pointer]: FLARE & WIDE LEG JEANS
+                      - cell "Mapped" [ref=e1732]:
+                        - generic [ref=e1733]: Mapped
+                      - cell "Approve ANAYA JEANS for push" [ref=e1734]:
+                        - checkbox "Approve ANAYA JEANS for push" [ref=e1736]
+                      - cell "Needs Review" [ref=e1737]:
+                        - generic [ref=e1738]: Needs Review
+                      - 'cell "Current: WOMEN > CLOTHING Final: WOMEN > CLOTHING > JEANS, JEANS > WOMEN Final Collections: WOMEN JEANS, All Products (ChatGPT-AI) Changed: +3 / -0" [ref=e1739]':
+                        - generic [ref=e1740]:
+                          - generic [ref=e1741]: "Current: WOMEN > CLOTHING"
+                          - generic [ref=e1742]: "Final: WOMEN > CLOTHING > JEANS, JEANS > WOMEN"
+                          - generic [ref=e1743]: "Final Collections: WOMEN JEANS, All Products (ChatGPT-AI)"
+                          - generic [ref=e1744]:
+                            - text: "Changed:"
+                            - generic [ref=e1745]: "+3"
+                            - text: /
+                            - generic [ref=e1746]: "-0"
+                    - 'row "Open row details Open product image preview ANDY JEANS UPC: 1123010 JEANS MEN JEANS > MEN > BAGGY JEANS > MEN > SLIM JEANS Mapped Approve ANDY JEANS for push Needs Review Current: MEN > CLOTHING, JEANS > MEN > SKINNY JEANS, JEANS > MEN > SUPER SKINNY JEANS Final: JEANS > MEN > SKINNY JEANS, JEANS > MEN > SUPER SKINNY JEANS, MEN > CLOTHING > JEANS Final Collections: MEN JEANS, All Products (ChatGPT-AI) Changed: +3 / -0" [ref=e1747]':
+                      - cell [ref=e1748]:
+                        - checkbox [ref=e1749]
+                      - cell "Open row details" [ref=e1750]:
+                        - button "Open row details" [ref=e1751] [cursor=pointer]:
+                          - img [ref=e1752]
+                      - cell "Open product image preview" [ref=e1754]:
+                        - button "Open product image preview" [ref=e1755] [cursor=pointer]:
+                          - img "ANDY JEANS" [ref=e1756]
+                      - 'cell "ANDY JEANS UPC: 1123010" [ref=e1757]':
+                        - generic [ref=e1758]: ANDY JEANS
+                        - generic [ref=e1759]: "UPC: 1123010"
+                      - cell "JEANS MEN" [ref=e1760]:
+                        - generic [ref=e1761]:
+                          - generic [ref=e1762]: JEANS
+                          - generic [ref=e1763]: MEN
+                      - cell "JEANS > MEN > BAGGY JEANS > MEN > SLIM JEANS" [ref=e1764]:
+                        - generic [ref=e1765]:
+                          - button "JEANS > MEN > BAGGY" [ref=e1766] [cursor=pointer]: BAGGY
+                          - button "JEANS > MEN > SLIM JEANS" [ref=e1767] [cursor=pointer]: SLIM JEANS
+                      - cell "Mapped" [ref=e1768]:
+                        - generic [ref=e1769]: Mapped
+                      - cell "Approve ANDY JEANS for push" [ref=e1770]:
+                        - checkbox "Approve ANDY JEANS for push" [ref=e1772]
+                      - cell "Needs Review" [ref=e1773]:
+                        - generic [ref=e1774]: Needs Review
+                      - 'cell "Current: MEN > CLOTHING, JEANS > MEN > SKINNY JEANS, JEANS > MEN > SUPER SKINNY JEANS Final: JEANS > MEN > SKINNY JEANS, JEANS > MEN > SUPER SKINNY JEANS, MEN > CLOTHING > JEANS Final Collections: MEN JEANS, All Products (ChatGPT-AI) Changed: +3 / -0" [ref=e1775]':
+                        - generic [ref=e1776]:
+                          - generic [ref=e1777]: "Current: MEN > CLOTHING, JEANS > MEN > SKINNY JEANS, JEANS > MEN > SUPER SKINNY JEANS"
+                          - generic [ref=e1778]: "Final: JEANS > MEN > SKINNY JEANS, JEANS > MEN > SUPER SKINNY JEANS, MEN > CLOTHING > JEANS"
+                          - generic [ref=e1779]: "Final Collections: MEN JEANS, All Products (ChatGPT-AI)"
+                          - generic [ref=e1780]:
+                            - text: "Changed:"
+                            - generic [ref=e1781]: "+3"
+                            - text: /
+                            - generic [ref=e1782]: "-0"
+                    - 'row "Open row details ANGELS T-SHIRT UPC: 1125446 T-SHIRTS MEN > CLOTHING > TOPS Mapped Approve ANGELS T-SHIRT for push Needs Review Current: MEN > Final: MEN > CLOTHING > T-SHIRTS Final Collections: All Products (ChatGPT-AI) Changed: +2 / -0" [ref=e1783]':
+                      - cell [ref=e1784]:
+                        - checkbox [ref=e1785]
+                      - cell "Open row details" [ref=e1786]:
+                        - button "Open row details" [ref=e1787] [cursor=pointer]:
+                          - img [ref=e1788]
+                      - cell [ref=e1790]
+                      - 'cell "ANGELS T-SHIRT UPC: 1125446" [ref=e1792]':
+                        - generic [ref=e1793]: ANGELS T-SHIRT
+                        - generic [ref=e1794]: "UPC: 1125446"
+                      - cell "T-SHIRTS" [ref=e1795]:
+                        - generic [ref=e1797]: T-SHIRTS
+                      - cell "MEN > CLOTHING > TOPS" [ref=e1798]:
+                        - button "MEN > CLOTHING > TOPS" [ref=e1800] [cursor=pointer]: TOPS
+                      - cell "Mapped" [ref=e1801]:
+                        - generic [ref=e1802]: Mapped
+                      - cell "Approve ANGELS T-SHIRT for push" [ref=e1803]:
+                        - checkbox "Approve ANGELS T-SHIRT for push" [ref=e1805]
+                      - cell "Needs Review" [ref=e1806]:
+                        - generic [ref=e1807]: Needs Review
+                      - 'cell "Current: MEN > Final: MEN > CLOTHING > T-SHIRTS Final Collections: All Products (ChatGPT-AI) Changed: +2 / -0" [ref=e1808]':
+                        - generic [ref=e1809]:
+                          - generic [ref=e1810]: "Current: MEN >"
+                          - generic [ref=e1811]: "Final: MEN > CLOTHING > T-SHIRTS"
+                          - generic [ref=e1812]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e1813]:
+                            - text: "Changed:"
+                            - generic [ref=e1814]: "+2"
+                            - text: /
+                            - generic [ref=e1815]: "-0"
+                    - 'row "Open row details Open product image preview ANKLET A UPC: 2631963 ALL ACCESSORIES - Mapped Approve ANKLET A for push Synced Current: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES Final: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e1816]':
+                      - cell [ref=e1817]:
+                        - checkbox [ref=e1818]
+                      - cell "Open row details" [ref=e1819]:
+                        - button "Open row details" [ref=e1820] [cursor=pointer]:
+                          - img [ref=e1821]
+                      - cell "Open product image preview" [ref=e1823]:
+                        - button "Open product image preview" [ref=e1824] [cursor=pointer]:
+                          - img "ANKLET A" [ref=e1825]
+                      - 'cell "ANKLET A UPC: 2631963" [ref=e1826]':
+                        - generic [ref=e1827]: ANKLET A
+                        - generic [ref=e1828]: "UPC: 2631963"
+                      - cell "ALL ACCESSORIES" [ref=e1829]:
+                        - generic [ref=e1831]: ALL ACCESSORIES
+                      - cell "-" [ref=e1832]
+                      - cell "Mapped" [ref=e1833]:
+                        - generic [ref=e1834]: Mapped
+                      - cell "Approve ANKLET A for push" [ref=e1835]:
+                        - checkbox "Approve ANKLET A for push" [ref=e1837]
+                      - cell "Synced" [ref=e1838]:
+                        - generic [ref=e1839]: Synced
+                      - 'cell "Current: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES Final: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e1840]':
+                        - generic [ref=e1841]:
+                          - generic [ref=e1842]: "Current: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES"
+                          - generic [ref=e1843]: "Final: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES"
+                          - generic [ref=e1844]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e1845]:
+                            - text: "Changed:"
+                            - generic [ref=e1846]: "+0"
+                            - text: /
+                            - generic [ref=e1847]: "-0"
+                    - 'row "Open row details Open product image preview ANKLET B UPC: 2631964 ALL ACCESSORIES - Mapped Approve ANKLET B for push Synced Current: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES Final: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e1848]':
+                      - cell [ref=e1849]:
+                        - checkbox [ref=e1850]
+                      - cell "Open row details" [ref=e1851]:
+                        - button "Open row details" [ref=e1852] [cursor=pointer]:
+                          - img [ref=e1853]
+                      - cell "Open product image preview" [ref=e1855]:
+                        - button "Open product image preview" [ref=e1856] [cursor=pointer]:
+                          - img "ANKLET B" [ref=e1857]
+                      - 'cell "ANKLET B UPC: 2631964" [ref=e1858]':
+                        - generic [ref=e1859]: ANKLET B
+                        - generic [ref=e1860]: "UPC: 2631964"
+                      - cell "ALL ACCESSORIES" [ref=e1861]:
+                        - generic [ref=e1863]: ALL ACCESSORIES
+                      - cell "-" [ref=e1864]
+                      - cell "Mapped" [ref=e1865]:
+                        - generic [ref=e1866]: Mapped
+                      - cell "Approve ANKLET B for push" [ref=e1867]:
+                        - checkbox "Approve ANKLET B for push" [ref=e1869]
+                      - cell "Synced" [ref=e1870]:
+                        - generic [ref=e1871]: Synced
+                      - 'cell "Current: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES Final: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e1872]':
+                        - generic [ref=e1873]:
+                          - generic [ref=e1874]: "Current: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES"
+                          - generic [ref=e1875]: "Final: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES"
+                          - generic [ref=e1876]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e1877]:
+                            - text: "Changed:"
+                            - generic [ref=e1878]: "+0"
+                            - text: /
+                            - generic [ref=e1879]: "-0"
+                    - 'row "Open row details Open product image preview ANKLET C UPC: 2631965 ALL ACCESSORIES - Mapped Approve ANKLET C for push Synced Current: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES Final: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e1880]':
+                      - cell [ref=e1881]:
+                        - checkbox [ref=e1882]
+                      - cell "Open row details" [ref=e1883]:
+                        - button "Open row details" [ref=e1884] [cursor=pointer]:
+                          - img [ref=e1885]
+                      - cell "Open product image preview" [ref=e1887]:
+                        - button "Open product image preview" [ref=e1888] [cursor=pointer]:
+                          - img "ANKLET C" [ref=e1889]
+                      - 'cell "ANKLET C UPC: 2631965" [ref=e1890]':
+                        - generic [ref=e1891]: ANKLET C
+                        - generic [ref=e1892]: "UPC: 2631965"
+                      - cell "ALL ACCESSORIES" [ref=e1893]:
+                        - generic [ref=e1895]: ALL ACCESSORIES
+                      - cell "-" [ref=e1896]
+                      - cell "Mapped" [ref=e1897]:
+                        - generic [ref=e1898]: Mapped
+                      - cell "Approve ANKLET C for push" [ref=e1899]:
+                        - checkbox "Approve ANKLET C for push" [ref=e1901]
+                      - cell "Synced" [ref=e1902]:
+                        - generic [ref=e1903]: Synced
+                      - 'cell "Current: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES Final: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e1904]':
+                        - generic [ref=e1905]:
+                          - generic [ref=e1906]: "Current: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES"
+                          - generic [ref=e1907]: "Final: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES"
+                          - generic [ref=e1908]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e1909]:
+                            - text: "Changed:"
+                            - generic [ref=e1910]: "+0"
+                            - text: /
+                            - generic [ref=e1911]: "-0"
+                    - 'row "Open row details Open product image preview ANKLET D UPC: 2631987 ALL ACCESSORIES - Mapped Approve ANKLET D for push Synced Current: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES Final: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e1912]':
+                      - cell [ref=e1913]:
+                        - checkbox [ref=e1914]
+                      - cell "Open row details" [ref=e1915]:
+                        - button "Open row details" [ref=e1916] [cursor=pointer]:
+                          - img [ref=e1917]
+                      - cell "Open product image preview" [ref=e1919]:
+                        - button "Open product image preview" [ref=e1920] [cursor=pointer]:
+                          - img "ANKLET D" [ref=e1921]
+                      - 'cell "ANKLET D UPC: 2631987" [ref=e1922]':
+                        - generic [ref=e1923]: ANKLET D
+                        - generic [ref=e1924]: "UPC: 2631987"
+                      - cell "ALL ACCESSORIES" [ref=e1925]:
+                        - generic [ref=e1927]: ALL ACCESSORIES
+                      - cell "-" [ref=e1928]
+                      - cell "Mapped" [ref=e1929]:
+                        - generic [ref=e1930]: Mapped
+                      - cell "Approve ANKLET D for push" [ref=e1931]:
+                        - checkbox "Approve ANKLET D for push" [ref=e1933]
+                      - cell "Synced" [ref=e1934]:
+                        - generic [ref=e1935]: Synced
+                      - 'cell "Current: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES Final: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e1936]':
+                        - generic [ref=e1937]:
+                          - generic [ref=e1938]: "Current: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES"
+                          - generic [ref=e1939]: "Final: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES"
+                          - generic [ref=e1940]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e1941]:
+                            - text: "Changed:"
+                            - generic [ref=e1942]: "+0"
+                            - text: /
+                            - generic [ref=e1943]: "-0"
+                    - 'row "Open row details Open product image preview ANKLET E UPC: 2631988 ALL ACCESSORIES - Mapped Approve ANKLET E for push Synced Current: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES Final: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e1944]':
+                      - cell [ref=e1945]:
+                        - checkbox [ref=e1946]
+                      - cell "Open row details" [ref=e1947]:
+                        - button "Open row details" [ref=e1948] [cursor=pointer]:
+                          - img [ref=e1949]
+                      - cell "Open product image preview" [ref=e1951]:
+                        - button "Open product image preview" [ref=e1952] [cursor=pointer]:
+                          - img "ANKLET E" [ref=e1953]
+                      - 'cell "ANKLET E UPC: 2631988" [ref=e1954]':
+                        - generic [ref=e1955]: ANKLET E
+                        - generic [ref=e1956]: "UPC: 2631988"
+                      - cell "ALL ACCESSORIES" [ref=e1957]:
+                        - generic [ref=e1959]: ALL ACCESSORIES
+                      - cell "-" [ref=e1960]
+                      - cell "Mapped" [ref=e1961]:
+                        - generic [ref=e1962]: Mapped
+                      - cell "Approve ANKLET E for push" [ref=e1963]:
+                        - checkbox "Approve ANKLET E for push" [ref=e1965]
+                      - cell "Synced" [ref=e1966]:
+                        - generic [ref=e1967]: Synced
+                      - 'cell "Current: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES Final: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e1968]':
+                        - generic [ref=e1969]:
+                          - generic [ref=e1970]: "Current: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES"
+                          - generic [ref=e1971]: "Final: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES"
+                          - generic [ref=e1972]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e1973]:
+                            - text: "Changed:"
+                            - generic [ref=e1974]: "+0"
+                            - text: /
+                            - generic [ref=e1975]: "-0"
+                    - 'row "Open row details Open product image preview ANKLET F UPC: 2631989 ALL ACCESSORIES - Mapped Approve ANKLET F for push Synced Current: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES Final: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e1976]':
+                      - cell [ref=e1977]:
+                        - checkbox [ref=e1978]
+                      - cell "Open row details" [ref=e1979]:
+                        - button "Open row details" [ref=e1980] [cursor=pointer]:
+                          - img [ref=e1981]
+                      - cell "Open product image preview" [ref=e1983]:
+                        - button "Open product image preview" [ref=e1984] [cursor=pointer]:
+                          - img "ANKLET F" [ref=e1985]
+                      - 'cell "ANKLET F UPC: 2631989" [ref=e1986]':
+                        - generic [ref=e1987]: ANKLET F
+                        - generic [ref=e1988]: "UPC: 2631989"
+                      - cell "ALL ACCESSORIES" [ref=e1989]:
+                        - generic [ref=e1991]: ALL ACCESSORIES
+                      - cell "-" [ref=e1992]
+                      - cell "Mapped" [ref=e1993]:
+                        - generic [ref=e1994]: Mapped
+                      - cell "Approve ANKLET F for push" [ref=e1995]:
+                        - checkbox "Approve ANKLET F for push" [ref=e1997]
+                      - cell "Synced" [ref=e1998]:
+                        - generic [ref=e1999]: Synced
+                      - 'cell "Current: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES Final: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e2000]':
+                        - generic [ref=e2001]:
+                          - generic [ref=e2002]: "Current: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES"
+                          - generic [ref=e2003]: "Final: WOMEN > ACCESSORIES & SHOES > JEWELRY, ALL ACCESSORIES"
+                          - generic [ref=e2004]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e2005]:
+                            - text: "Changed:"
+                            - generic [ref=e2006]: "+0"
+                            - text: /
+                            - generic [ref=e2007]: "-0"
+                    - 'row "Open row details Open product image preview ANNE SKINNY BELT UPC: 2122901 ALL ACCESSORIES - Mapped Approve ANNE SKINNY BELT for push Synced Current: WOMEN > ACCESSORIES & SHOES > BELTS, ALL ACCESSORIES Final: WOMEN > ACCESSORIES & SHOES > BELTS, ALL ACCESSORIES Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e2008]':
+                      - cell [ref=e2009]:
+                        - checkbox [ref=e2010]
+                      - cell "Open row details" [ref=e2011]:
+                        - button "Open row details" [ref=e2012] [cursor=pointer]:
+                          - img [ref=e2013]
+                      - cell "Open product image preview" [ref=e2015]:
+                        - button "Open product image preview" [ref=e2016] [cursor=pointer]:
+                          - img "ANNE SKINNY BELT" [ref=e2017]
+                      - 'cell "ANNE SKINNY BELT UPC: 2122901" [ref=e2018]':
+                        - generic [ref=e2019]: ANNE SKINNY BELT
+                        - generic [ref=e2020]: "UPC: 2122901"
+                      - cell "ALL ACCESSORIES" [ref=e2021]:
+                        - generic [ref=e2023]: ALL ACCESSORIES
+                      - cell "-" [ref=e2024]
+                      - cell "Mapped" [ref=e2025]:
+                        - generic [ref=e2026]: Mapped
+                      - cell "Approve ANNE SKINNY BELT for push" [ref=e2027]:
+                        - checkbox "Approve ANNE SKINNY BELT for push" [ref=e2029]
+                      - cell "Synced" [ref=e2030]:
+                        - generic [ref=e2031]: Synced
+                      - 'cell "Current: WOMEN > ACCESSORIES & SHOES > BELTS, ALL ACCESSORIES Final: WOMEN > ACCESSORIES & SHOES > BELTS, ALL ACCESSORIES Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e2032]':
+                        - generic [ref=e2033]:
+                          - generic [ref=e2034]: "Current: WOMEN > ACCESSORIES & SHOES > BELTS, ALL ACCESSORIES"
+                          - generic [ref=e2035]: "Final: WOMEN > ACCESSORIES & SHOES > BELTS, ALL ACCESSORIES"
+                          - generic [ref=e2036]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e2037]:
+                            - text: "Changed:"
+                            - generic [ref=e2038]: "+0"
+                            - text: /
+                            - generic [ref=e2039]: "-0"
+                    - 'row "Open row details Open product image preview ANYA BODYSUIT UPC: 2581711 BODYSUITS - Mapped Approve ANYA BODYSUIT for push Ready to Push Current: WOMEN > CLOTHING Final: WOMEN > CLOTHING > BODYSUITS Final Collections: All Products (ChatGPT-AI) Changed: +1 / -0" [ref=e2040]':
+                      - cell [ref=e2041]:
+                        - checkbox [ref=e2042]
+                      - cell "Open row details" [ref=e2043]:
+                        - button "Open row details" [ref=e2044] [cursor=pointer]:
+                          - img [ref=e2045]
+                      - cell "Open product image preview" [ref=e2047]:
+                        - button "Open product image preview" [ref=e2048] [cursor=pointer]:
+                          - img "ANYA BODYSUIT" [ref=e2049]
+                      - 'cell "ANYA BODYSUIT UPC: 2581711" [ref=e2050]':
+                        - generic [ref=e2051]: ANYA BODYSUIT
+                        - generic [ref=e2052]: "UPC: 2581711"
+                      - cell "BODYSUITS" [ref=e2053]:
+                        - generic [ref=e2055]: BODYSUITS
+                      - cell "-" [ref=e2056]
+                      - cell "Mapped" [ref=e2057]:
+                        - generic [ref=e2058]: Mapped
+                      - cell "Approve ANYA BODYSUIT for push" [ref=e2059]:
+                        - checkbox "Approve ANYA BODYSUIT for push" [ref=e2061]
+                      - cell "Ready to Push" [ref=e2062]:
+                        - generic [ref=e2063]: Ready to Push
+                      - 'cell "Current: WOMEN > CLOTHING Final: WOMEN > CLOTHING > BODYSUITS Final Collections: All Products (ChatGPT-AI) Changed: +1 / -0" [ref=e2064]':
+                        - generic [ref=e2065]:
+                          - generic [ref=e2066]: "Current: WOMEN > CLOTHING"
+                          - generic [ref=e2067]: "Final: WOMEN > CLOTHING > BODYSUITS"
+                          - generic [ref=e2068]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e2069]:
+                            - text: "Changed:"
+                            - generic [ref=e2070]: "+1"
+                            - text: /
+                            - generic [ref=e2071]: "-0"
+                    - 'row "Open row details Open product image preview APOLOGY HOODIE UPC: 1222220 SWEATSHIRTS & HOODIES - Mapped Approve APOLOGY HOODIE for push Synced Current: MEN > CLOTHING > TOPS, SWEATSHIRTS & HOODIES, JACKETS & COATS Final: MEN > CLOTHING > TOPS, SWEATSHIRTS & HOODIES, JACKETS & COATS Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e2072]':
+                      - cell [ref=e2073]:
+                        - checkbox [ref=e2074]
+                      - cell "Open row details" [ref=e2075]:
+                        - button "Open row details" [ref=e2076] [cursor=pointer]:
+                          - img [ref=e2077]
+                      - cell "Open product image preview" [ref=e2079]:
+                        - button "Open product image preview" [ref=e2080] [cursor=pointer]:
+                          - img "APOLOGY HOODIE" [ref=e2081]
+                      - 'cell "APOLOGY HOODIE UPC: 1222220" [ref=e2082]':
+                        - generic [ref=e2083]: APOLOGY HOODIE
+                        - generic [ref=e2084]: "UPC: 1222220"
+                      - cell "SWEATSHIRTS & HOODIES" [ref=e2085]:
+                        - generic [ref=e2087]: SWEATSHIRTS & HOODIES
+                      - cell "-" [ref=e2088]
+                      - cell "Mapped" [ref=e2089]:
+                        - generic [ref=e2090]: Mapped
+                      - cell "Approve APOLOGY HOODIE for push" [ref=e2091]:
+                        - checkbox "Approve APOLOGY HOODIE for push" [ref=e2093]
+                      - cell "Synced" [ref=e2094]:
+                        - generic [ref=e2095]: Synced
+                      - 'cell "Current: MEN > CLOTHING > TOPS, SWEATSHIRTS & HOODIES, JACKETS & COATS Final: MEN > CLOTHING > TOPS, SWEATSHIRTS & HOODIES, JACKETS & COATS Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e2096]':
+                        - generic [ref=e2097]:
+                          - generic [ref=e2098]: "Current: MEN > CLOTHING > TOPS, SWEATSHIRTS & HOODIES, JACKETS & COATS"
+                          - generic [ref=e2099]: "Final: MEN > CLOTHING > TOPS, SWEATSHIRTS & HOODIES, JACKETS & COATS"
+                          - generic [ref=e2100]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e2101]:
+                            - text: "Changed:"
+                            - generic [ref=e2102]: "+0"
+                            - text: /
+                            - generic [ref=e2103]: "-0"
+                    - 'row "Open row details Open product image preview ARCHER OVERALL UPC: 1111162 OVERALLS - Mapped Approve ARCHER OVERALL for push Synced Current: MEN > CLOTHING > OVERALLS Final: MEN > CLOTHING > OVERALLS Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e2104]':
+                      - cell [ref=e2105]:
+                        - checkbox [ref=e2106]
+                      - cell "Open row details" [ref=e2107]:
+                        - button "Open row details" [ref=e2108] [cursor=pointer]:
+                          - img [ref=e2109]
+                      - cell "Open product image preview" [ref=e2111]:
+                        - button "Open product image preview" [ref=e2112] [cursor=pointer]:
+                          - img "ARCHER OVERALL" [ref=e2113]
+                      - 'cell "ARCHER OVERALL UPC: 1111162" [ref=e2114]':
+                        - generic [ref=e2115]: ARCHER OVERALL
+                        - generic [ref=e2116]: "UPC: 1111162"
+                      - cell "OVERALLS" [ref=e2117]:
+                        - generic [ref=e2119]: OVERALLS
+                      - cell "-" [ref=e2120]
+                      - cell "Mapped" [ref=e2121]:
+                        - generic [ref=e2122]: Mapped
+                      - cell "Approve ARCHER OVERALL for push" [ref=e2123]:
+                        - checkbox "Approve ARCHER OVERALL for push" [ref=e2125]
+                      - cell "Synced" [ref=e2126]:
+                        - generic [ref=e2127]: Synced
+                      - 'cell "Current: MEN > CLOTHING > OVERALLS Final: MEN > CLOTHING > OVERALLS Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e2128]':
+                        - generic [ref=e2129]:
+                          - generic [ref=e2130]: "Current: MEN > CLOTHING > OVERALLS"
+                          - generic [ref=e2131]: "Final: MEN > CLOTHING > OVERALLS"
+                          - generic [ref=e2132]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e2133]:
+                            - text: "Changed:"
+                            - generic [ref=e2134]: "+0"
+                            - text: /
+                            - generic [ref=e2135]: "-0"
+                    - 'row "Open row details Open product image preview ARI TOP UPC: 2222350 - - Needs Review Approve ARI TOP for push Needs Review Current: WOMEN > CLOTHING > TOPS, JACKETS & COATS, SWEATSHIRTS & HOODIES Final: WOMEN > CLOTHING > TOPS, JACKETS & COATS, SWEATSHIRTS & HOODIES Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e2136]':
+                      - cell [ref=e2137]:
+                        - checkbox [ref=e2138]
+                      - cell "Open row details" [ref=e2139]:
+                        - button "Open row details" [ref=e2140] [cursor=pointer]:
+                          - img [ref=e2141]
+                      - cell "Open product image preview" [ref=e2143]:
+                        - button "Open product image preview" [ref=e2144] [cursor=pointer]:
+                          - img "ARI TOP" [ref=e2145]
+                      - 'cell "ARI TOP UPC: 2222350" [ref=e2146]':
+                        - generic [ref=e2147]: ARI TOP
+                        - generic [ref=e2148]: "UPC: 2222350"
+                      - cell "-" [ref=e2149]
+                      - cell "-" [ref=e2150]
+                      - cell "Needs Review" [ref=e2151]:
+                        - generic [ref=e2152]: Needs Review
+                      - cell "Approve ARI TOP for push" [ref=e2153]:
+                        - checkbox "Approve ARI TOP for push" [ref=e2155]
+                      - cell "Needs Review" [ref=e2156]:
+                        - generic [ref=e2157]: Needs Review
+                      - 'cell "Current: WOMEN > CLOTHING > TOPS, JACKETS & COATS, SWEATSHIRTS & HOODIES Final: WOMEN > CLOTHING > TOPS, JACKETS & COATS, SWEATSHIRTS & HOODIES Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e2158]':
+                        - generic [ref=e2159]:
+                          - generic [ref=e2160]: "Current: WOMEN > CLOTHING > TOPS, JACKETS & COATS, SWEATSHIRTS & HOODIES"
+                          - generic [ref=e2161]: "Final: WOMEN > CLOTHING > TOPS, JACKETS & COATS, SWEATSHIRTS & HOODIES"
+                          - generic [ref=e2162]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e2163]:
+                            - text: "Changed:"
+                            - generic [ref=e2164]: "+0"
+                            - text: /
+                            - generic [ref=e2165]: "-0"
+                    - 'row "Open row details Open product image preview ARYA HALTER MINI DRESS UPC: 2531108 DRESSES COLLECTION: midi-dresses-women COLLECTION: maxi-dresses-women COLLECTION: mini-dresses COLLECTION: night-dresses Mapped Approve ARYA HALTER MINI DRESS for push Needs Review Current: WOMEN > CLOTHING > DRESSES Final: WOMEN > CLOTHING > DRESSES Final Collections: NIGHT DRESSES, All Products (ChatGPT-AI), MINI DRESSES Changed: +0 / -0" [ref=e2166]':
+                      - cell [ref=e2167]:
+                        - checkbox [ref=e2168]
+                      - cell "Open row details" [ref=e2169]:
+                        - button "Open row details" [ref=e2170] [cursor=pointer]:
+                          - img [ref=e2171]
+                      - cell "Open product image preview" [ref=e2173]:
+                        - button "Open product image preview" [ref=e2174] [cursor=pointer]:
+                          - img "ARYA HALTER MINI DRESS" [ref=e2175]
+                      - 'cell "ARYA HALTER MINI DRESS UPC: 2531108" [ref=e2176]':
+                        - generic [ref=e2177]: ARYA HALTER MINI DRESS
+                        - generic [ref=e2178]: "UPC: 2531108"
+                      - cell "DRESSES" [ref=e2179]:
+                        - generic [ref=e2181]: DRESSES
+                      - 'cell "COLLECTION: midi-dresses-women COLLECTION: maxi-dresses-women COLLECTION: mini-dresses COLLECTION: night-dresses" [ref=e2182]':
+                        - generic [ref=e2183]:
+                          - 'button "COLLECTION: midi-dresses-women" [ref=e2184] [cursor=pointer]': MIDI DRESSES
+                          - 'button "COLLECTION: maxi-dresses-women" [ref=e2185] [cursor=pointer]': MAXI DRESSES
+                          - 'button "COLLECTION: mini-dresses" [ref=e2186] [cursor=pointer]': MINI DRESSES
+                          - 'button "COLLECTION: night-dresses" [ref=e2187] [cursor=pointer]': NIGHT DRESSES
+                      - cell "Mapped" [ref=e2188]:
+                        - generic [ref=e2189]: Mapped
+                      - cell "Approve ARYA HALTER MINI DRESS for push" [ref=e2190]:
+                        - checkbox "Approve ARYA HALTER MINI DRESS for push" [ref=e2192]
+                      - cell "Needs Review" [ref=e2193]:
+                        - generic [ref=e2194]: Needs Review
+                      - 'cell "Current: WOMEN > CLOTHING > DRESSES Final: WOMEN > CLOTHING > DRESSES Final Collections: NIGHT DRESSES, All Products (ChatGPT-AI), MINI DRESSES Changed: +0 / -0" [ref=e2195]':
+                        - generic [ref=e2196]:
+                          - generic [ref=e2197]: "Current: WOMEN > CLOTHING > DRESSES"
+                          - generic [ref=e2198]: "Final: WOMEN > CLOTHING > DRESSES"
+                          - generic [ref=e2199]: "Final Collections: NIGHT DRESSES, All Products (ChatGPT-AI), MINI DRESSES"
+                          - generic [ref=e2200]:
+                            - text: "Changed:"
+                            - generic [ref=e2201]: "+0"
+                            - text: /
+                            - generic [ref=e2202]: "-0"
+                    - 'row "Open row details ASHER SHIRT SET UPC: 1125209 TANK TOPS - Mapped Approve ASHER SHIRT SET for push Ready to Push Current: - Final: MEN > CLOTHING > TANK TOPS Final Collections: All Products (ChatGPT-AI) Changed: +3 / -0" [ref=e2203]':
+                      - cell [ref=e2204]:
+                        - checkbox [ref=e2205]
+                      - cell "Open row details" [ref=e2206]:
+                        - button "Open row details" [ref=e2207] [cursor=pointer]:
+                          - img [ref=e2208]
+                      - cell [ref=e2210]
+                      - 'cell "ASHER SHIRT SET UPC: 1125209" [ref=e2212]':
+                        - generic [ref=e2213]: ASHER SHIRT SET
+                        - generic [ref=e2214]: "UPC: 1125209"
+                      - cell "TANK TOPS" [ref=e2215]:
+                        - generic [ref=e2217]: TANK TOPS
+                      - cell "-" [ref=e2218]
+                      - cell "Mapped" [ref=e2219]:
+                        - generic [ref=e2220]: Mapped
+                      - cell "Approve ASHER SHIRT SET for push" [ref=e2221]:
+                        - checkbox "Approve ASHER SHIRT SET for push" [ref=e2223]
+                      - cell "Ready to Push" [ref=e2224]:
+                        - generic [ref=e2225]: Ready to Push
+                      - 'cell "Current: - Final: MEN > CLOTHING > TANK TOPS Final Collections: All Products (ChatGPT-AI) Changed: +3 / -0" [ref=e2226]':
+                        - generic [ref=e2227]:
+                          - generic [ref=e2228]: "Current: -"
+                          - generic [ref=e2229]: "Final: MEN > CLOTHING > TANK TOPS"
+                          - generic [ref=e2230]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e2231]:
+                            - text: "Changed:"
+                            - generic [ref=e2232]: "+3"
+                            - text: /
+                            - generic [ref=e2233]: "-0"
+                    - 'row "Open row details ASHER SHORTS SET UPC: 1125309 SHORTS - Mapped Approve ASHER SHORTS SET for push Synced Current: MEN > CLOTHING > SHORTS Final: MEN > CLOTHING > SHORTS Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e2234]':
+                      - cell [ref=e2235]:
+                        - checkbox [ref=e2236]
+                      - cell "Open row details" [ref=e2237]:
+                        - button "Open row details" [ref=e2238] [cursor=pointer]:
+                          - img [ref=e2239]
+                      - cell [ref=e2241]
+                      - 'cell "ASHER SHORTS SET UPC: 1125309" [ref=e2243]':
+                        - generic [ref=e2244]: ASHER SHORTS SET
+                        - generic [ref=e2245]: "UPC: 1125309"
+                      - cell "SHORTS" [ref=e2246]:
+                        - generic [ref=e2248]: SHORTS
+                      - cell "-" [ref=e2249]
+                      - cell "Mapped" [ref=e2250]:
+                        - generic [ref=e2251]: Mapped
+                      - cell "Approve ASHER SHORTS SET for push" [ref=e2252]:
+                        - checkbox "Approve ASHER SHORTS SET for push" [ref=e2254]
+                      - cell "Synced" [ref=e2255]:
+                        - generic [ref=e2256]: Synced
+                      - 'cell "Current: MEN > CLOTHING > SHORTS Final: MEN > CLOTHING > SHORTS Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e2257]':
+                        - generic [ref=e2258]:
+                          - generic [ref=e2259]: "Current: MEN > CLOTHING > SHORTS"
+                          - generic [ref=e2260]: "Final: MEN > CLOTHING > SHORTS"
+                          - generic [ref=e2261]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e2262]:
+                            - text: "Changed:"
+                            - generic [ref=e2263]: "+0"
+                            - text: /
+                            - generic [ref=e2264]: "-0"
+                    - 'row "Open row details Open product image preview ASHTON DENIM JACKET UPC: 1222361 JACKETS & COATS - Mapped Approve ASHTON DENIM JACKET for push Synced Current: MEN > CLOTHING > TOPS, JACKETS & COATS Final: MEN > CLOTHING > TOPS, JACKETS & COATS Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e2265]':
+                      - cell [ref=e2266]:
+                        - checkbox [ref=e2267]
+                      - cell "Open row details" [ref=e2268]:
+                        - button "Open row details" [ref=e2269] [cursor=pointer]:
+                          - img [ref=e2270]
+                      - cell "Open product image preview" [ref=e2272]:
+                        - button "Open product image preview" [ref=e2273] [cursor=pointer]:
+                          - img "ASHTON DENIM JACKET" [ref=e2274]
+                      - 'cell "ASHTON DENIM JACKET UPC: 1222361" [ref=e2275]':
+                        - generic [ref=e2276]: ASHTON DENIM JACKET
+                        - generic [ref=e2277]: "UPC: 1222361"
+                      - cell "JACKETS & COATS" [ref=e2278]:
+                        - generic [ref=e2280]: JACKETS & COATS
+                      - cell "-" [ref=e2281]
+                      - cell "Mapped" [ref=e2282]:
+                        - generic [ref=e2283]: Mapped
+                      - cell "Approve ASHTON DENIM JACKET for push" [ref=e2284]:
+                        - checkbox "Approve ASHTON DENIM JACKET for push" [ref=e2286]
+                      - cell "Synced" [ref=e2287]:
+                        - generic [ref=e2288]: Synced
+                      - 'cell "Current: MEN > CLOTHING > TOPS, JACKETS & COATS Final: MEN > CLOTHING > TOPS, JACKETS & COATS Final Collections: All Products (ChatGPT-AI) Changed: +0 / -0" [ref=e2289]':
+                        - generic [ref=e2290]:
+                          - generic [ref=e2291]: "Current: MEN > CLOTHING > TOPS, JACKETS & COATS"
+                          - generic [ref=e2292]: "Final: MEN > CLOTHING > TOPS, JACKETS & COATS"
+                          - generic [ref=e2293]: "Final Collections: All Products (ChatGPT-AI)"
+                          - generic [ref=e2294]:
+                            - text: "Changed:"
+                            - generic [ref=e2295]: "+0"
+                            - text: /
+                            - generic [ref=e2296]: "-0"
+                - generic [ref=e120]:
+                  - generic [ref=e121]:
+                    - button "<<" [disabled] [ref=e122]
+                    - button "<" [disabled] [ref=e123]
+                    - generic [ref=e124]: Page 1 of 16
+                    - button ">" [ref=e125] [cursor=pointer]
+                    - button ">>" [ref=e126] [cursor=pointer]
+                  - generic "Products per page" [ref=e127]:
+                    - generic [ref=e128]: Per page
+                    - combobox "Products per page" [ref=e129]:
+                      - option "20"
+                      - option "50" [selected]
+                      - option "100"
+                      - option "200"
+                      - option "500"
+            - complementary "Advanced filters" [ref=e132]:
+              - generic [ref=e133]:
+                - strong [ref=e134]: Advanced Filters
+                - button "✕" [ref=e135] [cursor=pointer]
+              - generic [ref=e136]:
+                - generic [ref=e137]:
+                  - heading "Quick Filters" [level=4] [ref=e138]
+                  - generic [ref=e139] [cursor=pointer]:
+                    - checkbox "Has suggestions" [ref=e140]
+                    - generic [ref=e141]: Has suggestions
+                  - generic [ref=e142] [cursor=pointer]:
+                    - checkbox "Needs manual review" [ref=e143]
+                    - generic [ref=e144]: Needs manual review
+                  - generic [ref=e145] [cursor=pointer]:
+                    - checkbox "Auto-mapped" [ref=e146]
+                    - generic [ref=e147]: Auto-mapped
+                - generic [ref=e148]:
+                  - heading "Visibility" [level=4] [ref=e149]
+                  - generic [ref=e150] [cursor=pointer]:
+                    - checkbox "Include finished rows" [ref=e151]
+                    - generic [ref=e152]: Include finished rows
+                - generic [ref=e153]:
+                  - heading "Product Type" [level=4] [ref=e154]
+                  - generic [ref=e155]:
+                    - button "All product types ▲" [expanded] [ref=e454] [cursor=pointer]:
+                      - generic [ref=e455]: All product types
+                      - generic [ref=e456]: ▲
+                    - listbox "Product types" [ref=e457]:
+                      - generic [ref=e458] [cursor=pointer]:
+                        - checkbox "MEN" [ref=e459]
+                        - generic [ref=e460]: MEN
+                      - generic [ref=e461] [cursor=pointer]:
+                        - checkbox "MEN >> ACCESSORIES" [ref=e462]
+                        - generic [ref=e463]: MEN >> ACCESSORIES
+                      - generic [ref=e464] [cursor=pointer]:
+                        - checkbox "MEN >> BUTTON SHIRT" [ref=e465]
+                        - generic [ref=e466]: MEN >> BUTTON SHIRT
+                      - generic [ref=e467] [cursor=pointer]:
+                        - checkbox "MEN >> COAT" [ref=e468]
+                        - generic [ref=e469]: MEN >> COAT
+                      - generic [ref=e470] [cursor=pointer]:
+                        - checkbox "MEN >> DENIM JACKET" [ref=e471]
+                        - generic [ref=e472]: MEN >> DENIM JACKET
+                      - generic [ref=e473] [cursor=pointer]:
+                        - checkbox "MEN >> DENIM SHIRT" [ref=e474]
+                        - generic [ref=e475]: MEN >> DENIM SHIRT
+                      - generic [ref=e476] [cursor=pointer]:
+                        - checkbox "MEN >> EVENING PANTS" [ref=e477]
+                        - generic [ref=e478]: MEN >> EVENING PANTS
+                      - generic [ref=e479] [cursor=pointer]:
+                        - checkbox "MEN >> JACKET" [ref=e480]
+                        - generic [ref=e481]: MEN >> JACKET
+                      - generic [ref=e482] [cursor=pointer]:
+                        - checkbox "MEN >> JEANS" [ref=e483]
+                        - generic [ref=e484]: MEN >> JEANS
+                      - generic [ref=e485] [cursor=pointer]:
+                        - checkbox "MEN >> OVERALL" [ref=e486]
+                        - generic [ref=e487]: MEN >> OVERALL
+                      - generic [ref=e488] [cursor=pointer]:
+                        - checkbox "MEN >> PANTS" [ref=e489]
+                        - generic [ref=e490]: MEN >> PANTS
+                      - generic [ref=e491] [cursor=pointer]:
+                        - checkbox "MEN >> SHIRTS" [ref=e492]
+                        - generic [ref=e493]: MEN >> SHIRTS
+                      - generic [ref=e494] [cursor=pointer]:
+                        - checkbox "MEN >> SHOES" [ref=e495]
+                        - generic [ref=e496]: MEN >> SHOES
+                      - generic [ref=e497] [cursor=pointer]:
+                        - checkbox "MEN >> SHORTS" [ref=e498]
+                        - generic [ref=e499]: MEN >> SHORTS
+                      - generic [ref=e500] [cursor=pointer]:
+                        - checkbox "MEN >> SWEATER" [ref=e501]
+                        - generic [ref=e502]: MEN >> SWEATER
+                      - generic [ref=e503] [cursor=pointer]:
+                        - checkbox "MEN >> SWEATPANTS" [ref=e504]
+                        - generic [ref=e505]: MEN >> SWEATPANTS
+                      - generic [ref=e506] [cursor=pointer]:
+                        - checkbox "MEN >> SWEATSHIRTS" [ref=e507]
+                        - generic [ref=e508]: MEN >> SWEATSHIRTS
+                      - generic [ref=e509] [cursor=pointer]:
+                        - checkbox "MEN >> SWIMWEAR" [ref=e510]
+                        - generic [ref=e511]: MEN >> SWIMWEAR
+                      - generic [ref=e512] [cursor=pointer]:
+                        - checkbox "MEN >> T- SHIRT" [ref=e513]
+                        - generic [ref=e514]: MEN >> T- SHIRT
+                      - generic [ref=e515] [cursor=pointer]:
+                        - checkbox "MEN >> T-SHIRT" [ref=e516]
+                        - generic [ref=e517]: MEN >> T-SHIRT
+                      - generic [ref=e518] [cursor=pointer]:
+                        - checkbox "MEN >> TANK TOP" [ref=e519]
+                        - generic [ref=e520]: MEN >> TANK TOP
+                      - generic [ref=e521] [cursor=pointer]:
+                        - checkbox "MEN >> TOP" [ref=e522]
+                        - generic [ref=e523]: MEN >> TOP
+                      - generic [ref=e524] [cursor=pointer]:
+                        - checkbox "MEN >> VEST" [ref=e525]
+                        - generic [ref=e526]: MEN >> VEST
+                      - generic [ref=e527] [cursor=pointer]:
+                        - checkbox "WOMEN >> ACCESSORIES" [ref=e528]
+                        - generic [ref=e529]: WOMEN >> ACCESSORIES
+                      - generic [ref=e530] [cursor=pointer]:
+                        - checkbox "WOMEN >> BLOUSE" [ref=e531]
+                        - generic [ref=e532]: WOMEN >> BLOUSE
+                      - generic [ref=e533] [cursor=pointer]:
+                        - checkbox "WOMEN >> BODYSUIT" [ref=e534]
+                        - generic [ref=e535]: WOMEN >> BODYSUIT
+                      - generic [ref=e536] [cursor=pointer]:
+                        - checkbox "WOMEN >> COAT" [ref=e537]
+                        - generic [ref=e538]: WOMEN >> COAT
+                      - generic [ref=e539] [cursor=pointer]:
+                        - checkbox "WOMEN >> DRESS" [ref=e540]
+                        - generic [ref=e541]: WOMEN >> DRESS
+                      - generic [ref=e542] [cursor=pointer]:
+                        - checkbox "WOMEN >> HOODIE" [ref=e543]
+                        - generic [ref=e544]: WOMEN >> HOODIE
+                      - generic [ref=e545] [cursor=pointer]:
+                        - checkbox "WOMEN >> JACKET" [ref=e546]
+                        - generic [ref=e547]: WOMEN >> JACKET
+                      - generic [ref=e548] [cursor=pointer]:
+                        - checkbox "WOMEN >> JEANS" [ref=e549]
+                        - generic [ref=e550]: WOMEN >> JEANS
+                      - generic [ref=e551] [cursor=pointer]:
+                        - checkbox "WOMEN >> LEGGING" [ref=e552]
+                        - generic [ref=e553]: WOMEN >> LEGGING
+                      - generic [ref=e554] [cursor=pointer]:
+                        - checkbox "WOMEN >> PANTS" [ref=e555]
+                        - generic [ref=e556]: WOMEN >> PANTS
+                      - generic [ref=e557] [cursor=pointer]:
+                        - checkbox "WOMEN >> ROMPER" [ref=e558]
+                        - generic [ref=e559]: WOMEN >> ROMPER
+                      - generic [ref=e560] [cursor=pointer]:
+                        - checkbox "WOMEN >> SET" [ref=e561]
+                        - generic [ref=e562]: WOMEN >> SET
+                      - generic [ref=e563] [cursor=pointer]:
+                        - checkbox "WOMEN >> SHOES" [ref=e564]
+                        - generic [ref=e565]: WOMEN >> SHOES
+                      - generic [ref=e566] [cursor=pointer]:
+                        - checkbox "WOMEN >> SHORTS" [ref=e567]
+                        - generic [ref=e568]: WOMEN >> SHORTS
+                      - generic [ref=e569] [cursor=pointer]:
+                        - checkbox "WOMEN >> SKIRT" [ref=e570]
+                        - generic [ref=e571]: WOMEN >> SKIRT
+                      - generic [ref=e572] [cursor=pointer]:
+                        - checkbox "WOMEN >> SWEATPANTS" [ref=e573]
+                        - generic [ref=e574]: WOMEN >> SWEATPANTS
+                      - generic [ref=e575] [cursor=pointer]:
+                        - checkbox "WOMEN >> SWEATSHIRT" [ref=e576]
+                        - generic [ref=e577]: WOMEN >> SWEATSHIRT
+                      - generic [ref=e578] [cursor=pointer]:
+                        - checkbox "WOMEN >> SWEATSHIRTS" [ref=e579]
+                        - generic [ref=e580]: WOMEN >> SWEATSHIRTS
+                      - generic [ref=e581] [cursor=pointer]:
+                        - checkbox "WOMEN >> SWIMSUIT" [ref=e582]
+                        - generic [ref=e583]: WOMEN >> SWIMSUIT
+                      - generic [ref=e584] [cursor=pointer]:
+                        - checkbox "WOMEN >> T-SHIRT" [ref=e585]
+                        - generic [ref=e586]: WOMEN >> T-SHIRT
+                      - generic [ref=e587] [cursor=pointer]:
+                        - checkbox "WOMEN >> TEES" [ref=e588]
+                        - generic [ref=e589]: WOMEN >> TEES
+                      - generic [ref=e590] [cursor=pointer]:
+                        - checkbox "WOMEN >> TOP" [ref=e591]
+                        - generic [ref=e592]: WOMEN >> TOP
+                      - generic [ref=e593] [cursor=pointer]:
+                        - checkbox "WOMEN >> TOPS" [ref=e594]
+                        - generic [ref=e595]: WOMEN >> TOPS
+                      - generic [ref=e596] [cursor=pointer]:
+                        - checkbox "WOMEN >> VEST" [ref=e597]
+                        - generic [ref=e598]: WOMEN >> VEST
+              - generic [ref=e156]:
+                - button "Clear All" [ref=e157] [cursor=pointer]
+                - button "Apply Filters" [ref=e158] [cursor=pointer]
+  - alert [ref=e161]

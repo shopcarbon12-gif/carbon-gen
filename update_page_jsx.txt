@@ -1,0 +1,241 @@
+  return (
+    <main className={styles.page}>
+      
+      <div className={styles.headerTop}>
+         <div className={styles.headerTopLogo}>
+           <span className={styles.hexGlyph}>⬡</span>
+           <span style={{fontWeight: 600}}>CARBON</span>
+           <span style={{opacity: 0.5, margin: '0 8px'}}>/</span>
+           <span>ACCESSIBILITY</span>
+         </div>
+      </div>
+
+      <header className={styles.hero}>
+        <h1 className={styles.heroTitle}>Accessibility</h1>
+        <p className={styles.heroSub}>Manage the accessibility assistant and site compliance status.</p>
+      </header>
+      
+      <nav className={styles.tabBar}>
+        <div className={styles.tabsContainer}>
+          <button className={styles.tab}>Docs</button>
+          <button className={styles.tab}>Tickets</button>
+          <button className={styles.tab}>Log History</button>
+          <button className={`${styles.tab} ${styles.tabActive}`}>Widget</button>
+        </div>
+        <button className={styles.publishBtn} onClick={saveSettings} disabled={settingsSaving || !canSaveSettings}>
+          {settingsSaving ? "Saving..." : "Publish Changes ›"}
+        </button>
+      </nav>
+
+      {settings.complianceChecklist.monthlyRetestDone && (
+         <div className={styles.successBanner}>
+           <div className={styles.checkboxMock}>✓</div>
+           Monthly retest and evidence log completed
+         </div>
+      )}
+
+      <div className={styles.layout}>
+         <div className={styles.mainCol}>
+            
+            <section className={styles.glassPanel}>
+               <div className={styles.panelHeader}>
+                 <h2 className={styles.panelTitle}>Accessibility</h2>
+                 <div style={{color:'rgba(255,255,255,0.5)', fontSize: '14px', cursor: 'pointer'}}>
+                    Crees Festens ▾
+                 </div>
+               </div>
+               
+               <div className={styles.brandRow}>
+                 <div className={styles.brandLeft}>
+                   <span className={styles.hexGlyph}>⬡</span>
+                   CARBON ASSIST
+                 </div>
+                 <div className={styles.activeDot}>Active</div>
+               </div>
+               
+               <div className={styles.profileSection}>
+                 <span className={styles.profileLabel}>Accessibility preferences</span>
+                 <div className={styles.profileStrip}>
+                   <span className={styles.profilePill}>Retail</span>
+                   <span className={styles.profilePill}>Low Vision</span>
+                   <span className={styles.profilePill}>Motor</span>
+                   <span className={styles.profilePill}>Dyslexia</span>
+                   <span className={styles.profilePill}>ADHD</span>
+                   <button className={styles.profilePillAdd}>New ›</button>
+                 </div>
+               </div>
+
+               <div className={styles.widgetPreviewCard}>
+                  <div className={styles.wpActualCard}>
+                    <div className={styles.wpHead}>
+                      <div className={styles.wpBrand}><span className={styles.hexGlyph}>⬡</span> CARBON ASSIST</div>
+                      <button className={styles.wpClose} onClick={removeRuntimeWidgetFromPage}>×</button>
+                    </div>
+                    <div>
+                        <div className={styles.wpEyebrow}>Accessibility preferences</div>
+                        <div className={styles.wpSubtitle}>Tune display, motion, and navigation for this site.</div>
+                        <div className={styles.wpProfiles}>
+                          <span className={styles.wpProfilePill}>Blind</span>
+                          <span className={styles.wpProfilePill}>Low Vision</span>
+                          <span className={styles.wpProfilePill}>Motor</span>
+                          <span className={styles.wpProfilePill}>Dyslexia</span>
+                          <span className={styles.wpProfilePill}>ADHD</span>
+                          <span className={styles.wpProfilePill}>Seizure Safe</span>
+                        </div>
+                    </div>
+                  </div>
+                  <div className={styles.wpRightActions}>
+                      <div className={styles.wpActionGroup}>
+                         <button className={styles.wpActionBtn} onClick={installRuntimeWidgetOnPage}>
+                            {runtimeWidgetMounted ? "Reload Preview ›" : "Open Preview ›"}
+                         </button>
+                         <button className={styles.wpActionBtn} onClick={() => setPreviewOpen(!previewOpen)}>
+                            ↺
+                         </button>
+                         <button className={styles.wpActionBtn} onClick={() => setPreviewOpen(!previewOpen)}>
+                            View ↓
+                         </button>
+                      </div>
+                      <div className={styles.wpActionGroup}>
+                         <button className={styles.wpActionBtn}>Installation Snippets ▾</button>
+                         <button className={styles.wpActionBtn} onClick={() => { removeRuntimeWidgetFromPage(); setRuntimeWidgetMounted(false); }}>Uninstall</button>
+                      </div>
+                  </div>
+               </div>
+
+               <div className={styles.actionRow}>
+                 <button className={styles.outlineBtn} onClick={installRuntimeWidgetOnPage}>Open Preview</button>
+                 <button className={styles.outlineBtn} onClick={() => setPreviewOpen(!previewOpen)}>View ›</button>
+                 <button className={styles.outlineBtn} onClick={() => document.getElementById("snippets")?.scrollIntoView({behavior: "smooth"})}>↺ Installation Snippets ▾</button>
+                 <button className={styles.outlineBtn} style={{border: 'none', background: 'transparent'}}>&nbsp; ✐</button>
+               </div>
+            </section>
+
+            <section id="snippets" className={styles.glassPanel}>
+               <div className={styles.panelHeader}>
+                 <h2 className={styles.panelTitle}>Installation Snippets</h2>
+                 <button className={styles.outlineBtn} onClick={copySnippet} style={{padding:'6px 16px', border: 'transparent', width:'auto'}}>
+                   {copied ? "Copied!" : "••• ↺ Refresh"}
+                 </button>
+               </div>
+               
+               <div className={styles.snippetSection}>
+                 <div>
+                   <span className={styles.subLabel}>Site Snippet</span>
+                   <div className={styles.snippetBox}>
+                     <code>{installSnippet ? installSnippet.slice(0, 70) + '...' : '<script src="https://example.com/accessibility.js"></script>'}</code>
+                     <button className={styles.snippetCopy} onClick={copySnippet}>{copied ? 'Copied' : 'Copy'}</button>
+                   </div>
+                 </div>
+                 
+                 <div>
+                   <span className={styles.subLabel}>App Snippet</span>
+                   <div className={styles.snippetBox}>
+                     <code>const carbonAssist = require("carbon-assist");</code>
+                     <button className={styles.snippetCopy}>Copy</button>
+                   </div>
+                 </div>
+               </div>
+               
+               <button className={styles.outlineBtn} style={{alignSelf: 'flex-start'}}>Check Installation</button>
+            </section>
+
+            <section className={styles.glassPanel}>
+               <div className={styles.panelHeader}>
+                 <h2 className={styles.panelTitle}>Law Watch Status</h2>
+                 <button className={styles.outlineBtn} onClick={runLawWatchNow} style={{padding: '6px 16px', border: 'transparent', width:'auto'}}>••• ↺ Reset</button>
+               </div>
+               <p className={styles.lawWatchDesc}>Daily automated checks for accessibility law/regulation source updates (ADA.gov, Federal regulators, etc.)</p>
+               <div className={styles.actionRow}>
+                 <button className={styles.outlineBtn} onClick={runLawWatchNow} disabled={lawWatchRunning}>{lawWatchRunning ? "Refreshing..." : "Refresh Status"}</button>
+                 <button className={styles.outlineBtn} style={{width:'48px'}}>✓</button>
+                 <button className={styles.outlineBtn} onClick={runLawWatchNow}>Run Law watch now</button>
+               </div>
+               {lawWatchStatus && <p className={styles.lawWatchDesc}>{lawWatchStatus}</p>}
+            </section>
+         </div>
+
+         {/* SIDEBAR RIGHT RAIL */}
+         <div className={styles.mainCol}>
+            <section className={styles.railCard}>
+               <div className={styles.railCardHeader}>
+                 API STATUS
+                 <button className={styles.wpClose}>×</button>
+               </div>
+               <div className={styles.railItemRow}>
+                 <span>Shopify</span>
+                 <span className={styles.railStatusDot}><span style={{color:'#10b981'}}>●</span> Active</span>
+               </div>
+               <div className={styles.railItemRow}>
+                 <span>Lightspeed API</span>
+                 <span className={styles.railStatusDot}><span style={{color:'#10b981'}}>●</span> Active</span>
+               </div>
+               <div className={styles.railItemRow}>
+                 <span>Dropbox</span>
+                 <span className={styles.railStatusDot}><span style={{color:'#10b981'}}>●</span> Active</span>
+               </div>
+            </section>
+
+            <section className={`${styles.railCard} ${styles.chatGptCard}`}>
+               <div className={styles.railCardHeader} style={{textTransform:'none', fontSize:'16px'}}>
+                 <span style={{display:'flex', alignItems:'center', gap:'8px'}}><span className={styles.hexGlyph}>⬡</span> ChatGPT</span>
+                 <span>↺</span>
+               </div>
+               <div className={styles.lawWatchDesc} style={{color:'rgba(255,255,255,0.7)'}}>Ask anything.</div>
+               <div className={styles.chatWindow}>
+                 No chat messages.
+               </div>
+               <div className={styles.railItemRow} style={{background: 'transparent', border:'1px solid rgba(255,255,255,0.1)'}}>
+                 <span style={{color: 'rgba(255,255,255,0.6)'}}>Message ChatGPT...</span>
+                 <span>›</span>
+               </div>
+               <div className={styles.actionRow}>
+                 <button className={styles.outlineBtn} style={{flex:1, background:'rgba(255,255,255,0.8)', color:'#000'}}>Send</button>
+                 <button className={styles.outlineBtn} style={{flex:1}}>Clear</button>
+               </div>
+            </section>
+
+            <section className={styles.railCard} style={{background: 'rgba(25, 12, 35, 0.4)'}}>
+               <div className={styles.railCardHeader} style={{textTransform:'none', fontSize:'16px'}}>
+                 <span style={{display:'flex',alignItems:'center',gap:'8px'}}>🌐 Compliance Checklist</span>
+               </div>
+               <div className={styles.progressWrap}>
+                 <span className={styles.progressLabel}>Remediation progress</span>
+                 <div className={styles.progressBar}><div className={styles.progressFill} style={{width: `${checklistCompletion.percent}%`}}></div></div>
+               </div>
+               <div className={styles.statsRow}>
+                 <span className={styles.statBig}>{String(checklistCompletion.done).padStart(2,'0')} / {checklistCompletion.total}</span>
+                 <span className={styles.statSmall}>({checklistCompletion.percent}%)</span>
+               </div>
+               <div style={{display:'flex',flexDirection:'column',gap:'16px'}}>
+                 <div className={styles.statsRow}>
+                   <span className={styles.statBig}>1:38s</span>
+                   <span className={styles.statsSubtext}>Avg: Automation <br/> Times</span>
+                 </div>
+                 <div className={styles.statsRow}>
+                   <span className={styles.statBig}>3.6%</span>
+                   <span className={styles.statsSubtext}>Assist Clickthrough <br/> Rate</span>
+                 </div>
+               </div>
+               <button className={styles.outlineBtn} style={{marginTop:'8px', width: 'auto', alignSelf: 'flex-start', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)'}}>View log history ⓘ</button>
+            </section>
+            
+            <section className={styles.railCard} style={{background: 'rgba(20, 10, 30, 0.4)'}}>
+               <div className={styles.railCardHeader} style={{textTransform:'none', fontSize:'16px'}}>
+                 <span style={{display:'flex',alignItems:'center',gap:'8px'}}>⏱ Law Watch Status</span>
+               </div>
+               <div className={styles.lawWatchDesc} style={{opacity: 0.7}}>Daily automated checks for accessibility law/regulation source updates (ADA.gov, Federal regulations, Florida statutes).</div>
+               <div className={styles.lawWatchStatusBox}>
+                 <span className={styles.lawWatchStatusLabel}>Current Compliance:</span>
+                 <span className={styles.railStatusDot}><span style={{color:'#10b981'}}>●</span> active/ok</span>
+               </div>
+               <div className={styles.actionRow}>
+                 <button className={styles.outlineBtn} style={{flex:1, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)'}}>Send</button>
+                 <button className={styles.outlineBtn} style={{flex:1, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)'}}>Clear</button>
+               </div>
+            </section>
+         </div>
+      </div>
+    </main>
+  );
+}

@@ -1,0 +1,480 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - button "Open menu" [ref=e5] [cursor=pointer]
+      - generic [ref=e10]:
+        - img "Carbon" [ref=e12]
+        - generic [ref=e13]: /
+        - generic [ref=e14]: Collection Mapping
+    - complementary:
+      - navigation "Carbon menu":
+        - generic: MENU
+        - generic:
+          - generic:
+            - button "Pictures Generator":
+              - generic: Pictures Generator
+              - generic:
+                - img
+            - button "SEO Manager"
+            - button "Accessibility"
+            - button "RFID Price Tag"
+            - button "Lightspeed Catalog"
+            - button "Shopify Mapping Inventory"
+            - button "Collection Mapping"
+            - button "Create New Items"
+            - button "Social Ads & Meta"
+            - button "Ops Inventory"
+            - button "Workspace Dashboard"
+          - region "Shopify Mapping Inventory submenu":
+            - button "Back to main menu":
+              - img
+            - generic:
+              - button "Shopify Mapping Inventory"
+              - button "Workset"
+              - button "Sales"
+              - button "Inventory"
+              - button "Carts Inventory"
+              - button "Configurations":
+                - generic: Configurations
+                - generic:
+                  - img
+        - generic:
+          - button "SETTINGS"
+          - generic:
+            - button "LOGOUT"
+            - button "Pin menu":
+              - img
+    - main [ref=e15]:
+      - generic [ref=e16]:
+        - generic "Collection mapping summary":
+          - button "Loaded 1" [ref=e162] [cursor=pointer]:
+            - generic [ref=e18]: Loaded
+            - generic [ref=e19]: "1"
+          - button "Needs Review 1" [ref=e163] [cursor=pointer]:
+            - generic [ref=e21]: Needs Review
+            - generic [ref=e22]: "1"
+          - button "Ready to Push 0" [ref=e23] [cursor=pointer]:
+            - generic [ref=e24]: Ready to Push
+            - generic [ref=e25]: "0"
+          - button "Push Failed 0" [ref=e26] [cursor=pointer]:
+            - generic [ref=e27]: Push Failed
+            - generic [ref=e28]: "0"
+          - button "Synced 0" [ref=e29] [cursor=pointer]:
+            - generic [ref=e30]: Synced
+            - generic [ref=e31]: "0"
+        - main [ref=e40]:
+          - generic [ref=e41]:
+            - generic [ref=e43]:
+              - generic [ref=e45]:
+                - generic [ref=e46]:
+                  - button "Collapse tree menu" [ref=e47] [cursor=pointer]:
+                    - img [ref=e48]
+                    - text: Collapse tree menu
+                  - button "refresh" [ref=e52] [cursor=pointer]: ⟳ Refresh menu tree
+                  - button "Collapse tree cards" [ref=e53] [cursor=pointer]: ↶ Collapse tree cards
+                  - textbox "Search menu tree" [ref=e54]:
+                    - /placeholder: Search menu items...
+                  - button "Save menu tree" [ref=e55] [cursor=pointer]:
+                    - img [ref=e56]
+                    - text: Save menu tree
+                - generic [ref=e58]:
+                  - generic [ref=e59]:
+                    - button "Expand menu item MEN Men Hide this menu branch on live website (save required) Edit menu item Delete menu item" [ref=e165]:
+                      - button "Move menu item" [ref=e166]:
+                        - img [ref=e167]
+                      - button "Expand menu item" [ref=e174] [cursor=pointer]:
+                        - img [ref=e175]
+                      - generic [ref=e177]:
+                        - generic [ref=e178]: MEN
+                        - generic [ref=e179]: Men
+                      - generic [ref=e180]:
+                        - button "Hide this menu branch on live website (save required)" [ref=e181] [cursor=pointer]:
+                          - img [ref=e182]
+                        - button "Edit menu item" [ref=e184] [cursor=pointer]:
+                          - img [ref=e185]
+                        - button "Delete menu item" [ref=e187] [cursor=pointer]:
+                          - img [ref=e188]
+                    - button "Expand menu item WOMEN Women Hide this menu branch on live website (save required) Edit menu item Delete menu item" [ref=e191]:
+                      - button "Move menu item" [ref=e192]:
+                        - img [ref=e193]
+                      - button "Expand menu item" [ref=e200] [cursor=pointer]:
+                        - img [ref=e201]
+                      - generic [ref=e203]:
+                        - generic [ref=e204]: WOMEN
+                        - generic [ref=e205]: Women
+                      - generic [ref=e206]:
+                        - button "Hide this menu branch on live website (save required)" [ref=e207] [cursor=pointer]:
+                          - img [ref=e208]
+                        - button "Edit menu item" [ref=e210] [cursor=pointer]:
+                          - img [ref=e211]
+                        - button "Delete menu item" [ref=e213] [cursor=pointer]:
+                          - img [ref=e214]
+                    - button "Expand menu item JEANS jeans.html Hide this menu branch on live website (save required) Edit menu item Delete menu item" [ref=e217]:
+                      - button "Move menu item" [ref=e218]:
+                        - img [ref=e219]
+                      - button "Expand menu item" [ref=e226] [cursor=pointer]:
+                        - img [ref=e227]
+                      - generic [ref=e229]:
+                        - generic [ref=e230]: JEANS
+                        - generic [ref=e231]: jeans.html
+                      - generic [ref=e232]:
+                        - button "Hide this menu branch on live website (save required)" [ref=e233] [cursor=pointer]:
+                          - img [ref=e234]
+                        - button "Edit menu item" [ref=e236] [cursor=pointer]:
+                          - img [ref=e237]
+                        - button "Delete menu item" [ref=e239] [cursor=pointer]:
+                          - img [ref=e240]
+                    - button "REWARDS rewards.html Hide this menu branch on live website (save required) Edit menu item Delete menu item" [ref=e243]:
+                      - button "Move menu item" [ref=e244]:
+                        - img [ref=e245]
+                      - generic [ref=e253]:
+                        - generic [ref=e254]: REWARDS
+                        - generic [ref=e255]: rewards.html
+                      - generic [ref=e256]:
+                        - button "Hide this menu branch on live website (save required)" [ref=e257] [cursor=pointer]:
+                          - img [ref=e258]
+                        - button "Edit menu item" [ref=e260] [cursor=pointer]:
+                          - img [ref=e261]
+                        - button "Delete menu item" [ref=e263] [cursor=pointer]:
+                          - img [ref=e264]
+                    - button "BECOME AFFILIATE become-affiliate.html Hide this menu branch on live website (save required) Edit menu item Delete menu item" [ref=e267]:
+                      - button "Move menu item" [ref=e268]:
+                        - img [ref=e269]
+                      - generic [ref=e277]:
+                        - generic [ref=e278]: BECOME AFFILIATE
+                        - generic [ref=e279]: become-affiliate.html
+                      - generic [ref=e280]:
+                        - button "Hide this menu branch on live website (save required)" [ref=e281] [cursor=pointer]:
+                          - img [ref=e282]
+                        - button "Edit menu item" [ref=e284] [cursor=pointer]:
+                          - img [ref=e285]
+                        - button "Delete menu item" [ref=e287] [cursor=pointer]:
+                          - img [ref=e288]
+                    - button "Add menu item" [ref=e61] [cursor=pointer]:
+                      - img [ref=e63]
+                      - generic [ref=e65]: Add menu item
+                  - generic [ref=e66]:
+                    - generic [ref=e68]:
+                      - generic [ref=e69]: UNMAPPED COLLECTIONS
+                      - generic [ref=e70]: "9"
+                    - generic [ref=e71]:
+                      - button "All Products (ChatGPT-AI) Edit collection name Delete unmapped collection card" [ref=e290] [cursor=pointer]:
+                        - button [ref=e292]:
+                          - img [ref=e293]
+                        - generic [ref=e300]: All Products (ChatGPT-AI)
+                        - generic [ref=e301]:
+                          - button "Edit collection name" [ref=e302]:
+                            - img [ref=e303]
+                          - button "Delete unmapped collection card" [ref=e305]:
+                            - img [ref=e306]
+                      - button "GRAPHIC T-SHIRTS (WINTER men) Edit collection name Delete unmapped collection card" [ref=e308] [cursor=pointer]:
+                        - button [ref=e310]:
+                          - img [ref=e311]
+                        - generic [ref=e318]: GRAPHIC T-SHIRTS (WINTER men)
+                        - generic [ref=e319]:
+                          - button "Edit collection name" [ref=e320]:
+                            - img [ref=e321]
+                          - button "Delete unmapped collection card" [ref=e323]:
+                            - img [ref=e324]
+                      - button "LEGGINGS (women) Edit collection name Delete unmapped collection card" [ref=e326] [cursor=pointer]:
+                        - button [ref=e328]:
+                          - img [ref=e329]
+                        - generic [ref=e336]: LEGGINGS (women)
+                        - generic [ref=e337]:
+                          - button "Edit collection name" [ref=e338]:
+                            - img [ref=e339]
+                          - button "Delete unmapped collection card" [ref=e341]:
+                            - img [ref=e342]
+                      - button "MAXI DRESSES Edit collection name Delete unmapped collection card" [ref=e344] [cursor=pointer]:
+                        - button [ref=e346]:
+                          - img [ref=e347]
+                        - generic [ref=e354]: MAXI DRESSES
+                        - generic [ref=e355]:
+                          - button "Edit collection name" [ref=e356]:
+                            - img [ref=e357]
+                          - button "Delete unmapped collection card" [ref=e359]:
+                            - img [ref=e360]
+                      - button "MEN JEANS Edit collection name Delete unmapped collection card" [ref=e362] [cursor=pointer]:
+                        - button [ref=e364]:
+                          - img [ref=e365]
+                        - generic [ref=e372]: MEN JEANS
+                        - generic [ref=e373]:
+                          - button "Edit collection name" [ref=e374]:
+                            - img [ref=e375]
+                          - button "Delete unmapped collection card" [ref=e377]:
+                            - img [ref=e378]
+                      - button "MIDI DRESSES Edit collection name Delete unmapped collection card" [ref=e380] [cursor=pointer]:
+                        - button [ref=e382]:
+                          - img [ref=e383]
+                        - generic [ref=e390]: MIDI DRESSES
+                        - generic [ref=e391]:
+                          - button "Edit collection name" [ref=e392]:
+                            - img [ref=e393]
+                          - button "Delete unmapped collection card" [ref=e395]:
+                            - img [ref=e396]
+                      - button "MINI DRESSES Edit collection name Delete unmapped collection card" [ref=e398] [cursor=pointer]:
+                        - button [ref=e400]:
+                          - img [ref=e401]
+                        - generic [ref=e408]: MINI DRESSES
+                        - generic [ref=e409]:
+                          - button "Edit collection name" [ref=e410]:
+                            - img [ref=e411]
+                          - button "Delete unmapped collection card" [ref=e413]:
+                            - img [ref=e414]
+                      - button "NIGHT DRESSES Edit collection name Delete unmapped collection card" [ref=e416] [cursor=pointer]:
+                        - button [ref=e418]:
+                          - img [ref=e419]
+                        - generic [ref=e426]: NIGHT DRESSES
+                        - generic [ref=e427]:
+                          - button "Edit collection name" [ref=e428]:
+                            - img [ref=e429]
+                          - button "Delete unmapped collection card" [ref=e431]:
+                            - img [ref=e432]
+                      - button "WOMEN JEANS Edit collection name Delete unmapped collection card" [ref=e434] [cursor=pointer]:
+                        - button [ref=e436]:
+                          - img [ref=e437]
+                        - generic [ref=e444]: WOMEN JEANS
+                        - generic [ref=e445]:
+                          - button "Edit collection name" [ref=e446]:
+                            - img [ref=e447]
+                          - button "Delete unmapped collection card" [ref=e449]:
+                            - img [ref=e450]
+                - status [ref=e73]
+              - button "Resize menu tree panel" [ref=e74]
+              - main [ref=e76]:
+                - generic [ref=e77]:
+                  - textbox "Search products" [ref=e78]:
+                    - /placeholder: Search products (title / sku / upc / type)
+                    - text: AARON
+                  - button "Search products" [ref=e79] [cursor=pointer]:
+                    - img [ref=e80]
+                    - text: Search products
+                  - button "Refresh products" [ref=e82] [cursor=pointer]:
+                    - img [ref=e83]
+                    - text: Refresh products
+                  - button "Open more filters" [ref=e85] [cursor=pointer]:
+                    - img [ref=e86]
+                    - text: More filters
+                  - button "Open reports" [ref=e88] [cursor=pointer]:
+                    - img [ref=e89]
+                    - text: Reports
+                  - button "COMMIT CHANGES ▼" [ref=e92] [cursor=pointer]:
+                    - text: COMMIT CHANGES
+                    - generic [ref=e93]: ▼
+                - table [ref=e95]:
+                  - rowgroup [ref=e96]:
+                    - row "Select all products View Picture ↕ Product ↑ Auto Path Suggested ↕ Decision Approved Status ↕ Current → Final" [ref=e97]:
+                      - columnheader "Select all products" [ref=e98]:
+                        - checkbox "Select all products" [ref=e99]
+                      - columnheader "View" [ref=e100]
+                      - columnheader "Picture ↕" [ref=e101]:
+                        - generic [ref=e102] [cursor=pointer]:
+                          - text: Picture
+                          - generic [ref=e103]: ↕
+                      - columnheader "Product ↑" [ref=e104]:
+                        - generic [ref=e105] [cursor=pointer]:
+                          - text: Product
+                          - generic [ref=e106]: ↑
+                      - columnheader "Auto Path" [ref=e107]
+                      - columnheader "Suggested ↕" [ref=e108]:
+                        - generic [ref=e109] [cursor=pointer]:
+                          - text: Suggested
+                          - generic [ref=e110]: ↕
+                      - columnheader "Decision" [ref=e111]
+                      - columnheader "Approved" [ref=e112]
+                      - columnheader "Status ↕" [ref=e113]:
+                        - generic [ref=e114] [cursor=pointer]:
+                          - text: Status
+                          - generic [ref=e115]: ↕
+                      - columnheader "Current → Final" [ref=e116]
+                  - rowgroup [ref=e117]:
+                    - row "No products match the current filter." [ref=e452]:
+                      - cell "No products match the current filter." [ref=e453]
+                - generic [ref=e120]:
+                  - generic [ref=e121]:
+                    - button "<<" [disabled] [ref=e122]
+                    - button "<" [disabled] [ref=e123]
+                    - generic [ref=e124]: Page 1 of 1
+                    - button ">" [disabled] [ref=e125]
+                    - button ">>" [disabled] [ref=e126]
+                  - generic "Products per page" [ref=e127]:
+                    - generic [ref=e128]: Per page
+                    - combobox "Products per page" [ref=e129]:
+                      - option "20"
+                      - option "50" [selected]
+                      - option "100"
+                      - option "200"
+                      - option "500"
+            - complementary "Advanced filters" [ref=e132]:
+              - generic [ref=e133]:
+                - strong [ref=e134]: Advanced Filters
+                - button "✕" [ref=e135] [cursor=pointer]
+              - generic [ref=e136]:
+                - generic [ref=e137]:
+                  - heading "Quick Filters" [level=4] [ref=e138]
+                  - generic [ref=e139] [cursor=pointer]:
+                    - checkbox "Has suggestions" [ref=e140]
+                    - generic [ref=e141]: Has suggestions
+                  - generic [ref=e142] [cursor=pointer]:
+                    - checkbox "Needs manual review" [ref=e143]
+                    - generic [ref=e144]: Needs manual review
+                  - generic [ref=e145] [cursor=pointer]:
+                    - checkbox "Auto-mapped" [ref=e146]
+                    - generic [ref=e147]: Auto-mapped
+                - generic [ref=e148]:
+                  - heading "Visibility" [level=4] [ref=e149]
+                  - generic [ref=e150] [cursor=pointer]:
+                    - checkbox "Include finished rows" [ref=e151]
+                    - generic [ref=e152]: Include finished rows
+                - generic [ref=e153]:
+                  - heading "Product Type" [level=4] [ref=e154]
+                  - generic [ref=e155]:
+                    - button "All product types ▲" [expanded] [ref=e454] [cursor=pointer]:
+                      - generic [ref=e455]: All product types
+                      - generic [ref=e456]: ▲
+                    - listbox "Product types" [ref=e457]:
+                      - generic [ref=e458] [cursor=pointer]:
+                        - checkbox "MEN" [ref=e459]
+                        - generic [ref=e460]: MEN
+                      - generic [ref=e461] [cursor=pointer]:
+                        - checkbox "MEN >> ACCESSORIES" [ref=e462]
+                        - generic [ref=e463]: MEN >> ACCESSORIES
+                      - generic [ref=e464] [cursor=pointer]:
+                        - checkbox "MEN >> BUTTON SHIRT" [ref=e465]
+                        - generic [ref=e466]: MEN >> BUTTON SHIRT
+                      - generic [ref=e467] [cursor=pointer]:
+                        - checkbox "MEN >> COAT" [ref=e468]
+                        - generic [ref=e469]: MEN >> COAT
+                      - generic [ref=e470] [cursor=pointer]:
+                        - checkbox "MEN >> DENIM JACKET" [ref=e471]
+                        - generic [ref=e472]: MEN >> DENIM JACKET
+                      - generic [ref=e473] [cursor=pointer]:
+                        - checkbox "MEN >> DENIM SHIRT" [ref=e474]
+                        - generic [ref=e475]: MEN >> DENIM SHIRT
+                      - generic [ref=e476] [cursor=pointer]:
+                        - checkbox "MEN >> EVENING PANTS" [ref=e477]
+                        - generic [ref=e478]: MEN >> EVENING PANTS
+                      - generic [ref=e479] [cursor=pointer]:
+                        - checkbox "MEN >> JACKET" [ref=e480]
+                        - generic [ref=e481]: MEN >> JACKET
+                      - generic [ref=e482] [cursor=pointer]:
+                        - checkbox "MEN >> JEANS" [ref=e483]
+                        - generic [ref=e484]: MEN >> JEANS
+                      - generic [ref=e485] [cursor=pointer]:
+                        - checkbox "MEN >> OVERALL" [ref=e486]
+                        - generic [ref=e487]: MEN >> OVERALL
+                      - generic [ref=e488] [cursor=pointer]:
+                        - checkbox "MEN >> PANTS" [ref=e489]
+                        - generic [ref=e490]: MEN >> PANTS
+                      - generic [ref=e491] [cursor=pointer]:
+                        - checkbox "MEN >> SHIRTS" [ref=e492]
+                        - generic [ref=e493]: MEN >> SHIRTS
+                      - generic [ref=e494] [cursor=pointer]:
+                        - checkbox "MEN >> SHOES" [ref=e495]
+                        - generic [ref=e496]: MEN >> SHOES
+                      - generic [ref=e497] [cursor=pointer]:
+                        - checkbox "MEN >> SHORTS" [ref=e498]
+                        - generic [ref=e499]: MEN >> SHORTS
+                      - generic [ref=e500] [cursor=pointer]:
+                        - checkbox "MEN >> SWEATER" [ref=e501]
+                        - generic [ref=e502]: MEN >> SWEATER
+                      - generic [ref=e503] [cursor=pointer]:
+                        - checkbox "MEN >> SWEATPANTS" [ref=e504]
+                        - generic [ref=e505]: MEN >> SWEATPANTS
+                      - generic [ref=e506] [cursor=pointer]:
+                        - checkbox "MEN >> SWEATSHIRTS" [ref=e507]
+                        - generic [ref=e508]: MEN >> SWEATSHIRTS
+                      - generic [ref=e509] [cursor=pointer]:
+                        - checkbox "MEN >> SWIMWEAR" [ref=e510]
+                        - generic [ref=e511]: MEN >> SWIMWEAR
+                      - generic [ref=e512] [cursor=pointer]:
+                        - checkbox "MEN >> T- SHIRT" [ref=e513]
+                        - generic [ref=e514]: MEN >> T- SHIRT
+                      - generic [ref=e515] [cursor=pointer]:
+                        - checkbox "MEN >> T-SHIRT" [ref=e516]
+                        - generic [ref=e517]: MEN >> T-SHIRT
+                      - generic [ref=e518] [cursor=pointer]:
+                        - checkbox "MEN >> TANK TOP" [ref=e519]
+                        - generic [ref=e520]: MEN >> TANK TOP
+                      - generic [ref=e521] [cursor=pointer]:
+                        - checkbox "MEN >> TOP" [ref=e522]
+                        - generic [ref=e523]: MEN >> TOP
+                      - generic [ref=e524] [cursor=pointer]:
+                        - checkbox "MEN >> VEST" [ref=e525]
+                        - generic [ref=e526]: MEN >> VEST
+                      - generic [ref=e527] [cursor=pointer]:
+                        - checkbox "WOMEN >> ACCESSORIES" [ref=e528]
+                        - generic [ref=e529]: WOMEN >> ACCESSORIES
+                      - generic [ref=e530] [cursor=pointer]:
+                        - checkbox "WOMEN >> BLOUSE" [ref=e531]
+                        - generic [ref=e532]: WOMEN >> BLOUSE
+                      - generic [ref=e533] [cursor=pointer]:
+                        - checkbox "WOMEN >> BODYSUIT" [ref=e534]
+                        - generic [ref=e535]: WOMEN >> BODYSUIT
+                      - generic [ref=e536] [cursor=pointer]:
+                        - checkbox "WOMEN >> COAT" [ref=e537]
+                        - generic [ref=e538]: WOMEN >> COAT
+                      - generic [ref=e539] [cursor=pointer]:
+                        - checkbox "WOMEN >> DRESS" [ref=e540]
+                        - generic [ref=e541]: WOMEN >> DRESS
+                      - generic [ref=e542] [cursor=pointer]:
+                        - checkbox "WOMEN >> HOODIE" [ref=e543]
+                        - generic [ref=e544]: WOMEN >> HOODIE
+                      - generic [ref=e545] [cursor=pointer]:
+                        - checkbox "WOMEN >> JACKET" [ref=e546]
+                        - generic [ref=e547]: WOMEN >> JACKET
+                      - generic [ref=e548] [cursor=pointer]:
+                        - checkbox "WOMEN >> JEANS" [ref=e549]
+                        - generic [ref=e550]: WOMEN >> JEANS
+                      - generic [ref=e551] [cursor=pointer]:
+                        - checkbox "WOMEN >> LEGGING" [ref=e552]
+                        - generic [ref=e553]: WOMEN >> LEGGING
+                      - generic [ref=e554] [cursor=pointer]:
+                        - checkbox "WOMEN >> PANTS" [ref=e555]
+                        - generic [ref=e556]: WOMEN >> PANTS
+                      - generic [ref=e557] [cursor=pointer]:
+                        - checkbox "WOMEN >> ROMPER" [ref=e558]
+                        - generic [ref=e559]: WOMEN >> ROMPER
+                      - generic [ref=e560] [cursor=pointer]:
+                        - checkbox "WOMEN >> SET" [ref=e561]
+                        - generic [ref=e562]: WOMEN >> SET
+                      - generic [ref=e563] [cursor=pointer]:
+                        - checkbox "WOMEN >> SHOES" [ref=e564]
+                        - generic [ref=e565]: WOMEN >> SHOES
+                      - generic [ref=e566] [cursor=pointer]:
+                        - checkbox "WOMEN >> SHORTS" [ref=e567]
+                        - generic [ref=e568]: WOMEN >> SHORTS
+                      - generic [ref=e569] [cursor=pointer]:
+                        - checkbox "WOMEN >> SKIRT" [ref=e570]
+                        - generic [ref=e571]: WOMEN >> SKIRT
+                      - generic [ref=e572] [cursor=pointer]:
+                        - checkbox "WOMEN >> SWEATPANTS" [ref=e573]
+                        - generic [ref=e574]: WOMEN >> SWEATPANTS
+                      - generic [ref=e575] [cursor=pointer]:
+                        - checkbox "WOMEN >> SWEATSHIRT" [ref=e576]
+                        - generic [ref=e577]: WOMEN >> SWEATSHIRT
+                      - generic [ref=e578] [cursor=pointer]:
+                        - checkbox "WOMEN >> SWEATSHIRTS" [ref=e579]
+                        - generic [ref=e580]: WOMEN >> SWEATSHIRTS
+                      - generic [ref=e581] [cursor=pointer]:
+                        - checkbox "WOMEN >> SWIMSUIT" [ref=e582]
+                        - generic [ref=e583]: WOMEN >> SWIMSUIT
+                      - generic [ref=e584] [cursor=pointer]:
+                        - checkbox "WOMEN >> T-SHIRT" [ref=e585]
+                        - generic [ref=e586]: WOMEN >> T-SHIRT
+                      - generic [ref=e587] [cursor=pointer]:
+                        - checkbox "WOMEN >> TEES" [ref=e588]
+                        - generic [ref=e589]: WOMEN >> TEES
+                      - generic [ref=e590] [cursor=pointer]:
+                        - checkbox "WOMEN >> TOP" [ref=e591]
+                        - generic [ref=e592]: WOMEN >> TOP
+                      - generic [ref=e593] [cursor=pointer]:
+                        - checkbox "WOMEN >> TOPS" [ref=e594]
+                        - generic [ref=e595]: WOMEN >> TOPS
+                      - generic [ref=e596] [cursor=pointer]:
+                        - checkbox "WOMEN >> VEST" [ref=e597]
+                        - generic [ref=e598]: WOMEN >> VEST
+              - generic [ref=e156]:
+                - button "Clear All" [ref=e157] [cursor=pointer]
+                - button "Apply Filters" [ref=e158] [cursor=pointer]
+  - alert [ref=e161]
