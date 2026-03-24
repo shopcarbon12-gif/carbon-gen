@@ -1,37 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" aria-hidden="true">
-  <circle cx="32" cy="32" r="30" fill="#000"/>
-  <circle cx="32" cy="14.5" r="4.4" fill="#fff"/>
-
-  <path
-    d="M15 22.3 Q32 24.8 49 22.3"
-    fill="none"
-    stroke="#fff"
-    stroke-width="4.8"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-  />
-
-  <path
-    d="M27.6 24.8
-       H36.4
-       V37.8
-       H27.6
-       Z"
-    fill="#fff"
-  />
-
-  <path
-    d="M30 37.8 L24 53"
-    fill="none"
-    stroke="#fff"
-    stroke-width="4.8"
-    stroke-linecap="round"
-  />
-  <path
-    d="M34 37.8 L40 53"
-    fill="none"
-    stroke="#fff"
-    stroke-width="4.8"
-    stroke-linecap="round"
-  />
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="Accessibility icon">
+  <circle cx="32" cy="32" r="31.5" fill="#000"/>
+  <circle cx="32" cy="32" r="28.5" fill="#fff"/>
+  <circle cx="32" cy="32" r="25.5" fill="#000"/>
+  <circle cx="31.53" cy="14.03" r="3.16" fill="#fff"/>
+  <path fill="#fff" transform="scale(0.0625)"
+        d="M 621.0 774.5 L 610.0 772.5 L 603.0 768.5 L 594.5 756.0 L 523.0 547.5 L 497.0 547.5 L 495.5 549.0 L 470.5 632.0 L 428.5 762.0 L 420.0 770.5 L 409.0 774.5 L 396.0 771.5 L 385.5 762.0 L 381.5 750.0 L 382.5 743.0 L 432.5 544.0 L 441.5 513.0 L 441.5 363.0 L 393.0 354.5 L 302.0 342.5 L 284.0 338.5 L 275.5 332.0 L 269.5 318.0 L 271.5 308.0 L 279.0 298.5 L 286.0 294.5 L 300.0 293.5 L 384.0 302.5 L 473.0 309.5 L 546.0 309.5 L 657.0 300.5 L 721.0 293.5 L 734.0 293.5 L 743.0 297.5 L 749.5 304.0 L 753.5 313.0 L 752.5 324.0 L 748.0 331.5 L 738.0 338.5 L 718.0 342.5 L 613.0 356.5 L 577.5 363.0 L 577.5 514.0 L 643.5 746.0 L 643.5 754.0 L 639.5 763.0 L 633.0 769.5 L 621.0 774.5 Z"/>
 </svg>
