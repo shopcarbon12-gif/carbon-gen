@@ -137,52 +137,32 @@ body:has(.accessibility-standalone-route) .shell.chat-expanded .content.no-integ
   padding-right: var(--page-edge-gap) !important;
 }
 
-/*
- * Studio topbar wordmark — keep visually in line with title text (~1rem).
- * Use high specificity + !important so embedded workspace-shell rules cannot inflate the logo.
- */
-.shell header.topbar .topbar-brand-lock {
-  display: inline-flex !important;
-  align-items: center !important;
-  overflow: hidden !important;
-  height: 30px !important;
-  max-height: 32px !important;
-  max-width: min(40vw, 150px) !important;
+/* FOUC guard: keep header logo bounded even if route-scoped styles are delayed briefly. */
+.shell .topbar-brand-lock {
+  display: inline-flex;
+  align-items: center;
+  overflow: hidden;
+  height: 62px;
+  max-width: min(56vw, 340px);
 }
 
-.shell header.topbar img.topbar-logo {
-  display: block !important;
-  width: auto !important;
-  height: 24px !important;
-  max-height: 26px !important;
-  max-width: min(40vw, 150px) !important;
-  object-fit: contain !important;
-  object-position: left center !important;
-}
-
-@media (max-width: 900px) {
-  .shell header.topbar .topbar-brand-lock {
-    height: 28px !important;
-    max-width: min(36vw, 130px) !important;
-  }
-
-  .shell header.topbar img.topbar-logo {
-    height: 22px !important;
-    max-height: 24px !important;
-    max-width: min(36vw, 130px) !important;
-  }
+.shell .topbar-logo {
+  display: block;
+  width: auto;
+  height: 62px;
+  max-width: 100%;
+  object-fit: contain;
+  object-position: center center;
 }
 
 @media (max-width: 520px) {
-  .shell header.topbar .topbar-brand-lock {
-    height: 26px !important;
-    max-width: min(48vw, 120px) !important;
+  .shell .topbar-brand-lock {
+    height: 44px;
+    max-width: min(58vw, 220px);
   }
 
-  .shell header.topbar img.topbar-logo {
-    height: 20px !important;
-    max-height: 22px !important;
-    max-width: min(48vw, 120px) !important;
+  .shell .topbar-logo {
+    height: 44px;
   }
 }
 

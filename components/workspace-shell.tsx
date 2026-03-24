@@ -1016,25 +1016,20 @@ export function WorkspaceShell({
           overflow: hidden;
           text-overflow: ellipsis;
         }
-        .shell header.topbar .topbar-brand-lock {
+        .topbar-brand-lock {
           display: inline-flex;
           align-items: center;
           justify-content: center;
           flex-shrink: 0;
           line-height: 1;
-          overflow: hidden;
-          height: 30px;
-          max-height: 32px;
-          max-width: min(40vw, 150px);
         }
-        .shell header.topbar img.topbar-logo {
-          height: 24px;
-          max-height: 26px;
+        .topbar-logo {
+          height: 170px;
           width: auto;
-          max-width: min(40vw, 150px);
+          max-width: min(48vw, 210px);
           display: block;
           object-fit: contain;
-          object-position: left center;
+          object-position: center;
           filter:
             drop-shadow(0 0 0.7px rgba(255, 255, 255, 0.95))
             drop-shadow(0 0 0.7px rgba(255, 255, 255, 0.95));
@@ -2082,28 +2077,17 @@ export function WorkspaceShell({
             gap: 10px;
             min-width: 0;
           }
-          .shell header.topbar img.topbar-logo {
-            height: 22px;
-            max-height: 24px;
-            max-width: min(36vw, 130px);
-          }
-          .shell header.topbar .topbar-brand-lock {
-            height: 28px;
-            max-width: min(36vw, 130px);
+          .topbar-logo {
+            max-width: min(42vw, 190px);
           }
         }
         @media (max-width: 520px) {
           .topbar-title {
             font-size: 0.96rem;
           }
-          .shell header.topbar img.topbar-logo {
-            height: 20px;
-            max-height: 22px;
-            max-width: min(48vw, 120px);
-          }
-          .shell header.topbar .topbar-brand-lock {
-            height: 26px;
-            max-width: min(48vw, 120px);
+          .topbar-logo {
+            height: 130px;
+            max-width: min(52vw, 165px);
           }
           .carbon-panel-wrap {
             left: 13px;

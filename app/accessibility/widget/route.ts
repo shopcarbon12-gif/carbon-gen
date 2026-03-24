@@ -387,7 +387,7 @@ var widgetCss='' +
   '.ca-assist-launcher--fab-outline,.ca-assist-launcher--fab-glass,.ca-assist-launcher--fab-solid{background:transparent !important;box-shadow:none !important;backdrop-filter:none !important;-webkit-backdrop-filter:none !important;border:none !important}' +
   '.ca-assist-launcher--fab:focus-visible{outline:2px solid color-mix(in srgb,var(--ca-accent,#7c3aed) 55%,#1e1b4b);outline-offset:2px}' +
   '.ca-assist-launcher--fab .ca-assist-launcher__glyph{display:flex;align-items:center;justify-content:center;width:100%;height:100%;min-width:0;min-height:0;margin:0;border:none;background:transparent;box-shadow:none;border-radius:0;overflow:visible;padding:0;color:inherit}' +
-  '.ca-assist-launcher--fab .ca-assist-launcher__glyph svg{display:block;width:100%;height:100%}' +
+  '.ca-assist-launcher--fab .ca-assist-launcher__glyph svg{display:block;width:var(--ca-glyph-px,20px);height:var(--ca-glyph-px,20px);flex-shrink:0;box-sizing:border-box}' +
   '.ca-assist-markword{display:inline-flex;align-items:baseline;gap:0;letter-spacing:.14em !important;text-transform:uppercase !important;white-space:nowrap;font-size:10.5px;font-weight:600;color:#f4f4f5}' +
   '.ca-assist-markword--launcher{font-size:10px;letter-spacing:.16em !important}' +
   '.ca-assist-markword--strip{font-size:13px;letter-spacing:.14em !important}' +
@@ -2777,6 +2777,16 @@ function createWidget(){
     shellEl.style.setProperty('--ca-fab-size',ts+'px');
     shellEl.style.setProperty('--ca-launcher-size',ts+'px');
   }
+  function syncLauncherGlyphMetrics(){
+    try{
+      var tw=Math.round(Number(trigger.offsetWidth)||0);
+      var ts=tw>0?tw:fabSize();
+      var want=Math.max(14,Math.min(34,Math.round(Number(config.iconSize)||20)));
+      var maxG=Math.max(14,Math.floor(ts*0.54));
+      var g=Math.min(want,maxG);
+      trigger.style.setProperty('--ca-glyph-px',String(g)+'px');
+    }catch(_g){}
+  }
   var shadow=wrap.attachShadow({mode:'open'});
   var scopedStyle=document.createElement('style');
   scopedStyle.textContent=widgetCss;
@@ -2814,6 +2824,7 @@ function createWidget(){
   glyphEl.innerHTML=launcherGlyphSvg;
   trigger.appendChild(glyphEl);
   syncFabShellSize(shell,ts);
+  syncLauncherGlyphMetrics();
 
   var panel=document.createElement("div");
   var panelId="ca-assist-panel";
@@ -3225,6 +3236,7 @@ function createWidget(){
         syncFabShellSize(shell,closedSz);
         applyFabScreenCorner(dockOpenRight,closedSz);
       }
+      syncLauncherGlyphMetrics();
     }catch(_e){}
   }
   function refitAssistChromeFromState(){
@@ -3240,6 +3252,7 @@ function createWidget(){
       trigger.style.width=ts+'px';
       trigger.style.height=ts+'px';
       syncFabShellSize(shell,ts);
+      syncLauncherGlyphMetrics();
       syncOpenDockLayout();
     }catch(_rf){}
   }
@@ -3289,6 +3302,7 @@ function createWidget(){
       trigger.style.height=tsClose+'px';
       trigger.style.setProperty('--ca-launcher-size',tsClose+'px');
       syncFabShellSize(shell,tsClose);
+      syncLauncherGlyphMetrics();
       wrap.style.paddingBottom='';
       applyFabScreenCorner(dockOpenRight,tsClose);
       try{
