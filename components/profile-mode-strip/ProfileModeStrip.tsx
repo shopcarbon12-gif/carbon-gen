@@ -109,8 +109,10 @@ const MODES: {
 
 export type ProfileModeStripProps = {
   className?: string;
-  defaultMode?: ProfileModeId;
-  value?: ProfileModeId;
+  /** Initial mode when uncontrolled. */
+  defaultMode?: ProfileModeId | null;
+  /** Controlled selection; `null` = no segment highlighted (e.g. Blind / Seizure from pills). */
+  value?: ProfileModeId | null;
   onModeChange?: (id: ProfileModeId) => void;
 };
 
@@ -121,9 +123,9 @@ export function ProfileModeStrip({
   onModeChange,
 }: ProfileModeStripProps) {
   const uid = useId();
-  const [uncontrolled, setUncontrolled] = useState<ProfileModeId>(defaultMode);
+  const [uncontrolled, setUncontrolled] = useState<ProfileModeId | null>(defaultMode ?? "retail");
   const isControlled = valueProp !== undefined;
-  const active = isControlled ? valueProp : uncontrolled;
+  const active: ProfileModeId | null = isControlled ? (valueProp ?? null) : uncontrolled;
 
   const select = useCallback(
     (id: ProfileModeId) => {
@@ -140,7 +142,7 @@ export function ProfileModeStrip({
       aria-label="Accessibility profile presets"
     >
       {MODES.map((mode) => {
-        const activeSeg = active === mode.id;
+        const activeSeg = active !== null && active === mode.id;
         return (
           <button
             key={mode.id}

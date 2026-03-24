@@ -1,8 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
-import { ProfileModeStrip } from "@/components/profile-mode-strip";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ProfileModeStrip, type ProfileModeId } from "@/components/profile-mode-strip";
 import { PremiumSegmentedNav, type PremiumSegmentedTabId } from "@/components/premium-segmented-nav";
 import { PremiumToggle } from "@/components/premium-toggle";
 import carbonWordmark from "./assets-local/carbon-long-white.png";
@@ -33,6 +33,7 @@ type AccessibilitySettings = {
   statementUrl: string;
   feedbackUrl: string;
   supportEmail: string;
+  panelTheme: "dark" | "light";
   monthlyReportEmail: string;
   accessibilityOwner: string;
   accessibilityOwnerRole: string;
@@ -69,6 +70,7 @@ type AccessibilitySettings = {
     bigCursor: boolean;
     pageStructure: boolean;
     languageSelector: boolean;
+    tooltips: boolean;
   };
 };
 
@@ -176,11 +178,11 @@ const defaultSettings: AccessibilitySettings = {
   panelColor: "#111827",
   triggerStyle: "solid",
   position: "right",
-  sideOffset: 18,
-  bottomOffset: 18,
+  sideOffset: 10,
+  bottomOffset: 10,
   triggerSize: 76,
   iconSize: 20,
-  panelWidth: 300,
+  panelWidth: 400,
   cornerRadius: 14,
   widgetLabel: "Carbon Assist",
   logoUrl: "",
@@ -192,6 +194,7 @@ const defaultSettings: AccessibilitySettings = {
   statementUrl: "https://www.shopcarbon.com/pages/accessibility",
   feedbackUrl: "https://www.shopcarbon.com/pages/contact",
   supportEmail: "elior@carbonjeanscompany.com",
+  panelTheme: "dark",
   monthlyReportEmail: "elior@carbonjeanscompany.com",
   accessibilityOwner: "Elior",
   accessibilityOwnerRole: "Accessibility Owner",
@@ -228,11 +231,53 @@ const defaultSettings: AccessibilitySettings = {
     bigCursor: true,
     pageStructure: true,
     languageSelector: true,
+    tooltips: true,
   },
 };
 
-function buildInstallSnippet(settings: AccessibilitySettings) {
-  const config = {
+type AssistWidgetProfileKey = "clear" | "blind" | "lowVision" | "motor" | "dyslexia" | "adhd" | "seizure";
+
+const ASSIST_SHELL_PILLS: { key: AssistWidgetProfileKey; label: string }[] = [
+  { key: "blind", label: "Blind" },
+  { key: "lowVision", label: "Low Vision" },
+  { key: "motor", label: "Motor" },
+  { key: "dyslexia", label: "Dyslexia" },
+  { key: "adhd", label: "ADHD" },
+  { key: "seizure", label: "Seizure Safe" },
+];
+
+function widgetKeyToStripMode(key: string): ProfileModeId | null {
+  switch (key) {
+    case "clear":
+      return "retail";
+    case "lowVision":
+      return "low-vision";
+    case "motor":
+      return "motor";
+    case "dyslexia":
+      return "dyslexia";
+    case "adhd":
+      return "adhd";
+    default:
+      return null;
+  }
+}
+
+function stripModeToWidgetKey(id: ProfileModeId): AssistWidgetProfileKey | null {
+  if (id === "new") return null;
+  const m: Record<Exclude<ProfileModeId, "new">, AssistWidgetProfileKey> = {
+    retail: "clear",
+    "low-vision": "lowVision",
+    motor: "motor",
+    dyslexia: "dyslexia",
+    adhd: "adhd",
+  };
+  return m[id];
+}
+
+/** Payload shape expected by GET /accessibility/widget (must match route.ts normalizeConfigObject). */
+function toWidgetEmbedConfig(settings: AccessibilitySettings) {
+  return {
     brandColor: settings.brandColor,
     panelColor: settings.panelColor,
     triggerStyle: settings.triggerStyle,
@@ -253,14 +298,18 @@ function buildInstallSnippet(settings: AccessibilitySettings) {
     statementUrl: settings.statementUrl,
     feedbackUrl: settings.feedbackUrl,
     supportEmail: settings.supportEmail,
+    panelTheme: settings.panelTheme,
     features: settings.features,
   };
-  const encoded = encodeURIComponent(JSON.stringify(config));
-  return `<script src="https://app.shopcarbon.com/accessibility/widget?config=${encoded}" defer></script>`;
+}
+
+function buildInstallSnippet(settings: AccessibilitySettings) {
+  const encoded = encodeURIComponent(JSON.stringify(toWidgetEmbedConfig(settings)));
+  return `<script src="https://app.shopcarbon.com/accessibility/widget?config=${encoded}&wrev=31" defer></script>`;
 }
 
 function buildManagedInstallSnippet(scope = "default") {
-  return `<script src="https://app.shopcarbon.com/accessibility/widget?scope=${encodeURIComponent(scope)}" defer></script>`;
+  return `<script src="https://app.shopcarbon.com/accessibility/widget?scope=${encodeURIComponent(scope)}&wrev=31" defer></script>`;
 }
 
 function toButtonLabel(enabled: boolean) {
@@ -373,6 +422,9 @@ export default function AccessibilityPage() {
   const [sendingMonthlyTest, setSendingMonthlyTest] = useState(false);
   const [monthlyTestStatus, setMonthlyTestStatus] = useState<string | null>(null);
   const [runtimeWidgetMounted, setRuntimeWidgetMounted] = useState(false);
+  const appliedAssistProfileRef = useRef<string>("clear");
+  const [studioStripMode, setStudioStripMode] = useState<ProfileModeId | null>("retail");
+  const [appliedAssistProfile, setAppliedAssistProfile] = useState<AssistWidgetProfileKey>("clear");
   const [activeModal, setActiveModal] = useState<null | "log-history" | "recipient">(null);
   const [logHistoryData, setLogHistoryData] = useState<AccessibilityExportPayload | null>(null);
   const [logHistoryLoading, setLogHistoryLoading] = useState(false);
@@ -381,6 +433,39 @@ export default function AccessibilityPage() {
   const [recipientDraft, setRecipientDraft] = useState(defaultSettings.monthlyReportEmail);
   const [recipientSaving, setRecipientSaving] = useState(false);
   const [recipientStatus, setRecipientStatus] = useState<string | null>(null);
+
+  const pushAssistProfileToWidget = useCallback((name: AssistWidgetProfileKey) => {
+    appliedAssistProfileRef.current = name;
+    setAppliedAssistProfile(name);
+    setStudioStripMode(widgetKeyToStripMode(name));
+    const g = window as Window & { __carbonA11yApplyStudioProfile?: (k: string) => void };
+    if (typeof g.__carbonA11yApplyStudioProfile === "function") {
+      g.__carbonA11yApplyStudioProfile(name);
+    } else {
+      setSettingsStatus("Open Preview to apply this profile to the live widget.");
+    }
+  }, []);
+
+  const handleStudioProfileStripMode = useCallback(
+    (id: ProfileModeId) => {
+      if (id === "new") {
+        const next = window.prompt(
+          "New settings scope key (e.g. store-west) — letters, numbers, dashes:",
+          ""
+        );
+        if (next?.trim()) {
+          const trimmed = next.trim().replace(/\s+/g, "-");
+          setSettingsScope(trimmed);
+          setSettingsStatus(`Scope set to "${trimmed}". Publish or load settings for this scope.`);
+          document.getElementById("snippets")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+        return;
+      }
+      const wk = stripModeToWidgetKey(id);
+      if (wk) pushAssistProfileToWidget(wk);
+    },
+    [pushAssistProfileToWidget]
+  );
 
   const installSnippet = useMemo(() => buildInstallSnippet(settings), [settings]);
   const managedInstallSnippet = useMemo(
@@ -1004,7 +1089,12 @@ export default function AccessibilityPage() {
     const runtimeScript = document.getElementById("carbon-a11y-runtime-script");
     if (runtimeScript?.parentElement) runtimeScript.parentElement.removeChild(runtimeScript);
     try {
-      (window as unknown as Record<string, unknown>).__carbonA11yLoaded = false;
+      const gw = window as unknown as Record<string, unknown>;
+      delete gw.__carbonA11yRev;
+      gw.__carbonA11yLoaded = false;
+      delete gw.__carbonA11yStudioPreview;
+      delete gw.__carbonA11yApplyStudioPreview;
+      delete gw.__carbonA11yApplyStudioProfile;
     } catch {
       // no-op
     }
@@ -1012,11 +1102,37 @@ export default function AccessibilityPage() {
 
   function installRuntimeWidgetOnPage() {
     removeRuntimeWidgetFromPage();
+    const gw = window as Window & {
+      __carbonA11yStudioPreview?: {
+        textScale: number;
+        highContrast: boolean;
+        readableFont: boolean;
+        highlightLinks: boolean;
+      };
+    };
+    gw.__carbonA11yStudioPreview = {
+      textScale: previewTextScale,
+      highContrast: previewContrast,
+      readableFont: previewReadableFont,
+      highlightLinks: previewLinkHighlight,
+    };
     const script = document.createElement("script");
     script.id = "carbon-a11y-runtime-script";
     script.defer = true;
-    script.src = `/accessibility/widget?scope=${encodeURIComponent(settingsScope || "default")}&_ts=${Date.now()}`;
-    script.onload = () => setRuntimeWidgetMounted(true);
+    const cfg = encodeURIComponent(JSON.stringify(toWidgetEmbedConfig(settings)));
+    const sc = encodeURIComponent(settingsScope || "default");
+    script.src = `/accessibility/widget?config=${cfg}&scope=${sc}&wrev=31&_ts=${Date.now()}`;
+    script.onload = () => {
+      setRuntimeWidgetMounted(true);
+      const g = window as Window & {
+        __carbonA11yApplyStudioProfile?: (k: string) => void;
+        __carbonA11yApplyStudioPreview?: () => void;
+      };
+      requestAnimationFrame(() => {
+        g.__carbonA11yApplyStudioProfile?.(appliedAssistProfileRef.current);
+        g.__carbonA11yApplyStudioPreview?.();
+      });
+    };
     script.onerror = () => setRuntimeWidgetMounted(false);
     document.body.appendChild(script);
   }
@@ -1053,6 +1169,33 @@ export default function AccessibilityPage() {
     setPreviewOpen(false);
   }
 
+  /** Keep embedded widget prefs in sync with Configuration Console "Current preview" chips (separate from localStorage-only visits). */
+  useEffect(() => {
+    if (!runtimeWidgetMounted) return;
+    const g = window as Window & {
+      __carbonA11yStudioPreview?: {
+        textScale: number;
+        highContrast: boolean;
+        readableFont: boolean;
+        highlightLinks: boolean;
+      };
+      __carbonA11yApplyStudioPreview?: () => void;
+    };
+    g.__carbonA11yStudioPreview = {
+      textScale: previewTextScale,
+      highContrast: previewContrast,
+      readableFont: previewReadableFont,
+      highlightLinks: previewLinkHighlight,
+    };
+    g.__carbonA11yApplyStudioPreview?.();
+  }, [
+    runtimeWidgetMounted,
+    previewTextScale,
+    previewContrast,
+    previewReadableFont,
+    previewLinkHighlight,
+  ]);
+
   useEffect(() => {
     return () => {
       removeRuntimeWidgetFromPage();
@@ -1085,10 +1228,38 @@ export default function AccessibilityPage() {
       {/* TAB BAR */}
       <nav className={styles.tabBar}>
         <div className={styles.tabsRow}>
-          <button type="button" className={styles.tab}>Docs</button>
-          <button type="button" className={styles.tab}>Tickets</button>
-          <button type="button" className={styles.tab}>Log History</button>
-          <button type="button" className={`${styles.tab} ${styles.tabActive}`}>Widget</button>
+          <button
+            type="button"
+            className={`${styles.tab} ${activeTopTab === "docs" ? styles.tabActive : ""}`}
+            onClick={() => activateTopTab("docs")}
+            aria-current={activeTopTab === "docs" ? "page" : undefined}
+          >
+            Docs
+          </button>
+          <button
+            type="button"
+            className={`${styles.tab} ${activeTopTab === "tickets" ? styles.tabActive : ""}`}
+            onClick={() => activateTopTab("tickets")}
+            aria-current={activeTopTab === "tickets" ? "page" : undefined}
+          >
+            Tickets
+          </button>
+          <button
+            type="button"
+            className={`${styles.tab} ${activeTopTab === "log-history" ? styles.tabActive : ""}`}
+            onClick={() => activateTopTab("log-history")}
+            aria-current={activeTopTab === "log-history" ? "page" : undefined}
+          >
+            Log History
+          </button>
+          <button
+            type="button"
+            className={`${styles.tab} ${activeTopTab === "widget" ? styles.tabActive : ""}`}
+            onClick={() => activateTopTab("widget")}
+            aria-current={activeTopTab === "widget" ? "page" : undefined}
+          >
+            Widget
+          </button>
         </div>
         <div className={styles.toolbarCluster}>
           <label className={styles.scopeChip}>
@@ -1139,7 +1310,7 @@ export default function AccessibilityPage() {
             </div>
 
             <div className={styles.profileSection}>
-              <ProfileModeStrip />
+              <ProfileModeStrip value={studioStripMode} onModeChange={handleStudioProfileStripMode} />
             </div>
 
             <div
@@ -1161,12 +1332,16 @@ export default function AccessibilityPage() {
                     Tune display, motion, and navigation for this site.
                   </p>
                   <div className={styles.widgetShellPills}>
-                    <span className={styles.widgetShellPill}>Blind</span>
-                    <span className={styles.widgetShellPill}>Low Vision</span>
-                    <span className={styles.widgetShellPill}>Motor</span>
-                    <span className={styles.widgetShellPill}>Dyslexia</span>
-                    <span className={styles.widgetShellPill}>ADHD</span>
-                    <span className={styles.widgetShellPill}>Seizure Safe</span>
+                    {ASSIST_SHELL_PILLS.map(({ key, label }) => (
+                      <button
+                        key={key}
+                        type="button"
+                        className={`${styles.widgetShellPill} ${appliedAssistProfile === key ? styles.widgetShellPillActive : ""}`}
+                        onClick={() => pushAssistProfileToWidget(key)}
+                      >
+                        {label}
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -1199,7 +1374,9 @@ export default function AccessibilityPage() {
             </div>
             <div className={styles.panelHeader}>
               <h2 className={styles.panelTitle}>Accessibility</h2>
-              <button className={styles.panelAction}>Crees Festens v</button>
+              <button type="button" className={styles.panelAction} onClick={() => focusSection("config-console")}>
+                Configuration
+              </button>
             </div>
 
             <div className={styles.headerCluster}>
@@ -1224,7 +1401,7 @@ export default function AccessibilityPage() {
             {/* Profile strip */}
             <div className={styles.profileSection}>
               <span className={styles.profileLabel}>Accessibility preferences</span>
-              <ProfileModeStrip />
+              <ProfileModeStrip value={studioStripMode} onModeChange={handleStudioProfileStripMode} />
             </div>
 
             {/* Widget preview card */}
@@ -1235,17 +1412,23 @@ export default function AccessibilityPage() {
                   <div className={styles.wpMiniBrand}>
                     <span>CA</span> CARBON ASSIST
                   </div>
-                  <button className={styles.wpMiniClose} onClick={removeRuntimeWidgetFromPage}>X</button>
+                  <button type="button" className={styles.wpMiniClose} onClick={uninstallWidgetPreview}>
+                    X
+                  </button>
                 </div>
                 <div className={styles.wpMiniTitle}>Accessibility preferences</div>
                 <div className={styles.wpMiniSub}>Tune display, motion, and navigation for this site.</div>
                 <div className={styles.wpMiniProfiles}>
-                  <span className={styles.wpMiniPill}>Blind</span>
-                  <span className={styles.wpMiniPill}>Low Vision</span>
-                  <span className={styles.wpMiniPill}>Motor</span>
-                  <span className={styles.wpMiniPill}>Dyslexia</span>
-                  <span className={styles.wpMiniPill}>ADHD</span>
-                  <span className={styles.wpMiniPill}>Seizure Safe</span>
+                  {ASSIST_SHELL_PILLS.map(({ key, label }) => (
+                    <button
+                      key={key}
+                      type="button"
+                      className={`${styles.wpMiniPill} ${appliedAssistProfile === key ? styles.wpMiniPillActive : ""}`}
+                      onClick={() => pushAssistProfileToWidget(key)}
+                    >
+                      {label}
+                    </button>
+                  ))}
                 </div>
               </div>
               {/* Action buttons on right */}
@@ -1257,8 +1440,8 @@ export default function AccessibilityPage() {
                   <button
                     type="button"
                     className={styles.wpBtn}
-                    onClick={() => setPreviewOpen(!previewOpen)}
-                    aria-label="Refresh preview"
+                    onClick={installRuntimeWidgetOnPage}
+                    aria-label="Reload preview widget"
                   >
                     <RefreshIcon size={18} />
                   </button>
@@ -1268,7 +1451,7 @@ export default function AccessibilityPage() {
                   <button className={styles.wpBtn} onClick={() => document.getElementById('snippets')?.scrollIntoView({behavior:'smooth'})}>
                     Installation Snippets
                   </button>
-                  <button className={styles.wpBtn} onClick={() => { removeRuntimeWidgetFromPage(); setRuntimeWidgetMounted(false); }}>
+                  <button type="button" className={styles.wpBtn} onClick={uninstallWidgetPreview}>
                     Uninstall
                   </button>
                 </div>
@@ -1284,7 +1467,14 @@ export default function AccessibilityPage() {
               <button className={styles.outlineBtn} onClick={() => document.getElementById('snippets')?.scrollIntoView({behavior:'smooth'})}>
                 Installation Snippets
               </button>
-              <button className={styles.outlineBtn} style={{border:'none',background:'transparent',color:'rgba(255,255,255,0.4)'}}>Edit</button>
+              <button
+                type="button"
+                className={styles.outlineBtn}
+                style={{ border: "none", background: "transparent", color: "rgba(255,255,255,0.4)" }}
+                onClick={() => focusSection("config-console")}
+              >
+                Edit
+              </button>
             </div>
 
             <div className={styles.inlineGrid}>
@@ -1574,6 +1764,22 @@ export default function AccessibilityPage() {
                     <input type="color" className={styles.colorInput} value={settings.panelColor} onChange={(event) => setSettings((prev) => ({ ...prev, panelColor: event.target.value }))} />
                   </label>
                   <label className={styles.fieldGroup}>
+                    <span className={styles.fieldLabel}>Panel theme</span>
+                    <select
+                      className={styles.fieldSelect}
+                      value={settings.panelTheme}
+                      onChange={(event) =>
+                        setSettings((prev) => ({
+                          ...prev,
+                          panelTheme: event.target.value === "light" ? "light" : "dark",
+                        }))
+                      }
+                    >
+                      <option value="dark">Dark glass (Carbon)</option>
+                      <option value="light">Light gray (UserWay-style)</option>
+                    </select>
+                  </label>
+                  <label className={styles.fieldGroup}>
                     <span className={styles.fieldLabel}>Position</span>
                     <select className={styles.fieldSelect} value={settings.position} onChange={(event) => setSettings((prev) => ({ ...prev, position: event.target.value as WidgetPosition }))}>
                       <option value="right">Right</option>
@@ -1607,7 +1813,7 @@ export default function AccessibilityPage() {
                 </label>
                 <label className={styles.fieldGroup}>
                   <span className={styles.fieldLabel}>Panel width: {settings.panelWidth}px</span>
-                  <input type="range" className={styles.rangeInput} min={260} max={420} value={settings.panelWidth} onChange={(event) => setSettings((prev) => ({ ...prev, panelWidth: Number(event.target.value) }))} />
+                  <input type="range" className={styles.rangeInput} min={280} max={520} value={settings.panelWidth} onChange={(event) => setSettings((prev) => ({ ...prev, panelWidth: Number(event.target.value) }))} />
                 </label>
               </div>
 

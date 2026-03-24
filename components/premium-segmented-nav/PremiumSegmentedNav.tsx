@@ -33,7 +33,8 @@ export function PremiumSegmentedNav({
   return (
     <div
       className={[
-        "relative mx-auto w-full max-w-[min(680px,92vw)]",
+        /* Full width of parent so Publish + tabs share real estate; avoid fixed max-width cramming at mid viewports */
+        "relative w-full min-w-0",
         className ?? "",
       ]
         .filter(Boolean)
@@ -52,17 +53,19 @@ export function PremiumSegmentedNav({
       {/* Outer frame: floating centered glass panel — plum / aubergine, not crushed black */}
       <div
         className={[
-          "relative flex min-h-[50px] w-full items-center justify-between gap-6 rounded-[16px] border px-3 py-2 sm:min-h-[52px] sm:gap-8 sm:px-4 sm:py-2.5",
+          /* Stack below 1100px so Publish is not squeezed against the rail; row + scrollable tabs above */
+          "relative flex min-h-[50px] w-full min-w-0 flex-col gap-3 rounded-[16px] border px-2.5 py-2 sm:min-h-[52px] sm:px-3 sm:py-2.5 min-[1101px]:flex-row min-[1101px]:items-center min-[1101px]:justify-between min-[1101px]:gap-4 min-[1101px]:px-4",
           "border-[color-mix(in_srgb,rgba(210,190,240,0.22)_42%,rgba(90,70,125,0.38))]",
           "bg-[linear-gradient(168deg,rgba(255,255,255,0.1)_0%,transparent_44%),linear-gradient(180deg,rgba(58,46,88,0.48)_0%,rgba(38,30,62,0.72)_50%,rgba(28,22,48,0.8)_100%)]",
           "shadow-[0_14px_48px_rgba(32,18,52,0.38),inset_0_1px_0_rgba(255,255,255,0.12),inset_0_-1px_0_rgba(45,35,72,0.32)]",
           "backdrop-blur-md",
         ].join(" ")}
       >
-        {/* Segmented tabs */}
+        {/* Segmented tabs — scroll strip when row layout runs out of horizontal space */}
+        <div className="w-full min-w-0 overflow-x-auto [scrollbar-width:thin] min-[1101px]:flex-1 min-[1101px]:min-w-0">
         <div
           className={[
-            "flex shrink-0 overflow-hidden rounded-[11px] border p-[2px]",
+            "flex w-max min-w-0 max-w-none rounded-[11px] border p-[2px]",
             "border-[color-mix(in_srgb,rgba(255,255,255,0.12)_48%,rgba(75,58,108,0.42))]",
             "bg-[linear-gradient(180deg,rgba(72,60,102,0.38)_0%,rgba(46,38,72,0.52)_100%)]",
             "shadow-[inset_0_1px_0_rgba(255,255,255,0.08),inset_0_-1px_0_rgba(48,38,72,0.28)]",
@@ -78,7 +81,7 @@ export function PremiumSegmentedNav({
                 type="button"
                 onClick={() => onTabChange(tab.id)}
                 className={[
-                  "relative min-h-[36px] px-3.5 py-1.5 text-[13px] font-medium tracking-[0.05em] transition-all duration-200 sm:min-h-[38px] sm:px-[17px] sm:py-2",
+                  "relative min-h-[36px] shrink-0 px-2.5 py-1.5 text-[12px] font-medium tracking-[0.05em] transition-all duration-200 sm:min-h-[38px] sm:px-3.5 sm:text-[13px] sm:py-2 min-[1101px]:px-[17px]",
                   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color-mix(in_srgb,rgba(196,181,250,0.55),transparent)]",
                   isFirst ? "rounded-l-[9px]" : "",
                   isLast ? "rounded-r-[9px]" : "border-r border-[color-mix(in_srgb,rgba(255,255,255,0.1)_55%,transparent)]",
@@ -102,6 +105,7 @@ export function PremiumSegmentedNav({
             );
           })}
         </div>
+        </div>
 
         {/* Publish — strongest action in the bar (above active tab) */}
         <button
@@ -109,8 +113,8 @@ export function PremiumSegmentedNav({
           onClick={onPublish}
           disabled={publishDisabled || publishPending}
           className={[
-            "group relative inline-flex shrink-0 overflow-hidden",
-            "min-h-[46px] items-stretch rounded-[15px] border pl-5 pr-2 py-2",
+            "group relative inline-flex w-full min-w-0 overflow-hidden min-[1101px]:w-auto min-[1101px]:shrink-0",
+            "min-h-[46px] items-stretch justify-center rounded-[15px] border pl-4 pr-2 py-2 min-[1101px]:justify-start min-[1101px]:pl-5",
             "border-[color-mix(in_srgb,rgba(238,218,255,0.48)_42%,rgba(85,65,125,0.52))]",
             "bg-[linear-gradient(168deg,rgba(255,255,255,0.19)_0%,rgba(255,255,255,0.05)_30%,transparent_58%),linear-gradient(180deg,rgba(92,74,138,0.72)_0%,rgba(52,42,92,0.86)_50%,rgba(26,20,48,0.96)_100%)]",
             "shadow-[0_24px_58px_rgba(5,0,22,0.62),0_0_0_1px_rgba(255,255,255,0.11)_inset,0_1px_0_rgba(255,255,255,0.22)_inset,0_-1px_0_rgba(0,0,0,0.38)_inset,0_0_46px_color-mix(in_srgb,rgba(175,140,230,0.24),transparent)]",

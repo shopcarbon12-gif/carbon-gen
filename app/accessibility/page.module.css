@@ -334,6 +334,7 @@
   display: flex;
   flex-direction: column;
   gap: 18px;
+  min-width: 0;
 }
 
 /* ─── Glass panel ───────────────────────────────────── */
@@ -399,6 +400,7 @@
 .panelUtilityBar {
   display: flex;
   width: 100%;
+  min-width: 0;
   align-items: stretch;
   justify-content: stretch;
   gap: 0;
@@ -585,6 +587,31 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.widgetShellPill:hover {
+  background: rgba(255, 255, 255, 0.11);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.widgetShellPill:focus-visible {
+  outline: 2px solid color-mix(in srgb, rgba(180, 160, 240, 0.55), transparent);
+  outline-offset: 2px;
+}
+
+.widgetShellPillActive {
+  border-color: color-mix(in srgb, rgba(196, 181, 253, 0.45), rgba(255, 255, 255, 0.2));
+  background: linear-gradient(180deg, rgba(98, 80, 138, 0.42) 0%, rgba(52, 44, 88, 0.55) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 0 20px color-mix(in srgb, rgba(130, 100, 200, 0.2), transparent);
+  font-weight: 600;
 }
 
 .widgetActionRail {
@@ -798,6 +825,25 @@
   padding: 4px 8px;
   font-size: 10px;
   color: rgba(255,255,255,0.75);
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.wpMiniPill:hover {
+  background: rgba(255,255,255,0.1);
+}
+
+.wpMiniPill:focus-visible {
+  outline: 2px solid color-mix(in srgb, rgba(180, 160, 240, 0.5), transparent);
+  outline-offset: 1px;
+}
+
+.wpMiniPillActive {
+  border-color: rgba(196, 181, 253, 0.35);
+  background: rgba(98, 80, 138, 0.35);
+  color: #fff;
+  font-weight: 600;
 }
 
 .wpRight {
@@ -1251,6 +1297,8 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .scopeChip {
@@ -1699,6 +1747,25 @@
   background-repeat: no-repeat, no-repeat;
   background-position: right 14px center;
   background-size: 16px;
+}
+
+/* Native dropdown list rows: reinforce contrast (globals fixed black-on-dark; matches studio tokens). */
+.fieldSelect :global(option),
+.fieldSelect :global(optgroup) {
+  background-color: #1a1528;
+  color: #f0edf8;
+}
+
+.fieldSelect :global(option:hover),
+.fieldSelect :global(option:focus) {
+  background-color: #2d2642;
+  color: #ffffff;
+}
+
+.fieldSelect :global(option:checked),
+.fieldSelect :global(option[selected]) {
+  background-color: #5b21b6;
+  color: #ffffff;
 }
 
 #config-console .fieldSelect:focus {

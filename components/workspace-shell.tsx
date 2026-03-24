@@ -2068,6 +2068,19 @@ export function WorkspaceShell({
             padding-right: 0;
           }
         }
+        @media (max-width: 900px) {
+          .topbar {
+            padding: 8px 12px;
+            gap: 10px;
+          }
+          .topbar-title {
+            gap: 10px;
+            min-width: 0;
+          }
+          .topbar-logo {
+            max-width: min(42vw, 190px);
+          }
+        }
         @media (max-width: 520px) {
           .topbar-title {
             font-size: 0.96rem;

@@ -16,6 +16,13 @@
   --control-radius: 12px;
   --control-height: 52px;
   --control-padding-x: 14px;
+  /* Native <select> dropdown rows (option) — must stay light-on-dark for dark UI */
+  --select-option-bg: #1e1b2e;
+  --select-option-fg: #f8fafc;
+  --select-option-hover-bg: #2d2640;
+  --select-option-hover-fg: #ffffff;
+  --select-option-selected-bg: #4c1d95;
+  --select-option-selected-fg: #ffffff;
 }
 * {
   box-sizing: border-box;
@@ -232,10 +239,23 @@ select:focus {
   box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.14);
 }
 
-/* Dropdown list text color (e.g., Gender options). */
+/* Native <select> lists: never force black text on dark menus (was unreadable). */
 select option,
 select optgroup {
-  color: #000000;
+  background-color: var(--select-option-bg);
+  color: var(--select-option-fg);
+}
+
+select option:hover,
+select option:focus {
+  background-color: var(--select-option-hover-bg);
+  color: var(--select-option-hover-fg);
+}
+
+select option:checked,
+select option[selected] {
+  background-color: var(--select-option-selected-bg);
+  color: var(--select-option-selected-fg);
 }
 
 button,
