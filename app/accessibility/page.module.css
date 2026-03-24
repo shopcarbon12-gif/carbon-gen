@@ -1715,6 +1715,15 @@
   color: var(--ca-text-dim);
 }
 
+.fieldHint {
+  font-size: 12px;
+  line-height: 1.35;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: rgba(248, 250, 252, 0.55);
+  margin-top: -2px;
+}
+
 .fieldInput,
 .fieldSelect,
 .rangeInput,

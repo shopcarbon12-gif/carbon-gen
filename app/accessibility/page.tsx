@@ -181,7 +181,7 @@ const defaultSettings: AccessibilitySettings = {
   sideOffset: 10,
   bottomOffset: 10,
   triggerSize: 52,
-  iconSize: 20,
+  iconSize: 26,
   panelWidth: 400,
   cornerRadius: 14,
   widgetLabel: "Carbon Assist",
@@ -305,11 +305,11 @@ function toWidgetEmbedConfig(settings: AccessibilitySettings) {
 
 function buildInstallSnippet(settings: AccessibilitySettings) {
   const encoded = encodeURIComponent(JSON.stringify(toWidgetEmbedConfig(settings)));
-  return `<script src="https://app.shopcarbon.com/accessibility/widget?config=${encoded}&wrev=51" defer></script>`;
+  return `<script src="https://app.shopcarbon.com/accessibility/widget?config=${encoded}&wrev=52" defer></script>`;
 }
 
 function buildManagedInstallSnippet(scope = "default") {
-  return `<script src="https://app.shopcarbon.com/accessibility/widget?scope=${encodeURIComponent(scope)}&wrev=51" defer></script>`;
+  return `<script src="https://app.shopcarbon.com/accessibility/widget?scope=${encodeURIComponent(scope)}&wrev=52" defer></script>`;
 }
 
 function toButtonLabel(enabled: boolean) {
@@ -331,15 +331,23 @@ function normalizeEmailInput(value: string) {
   return value.toLowerCase();
 }
 
+function clampPx(n: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, Math.round(n)));
+}
+
 function normalizeSettings(settings: AccessibilitySettings): AccessibilitySettings {
   const rawLogoH = Number(settings.logoMaxHeight);
   const logoMaxHeight =
     Number.isFinite(rawLogoH) && rawLogoH > 0
       ? Math.max(12, Math.min(120, Math.round(rawLogoH)))
       : 32;
+  const rawIcon = Number(settings.iconSize);
+  const iconSize =
+    Number.isFinite(rawIcon) && rawIcon > 0 ? clampPx(rawIcon, 14, 48) : 26;
   return {
     ...settings,
     logoMaxHeight,
+    iconSize,
     statementUrl: normalizeUrlInput(settings.statementUrl || ""),
     feedbackUrl: normalizeUrlInput(settings.feedbackUrl || ""),
     supportEmail: normalizeEmailInput(settings.supportEmail || ""),
@@ -402,6 +410,8 @@ export default function AccessibilityPage() {
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsStatus, setSettingsStatus] = useState<string | null>(null);
+  const [logoMaxHeightDraft, setLogoMaxHeightDraft] = useState<string | null>(null);
+  const [iconSizeDraft, setIconSizeDraft] = useState<string | null>(null);
   const [copyManagedState, setCopyManagedState] = useState(false);
   const [usageSummary, setUsageSummary] = useState<UsageSummary | null>(null);
   const [usageLoading, setUsageLoading] = useState(false);
@@ -561,6 +571,8 @@ export default function AccessibilityPage() {
         }
         const data = (await res.json()) as { ok?: boolean; config?: Partial<AccessibilitySettings> };
         if (!data.ok || !data.config || cancelled) return;
+        setLogoMaxHeightDraft(null);
+        setIconSizeDraft(null);
         setSettings((prev) => {
           const incoming = data.config || {};
           const incomingFeatures = incoming.features || {};
@@ -1029,6 +1041,8 @@ export default function AccessibilityPage() {
       return false;
     }
     const normalized = normalizeSettings(nextSettings);
+    setLogoMaxHeightDraft(null);
+    setIconSizeDraft(null);
     setSettings(normalized);
     setSettingsSaving(true);
     setSettingsStatus(null);
@@ -1127,7 +1141,7 @@ export default function AccessibilityPage() {
     script.defer = true;
     const cfg = encodeURIComponent(JSON.stringify(toWidgetEmbedConfig(settings)));
     const sc = encodeURIComponent(settingsScope || "default");
-    script.src = `/accessibility/widget?config=${cfg}&scope=${sc}&wrev=51&_ts=${Date.now()}`;
+    script.src = `/accessibility/widget?config=${cfg}&scope=${sc}&wrev=52&_ts=${Date.now()}`;
     script.onload = () => {
       setRuntimeWidgetMounted(true);
       const g = window as Window & {
@@ -1673,10 +1687,21 @@ export default function AccessibilityPage() {
                 className={styles.publishBtn}
                 onClick={saveSettings}
                 disabled={settingsSaving || !canSaveSettings}
+                title={
+                  !canSaveSettings
+                    ? "Admin role required to save. Sign in as an admin user."
+                    : "Save settings for the current scope"
+                }
               >
                 {settingsSaving ? "Saving..." : "Save Scope"}
               </button>
             </div>
+            {!canSaveSettings && (
+              <p className={styles.inlineStatus} role="status">
+                Read-only: sign in as an <strong>admin</strong> to save. The button stays disabled until then.
+              </p>
+            )}
+            {settingsStatus && <p className={styles.inlineStatus}>{settingsStatus}</p>}
 
             <div className={styles.configGrid}>
               <div className={`${styles.configCard} ${styles.horizontalSurface} ${styles.lightOccupancy}`}>
@@ -1712,14 +1737,74 @@ export default function AccessibilityPage() {
                     />
                   </label>
                   <label className={styles.fieldGroup}>
-                    <span className={styles.fieldLabel}>Logo max height</span>
+                    <span className={styles.fieldLabel}>Logo max height (px)</span>
                     <input
-                      type="number"
-                      min={12}
-                      max={120}
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="off"
                       className={styles.fieldInput}
-                      value={settings.logoMaxHeight}
-                      onChange={(event) => setSettings((prev) => ({ ...prev, logoMaxHeight: Number(event.target.value) || prev.logoMaxHeight }))}
+                      data-no-autocapitalize="true"
+                      aria-label="Logo max height in pixels"
+                      value={logoMaxHeightDraft ?? String(settings.logoMaxHeight)}
+                      onFocus={() => setLogoMaxHeightDraft(String(settings.logoMaxHeight))}
+                      onChange={(e) => {
+                        const raw = e.target.value.replace(/\D/g, "");
+                        setLogoMaxHeightDraft(raw);
+                        if (raw !== "") {
+                          const n = parseInt(raw, 10);
+                          if (Number.isFinite(n)) {
+                            setSettings((p) => ({ ...p, logoMaxHeight: clampPx(n, 12, 120) }));
+                          }
+                        }
+                      }}
+                      onBlur={(e) => {
+                        const raw = e.target.value.replace(/\D/g, "");
+                        setLogoMaxHeightDraft(null);
+                        setSettings((p) => {
+                          if (raw === "") return { ...p, logoMaxHeight: p.logoMaxHeight };
+                          const n = parseInt(raw, 10);
+                          return {
+                            ...p,
+                            logoMaxHeight: Number.isFinite(n) ? clampPx(n, 12, 120) : p.logoMaxHeight,
+                          };
+                        });
+                      }}
+                    />
+                  </label>
+                  <label className={styles.fieldGroup}>
+                    <span className={styles.fieldLabel}>Launcher icon size (px)</span>
+                    <span className={styles.fieldHint}>Floating button accessibility glyph (not the panel logo)</span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      className={styles.fieldInput}
+                      data-no-autocapitalize="true"
+                      aria-label="Launcher icon size in pixels"
+                      value={iconSizeDraft ?? String(settings.iconSize)}
+                      onFocus={() => setIconSizeDraft(String(settings.iconSize))}
+                      onChange={(e) => {
+                        const raw = e.target.value.replace(/\D/g, "");
+                        setIconSizeDraft(raw);
+                        if (raw !== "") {
+                          const n = parseInt(raw, 10);
+                          if (Number.isFinite(n)) {
+                            setSettings((p) => ({ ...p, iconSize: clampPx(n, 14, 48) }));
+                          }
+                        }
+                      }}
+                      onBlur={(e) => {
+                        const raw = e.target.value.replace(/\D/g, "");
+                        setIconSizeDraft(null);
+                        setSettings((p) => {
+                          if (raw === "") return { ...p, iconSize: p.iconSize };
+                          const n = parseInt(raw, 10);
+                          return {
+                            ...p,
+                            iconSize: Number.isFinite(n) ? clampPx(n, 14, 48) : p.iconSize,
+                          };
+                        });
+                      }}
                     />
                   </label>
                   <label className={styles.fieldGroup}>

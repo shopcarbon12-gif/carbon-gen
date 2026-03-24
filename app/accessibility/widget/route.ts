@@ -21,7 +21,7 @@ const DEFAULT_CONFIG = {
   sideOffset: 10,
   bottomOffset: 10,
   triggerSize: 52,
-  iconSize: 20,
+  iconSize: 26,
   panelWidth: 400,
   cornerRadius: 22,
   label: "Accessibility",
@@ -117,7 +117,7 @@ function normalizeConfigObject(input: unknown) {
         : DEFAULT_CONFIG.triggerSize,
     iconSize:
       typeof cfg.iconSize === "number" && Number.isFinite(cfg.iconSize)
-        ? Math.max(14, Math.min(34, Math.round(cfg.iconSize)))
+        ? Math.max(14, Math.min(48, Math.round(cfg.iconSize)))
         : DEFAULT_CONFIG.iconSize,
     panelWidth:
       typeof cfg.panelWidth === "number" && Number.isFinite(cfg.panelWidth)
@@ -387,7 +387,7 @@ var widgetCss='' +
   '.ca-assist-launcher--fab-outline,.ca-assist-launcher--fab-glass,.ca-assist-launcher--fab-solid{background:transparent !important;box-shadow:none !important;backdrop-filter:none !important;-webkit-backdrop-filter:none !important;border:none !important}' +
   '.ca-assist-launcher--fab:focus-visible{outline:2px solid color-mix(in srgb,var(--ca-accent,#7c3aed) 55%,#1e1b4b);outline-offset:2px}' +
   '.ca-assist-launcher--fab .ca-assist-launcher__glyph{display:flex;align-items:center;justify-content:center;width:100%;height:100%;min-width:0;min-height:0;margin:0;border:none;background:transparent;box-shadow:none;border-radius:0;overflow:visible;padding:0;color:inherit}' +
-  '.ca-assist-launcher--fab .ca-assist-launcher__glyph svg{display:block;width:var(--ca-glyph-px,20px);height:var(--ca-glyph-px,20px);flex-shrink:0;box-sizing:border-box}' +
+  '.ca-assist-launcher--fab .ca-assist-launcher__glyph svg{display:block;width:var(--ca-glyph-px,26px);height:var(--ca-glyph-px,26px);flex-shrink:0;box-sizing:border-box}' +
   '.ca-assist-markword{display:inline-flex;align-items:baseline;gap:0;letter-spacing:.14em !important;text-transform:uppercase !important;white-space:nowrap;font-size:10.5px;font-weight:600;color:#f4f4f5}' +
   '.ca-assist-markword--launcher{font-size:10px;letter-spacing:.16em !important}' +
   '.ca-assist-markword--strip{font-size:13px;letter-spacing:.14em !important}' +
@@ -2781,9 +2781,11 @@ function createWidget(){
     try{
       var tw=Math.round(Number(trigger.offsetWidth)||0);
       var ts=tw>0?tw:fabSize();
-      var want=Math.max(14,Math.min(34,Math.round(Number(config.iconSize)||20)));
-      var maxG=Math.max(14,Math.floor(ts*0.54));
+      var want=Math.max(14,Math.min(48,Math.round(Number(config.iconSize)||26)));
+      var maxG=Math.max(24,Math.floor(ts*0.82));
+      var minG=Math.max(18,Math.floor(ts*0.36));
       var g=Math.min(want,maxG);
+      if(g<minG){g=minG;}
       trigger.style.setProperty('--ca-glyph-px',String(g)+'px');
     }catch(_g){}
   }
