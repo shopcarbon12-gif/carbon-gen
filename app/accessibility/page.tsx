@@ -305,11 +305,11 @@ function toWidgetEmbedConfig(settings: AccessibilitySettings) {
 
 function buildInstallSnippet(settings: AccessibilitySettings) {
   const encoded = encodeURIComponent(JSON.stringify(toWidgetEmbedConfig(settings)));
-  return `<script src="https://app.shopcarbon.com/accessibility/widget?config=${encoded}&wrev=49" defer></script>`;
+  return `<script src="https://app.shopcarbon.com/accessibility/widget?config=${encoded}&wrev=50" defer></script>`;
 }
 
 function buildManagedInstallSnippet(scope = "default") {
-  return `<script src="https://app.shopcarbon.com/accessibility/widget?scope=${encodeURIComponent(scope)}&wrev=49" defer></script>`;
+  return `<script src="https://app.shopcarbon.com/accessibility/widget?scope=${encodeURIComponent(scope)}&wrev=50" defer></script>`;
 }
 
 function toButtonLabel(enabled: boolean) {
@@ -332,8 +332,14 @@ function normalizeEmailInput(value: string) {
 }
 
 function normalizeSettings(settings: AccessibilitySettings): AccessibilitySettings {
+  const rawLogoH = Number(settings.logoMaxHeight);
+  const logoMaxHeight =
+    Number.isFinite(rawLogoH) && rawLogoH > 0
+      ? Math.max(12, Math.min(120, Math.round(rawLogoH)))
+      : 32;
   return {
     ...settings,
+    logoMaxHeight,
     statementUrl: normalizeUrlInput(settings.statementUrl || ""),
     feedbackUrl: normalizeUrlInput(settings.feedbackUrl || ""),
     supportEmail: normalizeEmailInput(settings.supportEmail || ""),
@@ -1121,7 +1127,7 @@ export default function AccessibilityPage() {
     script.defer = true;
     const cfg = encodeURIComponent(JSON.stringify(toWidgetEmbedConfig(settings)));
     const sc = encodeURIComponent(settingsScope || "default");
-    script.src = `/accessibility/widget?config=${cfg}&scope=${sc}&wrev=49&_ts=${Date.now()}`;
+    script.src = `/accessibility/widget?config=${cfg}&scope=${sc}&wrev=50&_ts=${Date.now()}`;
     script.onload = () => {
       setRuntimeWidgetMounted(true);
       const g = window as Window & {
