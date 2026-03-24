@@ -60,7 +60,7 @@ export async function GET(req: Request) {
     }
     const mimeMatch = /^data:([^;,]+)/i.exec(logoUrl);
     const ct = mimeMatch?.[1]?.trim() || "image/png";
-    return new NextResponse(buf, {
+    return new NextResponse(new Uint8Array(buf), {
       status: 200,
       headers: {
         "content-type": ct,
@@ -116,7 +116,7 @@ export async function GET(req: Request) {
       }
       baseCt = sniffed;
     }
-    return new NextResponse(buf, {
+    return new NextResponse(new Uint8Array(buf), {
       status: 200,
       headers: {
         "content-type": baseCt,

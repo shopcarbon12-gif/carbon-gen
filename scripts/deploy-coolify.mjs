@@ -175,7 +175,20 @@ function runPowerShell(script) {
   });
 }
 
+/** Set COOLIFY_NOTIFY=0 (or CI=true) to skip modal/toast and avoid blocking headless runs. */
+function desktopNotifyEnabled() {
+  const v = String(process.env.COOLIFY_NOTIFY ?? "1").trim().toLowerCase();
+  if (["0", "false", "off", "none", "skip", "disabled", "no"].includes(v)) return false;
+  const ci = String(process.env.CI || "").trim().toLowerCase();
+  if (ci === "1" || ci === "true") return false;
+  return true;
+}
+
 function notifyWindows({ title, message, success = true }) {
+  if (!desktopNotifyEnabled()) {
+    console.log(`[deploy notify] ${title}: ${message}`);
+    return;
+  }
   const safeTitle = escapePsSingleQuoted(title);
   const safeMessage = escapePsSingleQuoted(message);
   const successWav = String(process.env.COOLIFY_NOTIFY_WAV_SUCCESS || "C:\\Windows\\Media\\Alarm03.wav").trim();
