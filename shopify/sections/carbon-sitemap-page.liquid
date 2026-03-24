@@ -1,0 +1,223 @@
+{% comment %}
+  Human-readable sitemap page (HTML). Does not replace Shopify's /sitemap.xml (SEO).
+
+  Theme setup:
+  1. Add this file to sections/ and templates/page.carbon-sitemap.json to the theme.
+  2. Online Store → Pages → Add page (or edit "Sitemap") → Theme template → "carbon-sitemap".
+  3. Clear the page body in the editor (section owns the content). Set the page title to "Sitemap" (or your choice).
+
+  Optional: In the theme editor, pick menus for "Primary menu" and "Secondary menu" (e.g. footer).
+{% endcomment %}
+
+<div class="page-width carbon-sitemap-page">
+  <h1 class="carbon-sitemap-page__title">{{ section.settings.page_title | default: 'Sitemap' | escape }}</h1>
+
+  {% if section.settings.intro != blank %}
+    <div class="rte carbon-sitemap-page__intro">{{ section.settings.intro }}</div>
+  {% endif %}
+
+  {% if section.settings.show_shop_links %}
+    <section class="carbon-sitemap-page__block" aria-labelledby="carbon-sitemap-shop">
+      <h2 id="carbon-sitemap-shop">{{ section.settings.shop_heading | escape }}</h2>
+      <ul class="carbon-sitemap-page__list">
+        <li><a href="{{ routes.root_url }}">Home</a></li>
+        <li><a href="{{ routes.all_products_collection_url }}">{{ section.settings.all_products_label | escape }}</a></li>
+        <li><a href="{{ routes.cart_url }}">Cart</a></li>
+        <li><a href="{{ routes.account_url }}">Account</a></li>
+      </ul>
+    </section>
+  {% endif %}
+
+  {% assign primary = section.settings.primary_menu %}
+  {% if primary != blank and linklists[primary].links.size > 0 %}
+    <section class="carbon-sitemap-page__block" aria-labelledby="carbon-sitemap-primary">
+      <h2 id="carbon-sitemap-primary">{{ section.settings.primary_heading | escape }}</h2>
+      {% render 'carbon-sitemap-links', links: linklists[primary].links %}
+    </section>
+  {% endif %}
+
+  {% assign secondary = section.settings.secondary_menu %}
+  {% if secondary != blank and linklists[secondary].links.size > 0 %}
+    <section class="carbon-sitemap-page__block" aria-labelledby="carbon-sitemap-secondary">
+      <h2 id="carbon-sitemap-secondary">{{ section.settings.secondary_heading | escape }}</h2>
+      {% render 'carbon-sitemap-links', links: linklists[secondary].links %}
+    </section>
+  {% endif %}
+
+  {% if section.settings.show_collections %}
+    <section class="carbon-sitemap-page__block" aria-labelledby="carbon-sitemap-collections">
+      <h2 id="carbon-sitemap-collections">{{ section.settings.collections_heading | escape }}</h2>
+      <ul class="carbon-sitemap-page__list carbon-sitemap-page__list--columns">
+        {% for collection in collections %}
+          {% if collection.handle != 'frontpage' and collection.all_products_count > 0 %}
+            <li><a href="{{ collection.url }}">{{ collection.title | escape }}</a></li>
+          {% endif %}
+        {% endfor %}
+      </ul>
+    </section>
+  {% endif %}
+
+  {% if section.settings.show_blogs %}
+    <section class="carbon-sitemap-page__block" aria-labelledby="carbon-sitemap-blogs">
+      <h2 id="carbon-sitemap-blogs">{{ section.settings.blogs_heading | escape }}</h2>
+      {% for blog in blogs %}
+        <div class="carbon-sitemap-page__subblock">
+          <h3><a href="{{ blog.url }}">{{ blog.title | escape }}</a></h3>
+          {% if blog.articles_count > 0 %}
+            <ul class="carbon-sitemap-page__list">
+              {% for article in blog.articles limit: section.settings.blog_article_limit %}
+                <li><a href="{{ article.url }}">{{ article.title | escape }}</a></li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </section>
+  {% endif %}
+
+  {% if section.settings.show_policies %}
+    <section class="carbon-sitemap-page__block" aria-labelledby="carbon-sitemap-policies">
+      <h2 id="carbon-sitemap-policies">{{ section.settings.policies_heading | escape }}</h2>
+      <ul class="carbon-sitemap-page__list">
+        {% if shop.privacy_policy %}
+          <li><a href="{{ shop.privacy_policy.url }}">{{ shop.privacy_policy.title | escape }}</a></li>
+        {% endif %}
+        {% if shop.refund_policy %}
+          <li><a href="{{ shop.refund_policy.url }}">{{ shop.refund_policy.title | escape }}</a></li>
+        {% endif %}
+        {% if shop.shipping_policy %}
+          <li><a href="{{ shop.shipping_policy.url }}">{{ shop.shipping_policy.title | escape }}</a></li>
+        {% endif %}
+        {% if shop.terms_of_service %}
+          <li><a href="{{ shop.terms_of_service.url }}">{{ shop.terms_of_service.title | escape }}</a></li>
+        {% endif %}
+      </ul>
+    </section>
+  {% endif %}
+</div>
+
+<style>
+  .carbon-sitemap-page { padding: 1.5rem 0 3rem; }
+  .carbon-sitemap-page__title { margin-bottom: 0.75rem; }
+  .carbon-sitemap-page__intro { margin-bottom: 2rem; max-width: 65ch; }
+  .carbon-sitemap-page__block { margin-bottom: 2.25rem; }
+  .carbon-sitemap-page__block h2 { margin-bottom: 0.75rem; font-size: 1.25rem; }
+  .carbon-sitemap-page__subblock { margin-top: 1.25rem; }
+  .carbon-sitemap-page__subblock h3 { margin-bottom: 0.5rem; font-size: 1.05rem; }
+  .carbon-sitemap-page__list { list-style: disc; padding-left: 1.25rem; margin: 0; }
+  .carbon-sitemap-page__list li { margin: 0.35rem 0; }
+  .carbon-sitemap-page__list--columns {
+    column-width: 14rem;
+    column-gap: 2rem;
+  }
+</style>
+
+{% schema %}
+{
+  "name": "Sitemap page (Carbon)",
+  "tag": "section",
+  "class": "section",
+  "settings": [
+    {
+      "type": "text",
+      "id": "page_title",
+      "label": "Visible page title (H1)",
+      "default": "Sitemap"
+    },
+    {
+      "type": "richtext",
+      "id": "intro",
+      "label": "Introduction",
+      "default": "<p>Browse all main areas of our store. For search engines, we also provide <a href=\"/sitemap.xml\">sitemap.xml</a>.</p>"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_shop_links",
+      "label": "Show Home / All products / Cart / Account",
+      "default": true
+    },
+    {
+      "type": "text",
+      "id": "shop_heading",
+      "label": "Shop links heading",
+      "default": "Shop"
+    },
+    {
+      "type": "text",
+      "id": "all_products_label",
+      "label": "All products link label",
+      "default": "All products"
+    },
+    {
+      "type": "link_list",
+      "id": "primary_menu",
+      "label": "Primary menu",
+      "info": "Usually your header / main navigation"
+    },
+    {
+      "type": "text",
+      "id": "primary_heading",
+      "label": "Primary menu heading",
+      "default": "Main navigation"
+    },
+    {
+      "type": "link_list",
+      "id": "secondary_menu",
+      "label": "Secondary menu (optional)",
+      "info": "e.g. Footer menu"
+    },
+    {
+      "type": "text",
+      "id": "secondary_heading",
+      "label": "Secondary menu heading",
+      "default": "More links"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_collections",
+      "label": "List all collections (with products)",
+      "default": true
+    },
+    {
+      "type": "text",
+      "id": "collections_heading",
+      "label": "Collections heading",
+      "default": "Collections"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_blogs",
+      "label": "List blogs and recent articles",
+      "default": true
+    },
+    {
+      "type": "text",
+      "id": "blogs_heading",
+      "label": "Blogs heading",
+      "default": "Journal"
+    },
+    {
+      "type": "range",
+      "id": "blog_article_limit",
+      "min": 5,
+      "max": 100,
+      "step": 5,
+      "label": "Max articles per blog",
+      "default": 30
+    },
+    {
+      "type": "checkbox",
+      "id": "show_policies",
+      "label": "Show policy pages",
+      "default": true
+    },
+    {
+      "type": "text",
+      "id": "policies_heading",
+      "label": "Policies heading",
+      "default": "Policies"
+    }
+  ],
+  "presets": [{ "name": "Sitemap page (Carbon)" }]
+}
+{% endschema %}

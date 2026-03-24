@@ -1,0 +1,13 @@
+{% comment %}
+  Recursive list for menu links (nested menus). Expects variable: links
+{% endcomment %}
+<ul class="carbon-sitemap-page__list">
+  {% for link in links %}
+    <li>
+      <a href="{{ link.url }}">{{ link.title | escape }}</a>
+      {% if link.links != blank and link.links.size > 0 %}
+        {% render 'carbon-sitemap-links', links: link.links %}
+      {% endif %}
+    </li>
+  {% endfor %}
+</ul>
