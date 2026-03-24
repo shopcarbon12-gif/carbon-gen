@@ -8,7 +8,7 @@ const DEFAULT_CONFIG = {
   position: "right",
   sideOffset: 10,
   bottomOffset: 10,
-  triggerSize: 76,
+  triggerSize: 52,
   iconSize: 20,
   panelWidth: 400,
   cornerRadius: 22,
@@ -102,7 +102,7 @@ function normalizeConfigObject(input: unknown) {
         : DEFAULT_CONFIG.bottomOffset,
     triggerSize:
       typeof cfg.triggerSize === "number" && Number.isFinite(cfg.triggerSize)
-        ? Math.max(52, Math.min(96, Math.round(cfg.triggerSize)))
+        ? Math.max(48, Math.min(96, Math.round(cfg.triggerSize)))
         : DEFAULT_CONFIG.triggerSize,
     iconSize:
       typeof cfg.iconSize === "number" && Number.isFinite(cfg.iconSize)
@@ -193,16 +193,16 @@ export async function GET(request: Request) {
     }
   }
   const configJson = JSON.stringify(config);
-  /** 32×32 max on many OSes; arrow shape reads as pointer — not a solid black dot (circle fill failed in several browsers). */
+  /** Arrow used for the on-screen big-cursor overlay (theme cursor:url limits + !important cursors make overlay reliable). */
   const bigCursorDataUrl =
     "data:image/svg+xml," +
     encodeURIComponent(
-      '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">' +
-        '<path d="M4 4v20l6-6 3 9 4-2.5-3-8.5h9L4 4z" fill="#ffffff" stroke="#0a0a0a" stroke-width="1.75" stroke-linejoin="round"/>' +
+      '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">' +
+        '<path d="M8 10v38l12-12 6 18 8-5-6-18h20L8 10z" fill="#ffffff" stroke="#0a0a0a" stroke-width="3" stroke-linejoin="round"/>' +
         "</svg>"
     );
 
-  const js = `(function(){var __caRev=32;if(window.__carbonA11yRev===__caRev){return;}window.__carbonA11yRev=__caRev;window.__carbonA11yLoaded=true;
+  const js = `(function(){var __caRev=33;if(window.__carbonA11yRev===__caRev){return;}window.__carbonA11yRev=__caRev;window.__carbonA11yLoaded=true;
 /* ca-assist-ui v3 studio | Phase A+B a11y (see docs/accessibility-widget-phase-a-b-spec.md)
  * Panel: non-modal named region (not aria-modal). No focus trap — Tab may move into page content.
  * Esc closes only while focus is inside the panel (keydown on panel). Space toggles switches; Arrow/Home/End in radiogroups.
@@ -248,14 +248,116 @@ var scaleAnnounceTimer=null;
 var styleTag=document.createElement("style");
 styleTag.id="carbon-a11y-style";
 document.head.appendChild(styleTag);
+var __caVideoPauseBound=false;
+var __caVideoObserver=null;
+var __caCursorFollowEl=null;
+var __caCursorMoveFn=null;
+function onVideoPlayWhilePaused(ev){
+  try{
+    if(!state.pauseAnimations)return;
+    var t=ev.target;
+    if(t&&t.tagName==='VIDEO'){t.pause();}
+  }catch(_e){}
+}
+function syncPauseAnimationsMedia(){
+  try{
+    if(state.pauseAnimations){
+      var n=document.querySelectorAll('video');
+      for(var i=0;i<n.length;i++){
+        try{
+          var v=n[i];
+          v.pause();
+          if(v.hasAttribute('autoplay')){
+            v.setAttribute('data-ca-a11y-autoplay','1');
+            v.removeAttribute('autoplay');
+          }
+        }catch(_vi){}
+      }
+      if(!__caVideoPauseBound){
+        document.addEventListener('play',onVideoPlayWhilePaused,true);
+        __caVideoPauseBound=true;
+      }
+      if(!__caVideoObserver){
+        __caVideoObserver=new MutationObserver(function(){
+          try{
+            var q=document.querySelectorAll('video');
+            for(var j=0;j<q.length;j++){
+              try{
+                var x=q[j];
+                x.pause();
+                if(x.hasAttribute('autoplay')){
+                  x.setAttribute('data-ca-a11y-autoplay','1');
+                  x.removeAttribute('autoplay');
+                }
+              }catch(_xj){}
+            }
+          }catch(_mo){}
+        });
+        __caVideoObserver.observe(document.documentElement,{childList:true,subtree:true});
+      }
+    }else{
+      if(__caVideoPauseBound){
+        document.removeEventListener('play',onVideoPlayWhilePaused,true);
+        __caVideoPauseBound=false;
+      }
+      if(__caVideoObserver){
+        __caVideoObserver.disconnect();
+        __caVideoObserver=null;
+      }
+      var rest=document.querySelectorAll('video[data-ca-a11y-autoplay]');
+      for(var k=0;k<rest.length;k++){
+        try{
+          rest[k].setAttribute('autoplay','');
+          rest[k].removeAttribute('data-ca-a11y-autoplay');
+        }catch(_rk){}
+      }
+    }
+  }catch(_ve){}
+}
+function syncBigCursorOverlay(){
+  try{
+    if(!state.bigCursor){
+      if(__caCursorMoveFn){
+        document.removeEventListener('pointermove',__caCursorMoveFn,true);
+        __caCursorMoveFn=null;
+      }
+      if(__caCursorFollowEl&&__caCursorFollowEl.parentNode){
+        __caCursorFollowEl.parentNode.removeChild(__caCursorFollowEl);
+      }
+      __caCursorFollowEl=null;
+      return;
+    }
+    var u=String(__caBigCursorUrl||'');
+    if(!__caCursorFollowEl){
+      __caCursorFollowEl=document.createElement('div');
+      __caCursorFollowEl.id='carbon-a11y-cursor-follow';
+      __caCursorFollowEl.setAttribute('aria-hidden','true');
+      __caCursorFollowEl.style.cssText='position:fixed;left:0;top:0;width:56px;height:56px;margin:0;padding:0;pointer-events:none;z-index:2147483647;opacity:1;background-repeat:no-repeat;background-position:0 0;background-size:contain;border:none;transform:translate(-8px,-8px);will-change:left,top';
+      __caCursorFollowEl.style.backgroundImage='url('+JSON.stringify(u)+')';
+      var host=document.body||document.documentElement;
+      host.appendChild(__caCursorFollowEl);
+      __caCursorMoveFn=function(e){
+        if(!__caCursorFollowEl||!state.bigCursor)return;
+        try{
+          var t=e.target;
+          if(t&&t.closest&&(t.closest('input,textarea,select,option,[contenteditable="true"],[contenteditable="plaintext-only"]'))){__caCursorFollowEl.style.opacity='0';return;}
+        }catch(_ct){}
+        __caCursorFollowEl.style.opacity='1';
+        __caCursorFollowEl.style.left=e.clientX+'px';
+        __caCursorFollowEl.style.top=e.clientY+'px';
+      };
+      document.addEventListener('pointermove',__caCursorMoveFn,true);
+    }
+  }catch(_be){}
+}
 var widgetCss='' +
   '.ca-assist-root,.ca-assist-root::before,.ca-assist-root::after,.ca-assist-root *,.ca-assist-root *::before,.ca-assist-root *::after{box-sizing:border-box;margin:0;padding:0;font-family:ui-sans-serif,system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif !important;font-size:16px;line-height:1.5;letter-spacing:normal !important;text-decoration:none;color:inherit;border:none;background:transparent;box-shadow:none;outline:none;-webkit-font-smoothing:antialiased}' +
   '.ca-assist-root img{display:block;max-width:100%;height:auto;object-fit:contain}' +
   '.ca-assist-root button,.ca-assist-root [role="switch"],.ca-assist-root [role="radio"]{font:inherit;color:inherit;cursor:inherit;appearance:none;-webkit-appearance:none}' +
   '.ca-assist-root button.ca-assist-profile-pill{font-size:13px !important;font-weight:600 !important;line-height:1.3 !important}' +
-  '.ca-assist-shell{position:relative;display:block;isolation:isolate;z-index:0;--ca-fab-size:76px}' +
+  '.ca-assist-shell{position:relative;display:block;isolation:isolate;z-index:0;--ca-fab-size:52px}' +
   '.ca-assist-lang-he,.ca-assist-lang-he button,.ca-assist-lang-he .ca-assist-toggle__label,.ca-assist-lang-he .ca-assist-navrow__label,.ca-assist-lang-he .ca-assist-title{font-family:"Noto Sans Hebrew","Segoe UI","Arial Hebrew",Arial,sans-serif !important}' +
-  '.ca-assist-launcher--fab{position:relative;z-index:30;display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;width:var(--ca-launcher-size,76px);height:var(--ca-launcher-size,76px);min-width:0;max-width:none;padding:0;border-radius:50%;border:none;outline:none;background:transparent;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;color:inherit;cursor:grab;touch-action:none;-webkit-tap-highlight-color:transparent;transition:transform .15s ease}' +
+  '.ca-assist-launcher--fab{position:relative;z-index:30;display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;width:var(--ca-launcher-size,52px);height:var(--ca-launcher-size,52px);min-width:0;max-width:none;padding:0;border-radius:50%;border:none;outline:none;background:transparent;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;color:inherit;cursor:grab;touch-action:none;-webkit-tap-highlight-color:transparent;transition:transform .15s ease}' +
   '.ca-assist-launcher--fab::before,.ca-assist-launcher--fab::after{content:none !important;display:none !important;box-shadow:none !important;background:none !important}' +
   '.ca-assist-launcher--fab:hover{transform:translateY(-1px);filter:none}' +
   '.ca-assist-launcher--fab:active:not(.ca-assist-launcher--dragging){transform:translateY(0) scale(.98)}' +
@@ -1254,7 +1356,10 @@ function renderGlobalStyles(){
     if(sat!=='none'){css.push('html{filter:'+sat+' !important;}');}
   }
   if(state.readableFont){css.push('html,body,*{font-family:"Atkinson Hyperlegible","Segoe UI",Arial,sans-serif !important;}');}
-  if(state.pauseAnimations){css.push('*,*::before,*::after{animation:none !important;transition:none !important;scroll-behavior:auto !important;} video,iframe{animation:none !important;}');}
+  if(state.pauseAnimations){
+    css.push('*,*::before,*::after{animation:none !important;transition:none !important;scroll-behavior:auto !important;}');
+    css.push('video{animation:none !important;}');
+  }
   if(state.highlightLinks){css.push('a{outline:2px dashed #f59e0b !important;outline-offset:2px !important;border-radius:4px;}');}
   if(state.hideImages){css.push('img,svg,picture,video,canvas{visibility:hidden !important;}');}
   if(state.bigCursor){
@@ -1262,9 +1367,14 @@ function renderGlobalStyles(){
       root.classList.add('ca-a11y-big-cursor');
       root.classList.add('ca-a11y-cursor-xl');
     }catch(_bc){}
-    var cu=String(__caBigCursorUrl||'').split('"').join('');
     css.push(
-      'html.ca-a11y-big-cursor.ca-a11y-cursor-xl body,html.ca-a11y-big-cursor.ca-a11y-cursor-xl body *,html.ca-a11y-big-cursor.ca-a11y-cursor-xl body *::before,html.ca-a11y-big-cursor.ca-a11y-cursor-xl body *::after{cursor:url("'+cu+'") 4 4, crosshair, auto !important;}'
+      'html.ca-a11y-big-cursor.ca-a11y-cursor-xl body,html.ca-a11y-big-cursor.ca-a11y-cursor-xl body *{cursor:none !important;}'
+    );
+    css.push(
+      'html.ca-a11y-big-cursor.ca-a11y-cursor-xl body *::before,html.ca-a11y-big-cursor.ca-a11y-cursor-xl body *::after{cursor:none !important;}'
+    );
+    css.push(
+      'html.ca-a11y-big-cursor.ca-a11y-cursor-xl input:not([type]),html.ca-a11y-big-cursor.ca-a11y-cursor-xl input[type="text"],html.ca-a11y-big-cursor.ca-a11y-cursor-xl input[type="search"],html.ca-a11y-big-cursor.ca-a11y-cursor-xl input[type="email"],html.ca-a11y-big-cursor.ca-a11y-cursor-xl input[type="url"],html.ca-a11y-big-cursor.ca-a11y-cursor-xl input[type="tel"],html.ca-a11y-big-cursor.ca-a11y-cursor-xl input[type="password"],html.ca-a11y-big-cursor.ca-a11y-cursor-xl input[type="number"],html.ca-a11y-big-cursor.ca-a11y-cursor-xl textarea,html.ca-a11y-big-cursor.ca-a11y-cursor-xl select,html.ca-a11y-big-cursor.ca-a11y-cursor-xl [contenteditable="true"],html.ca-a11y-big-cursor.ca-a11y-cursor-xl [contenteditable="plaintext-only"]{cursor:text !important;}'
     );
   }else{
     try{
@@ -1287,6 +1397,8 @@ function renderGlobalStyles(){
   syncShadowBigCursorStyle();
   syncEnhancedTooltips();
   syncPanelThemeClass();
+  syncPauseAnimationsMedia();
+  syncBigCursorOverlay();
 }
 
 function track(eventName,payload){
@@ -2086,7 +2198,7 @@ function createWidget(){
   var viewportPushBaseR=null;
   var viewportPushBaseL=null;
   function fabSize(){
-    var base=Math.max(60,Math.min(96,Number(config.triggerSize)||76));
+    var base=Math.max(48,Math.min(96,Number(config.triggerSize)||52));
     if(state.oversizedUi){
       return Math.max(72,Math.min(118,Math.round(base*1.24)));
     }
