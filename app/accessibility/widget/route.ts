@@ -214,7 +214,7 @@ export async function GET(request: Request) {
         "</svg>"
     );
 
-  const js = `(function(){var __caRev=50;if(window.__carbonA11yRev===__caRev){return;}window.__carbonA11yRev=__caRev;window.__carbonA11yLoaded=true;
+  const js = `(function(){var __caRev=51;if(window.__carbonA11yRev===__caRev){return;}window.__carbonA11yRev=__caRev;window.__carbonA11yLoaded=true;
 /* ca-assist-ui v3 studio | Phase A+B a11y (see docs/accessibility-widget-phase-a-b-spec.md)
  * Panel: non-modal named region (not aria-modal). No focus trap — Tab may move into page content.
  * Esc closes only while focus is inside the panel (keydown on panel). Space toggles switches; Arrow/Home/End in radiogroups.
@@ -2648,8 +2648,6 @@ function createWidget(){
   var launcherDrag={active:false,pointerId:null,startX:0,startY:0,origLeft:0,origTop:0,moved:false,suppressClick:false};
   var launcherPosKey=storageKey+'::fabPos';
   var dockOpenRight=String(config.position||'right')!=='left';
-  /** Keep default (right) launcher left of typical bottom-right chat/cookie/checkout buttons. */
-  var rightEdgeStackClearancePx=dockOpenRight?76:0;
   var viewportPushBaseR=null;
   var viewportPushBaseL=null;
   function fabSize(){
@@ -2684,10 +2682,78 @@ function createWidget(){
     }catch(_e){}
     return{minL:minL,minT:minT,minR:minR,minB:minB,iw:iw,ih:ih};
   }
+  /** Fixed/sticky UI in bottom-right (wishlist, scroll-up, chat). Excludes our host + sky-high z overlays. */
+  function fabStripRects(wrapEl){
+    var ins=fabSafeInsets();
+    var iw=ins.iw, ih=ins.ih;
+    var out=[];
+    try{
+      var nodes=document.querySelectorAll('body *');
+      for(var i=0;i<nodes.length;i++){
+        var el=nodes[i];
+        if(!el||el===wrapEl)continue;
+        try{if(wrapEl&&wrapEl.contains(el))continue;}catch(_x){}
+        var cs=window.getComputedStyle(el);
+        if(cs.position!=='fixed'&&cs.position!=='sticky')continue;
+        if(cs.visibility==='hidden'||cs.display==='none')continue;
+        var op=parseFloat(cs.opacity);
+        if(isFinite(op)&&op<0.04)continue;
+        var zi=parseInt(cs.zIndex,10);
+        if(isFinite(zi)&&zi>=2147483640)continue;
+        var r=el.getBoundingClientRect();
+        if(r.width<6||r.height<6)continue;
+        if(r.width>iw*0.62)continue;
+        if(r.bottom<ih-168||r.right<iw-280)continue;
+        if(r.top<ih-200)continue;
+        out.push(r);
+      }
+    }catch(_e){}
+    return out;
+  }
+  function rectsOverlapFab(a,b,p){
+    return !(a.left+p>=b.right-p||a.right-p<=b.left+p||a.top+p>=b.bottom-p||a.bottom-p<=b.top+p);
+  }
+  /** True corner first; shift left only when overlapping another FAB; match their bottom row. */
+  function resolveRightDockFabRect(openSz){
+    var ins=fabSafeInsets();
+    var iw=ins.iw, ih=ins.ih;
+    var side=Math.max(2,Number(config.sideOffset)||10);
+    var bot=Math.max(2,Number(config.bottomOffset)||10);
+    var GAP=Math.max(8,Math.min(18,Math.round(side*0.55+5)));
+    var rects=fabStripRects(wrap);
+    var left=Math.round(iw-ins.minR-side-openSz);
+    var top=Math.round(ih-openSz-bot);
+    if(left<ins.minL){left=ins.minL;}
+    if(top<ins.minT){top=ins.minT;}
+    if(top+openSz>ih-ins.minB){top=ih-ins.minB-openSz;}
+    var guard=0;
+    while(guard++<55){
+      var mine={left:left,top:top,right:left+openSz,bottom:top+openSz};
+      var blocker=null;
+      for(var j=0;j<rects.length;j++){
+        if(rectsOverlapFab(mine,rects[j],GAP)){blocker=rects[j];break;}
+      }
+      if(!blocker)break;
+      left=Math.round(blocker.left-openSz-GAP);
+      if(left<ins.minL){left=ins.minL;break;}
+    }
+    var rowBottom=0;
+    for(var k=0;k<rects.length;k++){
+      var rk=rects[k];
+      if(rk.height>168)continue;
+      if(rk.top<ih-188)continue;
+      if(rk.right>=left-6&&rk.left<=iw-ins.minR+4){rowBottom=Math.max(rowBottom,rk.bottom);}
+    }
+    if(rowBottom>0&&rowBottom<=ih){
+      var snap=Math.round(rowBottom-openSz);
+      if(snap>=ins.minT&&snap+openSz<=ih-ins.minB){top=snap;}
+    }
+    return{left:left,top:top};
+  }
   function clampFab(left,top,sz){
     var ins=fabSafeInsets();
     var minL=ins.minL,minT=ins.minT;
-    var maxL=ins.iw-ins.minR-sz-rightEdgeStackClearancePx;
+    var maxL=ins.iw-ins.minR-sz;
     var maxT=ins.ih-ins.minB-sz;
     if(maxL<minL){maxL=minL;}
     if(maxT<minT){maxT=minT;}
@@ -2730,15 +2796,15 @@ function createWidget(){
     }catch(_e){}
   }
   function applyFabScreenCorner(dockRight,openSz){
-    var ins=fabSafeInsets();
-    var iw=ins.iw,ih=ins.ih;
     var targetLeft,targetTop;
     if(dockRight){
-      targetLeft=Math.round(iw-ins.minR-openSz-rightEdgeStackClearancePx);
-      targetTop=Math.round(ih-ins.minB-openSz);
+      var rr=resolveRightDockFabRect(openSz);
+      targetLeft=rr.left;
+      targetTop=rr.top;
     }else{
-      targetLeft=Math.round(ins.minL);
-      targetTop=Math.round(ih-ins.minB-openSz);
+      var insL=fabSafeInsets();
+      targetLeft=Math.round(insL.minL);
+      targetTop=Math.round(insL.ih-insL.minB-openSz);
     }
     wrap.style.paddingBottom='';
     var c=clampFab(targetLeft,targetTop,openSz);
@@ -2769,8 +2835,9 @@ function createWidget(){
       left=side;
       top=vh-sz-bot;
     }else{
-      left=vw-sz-side-rightEdgeStackClearancePx;
-      top=vh-sz-bot;
+      var rr0=resolveRightDockFabRect(sz);
+      left=rr0.left;
+      top=rr0.top;
     }
     var c=clampFab(left,top,sz);
     applyFabFreePosition(c.left,c.top);
@@ -3402,6 +3469,12 @@ function createWidget(){
       return;
     }
     var sz=Math.round(trigger.offsetWidth)||fabSize();
+    if(!loadFabPosition()&&dockOpenRight&&config.position!=='left'){
+      var rr=resolveRightDockFabRect(sz);
+      var cr=clampFab(rr.left,rr.top,sz);
+      applyFabFreePosition(cr.left,cr.top);
+      return;
+    }
     var lx=parseFloat(wrap.style.left)||0;
     var ly=parseFloat(wrap.style.top)||0;
     var c=clampFab(lx,ly,sz);
@@ -3437,6 +3510,19 @@ function createWidget(){
   wrap.style.width=ts+'px';
   wrap.style.height=ts+'px';
   placeFabInitial();
+  function refitDockIfDefault(){
+    try{
+      if(loadFabPosition())return;
+      if(panel.style.display!=='none'&&panel.style.display!=='')return;
+      if(config.position==='left'||!dockOpenRight)return;
+      var szF=fabSize();
+      var rrF=resolveRightDockFabRect(szF);
+      var cF=clampFab(rrF.left,rrF.top,szF);
+      applyFabFreePosition(cF.left,cF.top);
+    }catch(_rf){}
+  }
+  setTimeout(refitDockIfDefault,400);
+  window.addEventListener('load',refitDockIfDefault,{once:true});
   syncWidgetMotionClass();
   syncOversizedShellClass();
   document.addEventListener('keydown',function(ev){
