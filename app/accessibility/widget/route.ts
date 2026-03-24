@@ -202,7 +202,7 @@ export async function GET(request: Request) {
         "</svg>"
     );
 
-  const js = `(function(){var __caRev=31;if(window.__carbonA11yRev===__caRev){return;}window.__carbonA11yRev=__caRev;window.__carbonA11yLoaded=true;
+  const js = `(function(){var __caRev=32;if(window.__carbonA11yRev===__caRev){return;}window.__carbonA11yRev=__caRev;window.__carbonA11yLoaded=true;
 /* ca-assist-ui v3 studio | Phase A+B a11y (see docs/accessibility-widget-phase-a-b-spec.md)
  * Panel: non-modal named region (not aria-modal). No focus trap — Tab may move into page content.
  * Esc closes only while focus is inside the panel (keydown on panel). Space toggles switches; Arrow/Home/End in radiogroups.
@@ -369,7 +369,7 @@ var widgetCss='' +
   '.ca-assist-shell--oversize .ca-assist-brand-row{padding:22px 22px 18px !important}' +
   '.ca-assist-shell--oversize .ca-assist-head-titles{padding:12px 22px 22px !important}' +
   '.ca-assist-shell--oversize .ca-assist-field__name{font-size:12px !important;margin-bottom:14px !important}' +
-  '.ca-assist-shell--oversize .ca-assist-seg__btn{padding:12px 18px !important;font-size:14px !important;min-height:48px !important}' +
+  '.ca-assist-shell--oversize .ca-assist-seg__btn,.ca-assist-root.ca-assist-shell--oversize button.ca-assist-seg__btn{padding:13px 20px !important;font-size:15px !important;font-weight:600 !important;min-height:50px !important;line-height:1.3 !important}' +
   '.ca-assist-shell--oversize .ca-assist-navrow{padding:16px 18px !important;min-height:56px !important}' +
   '.ca-assist-shell--oversize .ca-assist-navrow__label{font-size:16px !important}' +
   '.ca-assist-shell--oversize .ca-assist-navrow__val{font-size:12px !important}' +
@@ -381,8 +381,7 @@ var widgetCss='' +
   '.ca-assist-shell--oversize .ca-assist-switch__thumb{width:22px;height:22px !important;top:2px !important;left:2px !important}' +
   '.ca-assist-shell--oversize .ca-assist-toggle.is-on .ca-assist-switch__thumb{transform:translateX(24px) !important}' +
   '.ca-assist-shell--oversize .ca-assist-footer-dynamic{padding:16px 18px 14px !important}' +
-  '.ca-assist-shell--oversize .ca-assist-footlink{font-size:13px !important}' +
-  '.ca-assist-shell--oversize .ca-assist-footreset{font-size:12px !important}' +
+  '.ca-assist-shell--oversize .ca-assist-footreset{font-size:13px !important}' +
   '.ca-assist-shell--oversize .ca-assist-footer-globe{width:32px;height:32px !important}' +
   '.ca-assist-shell--oversize .ca-assist-profile-clear{font-size:12.5px !important;padding:11px 14px !important;font-weight:600 !important}' +
   '.ca-assist-shell--oversize .ca-assist-profile-strip{gap:9px !important;row-gap:12px !important}' +
@@ -392,8 +391,13 @@ var widgetCss='' +
   '.ca-assist-shell--oversize .ca-assist-sec-group{margin-bottom:14px !important;border-radius:20px !important}' +
   '.ca-assist-shell--oversize .ca-assist-sec-group-body{padding:8px 16px 16px !important}' +
   '.ca-assist-shell--oversize .ca-assist-sec-group--commands .ca-assist-navrow{padding:16px 18px !important}' +
-  '.ca-assist-shell--oversize .ca-assist-field--compact .ca-assist-seg__btn{padding:6px 12px !important;min-height:34px !important;font-size:11px !important}' +
-  '.ca-assist-shell--oversize .ca-assist-sec-group-header{font-size:12px !important;padding:14px 18px 12px !important}' +
+  '.ca-assist-shell--oversize .ca-assist-field--compact{padding:12px 0 !important}' +
+  '.ca-assist-shell--oversize .ca-assist-field--compact .ca-assist-field__name--compact{font-size:12px !important;font-weight:650 !important;letter-spacing:.12em !important;margin-bottom:10px !important}' +
+  '.ca-assist-shell--oversize .ca-assist-field--compact .ca-assist-seg--tight{gap:8px !important;row-gap:10px !important}' +
+  '.ca-assist-shell--oversize .ca-assist-field--compact .ca-assist-seg__btn,.ca-assist-root.ca-assist-shell--oversize .ca-assist-field--compact button.ca-assist-seg__btn{padding:14px 20px !important;min-height:52px !important;font-size:16px !important;font-weight:600 !important;line-height:1.25 !important}' +
+  '.ca-assist-shell--oversize .ca-assist-sec-group-header{font-size:13.5px !important;padding:16px 18px 14px !important;letter-spacing:.11em !important}' +
+  '.ca-assist-shell--oversize .ca-assist-footlink{font-size:14.5px !important}' +
+  '.ca-assist-shell--oversize .ca-assist-footreset .ca-assist-footreset__label{font-size:14px !important}' +
   '.ca-assist-shell.ca-assist-reduce-motion .ca-assist-tile__thumb{transition:none !important}' +
   '.ca-assist-navrow{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;text-align:left;border:0;border-bottom:1px solid rgba(255,255,255,.07);background:transparent;color:#e4e4e7;padding:14px 18px;min-height:52px;cursor:inherit;transition:background .12s ease;border-radius:0}' +
   '.ca-assist-navrow:last-child{border-bottom:0}' +
