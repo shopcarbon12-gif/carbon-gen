@@ -3,6 +3,7 @@ import type { Dirent } from "node:fs";
 import path from "node:path";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { resolvePublicAppOrigin } from "@/lib/resolvePublicAppOrigin";
 
 type IntegrationStatus = "online" | "offline";
 
@@ -189,7 +190,7 @@ function normalizeProbeOrigin(origin: string) {
 }
 
 function getProbeOrigins(req: NextRequest) {
-  const requestOrigin = normalizeProbeOrigin(new URL(req.url).origin);
+  const requestOrigin = normalizeProbeOrigin(resolvePublicAppOrigin(req));
   const configuredInternal = String(process.env.INTERNAL_API_ORIGIN || "").trim().replace(/\/+$/, "");
   const defaultInternal =
     process.env.NODE_ENV === "production" ? "http://127.0.0.1:3000" : "";

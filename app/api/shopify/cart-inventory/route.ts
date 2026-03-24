@@ -26,6 +26,10 @@ import { logStageAdd } from "@/lib/shopifyCartSyncLog";
 import { sendPushNotificationEmail } from "@/lib/email";
 import { runActivateArchivedInCart, runCartPushAll } from "@/lib/cartInventoryPush";
 import { runMatchToLSMatrix } from "@/lib/cartInventoryMatchToLS";
+import {
+  resolveInternalApiSelfOrigin,
+  resolvePublicAppOrigin,
+} from "@/lib/resolvePublicAppOrigin";
 import { loadSyncToggles } from "@/lib/shopifyCartConfig";
 
 export const runtime = "nodejs";
@@ -1430,7 +1434,10 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Shop is required for match-to-ls-matrix." }, { status: 400 });
       }
       try {
-        const origin = req.nextUrl.origin;
+        const origin =
+          process.env.NODE_ENV === "production"
+            ? resolveInternalApiSelfOrigin()
+            : resolvePublicAppOrigin(req);
         const result = await runMatchToLSMatrix(shop, origin);
         return NextResponse.json({
           ok: true,

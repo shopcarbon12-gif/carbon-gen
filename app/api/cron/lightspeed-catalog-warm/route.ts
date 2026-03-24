@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { fetchInternalApi } from "@/lib/internalApiOrigin";
+import { resolvePublicAppOrigin } from "@/lib/resolvePublicAppOrigin";
 
 export const runtime = "nodejs";
 export const maxDuration = 180;
@@ -37,7 +38,7 @@ export async function GET(req: NextRequest) {
     const response = await fetchInternalApi(
       `api/lightspeed/catalog?${params.toString()}`,
       { cache: "no-store" },
-      req.nextUrl.origin
+      resolvePublicAppOrigin(req)
     );
     const json = (await response.json().catch(() => ({}))) as {
       ok?: boolean;

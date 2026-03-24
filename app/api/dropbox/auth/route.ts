@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { resolvePublicAppOrigin } from "@/lib/resolvePublicAppOrigin";
 import { readSession } from "@/lib/userAuth";
 import { getDropboxConfig } from "@/lib/dropbox";
 
 export async function GET(req: NextRequest) {
   const session = readSession(req);
   if (!session.isAuthed) {
-    return NextResponse.redirect(new URL("/login", req.url));
+    return NextResponse.redirect(new URL("/login", resolvePublicAppOrigin(req)));
   }
 
   const { appKey, redirectUri } = getDropboxConfig();

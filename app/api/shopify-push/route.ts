@@ -10,6 +10,7 @@ import {
   toProductGid,
 } from "@/lib/shopify";
 import { getShopifyAccessToken } from "@/lib/shopifyTokenRepository";
+import { resolvePublicAppOrigin } from "@/lib/resolvePublicAppOrigin";
 
 const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
 const MAX_SHOPIFY_PUSH_JSON_BYTES = Number.parseInt(
@@ -128,22 +129,7 @@ type ProductReorderMediaResult = {
 };
 
 function getPublicRequestOrigin(req: NextRequest) {
-  const configured =
-    norm(process.env.APP_PUBLIC_URL) ||
-    norm(process.env.NEXT_PUBLIC_APP_URL) ||
-    norm(process.env.PUBLIC_APP_URL) ||
-    norm(process.env.SITE_URL);
-  if (configured) {
-    return configured.replace(/\/+$/, "");
-  }
-  const forwardedHostRaw = String(req.headers.get("x-forwarded-host") || "").trim();
-  const forwardedProtoRaw = String(req.headers.get("x-forwarded-proto") || "").trim();
-  const forwardedHost = forwardedHostRaw.split(",")[0]?.trim();
-  const forwardedProto = forwardedProtoRaw.split(",")[0]?.trim() || "https";
-  if (forwardedHost) {
-    return `${forwardedProto}://${forwardedHost}`;
-  }
-  return req.nextUrl.origin.replace(/\/+$/, "");
+  return resolvePublicAppOrigin(req);
 }
 
 function norm(value: unknown) {

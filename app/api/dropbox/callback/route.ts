@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { resolvePublicAppOrigin } from "@/lib/resolvePublicAppOrigin";
 import { readSession } from "@/lib/userAuth";
 import { getDropboxConfig, upsertDropboxToken } from "@/lib/dropbox";
 
@@ -34,17 +35,17 @@ function resolveSafeSettingsOrigin(req: NextRequest) {
     }
   }
 
-  const incoming = req.nextUrl.origin;
-  if (/^https:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(incoming)) {
-    return incoming.replace(/^https:/i, "http:");
+  const resolved = resolvePublicAppOrigin(req);
+  if (/^https:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(resolved)) {
+    return resolved.replace(/^https:/i, "http:");
   }
-  return incoming;
+  return resolved;
 }
 
 export async function GET(req: NextRequest) {
   const session = readSession(req);
   if (!session.isAuthed) {
-    return NextResponse.redirect(new URL("/login", req.url));
+    return NextResponse.redirect(new URL("/login", resolvePublicAppOrigin(req)));
   }
   const userId = session.userId || session.username || "";
   if (!userId) {

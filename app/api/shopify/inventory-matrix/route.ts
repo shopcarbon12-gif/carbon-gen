@@ -8,6 +8,7 @@ import {
 import { listCartCatalogParentIds } from "@/lib/shopifyCartStaging";
 import { loadSyncToggles } from "@/lib/shopifyCartConfig";
 import { fetchInternalApi } from "@/lib/internalApiOrigin";
+import { resolvePublicAppOrigin } from "@/lib/resolvePublicAppOrigin";
 import {
   getShopifyAccessToken,
   listInstalledShops,
@@ -545,7 +546,7 @@ async function fetchLightspeedSnapshotChunk(
   const response = await fetchInternalApi(
     `api/lightspeed/catalog?${params.toString()}`,
     { cache: "no-store" },
-    req.nextUrl.origin
+    resolvePublicAppOrigin(req)
   );
   const json = (await response.json().catch(() => ({}))) as LightspeedCatalogResponse & {
     nextCatalogCursor?: string | null;

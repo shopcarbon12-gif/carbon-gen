@@ -54,7 +54,8 @@ export async function POST(req: NextRequest) {
     }
 
     const apiVersion = normalizeText(process.env.SHOPIFY_API_VERSION) || "2025-01";
-    const baseUrl = normalizeText(body?.baseUrl || process.env.NEXT_PUBLIC_BASE_URL || process.env.VERCEL_URL);
+    const baseUrlRaw = normalizeText(body?.baseUrl || process.env.NEXT_PUBLIC_BASE_URL || process.env.VERCEL_URL);
+    const baseUrl = baseUrlRaw || "https://app.shopcarbon.com";
     const protocol = baseUrl.startsWith("localhost") ? "http" : "https";
     const appUrl = baseUrl.startsWith("http") ? baseUrl : `${protocol}://${baseUrl}`;
 

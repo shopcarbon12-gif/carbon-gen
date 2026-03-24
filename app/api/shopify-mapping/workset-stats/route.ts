@@ -12,6 +12,7 @@ import {
 import { listCartCatalogParents } from "@/lib/shopifyCartStaging";
 import { ensureLightspeedEnvLoaded } from "@/lib/loadLightspeedEnv";
 import { fetchInternalApi } from "@/lib/internalApiOrigin";
+import { resolvePublicAppOrigin } from "@/lib/resolvePublicAppOrigin";
 import {
   listShopifyTokenRecords,
 } from "@/lib/shopifyTokenRepository";
@@ -158,7 +159,7 @@ async function getShopAndToken(): Promise<{ shop: string; token: string } | null
 }
 
 export async function GET(req: NextRequest) {
-  const reqFallbackOrigin = req.nextUrl.origin;
+  const reqFallbackOrigin = resolvePublicAppOrigin(req);
   try {
     const lsStatusRes = await fetchInternalApi("api/lightspeed/status", {
       cache: "no-store",

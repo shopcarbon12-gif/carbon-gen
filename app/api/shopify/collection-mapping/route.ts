@@ -32,6 +32,7 @@ import {
 } from "@/lib/shopifyCollectionMappingRepository";
 import { computeCollectionAutoMap } from "@/lib/shopifyCollectionAutoMapper";
 import { readSession } from "@/lib/userAuth";
+import { resolvePublicAppOrigin } from "@/lib/resolvePublicAppOrigin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -2597,7 +2598,7 @@ export async function GET(req: NextRequest) {
     const sortField = toSortField(normalizeText(searchParams.get("sortField") || "title"));
     const sortDir = toSortDir(normalizeText(searchParams.get("sortDir") || "asc"));
 
-    const { apiVersion } = getShopifyConfig(new URL(req.url).origin);
+    const { apiVersion } = getShopifyConfig(resolvePublicAppOrigin(req));
     const tokenResult = await resolveWorkingToken(shop, apiVersion);
     if (!tokenResult.ok) {
       return NextResponse.json({ ok: false, error: tokenResult.error }, { status: 401 });
@@ -2772,7 +2773,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "Missing Shopify shop." }, { status: 400 });
     }
 
-    const { apiVersion } = getShopifyConfig(new URL(req.url).origin);
+    const { apiVersion } = getShopifyConfig(resolvePublicAppOrigin(req));
     const tokenResult = await resolveWorkingToken(shop, apiVersion);
     if (!tokenResult.ok) {
       return NextResponse.json({ ok: false, error: tokenResult.error }, { status: 401 });

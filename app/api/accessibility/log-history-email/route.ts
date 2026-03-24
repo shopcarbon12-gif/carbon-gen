@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { Resend } from "resend";
 import { isRequestAuthed } from "@/lib/auth";
 import { loadAccessibilityWidgetConfig } from "@/lib/accessibilityConfigRepository";
+import { resolvePublicAppOrigin } from "@/lib/resolvePublicAppOrigin";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -12,16 +13,7 @@ const ACCESSIBILITY_FROM_EMAIL = "compliance@carbonjeanscompany.com";
 const ACCESSIBILITY_FROM_NAME = "Carbon Compliance";
 
 function buildOrigin(req: NextRequest) {
-  const forwardedProto = (req.headers.get("x-forwarded-proto") || "").trim();
-  const forwardedHost = (req.headers.get("x-forwarded-host") || req.headers.get("host") || "").trim();
-  if (forwardedProto && forwardedHost) {
-    return `${forwardedProto}://${forwardedHost}`;
-  }
-  try {
-    return new URL(req.url).origin;
-  } catch {
-    return "http://localhost:3000";
-  }
+  return resolvePublicAppOrigin(req);
 }
 
 export async function POST(req: NextRequest) {

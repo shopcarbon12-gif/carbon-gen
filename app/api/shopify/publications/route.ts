@@ -6,6 +6,7 @@ import {
   getShopifyConfig,
 } from "@/lib/shopify";
 import { getShopifyAccessToken } from "@/lib/shopifyTokenRepository";
+import { resolvePublicAppOrigin } from "@/lib/resolvePublicAppOrigin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -162,7 +163,7 @@ export async function POST(req: NextRequest) {
         { status: 401 },
       );
 
-    const { apiVersion } = getShopifyConfig(new URL(req.url).origin);
+    const { apiVersion } = getShopifyConfig(resolvePublicAppOrigin(req));
 
     if (action === "get-product-publications") {
       const productGids: string[] = Array.isArray(body.productGids)

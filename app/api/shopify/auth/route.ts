@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { resolvePublicAppOrigin } from "@/lib/resolvePublicAppOrigin";
 import { getShopifyAdminToken } from "@/lib/shopify";
 import { upsertShopifyToken } from "@/lib/shopifyTokenRepository";
 
@@ -8,21 +9,11 @@ function isValidShop(shop: string) {
 }
 
 function resolveSafeDashboardOrigin(req: NextRequest) {
-  const incoming = req.nextUrl.origin;
-  const isHttpsLocalhost = /^https:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(incoming);
-  if (!isHttpsLocalhost) return incoming;
-
-  const redirectUri = (process.env.SHOPIFY_REDIRECT_URI || "").trim();
-  if (redirectUri) {
-    try {
-      return new URL(redirectUri).origin;
-    } catch {
-      // fallback below
-    }
+  const resolved = resolvePublicAppOrigin(req);
+  if (/^https:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(resolved)) {
+    return resolved.replace(/^https:/i, "http:");
   }
-
-  // Last-resort local fallback if env is missing/malformed.
-  return incoming.replace(/^https:/i, "http:");
+  return resolved;
 }
 
 export async function GET(req: NextRequest) {

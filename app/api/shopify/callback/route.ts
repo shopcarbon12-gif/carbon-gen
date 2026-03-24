@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createHmac, timingSafeEqual } from "crypto";
+import { resolvePublicAppOrigin } from "@/lib/resolvePublicAppOrigin";
 import { normalizeShopDomain } from "@/lib/shopify";
 import { upsertShopifyToken } from "@/lib/shopifyTokenRepository";
 
@@ -37,11 +38,11 @@ function resolveSettingsOrigin(req: NextRequest) {
       // fall through
     }
   }
-  const incoming = req.nextUrl.origin;
-  if (/^https:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(incoming)) {
-    return incoming.replace(/^https:/i, "http:");
+  const resolved = resolvePublicAppOrigin(req);
+  if (/^https:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(resolved)) {
+    return resolved.replace(/^https:/i, "http:");
   }
-  return incoming;
+  return resolved;
 }
 
 function redirectToSettings(req: NextRequest, opts: { shop?: string | null; connected?: boolean; error?: string }) {
