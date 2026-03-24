@@ -17,6 +17,7 @@
     "check:upstash": "node scripts/check-upstash.mjs",
     "check:sync": "node scripts/check-sync.mjs",
     "check:shopify": "node scripts/check-shopify-smoke.mjs",
+    "shopify:sync-accessibility-page": "node scripts/sync-shopify-accessibility-page.mjs",
     "start:tunnel": "powershell -ExecutionPolicy Bypass -File scripts/start-tunnel.ps1",
     "start:local": "powershell -ExecutionPolicy Bypass -File scripts/start-local-stack.ps1",
     "stop:local": "powershell -ExecutionPolicy Bypass -File scripts/stop-local-stack.ps1",

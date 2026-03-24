@@ -192,8 +192,8 @@ const defaultSettings: AccessibilitySettings = {
   language: "en",
   showTextLabel: true,
   statementUrl: "https://www.shopcarbon.com/pages/accessibility",
-  feedbackUrl: "https://www.shopcarbon.com/pages/contact",
-  supportEmail: "elior@carbonjeanscompany.com",
+  feedbackUrl: "https://www.shopcarbon.com/pages/contact-us",
+  supportEmail: "support@shopcarbon.com",
   panelTheme: "dark",
   monthlyReportEmail: "elior@carbonjeanscompany.com",
   accessibilityOwner: "Elior",
@@ -305,11 +305,11 @@ function toWidgetEmbedConfig(settings: AccessibilitySettings) {
 
 function buildInstallSnippet(settings: AccessibilitySettings) {
   const encoded = encodeURIComponent(JSON.stringify(toWidgetEmbedConfig(settings)));
-  return `<script src="https://app.shopcarbon.com/accessibility/widget?config=${encoded}&wrev=37" defer></script>`;
+  return `<script src="https://app.shopcarbon.com/accessibility/widget?config=${encoded}&wrev=49" defer></script>`;
 }
 
 function buildManagedInstallSnippet(scope = "default") {
-  return `<script src="https://app.shopcarbon.com/accessibility/widget?scope=${encodeURIComponent(scope)}&wrev=37" defer></script>`;
+  return `<script src="https://app.shopcarbon.com/accessibility/widget?scope=${encodeURIComponent(scope)}&wrev=49" defer></script>`;
 }
 
 function toButtonLabel(enabled: boolean) {
@@ -1121,7 +1121,7 @@ export default function AccessibilityPage() {
     script.defer = true;
     const cfg = encodeURIComponent(JSON.stringify(toWidgetEmbedConfig(settings)));
     const sc = encodeURIComponent(settingsScope || "default");
-    script.src = `/accessibility/widget?config=${cfg}&scope=${sc}&wrev=37&_ts=${Date.now()}`;
+    script.src = `/accessibility/widget?config=${cfg}&scope=${sc}&wrev=49&_ts=${Date.now()}`;
     script.onload = () => {
       setRuntimeWidgetMounted(true);
       const g = window as Window & {

@@ -1,0 +1,30 @@
+{% comment %}
+  Footer: INFORMATION + CATEGORIES extras for Carbon.
+
+  Preferred — Shopify Admin: Online store → Navigation. Open the menu assigned to each footer column
+  (theme-specific names; often separate menus for “Information” / “Categories”).
+  - INFORMATION: Add “Accessibility statement” → link to your Accessibility page (e.g. /pages/accessibility).
+  - CATEGORIES: Add “JEANS” → same destination as the header mega menu Jeans hub. On shopcarbon.com that
+    collection handle is `clothing-jeans` (URL /collections/clothing-jeans). If your mega menu differs, match it here.
+
+  Theme code — inside each column’s `<ul>` (same pattern as existing `<li>` links), add:
+    {% render 'carbon-footer-nav-additions', which: 'accessibility' %}
+    {% render 'carbon-footer-nav-additions', which: 'jeans' %}
+{% endcomment %}
+
+{% liquid
+  assign w = which | default: ''
+%}
+
+{% if w == 'accessibility' and pages.accessibility != blank %}
+  <li>
+    <a href="{{ pages.accessibility.url }}">Accessibility statement</a>
+  </li>
+{% elsif w == 'jeans' %}
+  {% assign jeans_collection = collections['clothing-jeans'] %}
+  {% if jeans_collection != blank %}
+    <li>
+      <a href="{{ jeans_collection.url }}">JEANS</a>
+    </li>
+  {% endif %}
+{% endif %}
