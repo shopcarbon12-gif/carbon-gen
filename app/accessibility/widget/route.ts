@@ -2648,6 +2648,8 @@ function createWidget(){
   var launcherDrag={active:false,pointerId:null,startX:0,startY:0,origLeft:0,origTop:0,moved:false,suppressClick:false};
   var launcherPosKey=storageKey+'::fabPos';
   var dockOpenRight=String(config.position||'right')!=='left';
+  /** Keep default (right) launcher left of typical bottom-right chat/cookie/checkout buttons. */
+  var rightEdgeStackClearancePx=dockOpenRight?76:0;
   var viewportPushBaseR=null;
   var viewportPushBaseL=null;
   function fabSize(){
@@ -2685,7 +2687,7 @@ function createWidget(){
   function clampFab(left,top,sz){
     var ins=fabSafeInsets();
     var minL=ins.minL,minT=ins.minT;
-    var maxL=ins.iw-ins.minR-sz;
+    var maxL=ins.iw-ins.minR-sz-rightEdgeStackClearancePx;
     var maxT=ins.ih-ins.minB-sz;
     if(maxL<minL){maxL=minL;}
     if(maxT<minT){maxT=minT;}
@@ -2732,7 +2734,7 @@ function createWidget(){
     var iw=ins.iw,ih=ins.ih;
     var targetLeft,targetTop;
     if(dockRight){
-      targetLeft=Math.round(iw-ins.minR-openSz);
+      targetLeft=Math.round(iw-ins.minR-openSz-rightEdgeStackClearancePx);
       targetTop=Math.round(ih-ins.minB-openSz);
     }else{
       targetLeft=Math.round(ins.minL);
@@ -2767,7 +2769,7 @@ function createWidget(){
       left=side;
       top=vh-sz-bot;
     }else{
-      left=vw-sz-side;
+      left=vw-sz-side-rightEdgeStackClearancePx;
       top=vh-sz-bot;
     }
     var c=clampFab(left,top,sz);
