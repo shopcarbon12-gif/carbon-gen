@@ -1,0 +1,32 @@
+{%- comment -%}
+  Noindex for search and collection filters (reduces duplicate content).
+  Add to theme.liquid in <head> before {{ content_for_header }}:
+  {% render 'head-noindex' %}
+{%- endcomment -%}
+{%- assign needs_noindex = false -%}
+{%- if template.name == 'search' -%}
+  {%- assign needs_noindex = true -%}
+{%- elsif template.name == 'collection' and collection -%}
+  {%- comment -%} Tag-based: /collections/handle/tag {%- endcomment -%}
+  {%- if collection.tags.size > 0 -%}
+    {%- assign needs_noindex = true -%}
+  {%- endif -%}
+  {%- comment -%} Sort param: ?sort_by= {%- endcomment -%}
+  {%- if collection.sort_by != blank -%}
+    {%- assign needs_noindex = true -%}
+  {%- endif -%}
+  {%- comment -%} Storefront filters: ?filter.v.option.x= {%- endcomment -%}
+  {%- for filter in collection.filters -%}
+    {%- if filter.active_values.size > 0 -%}
+      {%- assign needs_noindex = true -%}
+      {%- break -%}
+    {%- endif -%}
+  {%- endfor -%}
+  {%- comment -%} /collections/types?q= or /collections/vendors?q= {%- endcomment -%}
+  {%- if collection.current_type != blank or collection.current_vendor != blank -%}
+    {%- assign needs_noindex = true -%}
+  {%- endif -%}
+{%- endif -%}
+{%- if needs_noindex -%}
+  <meta name="robots" content="noindex, follow">
+{%- endif -%}

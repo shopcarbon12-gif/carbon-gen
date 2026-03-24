@@ -1,12 +1,65 @@
 ---
-description: Browser MCP / Playwright — visible control and tab discipline.
+description: Playwright MCP only for browser / Shopify Admin — constraints and workflow.
 alwaysApply: true
 ---
 
-# Browser MCP and Playwright
+# Browser automation: Playwright MCP only
 
-When the user asks to use MCP browser, Playwright, or to "go to" a URL for review:
+For any task that drives a real browser (especially **Shopify Admin**), use the **Playwright MCP** server (`user-playwright` / `playwright` in Cursor). Do **not** use **cursor-ide-browser** for Shopify page body editing (CodeMirror breaks snapshots and fill).
 
-1. **Visible session:** Operate the browser tools so the user can follow what is happening; avoid "silent only" automation when they expect to see the flow.
-2. **Tab discipline:** Before opening a new tab, consider existing MCP browser tabs. Prefer reusing a tab that already matches the target site or task. Open a new tab only when no suitable tab exists.
-3. **Avoid tab spam:** Do not open duplicate tabs for the same destination without reason.
+## Why `browser_run_code` failed with `require` / `import()`
+
+The MCP runs your snippet in a **restricted Node VM**. **`require` is undefined** and **`import()` is disabled** (`ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING`). You cannot read `tmp-sitemap-clean/*.html` from inside the snippet.
+
+**Working approach:** embed the HTML as a string literal in `code`, or generate that snippet on disk and pass the full `code` string in the MCP tool call.
+
+## Payload generation (run in project root, not inside MCP)
+
+Regenerate MCP-ready snippets after changing clean HTML:
+
+```bash
+node scripts/gen-playwright-sitemap-code.mjs all
+```
+
+Outputs:
+
+- `tmp-sitemap-clean/_pw-code-<page>.txt` — raw `async (page) => { ... }` text
+- `tmp-sitemap-clean/out-args-<page>.json` — `{ "code": "..." }` suitable for `browser_run_code` **arguments**
+
+Pages: `blogs`, `articles`, `pages`, `collections`, `products`.
+
+## Tab discipline
+
+1. `browser_tabs` with `action: "list"`.
+2. If a tab is already on `admin.shopify.com`, `browser_tabs` `action: "select"` with that **index** (do not open a duplicate for the same task).
+3. Otherwise `browser_navigate` to the target admin URL, or open a new tab only when needed.
+
+## Shopify page editor — body field
+
+- Field: **`textarea[name="page.body"]`**. In HTML mode it is often **hidden** (`aria-hidden`, Polaris `_PlainView-hidden`). Use Playwright **`fill(value, { force: true })`** so the write is not blocked by visibility, then dispatch events (see below).
+- Show **Show HTML** first when the UI offers it.
+- After filling, fire **`InputEvent`** so React marks the form dirty:
+
+```js
+await page.locator('textarea[name="page.body"]').fill(html, { force: true });
+await page.evaluate(() => {
+  const el = document.querySelector('textarea[name="page.body"]');
+  if (!el) return;
+  el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertFromPaste', data: null }));
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+});
+```
+
+- Wait until **Save** is no longer `aria-disabled="true"` (poll ~20s), then `click`.
+- Click **Save** with `getByRole('button', { name: 'Save', exact: true })`.
+
+## Recommended automation order
+
+1. List / select the correct MCP browser tab.
+2. Regenerate payloads if HTML changed: `node scripts/gen-playwright-sitemap-code.mjs all`.
+3. Read `out-args-<page>.json` (or `_pw-code-<page>.txt`) and invoke **`browser_run_code`** with the `code` string.
+4. Confirm result in the MCP tool output; optionally `browser_snapshot` / storefront URL.
+
+## Visibility
+
+Prefer steps the user can follow in the MCP-attached browser (navigate, wait, click, save) rather than silent long runs with no feedback.

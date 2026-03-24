@@ -60,9 +60,18 @@ playwright-report/
 test-results/
 
 # local DB / dumps / one-off artifacts (do not commit)
-neon-backup.dump
 pg_dump.log
 postgresql/
 .playwright-mcp/
 build-accessibility.log
 build-capture.log
+
+# local scratch exports / dumps (never commit)
+neon-backup.dump
+tmp-*.html
+tmp-*.txt
+tmp-*.json
+tmp-theme-liquid.txt
+tmp-build-sitemap.mjs
+tmp-404-report/
+tmp-sitemap-clean/

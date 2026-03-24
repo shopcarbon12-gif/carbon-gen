@@ -1,0 +1,9 @@
+---
+description: Optional sound notification when finishing a task; no forced "Done." line.
+alwaysApply: true
+---
+
+# Task Complete Notification
+
+- **Do not** end replies with **"Done."** or similar unless the user asks for it. They will say when they are done.
+- **Optional:** Run `powershell -ExecutionPolicy Bypass -File scripts/notify-task-complete.ps1` only when the user wants sound/balloon for that turn, or says to use notifications. Skip if they say "skip notification" or clearly do not want it.

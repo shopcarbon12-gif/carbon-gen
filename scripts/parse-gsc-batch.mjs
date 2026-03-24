@@ -1,0 +1,10 @@
+import fs from "node:fs";
+import path from "node:path";
+const raw = fs.readFileSync(process.argv[2], "utf8");
+const jsonMatch = raw.match(/"(\[.*\])"/s);
+if (!jsonMatch) process.exit(1);
+const urls = JSON.parse(jsonMatch[1]).map((u) => String(u).replace(/[\u200e\u200f]/g, "").trim());
+const out = process.argv[3];
+fs.mkdirSync(path.dirname(out), { recursive: true });
+fs.writeFileSync(out, urls.map((u) => "404 " + u).join("\n"), "utf8");
+console.log("Saved", urls.length, "URLs to", out);
