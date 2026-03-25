@@ -1,6 +1,8 @@
 import { readFileSync } from "fs";
 import { join } from "path";
+import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { resolvePublicAppOrigin } from "@/lib/resolvePublicAppOrigin";
 import { normalizeAccessibilityLogoUrl } from "@/lib/accessibilityLogoUrl";
 import { loadAccessibilityWidgetConfig } from "@/lib/accessibilityConfigRepository";
 
@@ -193,7 +195,9 @@ export async function GET(request: Request) {
   const { searchParams } = parsedUrl;
   const configParam = searchParams.get("config");
   const scope = (searchParams.get("scope") || "default").trim() || "default";
-  const usageEndpoint = `${parsedUrl.origin}/api/accessibility/usage`;
+  /** Coolify/internal requests often have loopback request.url; storefront needs public origin for fetch + assets. */
+  const widgetOrigin = resolvePublicAppOrigin(request as NextRequest);
+  const usageEndpoint = `${widgetOrigin}/api/accessibility/usage`;
   let config = safeParseConfig(configParam);
   if (!configParam) {
     try {
@@ -214,7 +218,7 @@ export async function GET(request: Request) {
         "</svg>"
     );
 
-  const js = `(function(){var __caRev=52;if(window.__carbonA11yRev===__caRev){return;}window.__carbonA11yRev=__caRev;window.__carbonA11yLoaded=true;
+  const js = `(function(){var __caRev=53;if(window.__carbonA11yRev===__caRev){return;}window.__carbonA11yRev=__caRev;window.__carbonA11yLoaded=true;
 /* ca-assist-ui v3 studio | Phase A+B a11y (see docs/accessibility-widget-phase-a-b-spec.md)
  * Panel: non-modal named region (not aria-modal). No focus trap — Tab may move into page content.
  * Esc closes only while focus is inside the panel (keydown on panel). Space toggles switches; Arrow/Home/End in radiogroups.
@@ -226,7 +230,7 @@ var usageEndpoint=${JSON.stringify(usageEndpoint)};
 var scope=${JSON.stringify(scope)};
 var __caLogoProxy=${JSON.stringify(useLogoProxy)};
 var __caBigCursorUrl=${JSON.stringify(bigCursorDataUrl)};
-var __caWidgetOrigin=${JSON.stringify(parsedUrl.origin)};
+var __caWidgetOrigin=${JSON.stringify(widgetOrigin)};
 var widgetPanelBg=(function(){try{return new URL("/accessibility-assets/widget-panel-bg-pic2.png",__caWidgetOrigin).href;}catch(_e){return String(__caWidgetOrigin||"").replace(/\\/$/,"")+"/accessibility-assets/widget-panel-bg-pic2.png";}})();
 var carbonBrandMarkUrl=(function(){try{return new URL("/accessibility-assets/carbon-honeycomb-mark.png",__caWidgetOrigin).href;}catch(_e){return String(__caWidgetOrigin||"").replace(/\\/$/,"")+"/accessibility-assets/carbon-honeycomb-mark.png";}})();
 var carbonBrandMarkInline=${JSON.stringify(carbonHoneycombDataUrl)};
