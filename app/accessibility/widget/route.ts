@@ -2,7 +2,35 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { resolvePublicAppOrigin } from "@/lib/resolvePublicAppOrigin";
+import { getConfiguredPublicAppOrigin, resolvePublicAppOrigin } from "@/lib/resolvePublicAppOrigin";
+
+const WIDGET_ORIGIN_FALLBACK = "https://app.shopcarbon.com";
+
+function trimTrailingSlash(s: string) {
+  return s.replace(/\/+$/, "");
+}
+
+/** Never embed loopback origins in storefront widget (Coolify internal URL / mis-set NODE_ENV). */
+function widgetPublicOrigin(req: NextRequest): string {
+  const raw = trimTrailingSlash(resolvePublicAppOrigin(req));
+  try {
+    const { hostname } = new URL(raw);
+    const h = hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    if (
+      h === "0.0.0.0" ||
+      h === "127.0.0.1" ||
+      h === "localhost" ||
+      h === "::1"
+    ) {
+      const cfg = trimTrailingSlash(getConfiguredPublicAppOrigin());
+      return cfg || WIDGET_ORIGIN_FALLBACK;
+    }
+  } catch {
+    const cfg = trimTrailingSlash(getConfiguredPublicAppOrigin());
+    return cfg || WIDGET_ORIGIN_FALLBACK;
+  }
+  return raw;
+}
 import { normalizeAccessibilityLogoUrl } from "@/lib/accessibilityLogoUrl";
 import { loadAccessibilityWidgetConfig } from "@/lib/accessibilityConfigRepository";
 
@@ -195,8 +223,7 @@ export async function GET(request: Request) {
   const { searchParams } = parsedUrl;
   const configParam = searchParams.get("config");
   const scope = (searchParams.get("scope") || "default").trim() || "default";
-  /** Coolify/internal requests often have loopback request.url; storefront needs public origin for fetch + assets. */
-  const widgetOrigin = resolvePublicAppOrigin(request as NextRequest);
+  const widgetOrigin = widgetPublicOrigin(request as NextRequest);
   const usageEndpoint = `${widgetOrigin}/api/accessibility/usage`;
   let config = safeParseConfig(configParam);
   if (!configParam) {
@@ -218,7 +245,7 @@ export async function GET(request: Request) {
         "</svg>"
     );
 
-  const js = `(function(){var __caRev=53;if(window.__carbonA11yRev===__caRev){return;}window.__carbonA11yRev=__caRev;window.__carbonA11yLoaded=true;
+  const js = `(function(){var __caRev=54;if(window.__carbonA11yRev===__caRev){return;}window.__carbonA11yRev=__caRev;window.__carbonA11yLoaded=true;
 /* ca-assist-ui v3 studio | Phase A+B a11y (see docs/accessibility-widget-phase-a-b-spec.md)
  * Panel: non-modal named region (not aria-modal). No focus trap — Tab may move into page content.
  * Esc closes only while focus is inside the panel (keydown on panel). Space toggles switches; Arrow/Home/End in radiogroups.
