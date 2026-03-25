@@ -214,7 +214,7 @@ export async function GET(request: Request) {
         "</svg>"
     );
 
-  const js = `(function(){var __caRev=51;if(window.__carbonA11yRev===__caRev){return;}window.__carbonA11yRev=__caRev;window.__carbonA11yLoaded=true;
+  const js = `(function(){var __caRev=52;if(window.__carbonA11yRev===__caRev){return;}window.__carbonA11yRev=__caRev;window.__carbonA11yLoaded=true;
 /* ca-assist-ui v3 studio | Phase A+B a11y (see docs/accessibility-widget-phase-a-b-spec.md)
  * Panel: non-modal named region (not aria-modal). No focus trap — Tab may move into page content.
  * Esc closes only while focus is inside the panel (keydown on panel). Space toggles switches; Arrow/Home/End in radiogroups.
@@ -2682,32 +2682,65 @@ function createWidget(){
     }catch(_e){}
     return{minL:minL,minT:minT,minR:minR,minB:minB,iw:iw,ih:ih};
   }
-  /** Fixed/sticky UI in bottom-right (wishlist, scroll-up, chat). Excludes our host + sky-high z overlays. */
+  /** Bottom-right FABs via cheap hit-tests only (no full-body getComputedStyle scan — safe on large Shopify DOMs). */
   function fabStripRects(wrapEl){
     var ins=fabSafeInsets();
     var iw=ins.iw, ih=ins.ih;
     var out=[];
-    try{
-      var nodes=document.querySelectorAll('body *');
-      for(var i=0;i<nodes.length;i++){
-        var el=nodes[i];
-        if(!el||el===wrapEl)continue;
-        try{if(wrapEl&&wrapEl.contains(el))continue;}catch(_x){}
-        var cs=window.getComputedStyle(el);
-        if(cs.position!=='fixed'&&cs.position!=='sticky')continue;
-        if(cs.visibility==='hidden'||cs.display==='none')continue;
-        var op=parseFloat(cs.opacity);
-        if(isFinite(op)&&op<0.04)continue;
-        var zi=parseInt(cs.zIndex,10);
-        if(isFinite(zi)&&zi>=2147483640)continue;
-        var r=el.getBoundingClientRect();
-        if(r.width<6||r.height<6)continue;
-        if(r.width>iw*0.62)continue;
-        if(r.bottom<ih-168||r.right<iw-280)continue;
-        if(r.top<ih-200)continue;
-        out.push(r);
+    var seen=new WeakSet();
+    function pushFixedEl(el){
+      if(!el||el.nodeType!==1)return;
+      if(el===wrapEl)return;
+      try{if(wrapEl&&wrapEl.contains(el))return;}catch(_x){}
+      if(seen.has(el))return;
+      var cs=window.getComputedStyle(el);
+      if(cs.position!=='fixed'&&cs.position!=='sticky')return;
+      if(cs.visibility==='hidden'||cs.display==='none')return;
+      var op=parseFloat(cs.opacity);
+      if(isFinite(op)&&op<0.04)return;
+      var zi=parseInt(cs.zIndex,10);
+      if(isFinite(zi)&&zi>=2147483640)return;
+      var r=el.getBoundingClientRect();
+      if(r.width<6||r.height<6)return;
+      if(r.width>iw*0.62)return;
+      if(r.bottom<ih-168||r.right<iw-280)return;
+      if(r.top<ih-200)return;
+      seen.add(el);
+      out.push(r);
+    }
+    function probe(px,py){
+      var list;
+      try{list=document.elementsFromPoint(px,py);}catch(_e){return;}
+      if(!list||!list.length)return;
+      for(var i=0;i<list.length;i++){
+        var el=list[i];
+        if(!el||el.nodeType!==1)continue;
+        if(el===wrapEl)continue;
+        try{if(wrapEl&&wrapEl.contains(el))continue;}catch(_y){}
+        var cur=el;
+        while(cur&&cur!==document.body&&cur!==document.documentElement){
+          if(cur===wrapEl)break;
+          try{if(wrapEl&&wrapEl.contains(cur))break;}catch(_z){}
+          var cs=window.getComputedStyle(cur);
+          if(cs.position==='fixed'||cs.position==='sticky'){
+            pushFixedEl(cur);
+            return;
+          }
+          cur=cur.parentElement;
+        }
       }
-    }catch(_e){}
+    }
+    try{
+      var xR=iw-ins.minR-2;
+      var yB=ih-ins.minB-2;
+      var pts=[[0,0],[-40,0],[-88,0],[-140,0],[-200,0],[0,-36],[0,-80],[-56,-48],[-120,-28],[-24,-100]];
+      for(var p=0;p<pts.length;p++){
+        var px=Math.round(xR+pts[p][0]);
+        var py=Math.round(yB+pts[p][1]);
+        if(px<ins.minL+2||py<ins.minT+2)continue;
+        probe(px,py);
+      }
+    }catch(_e2){}
     return out;
   }
   function rectsOverlapFab(a,b,p){
@@ -3463,6 +3496,7 @@ function createWidget(){
     }
     setOpen(panel.style.display==="none");
   });
+  var fabReflowProbeTimer=null;
   function reflowFabToViewport(){
     if(panel.style.display!=='none'){
       syncOpenDockLayout();
@@ -3470,9 +3504,17 @@ function createWidget(){
     }
     var sz=Math.round(trigger.offsetWidth)||fabSize();
     if(!loadFabPosition()&&dockOpenRight&&config.position!=='left'){
-      var rr=resolveRightDockFabRect(sz);
-      var cr=clampFab(rr.left,rr.top,sz);
-      applyFabFreePosition(cr.left,cr.top);
+      if(fabReflowProbeTimer)clearTimeout(fabReflowProbeTimer);
+      fabReflowProbeTimer=setTimeout(function(){
+        fabReflowProbeTimer=null;
+        try{
+          if(panel.style.display!=='none')return;
+          var sz2=Math.round(trigger.offsetWidth)||fabSize();
+          var rr=resolveRightDockFabRect(sz2);
+          var cr=clampFab(rr.left,rr.top,sz2);
+          applyFabFreePosition(cr.left,cr.top);
+        }catch(_rp){}
+      },100);
       return;
     }
     var lx=parseFloat(wrap.style.left)||0;
@@ -3521,8 +3563,7 @@ function createWidget(){
       applyFabFreePosition(cF.left,cF.top);
     }catch(_rf){}
   }
-  setTimeout(refitDockIfDefault,400);
-  window.addEventListener('load',refitDockIfDefault,{once:true});
+  setTimeout(refitDockIfDefault,480);
   syncWidgetMotionClass();
   syncOversizedShellClass();
   document.addEventListener('keydown',function(ev){
