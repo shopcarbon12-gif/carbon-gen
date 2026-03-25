@@ -10,7 +10,9 @@ export async function GET() {
   return NextResponse.json({
     ok: true,
     configured,
-    label: configured ? "Not connected" : "Not configured",
+    label: configured
+      ? "App ID configured (token flow not wired yet)"
+      : "META_APP_ID not set in environment",
     status: "offline" as const,
   });
 }

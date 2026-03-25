@@ -245,7 +245,7 @@ export async function GET(request: Request) {
         "</svg>"
     );
 
-  const js = `(function(){var __caRev=54;if(window.__carbonA11yRev===__caRev){return;}window.__carbonA11yRev=__caRev;window.__carbonA11yLoaded=true;
+  const js = `(function(){var __caRev=60;if(window.__carbonA11yRev===__caRev){return;}window.__carbonA11yRev=__caRev;window.__carbonA11yLoaded=true;
 /* ca-assist-ui v3 studio | Phase A+B a11y (see docs/accessibility-widget-phase-a-b-spec.md)
  * Panel: non-modal named region (not aria-modal). No focus trap — Tab may move into page content.
  * Esc closes only while focus is inside the panel (keydown on panel). Space toggles switches; Arrow/Home/End in radiogroups.
@@ -304,7 +304,6 @@ document.head.appendChild(styleTag);
 var __caVideoPauseBound=false;
 var __caVideoObserver=null;
 var __caCursorFollowEl=null;
-var __caCursorMoveFn=null;
 function onVideoPlayWhilePaused(ev){
   try{
     if(!state.pauseAnimations)return;
@@ -312,37 +311,44 @@ function onVideoPlayWhilePaused(ev){
     if(t&&t.tagName==='VIDEO'){t.pause();}
   }catch(_e){}
 }
+function __caPauseVideoEl(v){
+  try{
+    if(!v||v.tagName!=='VIDEO')return;
+    v.pause();
+    if(v.hasAttribute('autoplay')){
+      v.setAttribute('data-ca-a11y-autoplay','1');
+      v.removeAttribute('autoplay');
+    }
+  }catch(_pv){}
+}
+function __caScanAddedNodeForVideos(node){
+  try{
+    if(!node||node.nodeType!==1)return;
+    if(node.tagName==='VIDEO'){__caPauseVideoEl(node);return;}
+    if(node.querySelectorAll){
+      var inner=node.querySelectorAll('video');
+      for(var ii=0;ii<inner.length;ii++){__caPauseVideoEl(inner[ii]);}
+    }
+  }catch(_sn){}
+}
 function syncPauseAnimationsMedia(){
   try{
     if(state.pauseAnimations){
       var n=document.querySelectorAll('video');
-      for(var i=0;i<n.length;i++){
-        try{
-          var v=n[i];
-          v.pause();
-          if(v.hasAttribute('autoplay')){
-            v.setAttribute('data-ca-a11y-autoplay','1');
-            v.removeAttribute('autoplay');
-          }
-        }catch(_vi){}
-      }
+      for(var i=0;i<n.length;i++){__caPauseVideoEl(n[i]);}
       if(!__caVideoPauseBound){
         document.addEventListener('play',onVideoPlayWhilePaused,true);
         __caVideoPauseBound=true;
       }
       if(!__caVideoObserver){
-        __caVideoObserver=new MutationObserver(function(){
+        __caVideoObserver=new MutationObserver(function(muts){
+          if(!state.pauseAnimations)return;
           try{
-            var q=document.querySelectorAll('video');
-            for(var j=0;j<q.length;j++){
-              try{
-                var x=q[j];
-                x.pause();
-                if(x.hasAttribute('autoplay')){
-                  x.setAttribute('data-ca-a11y-autoplay','1');
-                  x.removeAttribute('autoplay');
-                }
-              }catch(_xj){}
+            for(var mi=0;mi<muts.length;mi++){
+              var m=muts[mi];
+              for(var ni=0;ni<m.addedNodes.length;ni++){
+                __caScanAddedNodeForVideos(m.addedNodes[ni]);
+              }
             }
           }catch(_mo){}
         });
@@ -1634,6 +1640,7 @@ function renderGlobalStyles(){
   }catch(_mv){}
   guideLine.style.display=state.readingGuide?'block':'none';
   readingMask.style.display=state.readingMask?'block':'none';
+  syncReadingPointerMoveListener();
   syncAssistShellLangDir();
   syncShellLocaleClass();
   syncWidgetMotionClass();
@@ -2476,7 +2483,9 @@ function jumpToSelector(selector,okMsg,noneMsg){
 var lastReadingPointerApplyMs=0;
 var readingPointerRaf=0;
 var latestPointerY=0;
+var __readingPointerMoveBound=false;
 function applyReadingPointerLayout(y){
+  if(!state.readingGuide&&!state.readingMask){return;}
   guideLine.style.top=(y+1)+'px';
   var top=Math.max(0,y-45);
   var bottom=Math.max(0,(window.innerHeight||0)-y-45);
@@ -2484,10 +2493,12 @@ function applyReadingPointerLayout(y){
 }
 function flushReadingPointerFromRaf(){
   readingPointerRaf=0;
+  if(!state.readingGuide&&!state.readingMask){return;}
   lastReadingPointerApplyMs=Date.now();
   applyReadingPointerLayout(latestPointerY);
 }
 function handlePointerMove(event){
+  if(!state.readingGuide&&!state.readingMask){return;}
   latestPointerY=event.clientY||0;
   if(shouldMinimizeMotion()){
     var now=Date.now();
@@ -2499,8 +2510,26 @@ function handlePointerMove(event){
   }
   applyReadingPointerLayout(latestPointerY);
 }
-
-document.addEventListener('mousemove',handlePointerMove,{passive:true});
+function syncReadingPointerMoveListener(){
+  try{
+    var need=state.readingGuide||state.readingMask;
+    if(need){
+      if(!__readingPointerMoveBound){
+        document.addEventListener('mousemove',handlePointerMove,{passive:true});
+        __readingPointerMoveBound=true;
+      }
+    }else{
+      if(__readingPointerMoveBound){
+        document.removeEventListener('mousemove',handlePointerMove);
+        __readingPointerMoveBound=false;
+      }
+      if(readingPointerRaf){
+        cancelAnimationFrame(readingPointerRaf);
+        readingPointerRaf=0;
+      }
+    }
+  }catch(_e){}
+}
 
 function caResolveLogoUrl(raw){
   raw=String(raw||'').trim();
@@ -2689,7 +2718,9 @@ function createWidget(){
     return base;
   }
   function effectivePanelWidthPx(){
-    var pw=Math.max(300,Math.min(520,Math.max(360,Number(config.panelWidth)||400)));
+    var raw=Number(config.panelWidth);
+    if(!isFinite(raw)){raw=400;}
+    var pw=Math.max(280,Math.min(520,Math.round(raw)));
     if(state.oversizedUi){
       pw=Math.min(520,Math.round(pw*1.07)+36);
     }
@@ -3314,7 +3345,7 @@ function createWidget(){
       var topReserve=16;
       var panelOpen=false;
       try{panelOpen=panel.style.display!=='none';}catch(_po){}
-      if(panelOpen){
+      if(panelOpen&&state.oversizedUi){
         pw=Math.min(520,Math.round(pw*1.06)+32);
       }
       pw=Math.max(260,Math.min(pw,vw-8));

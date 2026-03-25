@@ -1,0 +1,30 @@
+{%- comment -%}
+  Google Tag Manager — container snippet (head), per Google’s install guide:
+  https://support.google.com/tagmanager/answer/6103696
+
+  In layout/theme.liquid:
+  1) Near the top (once), set your real container ID from Tag Manager → Admin → Install Google Tag Manager:
+     {%- liquid
+       assign gtm_container_id = 'GTM-XXXXXXX'
+     -%}
+  2) Inside <head>, as early as practical and before {{ content_for_header }}:
+     {% render 'carbon-gtm-head', gtm_container_id: gtm_container_id %}
+  3) Immediately after <body>:
+     {% render 'carbon-gtm-body', gtm_container_id: gtm_container_id %}
+
+  Do not load the same GTM container twice (e.g. theme + duplicate Custom HTML).
+{%- endcomment -%}
+{%- liquid
+  assign _gtm = gtm_container_id | strip
+-%}
+{%- if _gtm != blank -%}
+<!-- Google Tag Manager -->
+<script>
+(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+})(window,document,'script','dataLayer','{{ _gtm }}');
+</script>
+<!-- End Google Tag Manager -->
+{%- endif -%}

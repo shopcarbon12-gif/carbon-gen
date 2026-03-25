@@ -21,6 +21,14 @@ type DropboxStatusResponse = {
   error?: string;
 };
 
+type MetaStatusResponse = {
+  ok?: boolean;
+  configured?: boolean;
+  label?: string;
+  status?: string;
+  error?: string;
+};
+
 type LightspeedStatusResponse = {
   ok?: boolean;
   connected?: boolean;
@@ -119,6 +127,10 @@ export default function SettingsPage() {
   const [lightspeedLoading, setLightspeedLoading] = useState(true);
   const [lightspeedBusy, setLightspeedBusy] = useState(false);
   const [lightspeedStatusData, setLightspeedStatusData] = useState<LightspeedStatusResponse | null>(null);
+  const [metaConfigured, setMetaConfigured] = useState<boolean | null>(null);
+  const [metaLabel, setMetaLabel] = useState<string | null>(null);
+  const [metaLoading, setMetaLoading] = useState(true);
+  const [metaBusy, setMetaBusy] = useState(false);
   const [printerLoading, setPrinterLoading] = useState(true);
   const [printerBusy, setPrinterBusy] = useState(false);
   const [printerOnline, setPrinterOnline] = useState<boolean | null>(null);
@@ -233,6 +245,23 @@ export default function SettingsPage() {
     } finally {
       setLightspeedLoading(false);
       if (manual) setLightspeedBusy(false);
+    }
+  }, []);
+
+  const refreshMetaStatus = useCallback(async (manual = false) => {
+    if (manual) setMetaBusy(true);
+    setMetaLoading(true);
+    try {
+      const resp = await fetch("/api/meta/status", { cache: "no-store" });
+      const json = (await resp.json().catch(() => ({}))) as MetaStatusResponse;
+      setMetaConfigured(Boolean(json?.configured));
+      setMetaLabel(String(json?.label || "").trim() || null);
+    } catch {
+      setMetaConfigured(false);
+      setMetaLabel(null);
+    } finally {
+      setMetaLoading(false);
+      if (manual) setMetaBusy(false);
     }
   }, []);
 
@@ -714,6 +743,36 @@ export default function SettingsPage() {
           <Link className="btn ghost" href="/studio/rfid-price-tag">
             Open RFID Price Tag
           </Link>
+        </div>
+      </section>
+
+      <section id="integration-meta-instagram" className="card">
+        <div className="card-title">Meta / Instagram</div>
+        <p className="muted">
+          Instagram Widget studio uses Meta Graph when the token flow is connected. Env check only for now.
+        </p>
+        <div className="status-row">
+          <span className={`status-dot ${metaConfigured ? "on" : "off"}`} />
+          <span>
+            {metaLoading ? "Checking..." : metaConfigured ? "App ID present" : "Not configured"}
+            {metaLabel ? <em> — {metaLabel}</em> : null}
+          </span>
+        </div>
+        <div className="actions">
+          <button type="button" className="btn primary" disabled title="OAuth flow not wired yet">
+            Connect
+          </button>
+          <button type="button" className="btn danger" disabled title="OAuth flow not wired yet">
+            Disconnect
+          </button>
+          <button
+            type="button"
+            className="btn ghost"
+            onClick={() => void refreshMetaStatus(true)}
+            disabled={metaBusy}
+          >
+            {metaBusy ? "Refreshing..." : "Refresh Status"}
+          </button>
         </div>
       </section>
 

@@ -58,25 +58,37 @@ export async function POST(req: NextRequest) {
   }
 
   const buf = Buffer.from(await file.arrayBuffer());
+  const lowerType = String(file.type || "").toLowerCase();
+  const wantPng = lowerType.includes("png");
   let out: Buffer;
+  let contentType: string;
+  let ext: string;
   try {
-    out = await sharp(buf)
+    const pipeline = sharp(buf)
       .rotate()
-      .resize(INSTAGRAM_HERO_WIDTH, INSTAGRAM_HERO_HEIGHT, { fit: "cover", position: "centre" })
-      .jpeg({ quality: 90, mozjpeg: true })
-      .toBuffer();
+      .resize(INSTAGRAM_HERO_WIDTH, INSTAGRAM_HERO_HEIGHT, { fit: "cover", position: "centre" });
+    if (wantPng) {
+      out = await pipeline.png({ compressionLevel: 9 }).toBuffer();
+      contentType = "image/png";
+      ext = ".png";
+    } else {
+      out = await pipeline.jpeg({ quality: 90, mozjpeg: true }).toBuffer();
+      contentType = "image/jpeg";
+      ext = ".jpg";
+    }
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Image processing failed";
     return NextResponse.json({ ok: false, error: msg }, { status: 400 });
   }
 
-  const safeName = String(file.name || "hero.jpg").replace(/[^a-zA-Z0-9.\-_]/g, "_");
-  const path = `items/instagram-hero/${Date.now()}-${crypto.randomUUID()}-${safeName}.jpg`;
+  const rawName = String(file.name || `hero${ext}`).replace(/[^a-zA-Z0-9.\-_]/g, "_");
+  const baseName = rawName.replace(/\.(jpe?g|png|webp|gif)$/i, "") || "hero";
+  const path = `items/instagram-hero/${Date.now()}-${crypto.randomUUID()}-${baseName}${ext}`;
 
   const uploaded = await uploadBytesToStorage({
     path,
     bytes: new Uint8Array(out),
-    contentType: "image/jpeg",
+    contentType,
   });
 
   const ok = await verifyPublicUrl(uploaded.url);

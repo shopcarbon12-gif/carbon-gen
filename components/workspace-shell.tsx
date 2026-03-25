@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { PublishChangesButton } from "@/components/instagram-widget/PublishChangesButton";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Fragment,
@@ -46,11 +47,6 @@ const SHOPIFY_MAPPING_CONFIG_CART = `${SHOPIFY_MAPPING_CONFIG_ROOT}/cart`;
 const INSTAGRAM_WIDGET_ROOT = "/studio/instagram-widget";
 const instagramSubmenuItems: NavItem[] = [
   { href: INSTAGRAM_WIDGET_ROOT, label: "Instagram Widget" },
-  { href: `${INSTAGRAM_WIDGET_ROOT}/sources`, label: "Sources" },
-  { href: `${INSTAGRAM_WIDGET_ROOT}/layout`, label: "Layout" },
-  { href: `${INSTAGRAM_WIDGET_ROOT}/post`, label: "Post" },
-  { href: `${INSTAGRAM_WIDGET_ROOT}/style`, label: "Style" },
-  { href: `${INSTAGRAM_WIDGET_ROOT}/settings`, label: "Settings" },
 ];
 
 const ACTIVE_ITEM_STYLE: CSSProperties = {
@@ -146,15 +142,19 @@ export function WorkspaceShell({
     pathname.startsWith("/studio/shopify-collection-mapping");
   const hideSideRailsOnCollectionMapping = isCollectionMappingRoute;
   const isInstagramWidgetRoute = pathname.startsWith(INSTAGRAM_WIDGET_ROOT);
+  const isInstagramWidgetRootPage =
+    normalizePath(pathname) === normalizePath(INSTAGRAM_WIDGET_ROOT);
   const showIntegrationPanel =
-    !pathname.startsWith("/settings") && !hideSideRailsOnCollectionMapping;
+    !pathname.startsWith("/settings") &&
+    !hideSideRailsOnCollectionMapping &&
+    !isInstagramWidgetRoute;
   const showChatPanel = !hideSideRailsOnCollectionMapping && !isInstagramWidgetRoute;
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPinned, setMenuPinned] = useState(false);
   const [picturesGenOpen, setPicturesGenOpen] = useState(false);
   const [shopifySubmenuOpen, setShopifySubmenuOpen] = useState(false);
   const [shopifyConfigSubmenuOpen, setShopifyConfigSubmenuOpen] = useState(false);
-  const [instagramSubmenuOpen, setInstagramSubmenuOpen] = useState(false);
+  const [metaAppConfigured, setMetaAppConfigured] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [integrations, setIntegrations] = useState<IntegrationItem[]>([]);
   const [integrationsLoading, setIntegrationsLoading] = useState(true);
@@ -170,9 +170,6 @@ export function WorkspaceShell({
   const [shopifyParentItem, ...shopifyChildItems] = shopifyMappingSubmenuItems;
   const shopifyParentActive = normalizePath(pathname) === SHOPIFY_MAPPING_INVENTORY_ROOT;
   const configurationsActive = isActive(pathname, SHOPIFY_MAPPING_CONFIG_ROOT);
-  const [instagramParentItem, ...instagramChildItems] = instagramSubmenuItems;
-  const instagramParentActive = normalizePath(pathname) === INSTAGRAM_WIDGET_ROOT;
-
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem("carbon_menu_pinned");
@@ -228,27 +225,17 @@ export function WorkspaceShell({
     if (!drawerOpen) {
       setShopifySubmenuOpen(false);
       setShopifyConfigSubmenuOpen(false);
-      setInstagramSubmenuOpen(false);
       return;
     }
 
     if (isActive(pathname, SHOPIFY_MAPPING_INVENTORY_ROOT)) {
-      setInstagramSubmenuOpen(false);
       setShopifySubmenuOpen(true);
       setShopifyConfigSubmenuOpen(isActive(pathname, SHOPIFY_MAPPING_CONFIG_ROOT));
       return;
     }
 
-    if (isActive(pathname, INSTAGRAM_WIDGET_ROOT)) {
-      setShopifySubmenuOpen(false);
-      setShopifyConfigSubmenuOpen(false);
-      setInstagramSubmenuOpen(true);
-      return;
-    }
-
     setShopifySubmenuOpen(false);
     setShopifyConfigSubmenuOpen(false);
-    setInstagramSubmenuOpen(false);
   }, [drawerOpen, pathname]);
 
   useEffect(() => {
@@ -336,6 +323,23 @@ export function WorkspaceShell({
     }, 45000);
     return () => window.clearInterval(timer);
   }, [refreshIntegrations, showIntegrationPanel]);
+
+  useEffect(() => {
+    if (!isInstagramWidgetRootPage) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const resp = await fetch("/api/meta/status", { cache: "no-store" });
+        const json = (await resp.json().catch(() => ({}))) as { configured?: boolean };
+        if (!cancelled) setMetaAppConfigured(Boolean(json?.configured));
+      } catch {
+        if (!cancelled) setMetaAppConfigured(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isInstagramWidgetRootPage]);
 
   useEffect(() => {
     const node = chatLogRef.current;
@@ -456,8 +460,27 @@ export function WorkspaceShell({
                 <img className="topbar-logo" src="/brand/carbon-long-white.png" alt="Carbon" />
               </span>
               <span className="topbar-sep"> / </span>
-            <span className="topbar-page-lock">{currentTitle}</span>
-          </div>
+              <span className="topbar-page-lock">{currentTitle}</span>
+            </div>
+            {isInstagramWidgetRootPage ? (
+              <div className="topbar-instagram-actions">
+                <a
+                  className="topbar-meta-link"
+                  href="/settings#integration-meta-instagram"
+                  title="Meta / Instagram integration"
+                  aria-label="Open Meta Instagram integration in Settings"
+                >
+                  <span
+                    className={`topbar-meta-dot ${metaAppConfigured ? "on" : "off"}`}
+                    aria-hidden
+                  />
+                </a>
+                <PublishChangesButton
+                  suppressHydrationWarning
+                  onClick={() => navigateTo(`${INSTAGRAM_WIDGET_ROOT}/layout`)}
+                />
+              </div>
+            ) : null}
         </header>
 
       <aside
@@ -470,7 +493,7 @@ export function WorkspaceShell({
           <div className="carbon-main">
             <div
               className="carbon-menu"
-              aria-hidden={shopifySubmenuOpen || instagramSubmenuOpen ? "true" : undefined}
+              aria-hidden={shopifySubmenuOpen ? "true" : undefined}
             >
               {/* Pictures Generator collapsible group */}
               <button
@@ -499,7 +522,6 @@ export function WorkspaceShell({
                       onClick={() => {
                         setShopifySubmenuOpen(false);
                         setShopifyConfigSubmenuOpen(false);
-                        setInstagramSubmenuOpen(false);
                         navigateTo(sub.href);
                       }}
                       aria-current={subActive ? "page" : undefined}
@@ -522,7 +544,6 @@ export function WorkspaceShell({
                     type="button"
                     onClick={() => {
                       if (item.href === SHOPIFY_MAPPING_INVENTORY_ROOT) {
-                        setInstagramSubmenuOpen(false);
                         setShopifyConfigSubmenuOpen(false);
                         setShopifySubmenuOpen(true);
                         return;
@@ -530,12 +551,11 @@ export function WorkspaceShell({
                       if (item.href === INSTAGRAM_WIDGET_ROOT) {
                         setShopifySubmenuOpen(false);
                         setShopifyConfigSubmenuOpen(false);
-                        setInstagramSubmenuOpen(true);
+                        navigateTo(INSTAGRAM_WIDGET_ROOT);
                         return;
                       }
                       setShopifySubmenuOpen(false);
                       setShopifyConfigSubmenuOpen(false);
-                      setInstagramSubmenuOpen(false);
                       navigateTo(item.href);
                     }}
                     aria-current={active ? "page" : undefined}
@@ -560,7 +580,6 @@ export function WorkspaceShell({
                 onClick={() => {
                   setShopifySubmenuOpen(false);
                   setShopifyConfigSubmenuOpen(false);
-                  setInstagramSubmenuOpen(false);
                 }}
                 aria-label="Back to main menu"
               >
@@ -656,59 +675,6 @@ export function WorkspaceShell({
                 })}
               </div>
             </section>
-
-            <section
-              className={`carbon-submenu instagram-widget-submenu ${instagramSubmenuOpen ? "open" : ""}`}
-              aria-label="Instagram Widget submenu"
-            >
-              <button
-                suppressHydrationWarning
-                type="button"
-                className="carbon-submenu-back-icon"
-                onClick={() => {
-                  setInstagramSubmenuOpen(false);
-                }}
-                aria-label="Back to main menu"
-              >
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-                  <path
-                    d="M15 6L9 12L15 18"
-                    stroke="currentColor"
-                    strokeWidth="2.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </button>
-              <div className="carbon-submenu-list">
-                <button
-                  suppressHydrationWarning
-                  type="button"
-                  onClick={() => navigateTo(instagramParentItem.href)}
-                  aria-current={instagramParentActive ? "page" : undefined}
-                  data-active={instagramParentActive ? "true" : "false"}
-                  className={`carbon-submenu-item parent ${instagramParentActive ? "active" : ""}`}
-                >
-                  {instagramParentItem.label}
-                </button>
-                {instagramChildItems.map((item) => {
-                  const active = isActive(pathname, item.href);
-                  return (
-                    <button
-                      suppressHydrationWarning
-                      key={item.href}
-                      type="button"
-                      onClick={() => navigateTo(item.href)}
-                      aria-current={active ? "page" : undefined}
-                      data-active={active ? "true" : "false"}
-                      className={`carbon-submenu-item child ${active ? "active" : ""}`}
-                    >
-                      {item.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
           </div>
           <div className="menu-footer">
             <button
@@ -718,7 +684,6 @@ export function WorkspaceShell({
               onClick={() => {
                 setShopifySubmenuOpen(false);
                 setShopifyConfigSubmenuOpen(false);
-                setInstagramSubmenuOpen(false);
                 navigateTo("/settings");
               }}
             >
@@ -980,9 +945,52 @@ export function WorkspaceShell({
           overflow-x: clip;
           color: #f8fafc;
         }
-        /* Instagram Widget studio: flush content to topbar (removes grey strip below header). */
+        /* Instagram Widget studio: flush content to topbar; light canvas full width like topbar. */
         .shell.instagram-widget-shell .content.instagram-widget-content {
           padding-top: 70px;
+          background: #fff;
+          color: #0f172a;
+          --content-right-pad: 0px;
+          padding-right: 0;
+          padding-left: 0;
+        }
+        .shell.instagram-widget-shell.chat-expanded .content.instagram-widget-content {
+          --content-right-pad: 0px;
+          padding-right: 0;
+        }
+        .topbar-instagram-actions {
+          display: inline-flex;
+          align-items: center;
+          gap: 12px;
+          flex-shrink: 0;
+          margin-left: auto;
+        }
+        .topbar-meta-link {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 36px;
+          height: 36px;
+          border-radius: 10px;
+          border: 1px solid rgba(255, 255, 255, 0.22);
+          background: rgba(255, 255, 255, 0.06);
+          color: inherit;
+          text-decoration: none;
+        }
+        .topbar-meta-link:hover {
+          background: rgba(255, 255, 255, 0.1);
+        }
+        .topbar-meta-dot {
+          width: 12px;
+          height: 12px;
+          border-radius: 999px;
+          box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35);
+        }
+        .topbar-meta-dot.on {
+          background: #22c55e;
+        }
+        .topbar-meta-dot.off {
+          background: #ef4444;
         }
         .topbar {
           position: fixed;

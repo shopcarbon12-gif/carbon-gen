@@ -14,3 +14,7 @@ Use this when wiring **Phase 2** (feed from Graph API instead of Elfsight).
 Environment hints:
 
 - `META_APP_ID` — referenced by `/api/meta/status` until full OAuth exists.
+- `META_INSTAGRAM_BUSINESS_ACCOUNT_ID` — Instagram user id from Graph (the **Instagram Business Account** id, not the Facebook Page id).
+- `META_PAGE_ACCESS_TOKEN` — Page access token with permissions to read that account’s media (used server-side by `GET /api/studio/instagram-feed` for the `/studio/instagram-widget` preview).
+
+With both set, the studio preview loads **live media** in the existing 2×3 scrollable grid. The API reports observable status only (`credentials_incomplete` + `missingEnv`, `graph_error`, `no_media`, `insufficient_media`, or success)—it does not guess why the feed is empty beyond what Graph and env inspection return.

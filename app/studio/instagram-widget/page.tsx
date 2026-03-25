@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { StorefrontSectionPreview } from "@/components/instagram-widget/StorefrontSectionPreview";
 
-export default function InstagramWidgetIndexPage() {
-  redirect("/studio/instagram-widget/layout");
+export default function InstagramWidgetStudioPage() {
+  return <StorefrontSectionPreview />;
 }

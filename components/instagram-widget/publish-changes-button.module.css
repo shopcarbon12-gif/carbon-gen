@@ -1,0 +1,111 @@
+/* Matches Accessibility “Publish Changes” (app/accessibility/page.module.css). */
+
+.publishBtn {
+  --ig-pub-font: var(--font-geist-sans, "Inter"), system-ui, sans-serif;
+  border-radius: 10px;
+  padding: 8px 15px;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: var(--ig-pub-font);
+  letter-spacing: 0.03em;
+  color: rgba(250, 250, 250, 0.94);
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid color-mix(in srgb, rgba(255, 255, 255, 0.1) 50%, rgba(32, 30, 44, 0.85));
+  background:
+    linear-gradient(168deg, rgba(255, 255, 255, 0.05) 0%, transparent 36%),
+    linear-gradient(180deg, rgba(42, 38, 54, 0.62) 0%, rgba(16, 14, 24, 0.9) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.48),
+    4px 0 22px color-mix(in srgb, rgba(100, 80, 150, 0.2), transparent);
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.publishBtn:hover:not(:disabled) {
+  background:
+    linear-gradient(168deg, rgba(255, 255, 255, 0.07) 0%, transparent 36%),
+    linear-gradient(180deg, rgba(48, 44, 62, 0.68) 0%, rgba(20, 18, 30, 0.92) 100%);
+  border-color: color-mix(in srgb, rgba(255, 255, 255, 0.14) 50%, rgba(32, 30, 44, 0.85));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.45),
+    5px 0 26px color-mix(in srgb, rgba(110, 88, 165, 0.22), transparent);
+}
+
+.publishBtn:focus-visible {
+  outline: 2px solid color-mix(in srgb, rgba(167, 139, 250, 0.4), transparent);
+  outline-offset: 2px;
+}
+
+.publishBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.publishBtn .buttonLabelWithTriangle {
+  gap: 8px;
+}
+
+.publishBtn .glossyTriangle {
+  width: 9px;
+  height: 9px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1px 0 rgba(54, 20, 114, 0.28),
+    0 1px 0 rgba(255, 255, 255, 0.1),
+    0 2px 8px rgba(93, 35, 185, 0.22);
+}
+
+.buttonLabelWithTriangle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.glossyTriangle {
+  position: relative;
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  clip-path: polygon(20% 10%, 20% 90%, 92% 50%);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(233, 218, 255, 0.9) 34%, rgba(168, 126, 255, 0.78) 58%, rgba(94, 48, 186, 0.96) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.68),
+    inset 0 -1px 0 rgba(54, 20, 114, 0.42),
+    0 1px 0 rgba(255, 255, 255, 0.18),
+    0 4px 12px rgba(93, 35, 185, 0.42);
+  --ig-triangle-rotation: 0deg;
+  transform: translateY(1px) rotate(var(--ig-triangle-rotation));
+  transform-origin: 50% 50%;
+}
+
+.glossyTriangle::before {
+  content: "";
+  position: absolute;
+  inset: 1px 1px 5px 1px;
+  clip-path: polygon(20% 14%, 20% 58%, 78% 50%);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0));
+  opacity: 0.92;
+}
+
+.glossyTriangleRight {
+  --ig-triangle-rotation: 0deg;
+}
+
+.glossyTriangleDown {
+  --ig-triangle-rotation: 90deg;
+}
+
+.glossyTriangleUp {
+  --ig-triangle-rotation: -90deg;
+}

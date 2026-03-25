@@ -8,10 +8,13 @@
   If your theme uses a different layout (e.g. theme.liquid only has sections), add the same render
   to the main layout file that outputs </body>.
 
-  Config: position right, side/bottom 18px, trigger 76px, icon 40px. logoUrl fixed empty (was invalid "12" in paste).
+  Managed scope: loads the latest saved config from the Carbon app (Publish in /accessibility updates the DB;
+  the storefront always fetches current settings). Do not use a static ?config= URL here or theme edits are
+  required for every dashboard change.
+
   Bump wrev when widget script logic changes (cache bust).
 {% endcomment %}
 <script
-  src="https://app.shopcarbon.com/accessibility/widget?config=%7B%22brandColor%22%3A%22%23ffffff%22%2C%22panelColor%22%3A%22%23111827%22%2C%22triggerStyle%22%3A%22solid%22%2C%22position%22%3A%22right%22%2C%22sideOffset%22%3A18%2C%22bottomOffset%22%3A18%2C%22triggerSize%22%3A76%2C%22iconSize%22%3A40%2C%22panelWidth%22%3A300%2C%22cornerRadius%22%3A14%2C%22label%22%3A%22Carbon%20Assist%22%2C%22language%22%3A%22en%22%2C%22showTextLabel%22%3Afalse%2C%22logoUrl%22%3A%22%22%2C%22logoAlt%22%3A%22Carbon%20Assist%22%2C%22logoVariant%22%3A%22wordmark%22%2C%22logoMaxHeight%22%3A120%2C%22statementUrl%22%3A%22https%3A%2F%2Fwww.shopcarbon.com%2Fpages%2Faccessibility%22%2C%22feedbackUrl%22%3A%22https%3A%2F%2Fwww.shopcarbon.com%2Fpages%2Fcontact%22%2C%22supportEmail%22%3A%22elior%40carbonjeanscompany.com%22%2C%22panelTheme%22%3A%22dark%22%2C%22features%22%3A%7B%22textScale%22%3Atrue%2C%22highContrast%22%3Atrue%2C%22readableFont%22%3Atrue%2C%22pauseAnimations%22%3Atrue%2C%22highlightLinks%22%3Atrue%2C%22profiles%22%3Atrue%2C%22contrastModes%22%3Atrue%2C%22textSpacing%22%3Atrue%2C%22lineHeight%22%3Atrue%2C%22textAlign%22%3Atrue%2C%22saturation%22%3Atrue%2C%22hideImages%22%3Atrue%2C%22readingGuide%22%3Atrue%2C%22readingMask%22%3Atrue%2C%22bigCursor%22%3Atrue%2C%22pageStructure%22%3Atrue%2C%22languageSelector%22%3Atrue%2C%22tooltips%22%3Atrue%7D%7D&wrev=59"
+  src="https://app.shopcarbon.com/accessibility/widget?scope=default&wrev=60"
   defer
 ></script>
