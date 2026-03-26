@@ -139,7 +139,7 @@ function normalizeConfigObject(input: unknown) {
         : DEFAULT_CONFIG.sideOffset,
     bottomOffset:
       typeof cfg.bottomOffset === "number" && Number.isFinite(cfg.bottomOffset)
-        ? Math.max(8, Math.min(72, Math.round(cfg.bottomOffset)))
+        ? Math.max(0, Math.min(72, Math.round(cfg.bottomOffset)))
         : DEFAULT_CONFIG.bottomOffset,
     triggerSize:
       typeof cfg.triggerSize === "number" && Number.isFinite(cfg.triggerSize)
@@ -245,7 +245,7 @@ export async function GET(request: Request) {
         "</svg>"
     );
 
-  const js = `(function(){var __caRev=118;if(window.__carbonA11yRev===__caRev){return;}window.__carbonA11yRev=__caRev;window.__carbonA11yLoaded=true;
+  const js = `(function(){var __caRev=119;if(window.__carbonA11yRev===__caRev){return;}window.__carbonA11yRev=__caRev;window.__carbonA11yLoaded=true;
 /* ca-assist-ui v3 studio | Phase A+B a11y (see docs/accessibility-widget-phase-a-b-spec.md)
  * Panel: non-modal named region (not aria-modal). No focus trap — Tab may move into page content.
  * Esc closes only while focus is inside the panel (keydown on panel). Space toggles switches; Arrow/Home/End in radiogroups.
@@ -3921,7 +3921,8 @@ function createWidget(){
     var ins=fabSafeInsets();
     var iw=ins.iw, ih=ins.ih;
     var side=Math.max(2,Number(config.sideOffset)||10);
-    var bot=Math.max(2,Number(config.bottomOffset)||10);
+    var _botR=Number(config.bottomOffset);
+    var bot=isFinite(_botR)?Math.max(0,Math.min(72,Math.round(_botR))):10;
     var GAP=Math.max(8,Math.min(18,Math.round(side*0.55+5)));
     var rects=fabStripRects(wrap);
     var left=Math.round(iw-ins.minR-side-openSz);
@@ -4040,7 +4041,9 @@ function createWidget(){
     try{localStorage.removeItem(launcherPosKey);}catch(_e){}
     var sz=fabSize();
     var vw=window.innerWidth||400,vh=window.innerHeight||800;
-    var side=Math.max(2,Number(config.sideOffset)||10),bot=Math.max(2,Number(config.bottomOffset)||10);
+    var side=Math.max(2,Number(config.sideOffset)||10);
+    var _botI=Number(config.bottomOffset);
+    var bot=isFinite(_botI)?Math.max(0,Math.min(72,Math.round(_botI))):10;
     var left,top;
     if(sessionManualFab){
       left=sessionManualFab.left;
@@ -4710,7 +4713,9 @@ function createWidget(){
       }
     }else if(config.position==='left'){
       var vh=window.innerHeight||800;
-      var sideL=Math.max(2,Number(config.sideOffset)||10),botL=Math.max(2,Number(config.bottomOffset)||10);
+      var sideL=Math.max(2,Number(config.sideOffset)||10);
+      var _botL=Number(config.bottomOffset);
+      var botL=isFinite(_botL)?Math.max(0,Math.min(72,Math.round(_botL))):10;
       var cL=clampFab(sideL,vh-sz-botL,sz);
       applyFabFreePosition(cL.left,cL.top);
     }

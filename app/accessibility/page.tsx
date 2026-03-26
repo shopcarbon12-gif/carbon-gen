@@ -360,11 +360,11 @@ function toWidgetEmbedConfig(settings: AccessibilitySettings) {
 
 function buildInstallSnippet(settings: AccessibilitySettings) {
   const encoded = encodeURIComponent(JSON.stringify(toWidgetEmbedConfig(settings)));
-  return `<script src="https://app.shopcarbon.com/accessibility/widget?config=${encoded}&wrev=118" defer></script>`;
+  return `<script src="https://app.shopcarbon.com/accessibility/widget?config=${encoded}&wrev=119" defer></script>`;
 }
 
 function buildManagedInstallSnippet(scope = "default") {
-  return `<script src="https://app.shopcarbon.com/accessibility/widget?scope=${encodeURIComponent(scope)}&wrev=118" defer></script>`;
+  return `<script src="https://app.shopcarbon.com/accessibility/widget?scope=${encodeURIComponent(scope)}&wrev=119" defer></script>`;
 }
 
 function toButtonLabel(enabled: boolean) {
@@ -1251,7 +1251,7 @@ export default function AccessibilityPage() {
     script.defer = true;
     const cfg = encodeURIComponent(JSON.stringify(toWidgetEmbedConfig(settings)));
     const sc = encodeURIComponent(settingsScope || "default");
-    script.src = `/accessibility/widget?config=${cfg}&scope=${sc}&wrev=118&_ts=${Date.now()}`;
+    script.src = `/accessibility/widget?config=${cfg}&scope=${sc}&wrev=119&_ts=${Date.now()}`;
     script.onload = () => {
       setRuntimeWidgetMounted(true);
       const g = window as Window & {
@@ -2098,7 +2098,7 @@ export default function AccessibilityPage() {
                 </label>
                 <label className={styles.fieldGroup}>
                   <span className={styles.fieldLabel}>Bottom offset: {settings.bottomOffset}px</span>
-                  <input type="range" className={styles.rangeInput} min={8} max={72} value={settings.bottomOffset} onChange={(event) => setSettings((prev) => ({ ...prev, bottomOffset: Number(event.target.value) }))} />
+                  <input type="range" className={styles.rangeInput} min={0} max={72} value={settings.bottomOffset} onChange={(event) => setSettings((prev) => ({ ...prev, bottomOffset: Number(event.target.value) }))} />
                 </label>
                 <label className={styles.fieldGroup}>
                   <span className={styles.fieldLabel}>Trigger size: {settings.triggerSize}px</span>
