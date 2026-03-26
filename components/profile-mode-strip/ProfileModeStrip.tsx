@@ -159,6 +159,10 @@ export type ProfileModeStripProps = {
   /** Controlled selection; `null` = no segment highlighted (e.g. Screen reader / Seizure from pills). */
   value?: ProfileModeId | null;
   onModeChange?: (id: ProfileModeId) => void;
+  /** Dyslexia preset stage (widget parity): 0 = off, 1 = friendly typeface, 2 = legible fonts. */
+  dyslexiaStage?: 0 | 1 | 2;
+  /** True while dyslexia profile is applied (bar “on” styling). */
+  dyslexiaActive?: boolean;
 };
 
 export function ProfileModeStrip({
@@ -166,6 +170,8 @@ export function ProfileModeStrip({
   defaultMode = "retail",
   value: valueProp,
   onModeChange,
+  dyslexiaStage = 0,
+  dyslexiaActive = false,
 }: ProfileModeStripProps) {
   const uid = useId();
   const [uncontrolled, setUncontrolled] = useState<ProfileModeId | null>(defaultMode ?? "retail");
@@ -205,6 +211,26 @@ export function ProfileModeStrip({
           >
             <span className={styles.iconWrap}>{mode.icon}</span>
             <span className={styles.label}>{mode.label}</span>
+            {mode.id === "dyslexia" && dyslexiaActive && dyslexiaStage > 0 ? (
+              <span className={styles.dysStripBars} aria-hidden>
+                <span
+                  className={[
+                    styles.dysStripBar,
+                    dyslexiaStage >= 1 ? styles.dysStripBarOn : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                />
+                <span
+                  className={[
+                    styles.dysStripBar,
+                    dyslexiaStage >= 2 ? styles.dysStripBarOn : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                />
+              </span>
+            ) : null}
           </button>
         );
       })}

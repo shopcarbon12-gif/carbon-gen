@@ -245,7 +245,7 @@ export async function GET(request: Request) {
         "</svg>"
     );
 
-  const js = `(function(){var __caRev=107;if(window.__carbonA11yRev===__caRev){return;}window.__carbonA11yRev=__caRev;window.__carbonA11yLoaded=true;
+  const js = `(function(){var __caRev=109;if(window.__carbonA11yRev===__caRev){return;}window.__carbonA11yRev=__caRev;window.__carbonA11yLoaded=true;
 /* ca-assist-ui v3 studio | Phase A+B a11y (see docs/accessibility-widget-phase-a-b-spec.md)
  * Panel: non-modal named region (not aria-modal). No focus trap — Tab may move into page content.
  * Esc closes only while focus is inside the panel (keydown on panel). Space toggles switches; Arrow/Home/End in radiogroups.
@@ -390,6 +390,16 @@ function syncPauseAnimationsMedia(){
     }
   }catch(_ve){}
 }
+function bigCursorPointerTargetIsTextEntry(t){
+  try{
+    if(!t||!t.closest)return false;
+    if(t.closest('textarea,select,option,[contenteditable="true"],[contenteditable="plaintext-only"]'))return true;
+    var inp=t.closest('input');
+    if(!inp)return false;
+    var ty=String(inp.getAttribute('type')||'text').toLowerCase();
+    return ty==='text'||ty==='search'||ty==='email'||ty==='url'||ty==='tel'||ty==='password'||ty==='number'||ty==='date'||ty==='datetime-local'||ty==='month'||ty==='time'||ty==='week';
+  }catch(_e){return false;}
+}
 function syncBigCursorOverlay(){
   try{
     if(!state.bigCursor){
@@ -422,7 +432,7 @@ function syncBigCursorOverlay(){
         if(!__caCursorFollowEl||!state.bigCursor)return;
         try{
           var t=e.target;
-          if(t&&t.closest&&(t.closest('input,textarea,select,option,[contenteditable="true"],[contenteditable="plaintext-only"]'))){__caCursorFollowEl.style.opacity='0';return;}
+          if(bigCursorPointerTargetIsTextEntry(t)){__caCursorFollowEl.style.opacity='0';return;}
         }catch(_ct){}
         __caCursorFollowEl.style.opacity='1';
         __caCursorFollowEl.style.left=e.clientX+'px';
@@ -820,11 +830,11 @@ var i18n={
     profiles:'Quick presets',
     profilesHelp:'Bundles common settings. Tap the same preset again to turn it off. Dyslexia preset: OpenDyslexic, then Legible Fonts (Arial) like UserWay; tap the pill again to turn off. Screen reader: pauses motion and strengthens focus outlines—use Low vision for size and contrast.',
     profileBlind:'Screen reader',
-    profileHintBlind:'Pauses animations, adds strong focus outlines on the page, and calms motion. Use Jump to headings or links with your assistive tech. For size and contrast, use Low vision.',
+    profileHintBlind:'Pauses animations, underlines links, and shows a stronger keyboard focus ring for sighted users. This is not a replacement for a screen reader (we do not auto-detect NVDA/JAWS). Use your reader’s own shortcuts, or this widget’s Jump to headings/links when Page structure is on. For size and contrast, use Low vision.',
     profileLowVision:'Low vision',
     profileHintLowVision:'Larger text, smart contrast, bigger pointer, highlighted links.',
     profileMotor:'Motor',
-    profileHintMotor:'Bigger pointer, highlighted links, calmer motion.',
+    profileHintMotor:'Bigger pointer, highlighted links, calmer motion. Keyboard jumps (when not typing in a field): Alt+Shift+M navigation, H headings, F forms, B buttons, G images. Alt+Shift+A opens this panel.',
     profileDyslexia:'Dyslexia',
     profileDyslexiaFriendlyLabel:'Dyslexia Friendly',
     profileLegibleFontsLabel:'Legible Fonts',
@@ -933,6 +943,14 @@ var i18n={
       jumpHeadingsNone:'No headings found on this page',
       jumpLinksOk:'Moved to first link',
       jumpLinksNone:'No links found on this page',
+      jumpMotorMenuOk:'Moved to navigation',
+      jumpMotorMenuNone:'No navigation region found',
+      jumpMotorFormOk:'Moved to a form',
+      jumpMotorFormNone:'No form found',
+      jumpMotorButtonOk:'Moved to a button',
+      jumpMotorButtonNone:'No button found',
+      jumpMotorGraphicOk:'Moved to an image',
+      jumpMotorGraphicNone:'No image found',
       profileAppliedPrefix:'Profile applied:',
       profileDyslexiaFontOnly:'Dyslexia Friendly: OpenDyslexic font on.',
       profileDyslexiaLegibleFonts:'Legible Fonts: Arial on (UserWay-style).',
@@ -1782,9 +1800,6 @@ function renderGlobalStyles(){
     css.push('*,*::before,*::after{animation:none !important;transition:none !important;scroll-behavior:auto !important;}');
     css.push('video{animation:none !important;}');
   }
-  if(activeProfilePreset==='blind'){
-    css.push('html.ca-a11y-preset-blind *:focus-visible{outline:3px solid color-mix(in srgb,#c4b5fd 78%,#fff) !important;outline-offset:2px !important;}');
-  }
   if(state.highlightLinks){
     css.push('a,a:visited,[role=link]{color:#ffff00 !important;background-color:#000 !important;text-decoration:underline !important;text-underline-offset:2px !important;outline:none !important;}');
   }
@@ -1812,6 +1827,13 @@ function renderGlobalStyles(){
   if(spacing!=='normal'){css.push('p,li,button,input,textarea,select,a,span,div{letter-spacing:'+spacing+' !important;word-spacing:'+spacing+' !important;}');}
   if(line!=='1.5'){css.push('p,li,button,input,textarea,select,a,span,div{line-height:'+line+' !important;}');}
   if(align!=='initial'){css.push('p,li,div,section,article,main{text-align:'+align+' !important;}');}
+  if(activeProfilePreset==='blind'){
+    var blindSel=':where(a,a:visited,button,input:not([type=hidden]):not([type=radio]):not([type=checkbox]),textarea,select,summary,[tabindex]:not([tabindex="-1"]),[role=button],[role=link],[role=menuitem],[role=tab],[role=checkbox],[role=radio],[role=switch],[role=slider],[role=combobox],[role=searchbox],[role=spinbutton])';
+    css.push('html.ca-a11y-preset-blind '+blindSel+':focus-visible{outline:3px solid #7c3aed !important;outline-offset:3px !important;box-shadow:0 0 0 2px #fff,0 0 0 5px #7c3aed,0 0 0 8px rgba(124,58,237,0.35) !important;}');
+    css.push('html.ca-a11y-preset-blind input[type=radio]:focus-visible,html.ca-a11y-preset-blind input[type=checkbox]:focus-visible{outline:3px solid #7c3aed !important;outline-offset:3px !important;box-shadow:0 0 0 2px #fff,0 0 0 5px #7c3aed !important;}');
+    css.push('html.ca-a11y-preset-blind *:focus-visible{outline:3px solid #7c3aed !important;outline-offset:3px !important;box-shadow:0 0 0 2px #fff,0 0 0 5px #7c3aed !important;}');
+    css.push('html.ca-a11y-preset-blind a,html.ca-a11y-preset-blind a:visited{text-decoration:underline !important;text-underline-offset:0.2em !important;text-decoration-thickness:max(0.08em,2px) !important;}');
+  }
   styleTag.textContent=css.join("\\n");
   try{
     if(document.head&&styleTag){document.head.appendChild(styleTag);}
@@ -3079,6 +3101,77 @@ function jumpToSelector(selector,okMsg,noneMsg){
   announce(okMsg);
   return true;
 }
+function jumpToFirstMotorMatch(selector,okMsg,noneMsg,treatAsHeading){
+  var docEl=document.documentElement;
+  if(!docEl){
+    announce(noneMsg);
+    return false;
+  }
+  var found=querySelectorMatchesDeep(docEl,String(selector||''));
+  found=filterJumpTargetsToMainContent(found);
+  var target=null;
+  var i,el;
+  for(i=0;i<found.length;i++){
+    el=found[i];
+    if(isLikelyInsideCarbonWidget(el))continue;
+    if(isSkippableJumpTarget(el))continue;
+    if(isProbablyVisible(el)){target=el;break;}
+  }
+  if(!target){
+    for(i=0;i<found.length;i++){
+      el=found[i];
+      if(isLikelyInsideCarbonWidget(el))continue;
+      if(isSkippableJumpTarget(el))continue;
+      target=el;
+      break;
+    }
+  }
+  if(!target){
+    announce(noneMsg);
+    return false;
+  }
+  scrollJumpTargetToViewportStart(target,!!treatAsHeading);
+  announce(okMsg);
+  return true;
+}
+function handleMotorPresetNavKeydown(ev){
+  if(activeProfilePreset!=='motor')return;
+  if(!ev.altKey||!ev.shiftKey)return;
+  var key=String(ev.key||'').toLowerCase();
+  if('mhfbg'.indexOf(key)<0)return;
+  var el=ev.target;
+  var tag=el&&el.tagName;
+  if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'){
+    if(bigCursorPointerTargetIsTextEntry(el)){return;}
+  }
+  try{if(el&&el.isContentEditable)return;}catch(_ce){}
+  ev.preventDefault();
+  if(key==='h'){
+    jumpToSelector('h1,h2,h3,h4,h5,h6,[role="heading"]',ann('jumpHeadingsOk'),ann('jumpHeadingsNone'));
+    track('motor_jump_h',{});
+    return;
+  }
+  if(key==='m'){
+    jumpToFirstMotorMatch('nav,[role="navigation"],[role="menubar"]',ann('jumpMotorMenuOk'),ann('jumpMotorMenuNone'),false);
+    track('motor_jump_m',{});
+    return;
+  }
+  if(key==='f'){
+    jumpToFirstMotorMatch('form',ann('jumpMotorFormOk'),ann('jumpMotorFormNone'),false);
+    track('motor_jump_f',{});
+    return;
+  }
+  if(key==='b'){
+    jumpToFirstMotorMatch('button:not([disabled]),[role="button"]:not([aria-disabled="true"])',ann('jumpMotorButtonOk'),ann('jumpMotorButtonNone'),false);
+    track('motor_jump_b',{});
+    return;
+  }
+  if(key==='g'){
+    jumpToFirstMotorMatch('img[alt]:not([alt=""]),picture,[role="img"]',ann('jumpMotorGraphicOk'),ann('jumpMotorGraphicNone'),false);
+    track('motor_jump_g',{});
+    return;
+  }
+}
 
 var lastReadingPointerApplyMs=0;
 var readingPointerRaf=0;
@@ -4266,7 +4359,12 @@ function createWidget(){
   document.addEventListener('keydown',function(ev){
     try{
       if(!ev.altKey||!ev.shiftKey){return;}
-      if(String(ev.key||'').toLowerCase()!=='a'){return;}
+      var k=String(ev.key||'').toLowerCase();
+      if(activeProfilePreset==='motor'&&'mhfbg'.indexOf(k)>=0){
+        handleMotorPresetNavKeydown(ev);
+        return;
+      }
+      if(k!=='a'){return;}
       var el=ev.target;
       var tag=el&&el.tagName;
       if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'){return;}

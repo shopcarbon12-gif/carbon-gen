@@ -288,6 +288,13 @@ const ASSIST_SHELL_PILLS: { key: AssistWidgetProfileKey; label: string }[] = [
   { key: "seizure", label: "Seizure Safe" },
 ];
 
+/** Studio dyslexia pill copy — matches live widget stages (pic1 / pic2 / pic3). */
+function studioDyslexiaShellLabel(base: string, active: boolean, stage: 0 | 1 | 2): string {
+  if (!active || stage === 0) return base;
+  if (stage === 1) return "Dyslexia Friendly";
+  return "Legible Fonts";
+}
+
 function widgetKeyToStripMode(key: string): ProfileModeId | null {
   switch (key) {
     case "clear":
@@ -564,10 +571,14 @@ export default function AccessibilityPage() {
         }
         return;
       }
+      if (id === "dyslexia") {
+        cycleStudioDyslexia();
+        return;
+      }
       const wk = stripModeToWidgetKey(id);
       if (wk) pushAssistProfileToWidget(wk);
     },
-    [pushAssistProfileToWidget]
+    [pushAssistProfileToWidget, cycleStudioDyslexia]
   );
 
   const installSnippet = useMemo(() => buildInstallSnippet(settings), [settings]);
@@ -1429,7 +1440,12 @@ export default function AccessibilityPage() {
             </div>
 
             <div className={styles.profileSection}>
-              <ProfileModeStrip value={studioStripMode} onModeChange={handleStudioProfileStripMode} />
+              <ProfileModeStrip
+                value={studioStripMode}
+                onModeChange={handleStudioProfileStripMode}
+                dyslexiaStage={studioDyslexiaStage}
+                dyslexiaActive={appliedAssistProfile === "dyslexia"}
+              />
             </div>
 
             <div
@@ -1462,7 +1478,13 @@ export default function AccessibilityPage() {
                           onClick={() => cycleStudioDyslexia()}
                         >
                           <span className={styles.widgetShellPillDysStack}>
-                            <span className={styles.widgetShellPillDysLabel}>{label}</span>
+                            <span className={styles.widgetShellPillDysLabel}>
+                              {studioDyslexiaShellLabel(
+                                label,
+                                appliedAssistProfile === "dyslexia",
+                                studioDyslexiaStage
+                              )}
+                            </span>
                             {appliedAssistProfile === "dyslexia" && studioDyslexiaStage > 0 ? (
                               <span className={styles.widgetShellDysBars} aria-hidden>
                                 <span
@@ -1545,7 +1567,12 @@ export default function AccessibilityPage() {
             {/* Profile strip */}
             <div className={styles.profileSection}>
               <span className={styles.profileLabel}>Accessibility preferences</span>
-              <ProfileModeStrip value={studioStripMode} onModeChange={handleStudioProfileStripMode} />
+              <ProfileModeStrip
+                value={studioStripMode}
+                onModeChange={handleStudioProfileStripMode}
+                dyslexiaStage={studioDyslexiaStage}
+                dyslexiaActive={appliedAssistProfile === "dyslexia"}
+              />
             </div>
 
             {/* Widget preview card */}
@@ -1573,7 +1600,13 @@ export default function AccessibilityPage() {
                         onClick={() => cycleStudioDyslexia()}
                       >
                         <span className={styles.wpMiniPillDysStack}>
-                          <span className={styles.wpMiniPillDysLabel}>{label}</span>
+                          <span className={styles.wpMiniPillDysLabel}>
+                            {studioDyslexiaShellLabel(
+                              label,
+                              appliedAssistProfile === "dyslexia",
+                              studioDyslexiaStage
+                            )}
+                          </span>
                           {appliedAssistProfile === "dyslexia" && studioDyslexiaStage > 0 ? (
                             <span className={styles.wpMiniDysBars} aria-hidden>
                               <span

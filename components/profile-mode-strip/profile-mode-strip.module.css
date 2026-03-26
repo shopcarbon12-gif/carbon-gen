@@ -114,6 +114,39 @@
   flex-shrink: 0;
 }
 
+/* Dyslexia: indicator bars at bottom of segment, under label (same logic as widget) */
+.dysStripBars {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  max-width: 100%;
+  padding: 0 6px 2px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  margin-top: -3px;
+}
+
+.dysStripBar {
+  flex: 1 1 0;
+  height: 2px;
+  min-height: 2px;
+  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.22);
+  transition:
+    background 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.segmentActive .dysStripBarOn {
+  background: #fafafa;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    0 0 8px color-mix(in srgb, rgba(167, 139, 250, 0.45), transparent);
+}
+
 .segmentActive .iconWrap {
   color: rgba(238, 228, 255, 0.96);
   border-color: color-mix(in srgb, rgba(210, 190, 255, 0.34), transparent);
