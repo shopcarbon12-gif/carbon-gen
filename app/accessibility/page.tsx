@@ -183,7 +183,7 @@ const defaultSettings: AccessibilitySettings = {
   triggerSize: 52,
   iconSize: 26,
   panelWidth: 400,
-  cornerRadius: 14,
+  cornerRadius: 22,
   widgetLabel: "Carbon Assist",
   logoUrl: "",
   logoAlt: "Carbon Assist",
@@ -233,6 +233,32 @@ const defaultSettings: AccessibilitySettings = {
     languageSelector: true,
     tooltips: true,
   },
+};
+
+/** Brand / placement defaults — keep in sync with `DEFAULT_CONFIG` in `app/accessibility/widget/route.ts`. */
+const brandPlacementDefaults: Pick<
+  AccessibilitySettings,
+  | "brandColor"
+  | "panelColor"
+  | "panelTheme"
+  | "position"
+  | "triggerStyle"
+  | "sideOffset"
+  | "bottomOffset"
+  | "triggerSize"
+  | "cornerRadius"
+  | "panelWidth"
+> = {
+  brandColor: "#6d28d9",
+  panelColor: "#111827",
+  panelTheme: "dark",
+  position: "right",
+  triggerStyle: "solid",
+  sideOffset: 10,
+  bottomOffset: 10,
+  triggerSize: 52,
+  cornerRadius: 22,
+  panelWidth: 400,
 };
 
 type AssistWidgetProfileKey = "clear" | "blind" | "lowVision" | "motor" | "dyslexia" | "adhd" | "seizure";
@@ -305,11 +331,11 @@ function toWidgetEmbedConfig(settings: AccessibilitySettings) {
 
 function buildInstallSnippet(settings: AccessibilitySettings) {
   const encoded = encodeURIComponent(JSON.stringify(toWidgetEmbedConfig(settings)));
-  return `<script src="https://app.shopcarbon.com/accessibility/widget?config=${encoded}&wrev=60" defer></script>`;
+  return `<script src="https://app.shopcarbon.com/accessibility/widget?config=${encoded}&wrev=61" defer></script>`;
 }
 
 function buildManagedInstallSnippet(scope = "default") {
-  return `<script src="https://app.shopcarbon.com/accessibility/widget?scope=${encodeURIComponent(scope)}&wrev=60" defer></script>`;
+  return `<script src="https://app.shopcarbon.com/accessibility/widget?scope=${encodeURIComponent(scope)}&wrev=61" defer></script>`;
 }
 
 function toButtonLabel(enabled: boolean) {
@@ -1141,7 +1167,7 @@ export default function AccessibilityPage() {
     script.defer = true;
     const cfg = encodeURIComponent(JSON.stringify(toWidgetEmbedConfig(settings)));
     const sc = encodeURIComponent(settingsScope || "default");
-    script.src = `/accessibility/widget?config=${cfg}&scope=${sc}&wrev=60&_ts=${Date.now()}`;
+    script.src = `/accessibility/widget?config=${cfg}&scope=${sc}&wrev=61&_ts=${Date.now()}`;
     script.onload = () => {
       setRuntimeWidgetMounted(true);
       const g = window as Window & {
@@ -1844,7 +1870,32 @@ export default function AccessibilityPage() {
               </div>
 
               <div className={`${styles.configCard} ${styles.horizontalSurface} ${styles.lightOccupancy}`}>
-                <h3 className={styles.configTitle}>Brand and Placement</h3>
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "10px 14px",
+                    marginBottom: "10px",
+                  }}
+                >
+                  <h3 className={styles.configTitle} style={{ margin: 0 }}>
+                    Brand and Placement
+                  </h3>
+                  <button
+                    type="button"
+                    className={styles.outlineBtn}
+                    onClick={() => {
+                      setSettings((prev) => normalizeSettings({ ...prev, ...brandPlacementDefaults }));
+                      setSettingsStatus(
+                        'Brand and placement reset to Carbon defaults. Click Publish Changes to push to the storefront (scope= snippet).'
+                      );
+                    }}
+                  >
+                    Default mode
+                  </button>
+                </div>
                 <div className={styles.fieldGrid}>
                   <label className={styles.fieldGroup}>
                     <span className={styles.fieldLabel}>Brand color</span>

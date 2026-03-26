@@ -245,7 +245,7 @@ export async function GET(request: Request) {
         "</svg>"
     );
 
-  const js = `(function(){var __caRev=60;if(window.__carbonA11yRev===__caRev){return;}window.__carbonA11yRev=__caRev;window.__carbonA11yLoaded=true;
+  const js = `(function(){var __caRev=61;if(window.__carbonA11yRev===__caRev){return;}window.__carbonA11yRev=__caRev;window.__carbonA11yLoaded=true;
 /* ca-assist-ui v3 studio | Phase A+B a11y (see docs/accessibility-widget-phase-a-b-spec.md)
  * Panel: non-modal named region (not aria-modal). No focus trap — Tab may move into page content.
  * Esc closes only while focus is inside the panel (keydown on panel). Space toggles switches; Arrow/Home/End in radiogroups.
@@ -481,9 +481,9 @@ var widgetCss='' +
   '.ca-assist-field--textscale-row .ca-assist-step{flex:0 0 auto;padding:0 !important;gap:6px !important;margin:0 !important}' +
   '.ca-assist-field--textscale-row .ca-assist-step__btn{width:30px !important;height:30px !important;border-radius:9px !important;font-size:15px !important;line-height:1 !important}' +
   '.ca-assist-field--textscale-row .ca-assist-step__val{min-width:42px !important;font-size:12px !important;font-weight:650 !important;padding:0 2px !important}' +
-  '.ca-assist-seg{display:grid;grid-template-columns:repeat(auto-fit,minmax(48px,1fr));gap:4px;width:100%;align-items:stretch}' +
-  '.ca-assist-field--compact .ca-assist-seg{display:flex;flex-wrap:wrap;gap:4px;width:auto}' +
-  '.ca-assist-seg__btn{padding:10px 6px;border-radius:999px;border:1px solid rgba(255,255,255,.12);background:rgba(0,0,0,.4);color:#f4f4f5;font-size:14px;font-weight:550;min-height:42px;width:100%;max-width:100%;box-sizing:border-box;cursor:inherit;text-align:center;line-height:1.2;white-space:normal;word-break:break-word;transition:background .15s ease,border-color .15s ease,color .15s ease,box-shadow .15s ease}' +
+  '.ca-assist-seg{display:grid;grid-template-columns:repeat(auto-fit,minmax(74px,1fr));gap:6px;width:100%;align-items:stretch}' +
+  '.ca-assist-field--compact .ca-assist-seg{display:flex;flex-wrap:wrap;gap:6px;width:auto}' +
+  '.ca-assist-seg__btn{padding:10px 5px;border-radius:999px;border:1px solid rgba(255,255,255,.12);background:rgba(0,0,0,.4);color:#f4f4f5;font-size:13px;font-weight:550;min-height:42px;min-width:0;width:100%;max-width:100%;box-sizing:border-box;cursor:inherit;text-align:center;line-height:1.2;white-space:nowrap;word-break:normal;overflow-wrap:normal;transition:background .15s ease,border-color .15s ease,color .15s ease,box-shadow .15s ease}' +
   '.ca-assist-seg__btn:hover{border-color:rgba(255,255,255,.22);background:rgba(255,255,255,.07)}' +
   '.ca-assist-seg__btn[aria-checked="true"]{border-color:color-mix(in srgb,var(--ca-accent,#c4b5fd) 50%,rgba(255,255,255,.2));background:linear-gradient(180deg,color-mix(in srgb,var(--ca-accent,#7c3aed) 35%,rgba(0,0,0,.2)),rgba(0,0,0,.35));color:#fff;font-weight:650;box-shadow:0 0 20px color-mix(in srgb,var(--ca-accent,#7c3aed) 28%,transparent),inset 0 1px 0 rgba(255,255,255,.12)}' +
   '.ca-assist-seg__btn:focus-visible{outline:1px solid color-mix(in srgb,var(--ca-accent,#a78bfa) 55%,#fff);outline-offset:2px}' +
@@ -597,7 +597,7 @@ var widgetCss='' +
   '.ca-assist-footer-lang{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap}' +
   '.ca-assist-footer-lang .ca-assist-field{flex:1;min-width:180px;border:0;padding:0;background:transparent}' +
   '.ca-assist-footer-lang .ca-assist-field__name{display:none}' +
-  '.ca-assist-footer-lang .ca-assist-seg{display:grid;grid-template-columns:repeat(auto-fit,minmax(48px,1fr));gap:4px;width:100%}' +
+  '.ca-assist-footer-lang .ca-assist-seg{display:grid;grid-template-columns:repeat(auto-fit,minmax(52px,1fr));gap:6px;width:100%}' +
   '.ca-assist-footer-globe{flex:0 0 auto;display:grid;place-items:center;width:36px;height:36px;margin-top:2px;border-radius:999px;border:1px solid color-mix(in srgb,var(--ca-accent,#a78bfa) 28%,rgba(255,255,255,.1));background:rgba(0,0,0,.35);color:color-mix(in srgb,var(--ca-accent,#c4b5fd) 45%,rgba(212,212,216,.55))}' +
   '.ca-assist-footer-links-row{display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px;padding:8px 0 6px;width:100%}' +
   '.ca-assist-footer-links-sep{opacity:.5;font-weight:300;color:rgba(228,228,231,.5)}' +
