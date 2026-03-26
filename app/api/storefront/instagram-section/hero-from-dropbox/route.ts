@@ -8,7 +8,28 @@ import { INSTAGRAM_HERO_HEIGHT, INSTAGRAM_HERO_WIDTH } from "@/lib/instagram-wid
 import { uploadBytesToStorage } from "@/lib/storageProvider";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 180;
+
+const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 80 * 1024 * 1024;
+
+const VIDEO_EXTS = new Set(["mp4", "webm", "mov", "m4v", "ogv"]);
+
+function extAndContentTypeFromDropbox(pathLower: string, headerCt: string): { ext: string; contentType: string } {
+  const ct = headerCt.split(";")[0].trim().toLowerCase();
+  if (ct.includes("webm")) return { ext: ".webm", contentType: "video/webm" };
+  if (ct.includes("quicktime")) return { ext: ".mov", contentType: "video/quicktime" };
+  if (ct === "video/ogg" || ct.includes("ogg")) return { ext: ".ogv", contentType: "video/ogg" };
+  if (ct === "video/mp4" || ct.includes("mp4")) return { ext: ".mp4", contentType: "video/mp4" };
+
+  const m = pathLower.match(/\.([a-z0-9]+)$/i);
+  const e = m ? m[1].toLowerCase() : "";
+  if (e === "webm") return { ext: ".webm", contentType: "video/webm" };
+  if (e === "mov") return { ext: ".mov", contentType: "video/quicktime" };
+  if (e === "ogv") return { ext: ".ogv", contentType: "video/ogg" };
+  if (e === "m4v" || e === "mp4") return { ext: ".mp4", contentType: "video/mp4" };
+  return { ext: ".mp4", contentType: "video/mp4" };
+}
 
 async function verifyPublicUrl(url: string): Promise<boolean> {
   try {
@@ -66,12 +87,55 @@ export async function POST(req: NextRequest) {
     const errText = await dl.text().catch(() => "");
     return NextResponse.json(
       { ok: false, error: `Dropbox download failed: ${dl.status} ${errText.slice(0, 200)}` },
-      { status: 502 }
+      { status: 502 },
     );
   }
 
   const arrayBuf = await dl.arrayBuffer();
   const buf = Buffer.from(arrayBuf);
+
+  const headerCt = dl.headers.get("content-type") || "";
+  const pathExt = pathLower.match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase() ?? "";
+  const ctBase = headerCt.split(";")[0].trim().toLowerCase();
+  const isVideo = ctBase.startsWith("video/") || VIDEO_EXTS.has(pathExt);
+
+  if (isVideo) {
+    if (buf.length > MAX_VIDEO_BYTES) {
+      return NextResponse.json({ ok: false, error: "Video too large (max 80 MB)" }, { status: 413 });
+    }
+    const { ext, contentType } = extAndContentTypeFromDropbox(pathLower, headerCt);
+    const safeStem = pathLower
+      .replace(/^\/+/, "")
+      .replace(/[^a-zA-Z0-9.\-_/]/g, "_")
+      .split("/")
+      .pop()
+      ?.replace(/\.[^.]+$/, "") || "dropbox-hero";
+    const path = `items/instagram-hero/${Date.now()}-${crypto.randomUUID()}-${safeStem}${ext}`;
+
+    const uploaded = await uploadBytesToStorage({
+      path,
+      bytes: new Uint8Array(buf),
+      contentType,
+    });
+
+    const ok = await verifyPublicUrl(uploaded.url);
+    if (!ok) {
+      return NextResponse.json(
+        { ok: false, error: "Upload succeeded but URL could not be verified." },
+        { status: 502 },
+      );
+    }
+
+    return NextResponse.json({
+      ok: true,
+      kind: "video" as const,
+      url: uploaded.url,
+    });
+  }
+
+  if (buf.length > MAX_IMAGE_BYTES) {
+    return NextResponse.json({ ok: false, error: "File too large (max 25 MB)" }, { status: 413 });
+  }
 
   let out: Buffer;
   try {
@@ -96,12 +160,13 @@ export async function POST(req: NextRequest) {
   if (!ok) {
     return NextResponse.json(
       { ok: false, error: "Upload succeeded but URL could not be verified." },
-      { status: 502 }
+      { status: 502 },
     );
   }
 
   return NextResponse.json({
     ok: true,
+    kind: "image" as const,
     url: uploaded.url,
     width: INSTAGRAM_HERO_WIDTH,
     height: INSTAGRAM_HERO_HEIGHT,

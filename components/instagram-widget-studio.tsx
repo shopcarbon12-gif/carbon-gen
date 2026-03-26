@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { InstagramSectionStoredConfig } from "@/lib/instagramSectionConfigRepository";
+import { isHeroVideoUrl } from "@/lib/instagram-hero-media";
 import { INSTAGRAM_HERO_HEIGHT, INSTAGRAM_HERO_WIDTH } from "@/lib/instagram-widget-constants";
 
 const DEFAULT_HERO =
@@ -74,7 +75,19 @@ export function InstagramWidgetPreview({
         <div className={isDesktop ? "iw-main-row" : "iw-main-col"}>
           <div className="iw-hero">
             <div className="iw-hero-inner">
-              <img src={heroSrc} alt={cfg.heroAlt || ""} className="iw-hero-img" />
+              {isHeroVideoUrl(heroSrc) ? (
+                <video
+                  className="iw-hero-img"
+                  src={heroSrc}
+                  muted
+                  loop
+                  playsInline
+                  autoPlay
+                  aria-label={cfg.heroAlt || "Instagram hero video"}
+                />
+              ) : (
+                <img src={heroSrc} alt={cfg.heroAlt || ""} className="iw-hero-img" />
+              )}
               <a
                 className="iw-hero-link"
                 href={cfg.heroLinkHref || "#"}
@@ -318,7 +331,7 @@ export function InstagramWidgetStudioForm() {
       const url = String(data.url || "").trim();
       if (!url) throw new Error("No URL returned");
       patch({ heroImageUrl: url });
-      setStatus("Hero processed and verified. Save to persist.");
+      setStatus("Hero file processed and verified. Save to persist.");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Upload failed");
     } finally {
@@ -362,12 +375,15 @@ export function InstagramWidgetStudioForm() {
     const fs = cfg.heroLinkFontSizeDesktopPx ?? 28;
     const fw = cfg.heroLinkFontWeight ?? 400;
     const col = (cfg.heroLinkColor || "#ffffff").replace(/"/g, "&quot;");
+    const heroTag = isHeroVideoUrl(heroSrc)
+      ? `<video style="width:100%;object-fit:cover;border-radius:0" src="${src}" width="${INSTAGRAM_HERO_WIDTH}" height="${INSTAGRAM_HERO_HEIGHT}" muted playsinline autoplay loop></video>`
+      : `<img style="width:100%;object-fit:cover;border-radius:0" alt="${alt}" loading="lazy" src="${src}" width="${INSTAGRAM_HERO_WIDTH}" height="${INSTAGRAM_HERO_HEIGHT}" />`;
     return `{% comment %}
   Upload public/fonts/neuzeit-grotesk-regular.otf to Shopify Files (or your CDN), then add @font-face in theme CSS:
   @font-face { font-family: 'Neuzeit Grotesk'; src: url('YOUR_FILE_URL.otf') format('opentype'); font-weight: 400; font-display: swap; }
 {% endcomment %}
-<!-- Hero image -->
-<img style="width:100%;object-fit:cover;border-radius:0" alt="${alt}" loading="lazy" src="${src}" width="${INSTAGRAM_HERO_WIDTH}" height="${INSTAGRAM_HERO_HEIGHT}" />
+<!-- Hero ${isHeroVideoUrl(heroSrc) ? "video" : "image"} -->
+${heroTag}
 <!-- Overlay (@shopcarbon) — position to match theme; uses Neuzeit Grotesk Regular -->
 <div class="instagram-link" style="position:absolute;left:50%;top:62%;transform:translate(-50%,-50%);text-align:center;">
   <a style="font-family:'Neuzeit Grotesk',sans-serif;font-size:${fs}px;font-weight:${fw};color:${col};text-shadow:0 1px 6px rgba(0,0,0,0.45);" href="${href}" target="_blank" rel="noopener noreferrer">${link}</a>
@@ -407,11 +423,11 @@ export function InstagramWidgetStudioForm() {
         <h2>Hero + profile</h2>
         <div className="iw-grid-form">
           <label>
-            Hero image URL
+            Hero image or video URL
             <input
               value={cfg.heroImageUrl || ""}
               onChange={(e) => patch({ heroImageUrl: e.target.value })}
-              placeholder="https://…"
+              placeholder="https://… (.jpg, .png, .mp4, …)"
             />
           </label>
           <label>
@@ -498,8 +514,13 @@ export function InstagramWidgetStudioForm() {
         </div>
         <div className="iw-row">
           <label className="iw-upload">
-            {uploading ? "Working…" : "Upload hero file"}
-            <input type="file" accept="image/*" disabled={uploading} onChange={(e) => void onFile(e.target.files?.[0] ?? null)} />
+            {uploading ? "Working…" : "Upload hero image or video"}
+            <input
+              type="file"
+              accept="image/*,video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v,.ogv"
+              disabled={uploading}
+              onChange={(e) => void onFile(e.target.files?.[0] ?? null)}
+            />
           </label>
           <div className="iw-dropbox">
             <input
@@ -531,7 +552,7 @@ export function InstagramWidgetStudioForm() {
       </section>
 
       <section className="iw-panel">
-        <h2>Liquid fragment (hero img)</h2>
+        <h2>Liquid fragment (hero image or video)</h2>
         <pre className="iw-code">{liquidSnippet}</pre>
         <button type="button" onClick={() => void copyLiquid()}>
           Copy

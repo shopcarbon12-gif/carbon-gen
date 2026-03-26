@@ -18,6 +18,7 @@ const nextConfig: NextConfig = {
     const csp = [
       "default-src 'self'",
       "img-src 'self' data: blob: https:",
+      "media-src 'self' https: data: blob:",
       isProd
         ? "script-src 'self' 'unsafe-inline'"
         : "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
@@ -32,6 +33,13 @@ const nextConfig: NextConfig = {
     ].join("; ");
 
     return [
+      {
+        source: "/accessibility-assets/:path*",
+        headers: [
+          { key: "Access-Control-Allow-Origin", value: "*" },
+          { key: "Cross-Origin-Resource-Policy", value: "cross-origin" },
+        ],
+      },
       {
         source: "/(.*)",
         headers: [

@@ -19,6 +19,7 @@ import {
   STOREFRONT_PREVIEW_TILE_OBJECT_POSITIONS,
   type InstagramMediaItem,
 } from "@/lib/instagram-feed";
+import { isHeroVideoUrl } from "@/lib/instagram-hero-media";
 import { InstagramWidgetEditorToolbar } from "./InstagramWidgetEditorToolbar";
 import styles from "./storefront-section-preview.module.css";
 
@@ -280,15 +281,26 @@ export function StorefrontSectionPreview() {
       <div className={styles.mediaGrid}>
         <div className={styles.heroCell}>
           <div className={styles.banner}>
-            <Image
-              src={heroSrc}
-              alt={`Instagram banner for @${STOREFRONT_INSTAGRAM_HANDLE}`}
-              width={2000}
-              height={1200}
-              sizes="(max-width: 900px) 100vw, 50vw"
-              priority={false}
-              unoptimized={nextImageUnoptimized(heroSrc)}
-            />
+            {isHeroVideoUrl(heroSrc) ? (
+              <video
+                src={heroSrc}
+                muted
+                loop
+                playsInline
+                autoPlay
+                aria-label={`Instagram banner for @${STOREFRONT_INSTAGRAM_HANDLE}`}
+              />
+            ) : (
+              <Image
+                src={heroSrc}
+                alt={`Instagram banner for @${STOREFRONT_INSTAGRAM_HANDLE}`}
+                width={2000}
+                height={1200}
+                sizes="(max-width: 900px) 100vw, 50vw"
+                priority={false}
+                unoptimized={nextImageUnoptimized(heroSrc)}
+              />
+            )}
             <div className={styles.instagramLink}>
               <a href={STOREFRONT_INSTAGRAM_URL} target="_blank" rel="noopener noreferrer">
                 @{STOREFRONT_INSTAGRAM_HANDLE}
