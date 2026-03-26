@@ -245,7 +245,7 @@ export async function GET(request: Request) {
         "</svg>"
     );
 
-  const js = `(function(){var __caRev=61;if(window.__carbonA11yRev===__caRev){return;}window.__carbonA11yRev=__caRev;window.__carbonA11yLoaded=true;
+  const js = `(function(){var __caRev=62;if(window.__carbonA11yRev===__caRev){return;}window.__carbonA11yRev=__caRev;window.__carbonA11yLoaded=true;
 /* ca-assist-ui v3 studio | Phase A+B a11y (see docs/accessibility-widget-phase-a-b-spec.md)
  * Panel: non-modal named region (not aria-modal). No focus trap — Tab may move into page content.
  * Esc closes only while focus is inside the panel (keydown on panel). Space toggles switches; Arrow/Home/End in radiogroups.
@@ -2707,6 +2707,7 @@ function createWidget(){
   wrap.style.boxShadow='none';
   var launcherDrag={active:false,pointerId:null,startX:0,startY:0,origLeft:0,origTop:0,moved:false,suppressClick:false};
   var launcherPosKey=storageKey+'::fabPos';
+  var sessionManualFab=null;
   var dockOpenRight=String(config.position||'right')!=='left';
   var viewportPushBaseR=null;
   var viewportPushBaseL=null;
@@ -2764,7 +2765,7 @@ function createWidget(){
       if(isFinite(zi)&&zi>=2147483640)return;
       var r=el.getBoundingClientRect();
       if(r.width<6||r.height<6)return;
-      if(r.width>iw*0.62)return;
+      if(r.height>ih*0.88)return;
       if(r.bottom<ih-168||r.right<iw-280)return;
       if(r.top<ih-200)return;
       seen.add(el);
@@ -2829,12 +2830,22 @@ function createWidget(){
         if(rectsOverlapFab(mine,rects[j],GAP)){blocker=rects[j];break;}
       }
       if(!blocker)break;
-      left=Math.round(blocker.left-openSz-GAP);
-      if(left<ins.minL){left=ins.minL;break;}
+      var bW=blocker.right-blocker.left,bH=blocker.bottom-blocker.top;
+      if(bW>bH){
+        top=Math.round(blocker.top-openSz-12);
+        left=Math.round(iw-ins.minR-side-openSz);
+        if(top<ins.minT){top=ins.minT;}
+        if(left<ins.minL){left=ins.minL;}
+      }else{
+        left=Math.round(blocker.left-openSz-GAP);
+        if(left<ins.minL){left=ins.minL;break;}
+      }
     }
     var rowBottom=0;
     for(var k=0;k<rects.length;k++){
       var rk=rects[k];
+      var rkw=rk.right-rk.left,rkh=rk.bottom-rk.top;
+      if(rkw>rkh)continue;
       if(rk.height>168)continue;
       if(rk.top<ih-188)continue;
       if(rk.right>=left-6&&rk.left<=iw-ins.minR+4){rowBottom=Math.max(rowBottom,rk.bottom);}
@@ -2891,6 +2902,13 @@ function createWidget(){
     }catch(_e){}
   }
   function applyFabScreenCorner(dockRight,openSz){
+    if(sessionManualFab){
+      var cm=clampFab(sessionManualFab.left,sessionManualFab.top,openSz);
+      sessionManualFab={left:cm.left,top:cm.top};
+      wrap.style.paddingBottom='';
+      applyFabFreePosition(cm.left,cm.top);
+      return;
+    }
     var targetLeft,targetTop;
     if(dockRight){
       var rr=resolveRightDockFabRect(openSz);
@@ -2905,27 +2923,18 @@ function createWidget(){
     var c=clampFab(targetLeft,targetTop,openSz);
     applyFabFreePosition(c.left,c.top);
   }
-  function saveFabPosition(left,top){
-    try{localStorage.setItem(launcherPosKey,JSON.stringify({left:left,top:top}));}catch(_e){}
-  }
-  function loadFabPosition(){
-    try{
-      var raw=localStorage.getItem(launcherPosKey);
-      if(!raw){return null;}
-      var p=JSON.parse(raw);
-      if(typeof p.left==='number'&&typeof p.top==='number'){return p;}
-    }catch(_e){}
-    return null;
+  function rememberManualFab(left,top){
+    sessionManualFab={left:left,top:top};
   }
   function placeFabInitial(){
+    try{localStorage.removeItem(launcherPosKey);}catch(_e){}
     var sz=fabSize();
-    var saved=loadFabPosition();
     var vw=window.innerWidth||400,vh=window.innerHeight||800;
     var side=Math.max(2,Number(config.sideOffset)||10),bot=Math.max(2,Number(config.bottomOffset)||10);
     var left,top;
-    if(saved){
-      left=saved.left;
-      top=saved.top;
+    if(sessionManualFab){
+      left=sessionManualFab.left;
+      top=sessionManualFab.top;
     }else if(config.position==='left'){
       left=side;
       top=vh-sz-bot;
@@ -3471,11 +3480,6 @@ function createWidget(){
       syncLauncherGlyphMetrics();
       wrap.style.paddingBottom='';
       applyFabScreenCorner(dockOpenRight,tsClose);
-      try{
-        var lx=parseFloat(wrap.style.left)||0;
-        var ly=parseFloat(wrap.style.top)||0;
-        saveFabPosition(lx,ly);
-      }catch(_e1){}
       setTimeout(function(){
         panel.style.display='none';
         resetPanelDockStyles();
@@ -3524,7 +3528,7 @@ function createWidget(){
     if(launcherDrag.moved){
       var lx=parseFloat(wrap.style.left)||0;
       var ly=parseFloat(wrap.style.top)||0;
-      saveFabPosition(lx,ly);
+      rememberManualFab(lx,ly);
       launcherDrag.suppressClick=true;
       if(panel.style.display!=='none'){syncOpenDockLayout();}
     }
@@ -3565,7 +3569,7 @@ function createWidget(){
       return;
     }
     var sz=Math.round(trigger.offsetWidth)||fabSize();
-    if(!loadFabPosition()&&dockOpenRight&&config.position!=='left'){
+    if(!sessionManualFab&&dockOpenRight&&config.position!=='left'){
       if(fabReflowProbeTimer)clearTimeout(fabReflowProbeTimer);
       fabReflowProbeTimer=setTimeout(function(){
         fabReflowProbeTimer=null;
@@ -3579,12 +3583,19 @@ function createWidget(){
       },100);
       return;
     }
-    var lx=parseFloat(wrap.style.left)||0;
-    var ly=parseFloat(wrap.style.top)||0;
-    var c=clampFab(lx,ly,sz);
-    if(c.left!==lx||c.top!==ly){
-      applyFabFreePosition(c.left,c.top);
-      saveFabPosition(c.left,c.top);
+    if(sessionManualFab){
+      var lx=parseFloat(wrap.style.left)||0;
+      var ly=parseFloat(wrap.style.top)||0;
+      var c=clampFab(lx,ly,sz);
+      if(c.left!==lx||c.top!==ly){
+        applyFabFreePosition(c.left,c.top);
+        rememberManualFab(c.left,c.top);
+      }
+    }else if(config.position==='left'){
+      var vh=window.innerHeight||800;
+      var sideL=Math.max(2,Number(config.sideOffset)||10),botL=Math.max(2,Number(config.bottomOffset)||10);
+      var cL=clampFab(sideL,vh-sz-botL,sz);
+      applyFabFreePosition(cL.left,cL.top);
     }
   }
   window.addEventListener('resize',reflowFabToViewport,{passive:true});
@@ -3616,7 +3627,7 @@ function createWidget(){
   placeFabInitial();
   function refitDockIfDefault(){
     try{
-      if(loadFabPosition())return;
+      if(sessionManualFab)return;
       if(panel.style.display!=='none'&&panel.style.display!=='')return;
       if(config.position==='left'||!dockOpenRight)return;
       var szF=fabSize();
