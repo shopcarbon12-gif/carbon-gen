@@ -245,7 +245,7 @@ export async function GET(request: Request) {
         "</svg>"
     );
 
-  const js = `(function(){var __caRev=62;if(window.__carbonA11yRev===__caRev){return;}window.__carbonA11yRev=__caRev;window.__carbonA11yLoaded=true;
+  const js = `(function(){var __caRev=63;if(window.__carbonA11yRev===__caRev){return;}window.__carbonA11yRev=__caRev;window.__carbonA11yLoaded=true;
 /* ca-assist-ui v3 studio | Phase A+B a11y (see docs/accessibility-widget-phase-a-b-spec.md)
  * Panel: non-modal named region (not aria-modal). No focus trap — Tab may move into page content.
  * Esc closes only while focus is inside the panel (keydown on panel). Space toggles switches; Arrow/Home/End in radiogroups.
@@ -2901,6 +2901,21 @@ function createWidget(){
       setTimeout(function(){try{root.style.transition='';}catch(_e2){}},360);
     }catch(_e){}
   }
+  function applyFabAutoCorner(dockRight,openSz){
+    var targetLeft,targetTop;
+    if(dockRight){
+      var rr=resolveRightDockFabRect(openSz);
+      targetLeft=rr.left;
+      targetTop=rr.top;
+    }else{
+      var insA=fabSafeInsets();
+      targetLeft=Math.round(insA.minL);
+      targetTop=Math.round(insA.ih-insA.minB-openSz);
+    }
+    wrap.style.paddingBottom='';
+    var c=clampFab(targetLeft,targetTop,openSz);
+    applyFabFreePosition(c.left,c.top);
+  }
   function applyFabScreenCorner(dockRight,openSz){
     if(sessionManualFab){
       var cm=clampFab(sessionManualFab.left,sessionManualFab.top,openSz);
@@ -2909,19 +2924,7 @@ function createWidget(){
       applyFabFreePosition(cm.left,cm.top);
       return;
     }
-    var targetLeft,targetTop;
-    if(dockRight){
-      var rr=resolveRightDockFabRect(openSz);
-      targetLeft=rr.left;
-      targetTop=rr.top;
-    }else{
-      var insL=fabSafeInsets();
-      targetLeft=Math.round(insL.minL);
-      targetTop=Math.round(insL.ih-insL.minB-openSz);
-    }
-    wrap.style.paddingBottom='';
-    var c=clampFab(targetLeft,targetTop,openSz);
-    applyFabFreePosition(c.left,c.top);
+    applyFabAutoCorner(dockRight,openSz);
   }
   function rememberManualFab(left,top){
     sessionManualFab={left:left,top:top};
@@ -3390,7 +3393,7 @@ function createWidget(){
         var stackBottom=bottomInset+miniSz+fabGapOpen;
         panel.style.bottom=stackBottom+'px';
         panel.style.maxHeight=Math.max(260,Math.round(vh-topReserve-stackBottom-12))+'px';
-        applyFabScreenCorner(dockOpenRight,miniSz);
+        applyFabAutoCorner(dockOpenRight,miniSz);
       }else{
         try{
           trigger.style.visibility='';
