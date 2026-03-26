@@ -90,11 +90,7 @@ async function sendFailureWebhook(args: {
   }
 }
 
-export async function GET(req: NextRequest) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
-
+async function handleAccessibilityMonthlyReport(req: NextRequest): Promise<NextResponse> {
   const requestedTo = (new URL(req.url).searchParams.get("to") || "").trim();
   let savedConfig: Record<string, unknown> = {};
   try {
@@ -270,6 +266,19 @@ export async function GET(req: NextRequest) {
     month: monthLabel,
     messageId: result.data?.id || null,
   });
+}
+
+export async function GET(req: NextRequest) {
+  if (!isAuthorized(req)) {
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
+  try {
+    return await handleAccessibilityMonthlyReport(req);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[accessibility-monthly-report]", message);
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+  }
 }
 
 export async function POST(req: NextRequest) {

@@ -1122,7 +1122,20 @@ export default function AccessibilityPage() {
         }
       }
 
-      const data = (await res.json()) as { ok?: boolean; error?: string; sentTo?: string };
+      const raw = await res.text();
+      let data = {} as { ok?: boolean; error?: string; sentTo?: string };
+      try {
+        data = raw ? (JSON.parse(raw) as { ok?: boolean; error?: string; sentTo?: string }) : {};
+      } catch {
+        const hint = raw.trim().slice(0, 160).replace(/\s+/g, " ");
+        setMonthlyTestStatus(
+          hint
+            ? `Failed: server returned non-JSON (HTTP ${res.status}). ${hint}${raw.length > 160 ? "…" : ""}`
+            : `Failed: empty or invalid response (HTTP ${res.status}).`
+        );
+        void refreshLastReportState();
+        return;
+      }
       if (!res.ok || !data.ok) {
         setMonthlyTestStatus(data.error ? `Failed: ${data.error}` : `Failed: HTTP ${res.status}`);
         void refreshLastReportState();
@@ -1130,8 +1143,9 @@ export default function AccessibilityPage() {
       }
       setMonthlyTestStatus(`Sent monthly test report to ${data.sentTo || to}.`);
       void refreshLastReportState();
-    } catch {
-      setMonthlyTestStatus("Failed: network error while sending test report.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setMonthlyTestStatus(`Failed: ${msg}`);
     } finally {
       setSendingMonthlyTest(false);
     }
