@@ -614,6 +614,61 @@
   font-weight: 600;
 }
 
+/* Dyslexia preset: two segment bars (like widget), only rendered when stage > 0 */
+.widgetShellPillDyslexia {
+  flex-direction: column !important;
+  justify-content: center !important;
+  gap: 4px !important;
+  padding-top: 8px !important;
+  padding-bottom: 8px !important;
+  white-space: normal !important;
+}
+
+.widgetShellPillDysStack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+}
+
+.widgetShellPillDysLabel {
+  font-size: 13px;
+  font-weight: inherit;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.widgetShellDysBars {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  padding: 0 4px;
+  box-sizing: border-box;
+}
+
+.widgetShellDysBar {
+  flex: 1 1 0;
+  height: 2px;
+  min-height: 2px;
+  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.22);
+  transition:
+    background 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.widgetShellPillActive .widgetShellDysBarOn {
+  background: #fafafa;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    0 0 8px color-mix(in srgb, rgba(167, 139, 250, 0.45), transparent);
+}
+
 .widgetActionRail {
   display: flex;
   flex-direction: column;
@@ -816,6 +871,56 @@
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+}
+
+.wpMiniPillDyslexia {
+  flex: 1 1 100%;
+  min-height: 44px;
+  flex-direction: column !important;
+  justify-content: center !important;
+  gap: 3px !important;
+  white-space: normal !important;
+}
+
+.wpMiniPillDysStack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  width: 100%;
+}
+
+.wpMiniPillDysLabel {
+  font-size: 10px;
+  font-weight: inherit;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.wpMiniDysBars {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 3px;
+  width: 100%;
+  padding: 0 2px;
+  box-sizing: border-box;
+}
+
+.wpMiniDysBar {
+  flex: 1 1 0;
+  height: 2px;
+  min-height: 2px;
+  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.2);
+  transition:
+    background 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.wpMiniPillActive .wpMiniDysBarOn {
+  background: #f4f4f5;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35), 0 0 6px rgba(196, 181, 253, 0.35);
 }
 
 .wpMiniPill {
@@ -1634,6 +1739,12 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+/* Keep form controls above full-bleed ::before/::after texture layers */
+.page :global(#config-console) .configCard.horizontalSurface > * {
+  position: relative;
+  z-index: 1;
 }
 
 .configTitle {

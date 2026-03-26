@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { ProfileModeStrip, type ProfileModeId } from "@/components/profile-mode-strip";
 import { PremiumSegmentedNav, type PremiumSegmentedTabId } from "@/components/premium-segmented-nav";
 import { PremiumToggle } from "@/components/premium-toggle";
@@ -10,6 +11,21 @@ import { RefreshIcon } from "./RefreshIcon";
 import styles from "./page.module.css";
 
 type WidgetPosition = "left" | "right";
+
+/** Matches widget `storageKey` in `/accessibility/widget` (hostname + scope). */
+function readWidgetStoredHighContrast(scope: string): boolean | undefined {
+  if (typeof window === "undefined") return undefined;
+  try {
+    const key = `carbonA11yPrefs::${window.location.hostname || "site"}::${scope}`;
+    const raw = localStorage.getItem(key);
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw) as { highContrast?: boolean };
+    if (parsed && typeof parsed.highContrast === "boolean") return parsed.highContrast;
+  } catch {
+    /* ignore */
+  }
+  return undefined;
+}
 
 type AccessibilitySettings = {
   profileName: string;
@@ -280,10 +296,14 @@ function widgetKeyToStripMode(key: string): ProfileModeId | null {
       return "low-vision";
     case "motor":
       return "motor";
+    case "blind":
+      return "blind";
     case "dyslexia":
       return "dyslexia";
     case "adhd":
       return "adhd";
+    case "seizure":
+      return "seizure";
     default:
       return null;
   }
@@ -295,8 +315,10 @@ function stripModeToWidgetKey(id: ProfileModeId): AssistWidgetProfileKey | null 
     retail: "clear",
     "low-vision": "lowVision",
     motor: "motor",
+    blind: "blind",
     dyslexia: "dyslexia",
     adhd: "adhd",
+    seizure: "seizure",
   };
   return m[id];
 }
@@ -331,11 +353,11 @@ function toWidgetEmbedConfig(settings: AccessibilitySettings) {
 
 function buildInstallSnippet(settings: AccessibilitySettings) {
   const encoded = encodeURIComponent(JSON.stringify(toWidgetEmbedConfig(settings)));
-  return `<script src="https://app.shopcarbon.com/accessibility/widget?config=${encoded}&wrev=65" defer></script>`;
+  return `<script src="https://app.shopcarbon.com/accessibility/widget?config=${encoded}&wrev=86" defer></script>`;
 }
 
 function buildManagedInstallSnippet(scope = "default") {
-  return `<script src="https://app.shopcarbon.com/accessibility/widget?scope=${encodeURIComponent(scope)}&wrev=65" defer></script>`;
+  return `<script src="https://app.shopcarbon.com/accessibility/widget?scope=${encodeURIComponent(scope)}&wrev=86" defer></script>`;
 }
 
 function toButtonLabel(enabled: boolean) {
@@ -475,11 +497,13 @@ export default function AccessibilityPage() {
   const [recipientDraft, setRecipientDraft] = useState(defaultSettings.monthlyReportEmail);
   const [recipientSaving, setRecipientSaving] = useState(false);
   const [recipientStatus, setRecipientStatus] = useState<string | null>(null);
+  const [studioDyslexiaStage, setStudioDyslexiaStage] = useState<0 | 1 | 2>(0);
 
   const pushAssistProfileToWidget = useCallback((name: AssistWidgetProfileKey) => {
     appliedAssistProfileRef.current = name;
     setAppliedAssistProfile(name);
     setStudioStripMode(widgetKeyToStripMode(name));
+    setStudioDyslexiaStage(name === "dyslexia" ? 1 : 0);
     const g = window as Window & { __carbonA11yApplyStudioProfile?: (k: string) => void };
     if (typeof g.__carbonA11yApplyStudioProfile === "function") {
       g.__carbonA11yApplyStudioProfile(name);
@@ -487,6 +511,43 @@ export default function AccessibilityPage() {
       setSettingsStatus("Open Preview to apply this profile to the live widget.");
     }
   }, []);
+
+  const pushStudioDyslexiaLegible = useCallback(() => {
+    appliedAssistProfileRef.current = "dyslexia";
+    setAppliedAssistProfile("dyslexia");
+    setStudioStripMode("dyslexia");
+    setStudioDyslexiaStage(2);
+    const g = window as Window & { __carbonA11yApplyStudioProfile?: (k: string) => void };
+    if (typeof g.__carbonA11yApplyStudioProfile === "function") {
+      g.__carbonA11yApplyStudioProfile("dyslexiaLegible");
+    } else {
+      setSettingsStatus("Open Preview to apply this profile to the live widget.");
+    }
+  }, []);
+
+  const cycleStudioDyslexia = useCallback(() => {
+    const g = window as Window & { __carbonA11yApplyStudioProfile?: (k: string) => void };
+    if (studioDyslexiaStage === 0) {
+      pushAssistProfileToWidget("dyslexia");
+      return;
+    }
+    if (studioDyslexiaStage === 1) {
+      pushStudioDyslexiaLegible();
+      return;
+    }
+    if (typeof g.__carbonA11yApplyStudioProfile === "function") {
+      g.__carbonA11yApplyStudioProfile("dyslexiaOff");
+    }
+    setStudioDyslexiaStage(0);
+    setAppliedAssistProfile((prev) => {
+      if (prev === "dyslexia") {
+        appliedAssistProfileRef.current = "clear";
+        setStudioStripMode("retail");
+        return "clear";
+      }
+      return prev;
+    });
+  }, [studioDyslexiaStage, pushAssistProfileToWidget, pushStudioDyslexiaLegible]);
 
   const handleStudioProfileStripMode = useCallback(
     (id: ProfileModeId) => {
@@ -706,9 +767,12 @@ export default function AccessibilityPage() {
 
   useEffect(() => {
     void refreshIntegrations(false);
-    const timer = window.setInterval(() => {
-      void refreshIntegrations(false);
-    }, 45000);
+    const tick = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        void refreshIntegrations(false);
+      }
+    };
+    const timer = window.setInterval(tick, 180000);
     return () => window.clearInterval(timer);
   }, []);
 
@@ -893,6 +957,7 @@ export default function AccessibilityPage() {
     setPreviewContrast(false);
     setPreviewReadableFont(false);
     setPreviewLinkHighlight(false);
+    pushAssistProfileToWidget("clear");
   }
 
   function updateChecklist(
@@ -1148,6 +1213,14 @@ export default function AccessibilityPage() {
 
   function installRuntimeWidgetOnPage() {
     removeRuntimeWidgetFromPage();
+    const scope = settingsScope || "default";
+    const storedHc = readWidgetStoredHighContrast(scope);
+    const highContrastForEmbed = storedHc !== undefined ? storedHc : previewContrast;
+    if (storedHc !== undefined && storedHc !== previewContrast) {
+      flushSync(() => {
+        setPreviewContrast(storedHc);
+      });
+    }
     const gw = window as Window & {
       __carbonA11yStudioPreview?: {
         textScale: number;
@@ -1158,7 +1231,7 @@ export default function AccessibilityPage() {
     };
     gw.__carbonA11yStudioPreview = {
       textScale: previewTextScale,
-      highContrast: previewContrast,
+      highContrast: highContrastForEmbed,
       readableFont: previewReadableFont,
       highlightLinks: previewLinkHighlight,
     };
@@ -1167,7 +1240,7 @@ export default function AccessibilityPage() {
     script.defer = true;
     const cfg = encodeURIComponent(JSON.stringify(toWidgetEmbedConfig(settings)));
     const sc = encodeURIComponent(settingsScope || "default");
-    script.src = `/accessibility/widget?config=${cfg}&scope=${sc}&wrev=65&_ts=${Date.now()}`;
+    script.src = `/accessibility/widget?config=${cfg}&scope=${sc}&wrev=86&_ts=${Date.now()}`;
     script.onload = () => {
       setRuntimeWidgetMounted(true);
       const g = window as Window & {
@@ -1175,8 +1248,8 @@ export default function AccessibilityPage() {
         __carbonA11yApplyStudioPreview?: () => void;
       };
       requestAnimationFrame(() => {
-        g.__carbonA11yApplyStudioProfile?.(appliedAssistProfileRef.current);
         g.__carbonA11yApplyStudioPreview?.();
+        g.__carbonA11yApplyStudioProfile?.(appliedAssistProfileRef.current);
       });
     };
     script.onerror = () => setRuntimeWidgetMounted(false);
@@ -1361,6 +1434,7 @@ export default function AccessibilityPage() {
 
             <div
               id="widget-surface"
+              data-carbon-jump-skip
               className={`${styles.widgetStage} ${styles.widgetStagePic1} ${styles.lightOccupancy}`}
             >
               <div className={styles.widgetShell}>
@@ -1378,16 +1452,40 @@ export default function AccessibilityPage() {
                     Tune display, motion, and navigation for this site.
                   </p>
                   <div className={styles.widgetShellPills}>
-                    {ASSIST_SHELL_PILLS.map(({ key, label }) => (
-                      <button
-                        key={key}
-                        type="button"
-                        className={`${styles.widgetShellPill} ${appliedAssistProfile === key ? styles.widgetShellPillActive : ""}`}
-                        onClick={() => pushAssistProfileToWidget(key)}
-                      >
-                        {label}
-                      </button>
-                    ))}
+                    {ASSIST_SHELL_PILLS.map(({ key, label }) =>
+                      key === "dyslexia" ? (
+                        <button
+                          key={key}
+                          type="button"
+                          className={`${styles.widgetShellPill} ${styles.widgetShellPillDyslexia} ${appliedAssistProfile === "dyslexia" ? styles.widgetShellPillActive : ""}`}
+                          aria-pressed={appliedAssistProfile === "dyslexia"}
+                          onClick={() => cycleStudioDyslexia()}
+                        >
+                          <span className={styles.widgetShellPillDysStack}>
+                            <span className={styles.widgetShellPillDysLabel}>{label}</span>
+                            {appliedAssistProfile === "dyslexia" && studioDyslexiaStage > 0 ? (
+                              <span className={styles.widgetShellDysBars} aria-hidden>
+                                <span
+                                  className={`${styles.widgetShellDysBar} ${studioDyslexiaStage >= 1 ? styles.widgetShellDysBarOn : ""}`}
+                                />
+                                <span
+                                  className={`${styles.widgetShellDysBar} ${studioDyslexiaStage >= 2 ? styles.widgetShellDysBarOn : ""}`}
+                                />
+                              </span>
+                            ) : null}
+                          </span>
+                        </button>
+                      ) : (
+                        <button
+                          key={key}
+                          type="button"
+                          className={`${styles.widgetShellPill} ${appliedAssistProfile === key ? styles.widgetShellPillActive : ""}`}
+                          onClick={() => pushAssistProfileToWidget(key)}
+                        >
+                          {label}
+                        </button>
+                      )
+                    )}
                   </div>
                 </div>
               </div>
@@ -1398,7 +1496,7 @@ export default function AccessibilityPage() {
                     {renderGlossyTriangleLabel(runtimeWidgetMounted ? "Reload Preview" : "Open Preview")}
                   </button>
                   <button type="button" className={styles.wpBtn} onClick={resetPreview}>
-                    Reset
+                    <span style={{ fontWeight: 800, letterSpacing: "0.06em" }}>RESET ALL</span>
                   </button>
                   <button
                     type="button"
@@ -1465,16 +1563,40 @@ export default function AccessibilityPage() {
                 <div className={styles.wpMiniTitle}>Accessibility preferences</div>
                 <div className={styles.wpMiniSub}>Tune display, motion, and navigation for this site.</div>
                 <div className={styles.wpMiniProfiles}>
-                  {ASSIST_SHELL_PILLS.map(({ key, label }) => (
-                    <button
-                      key={key}
-                      type="button"
-                      className={`${styles.wpMiniPill} ${appliedAssistProfile === key ? styles.wpMiniPillActive : ""}`}
-                      onClick={() => pushAssistProfileToWidget(key)}
-                    >
-                      {label}
-                    </button>
-                  ))}
+                  {ASSIST_SHELL_PILLS.map(({ key, label }) =>
+                    key === "dyslexia" ? (
+                      <button
+                        key={key}
+                        type="button"
+                        className={`${styles.wpMiniPill} ${styles.wpMiniPillDyslexia} ${appliedAssistProfile === "dyslexia" ? styles.wpMiniPillActive : ""}`}
+                        aria-pressed={appliedAssistProfile === "dyslexia"}
+                        onClick={() => cycleStudioDyslexia()}
+                      >
+                        <span className={styles.wpMiniPillDysStack}>
+                          <span className={styles.wpMiniPillDysLabel}>{label}</span>
+                          {appliedAssistProfile === "dyslexia" && studioDyslexiaStage > 0 ? (
+                            <span className={styles.wpMiniDysBars} aria-hidden>
+                              <span
+                                className={`${styles.wpMiniDysBar} ${studioDyslexiaStage >= 1 ? styles.wpMiniDysBarOn : ""}`}
+                              />
+                              <span
+                                className={`${styles.wpMiniDysBar} ${studioDyslexiaStage >= 2 ? styles.wpMiniDysBarOn : ""}`}
+                              />
+                            </span>
+                          ) : null}
+                        </span>
+                      </button>
+                    ) : (
+                      <button
+                        key={key}
+                        type="button"
+                        className={`${styles.wpMiniPill} ${appliedAssistProfile === key ? styles.wpMiniPillActive : ""}`}
+                        onClick={() => pushAssistProfileToWidget(key)}
+                      >
+                        {label}
+                      </button>
+                    )
+                  )}
                 </div>
               </div>
               {/* Action buttons on right */}

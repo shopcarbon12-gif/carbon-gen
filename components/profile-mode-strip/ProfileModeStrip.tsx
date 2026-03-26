@@ -3,7 +3,15 @@
 import { useCallback, useId, useState, type ReactNode } from "react";
 import styles from "./profile-mode-strip.module.css";
 
-export type ProfileModeId = "retail" | "low-vision" | "motor" | "dyslexia" | "adhd" | "new";
+export type ProfileModeId =
+  | "retail"
+  | "low-vision"
+  | "motor"
+  | "blind"
+  | "dyslexia"
+  | "adhd"
+  | "seizure"
+  | "new";
 
 const MODES: {
   id: ProfileModeId;
@@ -58,6 +66,22 @@ const MODES: {
     ),
   },
   {
+    id: "blind",
+    label: "Screen reader",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+        <path
+          d="M6 14a8 8 0 0 1 12 0M9 18h6M12 5v2M8 7l1.5 1.5M16 7l-1.5 1.5"
+          stroke="currentColor"
+          strokeWidth="1.55"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <circle cx="12" cy="11" r="2.2" stroke="currentColor" strokeWidth="1.45" />
+      </svg>
+    ),
+  },
+  {
     id: "dyslexia",
     label: "Dyslexia",
     icon: (
@@ -90,6 +114,27 @@ const MODES: {
           strokeWidth="1.4"
           strokeLinecap="round"
           opacity="0.88"
+        />
+      </svg>
+    ),
+  },
+  {
+    id: "seizure",
+    label: "Seizure safe",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+        <path
+          d="M12 21a9 9 0 1 0-9-9c0 1.2.24 2.34.68 3.38L12 21l8.32-5.62A9 9 0 0 0 12 3Z"
+          stroke="currentColor"
+          strokeWidth="1.45"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M10.5 8.5L14 12l-3.5 3.5"
+          stroke="currentColor"
+          strokeWidth="1.35"
+          strokeLinecap="round"
+          strokeLinejoin="round"
         />
       </svg>
     ),
