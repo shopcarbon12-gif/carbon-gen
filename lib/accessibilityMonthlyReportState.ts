@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { getCarbonAppDataDir } from "@/lib/carbonAppDataDir";
 
 export type AccessibilityMonthlyReportState = {
   sentAt: string;
@@ -11,7 +12,7 @@ export type AccessibilityMonthlyReportState = {
 };
 
 function stateFilePath() {
-  return path.join(process.cwd(), ".tmp", "accessibility-monthly-report-state.json");
+  return path.join(getCarbonAppDataDir(), "accessibility-monthly-report-state.json");
 }
 
 export function readAccessibilityMonthlyReportState(): AccessibilityMonthlyReportState | null {

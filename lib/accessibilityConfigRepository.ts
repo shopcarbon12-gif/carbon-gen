@@ -1,4 +1,5 @@
 import { ensureSqlReady, hasSqlDatabaseConfigured, sqlQuery } from "@/lib/sqlDb";
+import { getCarbonAppDataDir } from "@/lib/carbonAppDataDir";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -41,7 +42,7 @@ async function ensureSqlTable() {
 export type AccessibilityWidgetStoredConfig = Record<string, unknown>;
 
 function localFilePath() {
-  return path.join(process.cwd(), ".tmp", "accessibility-widget-config.json");
+  return path.join(getCarbonAppDataDir(), "accessibility-widget-config.json");
 }
 
 function readLocalAll(): Record<string, AccessibilityWidgetStoredConfig> {

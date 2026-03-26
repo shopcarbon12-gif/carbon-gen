@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { getCarbonAppDataDir } from "@/lib/carbonAppDataDir";
 
 export type AccessibilityChecklistHistoryEntry = {
   month: string;
@@ -15,7 +16,7 @@ type AccessibilityChecklistHistoryFile = {
 };
 
 function historyFilePath() {
-  return path.join(process.cwd(), ".tmp", "accessibility-checklist-history.json");
+  return path.join(getCarbonAppDataDir(), "accessibility-checklist-history.json");
 }
 
 export function readAccessibilityChecklistHistory(): AccessibilityChecklistHistoryEntry[] {

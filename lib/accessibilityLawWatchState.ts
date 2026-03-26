@@ -1,3 +1,4 @@
+import { getCarbonAppDataDir } from "@/lib/carbonAppDataDir";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -31,7 +32,7 @@ export type AccessibilityLawWatchState = {
 };
 
 function stateFilePath() {
-  return path.join(process.cwd(), ".tmp", "accessibility-law-watch-state.json");
+  return path.join(getCarbonAppDataDir(), "accessibility-law-watch-state.json");
 }
 
 export function readAccessibilityLawWatchState(): AccessibilityLawWatchState | null {

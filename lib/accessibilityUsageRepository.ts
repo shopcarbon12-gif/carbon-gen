@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { getCarbonAppDataDir } from "@/lib/carbonAppDataDir";
 import { ensureSqlReady, hasSqlDatabaseConfigured, sqlQuery } from "@/lib/sqlDb";
 
 type DbMode = "sql" | "file";
@@ -40,7 +41,7 @@ function getDbMode(): DbMode {
 }
 
 function localFilePath() {
-  return path.join(process.cwd(), ".tmp", "accessibility-widget-usage-events.json");
+  return path.join(getCarbonAppDataDir(), "accessibility-widget-usage-events.json");
 }
 
 function readLocalEvents(): AccessibilityUsageEvent[] {

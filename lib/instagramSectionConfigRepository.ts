@@ -1,4 +1,5 @@
 import { ensureSqlReady, hasSqlDatabaseConfigured, sqlQuery } from "@/lib/sqlDb";
+import { getCarbonAppDataDir } from "@/lib/carbonAppDataDir";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -60,7 +61,7 @@ export type InstagramSectionStoredConfig = {
 };
 
 function localFilePath() {
-  return path.join(process.cwd(), ".tmp", "instagram-section-config.json");
+  return path.join(getCarbonAppDataDir(), "instagram-section-config.json");
 }
 
 function readLocalAll(): Record<string, InstagramSectionStoredConfig> {
