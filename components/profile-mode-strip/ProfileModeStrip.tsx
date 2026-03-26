@@ -111,7 +111,7 @@ export type ProfileModeStripProps = {
   className?: string;
   /** Initial mode when uncontrolled. */
   defaultMode?: ProfileModeId | null;
-  /** Controlled selection; `null` = no segment highlighted (e.g. Blind / Seizure from pills). */
+  /** Controlled selection; `null` = no segment highlighted (e.g. Screen reader / Seizure from pills). */
   value?: ProfileModeId | null;
   onModeChange?: (id: ProfileModeId) => void;
 };

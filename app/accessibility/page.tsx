@@ -264,8 +264,8 @@ const brandPlacementDefaults: Pick<
 type AssistWidgetProfileKey = "clear" | "blind" | "lowVision" | "motor" | "dyslexia" | "adhd" | "seizure";
 
 const ASSIST_SHELL_PILLS: { key: AssistWidgetProfileKey; label: string }[] = [
-  { key: "blind", label: "Blind" },
-  { key: "lowVision", label: "Low Vision" },
+  { key: "blind", label: "Screen reader" },
+  { key: "lowVision", label: "Low vision" },
   { key: "motor", label: "Motor" },
   { key: "dyslexia", label: "Dyslexia" },
   { key: "adhd", label: "ADHD" },
@@ -331,11 +331,11 @@ function toWidgetEmbedConfig(settings: AccessibilitySettings) {
 
 function buildInstallSnippet(settings: AccessibilitySettings) {
   const encoded = encodeURIComponent(JSON.stringify(toWidgetEmbedConfig(settings)));
-  return `<script src="https://app.shopcarbon.com/accessibility/widget?config=${encoded}&wrev=63" defer></script>`;
+  return `<script src="https://app.shopcarbon.com/accessibility/widget?config=${encoded}&wrev=65" defer></script>`;
 }
 
 function buildManagedInstallSnippet(scope = "default") {
-  return `<script src="https://app.shopcarbon.com/accessibility/widget?scope=${encodeURIComponent(scope)}&wrev=63" defer></script>`;
+  return `<script src="https://app.shopcarbon.com/accessibility/widget?scope=${encodeURIComponent(scope)}&wrev=65" defer></script>`;
 }
 
 function toButtonLabel(enabled: boolean) {
@@ -1167,7 +1167,7 @@ export default function AccessibilityPage() {
     script.defer = true;
     const cfg = encodeURIComponent(JSON.stringify(toWidgetEmbedConfig(settings)));
     const sc = encodeURIComponent(settingsScope || "default");
-    script.src = `/accessibility/widget?config=${cfg}&scope=${sc}&wrev=63&_ts=${Date.now()}`;
+    script.src = `/accessibility/widget?config=${cfg}&scope=${sc}&wrev=65&_ts=${Date.now()}`;
     script.onload = () => {
       setRuntimeWidgetMounted(true);
       const g = window as Window & {

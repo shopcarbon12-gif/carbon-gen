@@ -245,7 +245,7 @@ export async function GET(request: Request) {
         "</svg>"
     );
 
-  const js = `(function(){var __caRev=63;if(window.__carbonA11yRev===__caRev){return;}window.__carbonA11yRev=__caRev;window.__carbonA11yLoaded=true;
+  const js = `(function(){var __caRev=65;if(window.__carbonA11yRev===__caRev){return;}window.__carbonA11yRev=__caRev;window.__carbonA11yLoaded=true;
 /* ca-assist-ui v3 studio | Phase A+B a11y (see docs/accessibility-widget-phase-a-b-spec.md)
  * Panel: non-modal named region (not aria-modal). No focus trap — Tab may move into page content.
  * Esc closes only while focus is inside the panel (keydown on panel). Space toggles switches; Arrow/Home/End in radiogroups.
@@ -537,6 +537,7 @@ var widgetCss='' +
   '.ca-assist-shell--oversize .ca-assist-head-titles{padding:12px 22px 22px !important}' +
   '.ca-assist-shell--oversize .ca-assist-field__name{font-size:12px !important;margin-bottom:14px !important}' +
   '.ca-assist-shell--oversize .ca-assist-seg__btn,.ca-assist-root.ca-assist-shell--oversize button.ca-assist-seg__btn{padding:11px 8px !important;font-size:15px !important;font-weight:600 !important;min-height:46px !important;line-height:1.25 !important}' +
+  '.ca-assist-shell--oversize .ca-assist-footer-lang .ca-assist-seg__btn,.ca-assist-root.ca-assist-shell--oversize .ca-assist-footer-lang button.ca-assist-seg__btn{padding:6px 8px !important;font-size:12px !important;font-weight:650 !important;min-height:34px !important;line-height:1.2 !important}' +
   '.ca-assist-shell--oversize .ca-assist-navrow{padding:16px 18px !important;min-height:56px !important}' +
   '.ca-assist-shell--oversize .ca-assist-navrow__label{font-size:16px !important}' +
   '.ca-assist-shell--oversize .ca-assist-navrow__val{font-size:12px !important}' +
@@ -554,7 +555,7 @@ var widgetCss='' +
   '.ca-assist-shell--oversize .ca-assist-toggle.is-on .ca-assist-switch__thumb{transform:translateX(24px) !important}' +
   '.ca-assist-shell--oversize .ca-assist-footer-dynamic{padding:16px 18px 14px !important}' +
   '.ca-assist-shell--oversize .ca-assist-footreset{font-size:13px !important}' +
-  '.ca-assist-shell--oversize .ca-assist-footer-globe{width:40px;height:40px !important}' +
+  '.ca-assist-shell--oversize .ca-assist-footer-globe{width:34px;height:34px !important}' +
   '.ca-assist-shell--oversize .ca-assist-profile-clear{font-size:12.5px !important;padding:11px 14px !important;font-weight:600 !important}' +
   '.ca-assist-shell--oversize .ca-assist-profile-strip{gap:9px !important;row-gap:12px !important}' +
   '.ca-assist-shell--oversize .ca-assist-markword--strip{font-size:14px !important;letter-spacing:.12em !important}' +
@@ -594,11 +595,12 @@ var widgetCss='' +
   '.ca-assist-profile-clear:hover{background:rgba(255,255,255,.04);color:rgba(250,250,250,.85)}' +
   '.ca-assist-footer{flex-shrink:0;display:flex;flex-direction:column;gap:0;border-top:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,transparent,rgba(0,0,0,.35)),linear-gradient(180deg,transparent 40%,color-mix(in srgb,var(--ca-accent,#7c3aed) 8%,transparent) 100%)}' +
   '.ca-assist-footer-dynamic{display:flex;flex-direction:column;gap:10px;padding:14px 16px 12px}' +
-  '.ca-assist-footer-lang{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap}' +
-  '.ca-assist-footer-lang .ca-assist-field{flex:1;min-width:180px;border:0;padding:0;background:transparent}' +
+  '.ca-assist-footer-lang{display:flex;align-items:center;gap:8px;flex-wrap:wrap}' +
+  '.ca-assist-footer-lang .ca-assist-field{flex:1;min-width:0;max-width:100%;border:0;padding:0;background:transparent}' +
   '.ca-assist-footer-lang .ca-assist-field__name{display:none}' +
-  '.ca-assist-footer-lang .ca-assist-seg{display:grid;grid-template-columns:repeat(auto-fit,minmax(52px,1fr));gap:6px;width:100%}' +
-  '.ca-assist-footer-globe{flex:0 0 auto;display:grid;place-items:center;width:36px;height:36px;margin-top:2px;border-radius:999px;border:1px solid color-mix(in srgb,var(--ca-accent,#a78bfa) 28%,rgba(255,255,255,.1));background:rgba(0,0,0,.35);color:color-mix(in srgb,var(--ca-accent,#c4b5fd) 45%,rgba(212,212,216,.55))}' +
+  '.ca-assist-footer-lang .ca-assist-seg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;width:100%;max-width:100%}' +
+  '.ca-assist-footer-lang .ca-assist-seg__btn{padding:5px 6px!important;min-height:32px!important;font-size:12px!important;font-weight:650!important;line-height:1.2!important}' +
+  '.ca-assist-footer-globe{flex:0 0 auto;display:grid;place-items:center;width:30px;height:30px;margin-top:1px;border-radius:999px;border:1px solid color-mix(in srgb,var(--ca-accent,#a78bfa) 28%,rgba(255,255,255,.1));background:rgba(0,0,0,.35);color:color-mix(in srgb,var(--ca-accent,#c4b5fd) 45%,rgba(212,212,216,.55))}' +
   '.ca-assist-footer-links-row{display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px;padding:8px 0 6px;width:100%}' +
   '.ca-assist-footer-links-sep{opacity:.5;font-weight:300;color:rgba(228,228,231,.5)}' +
   '.ca-assist-footer-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0 6px;margin-top:2px;border-top:1px solid rgba(255,255,255,.08);width:100%;min-width:0}' +
@@ -755,14 +757,21 @@ body.appendChild(readingMask);
 
 var i18n={
   en:{
-    profiles:'Profiles',
-    profileBlind:'Blind',
-    profileLowVision:'Low Vision',
+    profiles:'Quick presets',
+    profilesHelp:'Bundles common settings. Screen reader does not change colors or text size—use Low vision for on-screen reading.',
+    profileBlind:'Screen reader',
+    profileHintBlind:'Pauses animations. Use “Jump to headings” or “Jump to links” with your assistive tech. For text size and contrast, use Low vision.',
+    profileLowVision:'Low vision',
+    profileHintLowVision:'Larger text, smart contrast, bigger pointer, highlighted links.',
     profileMotor:'Motor',
+    profileHintMotor:'Bigger pointer, highlighted links, calmer motion.',
     profileDyslexia:'Dyslexia',
+    profileHintDyslexia:'Readable font, wider letter and line spacing, left-aligned text.',
     profileADHD:'ADHD',
-    profileSeizure:'Seizure Safe',
-    profileClear:'Clear Profile',
+    profileHintADHD:'Reading mask, softer colors, fewer animations.',
+    profileSeizure:'Seizure safe',
+    profileHintSeizure:'Reduces motion and strong color intensity.',
+    profileClear:'Clear preset',
     textScale:'Text Size',
     highContrast:'High Contrast',
     contrastMode:'Contrast Mode',
@@ -807,16 +816,16 @@ var i18n={
     closePanel:'Close accessibility settings',
     launcherAccessibilityMenu:'accessibility menu',
     panelSubtitle:'Accessibility preferences',
-    panelHelper:'Tune display, motion, and navigation for this site.',
+    panelHelper:'Adjust on-screen reading, motion, and structure. Screen reader users: use Page structure first; text size and contrast are under Text & contrast.',
     plainLightUi:'Plain light panel',
     plainLightUiHelp:'Simple white background and high-contrast text for the menu',
     oversizedUi:'Larger menu & controls',
     oversizedUiHelp:'Larger launcher button, wider panel, bigger type and touch targets',
     enhancedTooltips:'Visible tooltips',
     enhancedTooltipsHelp:'Show larger hints for native title text across this page',
-    sectionReadingVision:'Reading & vision',
-    sectionMotion:'Motion & display',
-    sectionNavigation:'Navigation',
+    sectionReadingVision:'Text & contrast',
+    sectionMotion:'Motion & visibility tools',
+    sectionNavigation:'Page structure',
     sectionPanelChrome:'Panel appearance',
     hintPauseAnimations:'Temporarily stop non-essential animations',
     ann:{
@@ -861,14 +870,21 @@ var i18n={
     }
   },
   es:{
-    profiles:'Perfiles',
-    profileBlind:'Ceguera',
+    profiles:'Accesos rapidos',
+    profilesHelp:'Combina ajustes habituales. Lector de pantalla no cambia colores ni tamano de texto; use Baja vision para leer en pantalla.',
+    profileBlind:'Lector de pantalla',
+    profileHintBlind:'Pausa animaciones. Use Ir a encabezados o Ir a enlaces con su asistencia. Contraste y tamano: Baja vision.',
     profileLowVision:'Baja vision',
+    profileHintLowVision:'Texto mas grande, contraste inteligente, puntero grande, enlaces resaltados.',
     profileMotor:'Motriz',
+    profileHintMotor:'Puntero grande, enlaces resaltados, movimiento mas calmado.',
     profileDyslexia:'Dislexia',
+    profileHintDyslexia:'Fuente legible, mas espacio entre letras y lineas, texto alineado a la izquierda.',
     profileADHD:'TDAH',
-    profileSeizure:'Seguro epilepsia',
-    profileClear:'Limpiar perfil',
+    profileHintADHD:'Mascara de lectura, colores mas suaves, menos animaciones.',
+    profileSeizure:'Seguro ante crisis',
+    profileHintSeizure:'Menos movimiento y colores menos intensos.',
+    profileClear:'Quitar acceso rapido',
     textScale:'Tamano de texto',
     highContrast:'Alto contraste',
     contrastMode:'Modo de contraste',
@@ -913,28 +929,35 @@ var i18n={
     closePanel:'Cerrar panel de accesibilidad',
     launcherAccessibilityMenu:'menu de accesibilidad',
     panelSubtitle:'Preferencias de accesibilidad',
-    panelHelper:'Ajusta visualizacion, movimiento y navegacion en este sitio.',
+    panelHelper:'Ajuste lectura en pantalla, movimiento y estructura. Lector de pantalla: use Estructura del sitio primero; tamano y contraste en Texto y contraste.',
     plainLightUi:'Panel claro simple',
     plainLightUiHelp:'Fondo blanco y texto de alto contraste para el menu',
     oversizedUi:'Menu y controles mas grandes',
     oversizedUiHelp:'Boton lanzador mas grande, panel mas ancho, texto y controles mas grandes',
     enhancedTooltips:'Informacion emergente visible',
     enhancedTooltipsHelp:'Muestra sugerencias mas grandes para el texto title nativo en esta pagina',
-    sectionReadingVision:'Lectura y vision',
-    sectionMotion:'Movimiento y pantalla',
-    sectionNavigation:'Navegacion',
+    sectionReadingVision:'Texto y contraste',
+    sectionMotion:'Animacion y herramientas',
+    sectionNavigation:'Estructura del sitio',
     sectionPanelChrome:'Apariencia del panel',
     hintPauseAnimations:'Pausa animaciones no esenciales'
   },
   'pt-BR':{
-    profiles:'Perfis',
-    profileBlind:'Cegueira',
+    profiles:'Acessos rapidos',
+    profilesHelp:'Agrupa ajustes comuns. Leitor de tela nao muda cores nem tamanho do texto; use Baixa visao para leitura na tela.',
+    profileBlind:'Leitor de tela',
+    profileHintBlind:'Pausa animacoes. Use Ir para titulos ou Ir para links com seu recurso de acessibilidade. Contraste e tamanho: Baixa visao.',
     profileLowVision:'Baixa visao',
+    profileHintLowVision:'Texto maior, contraste inteligente, ponteiro maior, links destacados.',
     profileMotor:'Motora',
+    profileHintMotor:'Ponteiro maior, links destacados, movimento mais calmo.',
     profileDyslexia:'Dislexia',
+    profileHintDyslexia:'Fonte legivel, mais espaco entre letras e linhas, texto alinhado a esquerda.',
     profileADHD:'TDAH',
-    profileSeizure:'Seguro convulsao',
-    profileClear:'Limpar perfil',
+    profileHintADHD:'Mascara de leitura, cores mais suaves, menos animacoes.',
+    profileSeizure:'Protecao a crises',
+    profileHintSeizure:'Menos movimento e cores menos intensas.',
+    profileClear:'Limpar acesso rapido',
     textScale:'Tamanho do texto',
     highContrast:'Alto contraste',
     contrastMode:'Modo de contraste',
@@ -979,28 +1002,35 @@ var i18n={
     closePanel:'Fechar painel de acessibilidade',
     launcherAccessibilityMenu:'menu de acessibilidade',
     panelSubtitle:'Preferencias de acessibilidade',
-    panelHelper:'Ajuste exibicao, movimento e navegacao neste site.',
+    panelHelper:'Ajuste leitura na tela, movimento e estrutura. Leitor de tela: use Estrutura da pagina primeiro; tamanho e contraste em Texto e contraste.',
     plainLightUi:'Painel claro simples',
     plainLightUiHelp:'Fundo branco e texto de alto contraste no menu',
     oversizedUi:'Menu e controles maiores',
     oversizedUiHelp:'Botao lancador maior, painel mais largo, texto e controles maiores',
     enhancedTooltips:'Dicas visiveis',
     enhancedTooltipsHelp:'Mostra dicas maiores para o texto title nativo nesta pagina',
-    sectionReadingVision:'Leitura e visao',
-    sectionMotion:'Movimento e tela',
-    sectionNavigation:'Navegacao',
+    sectionReadingVision:'Texto e contraste',
+    sectionMotion:'Animacao e ferramentas',
+    sectionNavigation:'Estrutura da pagina',
     sectionPanelChrome:'Aparência do painel',
     hintPauseAnimations:'Pausar animacoes nao essenciais'
   },
   he:{
-    profiles:'פרופילים',
-    profileBlind:'לקות ראייה מלאה',
+    profiles:'ערכות מהירות',
+    profilesHelp:'אוסף הגדרות נפוצות. "קורא מסך" לא משנה צבעים או גודל טקסט — השתמשו ב"ראייה ירודה" לקריאה על המסך.',
+    profileBlind:'קורא מסך',
+    profileHintBlind:'משהה אנימציות. השתמשו ב"קפיצה לכותרות" או "קפיצה לקישורים" עם העזר הטכנולוגי שלכם. ניגוד וגודל: ב"ראייה ירודה".',
     profileLowVision:'ראייה ירודה',
+    profileHintLowVision:'טקסט גדול יותר, ניגודיות חכמה, סמן גדול, קישורים מודגשים.',
     profileMotor:'מוגבלות מוטורית',
+    profileHintMotor:'סמן גדול, קישורים מודגשים, תנועה רגועה יותר.',
     profileDyslexia:'דיסלקציה',
+    profileHintDyslexia:'גופן קריא, ריווח אותיות ושורות רחב יותר, יישור לשמאל.',
     profileADHD:'הפרעת קשב',
+    profileHintADHD:'מסכת קריאה, צבעים רכים יותר, פחות אנימציות.',
     profileSeizure:'רגישות להתקפים',
-    profileClear:'נקה פרופיל',
+    profileHintSeizure:'מפחית תנועה ועוצמת צבע חזקה.',
+    profileClear:'נקה ערכה',
     textScale:'גודל טקסט',
     highContrast:'ניגודיות גבוהה',
     contrastMode:'מצב ניגודיות',
@@ -1045,16 +1075,16 @@ var i18n={
     closePanel:'סגירת לוח נגישות',
     launcherAccessibilityMenu:'תפריט נגישות',
     panelSubtitle:'העדפות נגישות',
-    panelHelper:'כוונון תצוגה, תנועה וניווט באתר זה.',
+    panelHelper:'כוונון קריאה על המסך, תנועה ומבנה. משתמשי קורא מסך: התחילו מ"מבנה הדף"; גודל טקסט וניגודיות תחת "טקסט וניגודיות".',
     plainLightUi:'פאנל בהיר פשוט',
     plainLightUiHelp:'רקע לבן וטקסט ברור לתפריט',
     oversizedUi:'תפריט ופקדים גדולים יותר',
     oversizedUiHelp:'כפתור משגר גדול יותר, פאנל רחב יותר, טקסט ופקדים גדולים יותר',
     enhancedTooltips:'הסברים גלויים',
     enhancedTooltipsHelp:'הצגת רמזים גדולים יותר לטקסט title ברחבי העמוד',
-    sectionReadingVision:'קריאה וראייה',
-    sectionMotion:'תנועה ותצוגה',
-    sectionNavigation:'ניווט',
+    sectionReadingVision:'טקסט וניגודיות',
+    sectionMotion:'אנימציה וכלים',
+    sectionNavigation:'מבנה הדף',
     sectionPanelChrome:'מראה הפאנל',
     hintPauseAnimations:'השהיית אנימציות שאינן חיוניות',
     ann:{
@@ -2080,15 +2110,11 @@ function applyProfile(name){
   }else{
     resetAssistStateBaseline();
     if(name==='blind'){
-      state.textScale=120;
-      state.contrastMode='dark';
-      state.readableFont=true;
-      state.highlightLinks=true;
-      state.bigCursor=true;
       state.pauseAnimations=true;
     }else if(name==='lowVision'){
       state.textScale=130;
       state.contrastMode='smart';
+      state.readableFont=true;
       state.bigCursor=true;
       state.highlightLinks=true;
     }else if(name==='motor'){
@@ -3104,12 +3130,12 @@ function createWidget(){
         var profilesWrap=document.createElement('div');
         profilesWrap.className='ca-assist-profile-strip';
         var profileDefs=[
-          {key:'blind',label:t('profileBlind')},
-          {key:'lowVision',label:t('profileLowVision')},
-          {key:'motor',label:t('profileMotor')},
-          {key:'dyslexia',label:t('profileDyslexia')},
-          {key:'adhd',label:t('profileADHD')},
-          {key:'seizure',label:t('profileSeizure')}
+          {key:'blind',label:t('profileBlind'),hint:t('profileHintBlind')},
+          {key:'lowVision',label:t('profileLowVision'),hint:t('profileHintLowVision')},
+          {key:'motor',label:t('profileMotor'),hint:t('profileHintMotor')},
+          {key:'dyslexia',label:t('profileDyslexia'),hint:t('profileHintDyslexia')},
+          {key:'adhd',label:t('profileADHD'),hint:t('profileHintADHD')},
+          {key:'seizure',label:t('profileSeizure'),hint:t('profileHintSeizure')}
         ];
         for(var p=0;p<profileDefs.length;p++){
           (function(profile){
@@ -3118,6 +3144,7 @@ function createWidget(){
             b.className='ca-assist-profile-pill';
             b.setAttribute('data-carbon-key','profile-'+profile.key);
             b.textContent=profile.label;
+            if(profile.hint){b.setAttribute('title',profile.hint);}
             b.addEventListener('click',function(){applyProfile(profile.key);});
             profilesWrap.appendChild(b);
           })(profileDefs[p]);
@@ -3135,6 +3162,11 @@ function createWidget(){
         profHdr.textContent=t('profiles');
         var profBody=document.createElement('div');
         profBody.className='ca-assist-sec-group-body';
+        var profilesHelpEl=document.createElement('div');
+        profilesHelpEl.className='ca-assist-helper';
+        profilesHelpEl.style.marginBottom='10px';
+        profilesHelpEl.textContent=t('profilesHelp');
+        profBody.appendChild(profilesHelpEl);
         profBody.appendChild(profilesWrap);
         profBody.appendChild(clearProfile);
         profBlock.appendChild(profHdr);
@@ -3233,7 +3265,7 @@ function createWidget(){
         blocks.nav=navBlock;
       }
 
-      var orderKeys=['chrome','profiles','reading','motion','nav'];
+      var orderKeys=['chrome','profiles','nav','reading','motion'];
       for(var oi=0;oi<orderKeys.length;oi++){
         var bk=orderKeys[oi];
         if(blocks[bk]){panelBody.appendChild(blocks[bk]);}
@@ -3244,7 +3276,7 @@ function createWidget(){
       langRow.className='ca-assist-footer-lang';
       var globe=document.createElement('span');
       globe.className='ca-assist-footer-globe';
-      globe.innerHTML='<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>';
+      globe.innerHTML='<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>';
       langRow.appendChild(globe);
       langRow.appendChild(makeRadioGroup(t('language'),'language',[
         {value:'en',label:'EN'},
