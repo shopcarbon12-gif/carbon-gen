@@ -1,0 +1,761 @@
+/* Elfsight-style Sources strip — horizontal triggers; modals mirror dashboard column layout. */
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.bar {
+  margin-top: 20px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.trigger {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 16px;
+  border-radius: 11px;
+  border: none;
+  background: linear-gradient(180deg, #343438 0%, #2c2c30 100%);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--font-geist-sans, "Inter"), system-ui, sans-serif;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    filter 0.15s ease,
+    box-shadow 0.15s ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+.trigger:hover {
+  filter: brightness(1.06);
+}
+
+.trigger:focus-visible {
+  outline: 2px solid rgba(139, 92, 246, 0.55);
+  outline-offset: 2px;
+}
+
+.triggerActive {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 0 0 1px rgba(0, 149, 246, 0.35);
+}
+
+.triggerAdd {
+  color: #0095f6;
+  border: 1px solid #0095f6;
+  background: linear-gradient(180deg, #343438 0%, #2c2c30 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.triggerAdd:hover {
+  color: #2ba8ff;
+  border-color: #2ba8ff;
+  filter: brightness(1.04);
+}
+
+.chev {
+  margin-left: 2px;
+  font-size: 0.8em;
+  font-weight: 300;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+/* ─── Modal shell ───────────────────────────────────── */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 220;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(6, 8, 14, 0.62);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+}
+
+.dialog {
+  width: min(440px, 100%);
+  max-height: min(85vh, 720px);
+  overflow: auto;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: linear-gradient(180deg, #2a2834 0%, #1a1922 100%);
+  box-shadow:
+    0 28px 90px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  color: rgba(248, 250, 252, 0.94);
+}
+
+.dialogHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.dialogTitle {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  text-align: center;
+  flex: 1;
+  letter-spacing: 0.02em;
+}
+
+.closeX {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.closeX:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.dialogBody {
+  padding: 14px 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Add Instagram Source (Elfsight-style) */
+.addIgHead {
+  display: grid;
+  grid-template-columns: minmax(72px, 1fr) auto minmax(72px, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 16px 14px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.addIgCancel {
+  justify-self: start;
+  padding: 6px 4px;
+  border: none;
+  background: none;
+  color: #0095f6;
+  font-size: 15px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.addIgCancel:hover {
+  color: #2ba8ff;
+}
+
+.addIgTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  text-align: center;
+  color: #fff;
+  letter-spacing: 0.01em;
+}
+
+.addIgDone {
+  justify-self: end;
+  padding: 6px 4px;
+  border: none;
+  background: none;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.addIgDone:disabled {
+  color: #5c5c62;
+  cursor: not-allowed;
+}
+
+.addIgBody {
+  padding: 16px 16px 20px;
+}
+
+.addIgCard {
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(42, 41, 48, 0.98);
+  padding: 16px 16px 14px;
+}
+
+.addIgFieldLabel {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #fff;
+}
+
+.addIgRadioList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.addIgRadioRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+
+.addIgRadioRow:hover .igRadioRing:not(.igRadioRingOn) {
+  border-color: rgba(203, 213, 225, 0.45);
+}
+
+.addIgRadioLabel {
+  font-size: 15px;
+  color: rgba(252, 252, 255, 0.96);
+}
+
+.igRadioRing {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid rgba(148, 163, 184, 0.55);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  background: rgba(10, 10, 12, 0.35);
+}
+
+.igRadioRingOn {
+  border-color: rgba(255, 255, 255, 0.92);
+}
+
+.igRadioDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #0095f6;
+}
+
+.addIgDivider {
+  height: 1px;
+  margin: 14px 0 14px;
+  background: rgba(0, 0, 0, 0.45);
+  border: none;
+}
+
+.addIgSearchRow {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.addIgInput {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(18, 18, 22, 0.95);
+  color: #fff;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.addIgInput::placeholder {
+  color: rgba(160, 160, 170, 0.85);
+}
+
+.addIgInput:focus {
+  outline: 2px solid rgba(0, 149, 246, 0.35);
+  outline-offset: 0;
+}
+
+.addIgSearchBtn {
+  flex-shrink: 0;
+  padding: 0 16px;
+  border: none;
+  border-radius: 8px;
+  background: #fff;
+  color: #0a0a0a;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.addIgSearchBtn:hover {
+  background: #f0f0f0;
+}
+
+.addIgResults {
+  margin-top: 12px;
+  padding-top: 4px;
+}
+
+.addIgResultRow {
+  display: block;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(18, 18, 22, 0.75);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.addIgResultRow:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.addIgResultRowSelected {
+  border-color: rgba(0, 149, 246, 0.55);
+  box-shadow: 0 0 0 1px rgba(0, 149, 246, 0.2);
+}
+
+/* Cards inside Sources modal */
+.card {
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(22, 21, 30, 0.9);
+  overflow: visible;
+}
+
+.sourceRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.sourceLabel {
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(252, 252, 255, 0.95);
+}
+
+.ellipsisBtn {
+  width: 36px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 1.1rem;
+  letter-spacing: 2px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.ellipsisBtn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.addSourceBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 14px 16px;
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: transparent;
+  color: #60a5fa;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.addSourceBtn:hover {
+  background: rgba(96, 165, 250, 0.08);
+}
+
+.linkRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.linkRow:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.linkRow + .linkRow {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.popover {
+  position: absolute;
+  right: 12px;
+  top: calc(100% + 6px);
+  min-width: 160px;
+  padding: 6px 0;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #24232e;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  z-index: 10;
+}
+
+.popoverItem {
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  background: none;
+  color: rgba(248, 250, 252, 0.9);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.popoverItem:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.popoverDanger {
+  color: #f87171;
+}
+
+.sourceRowWrap {
+  position: relative;
+}
+
+.modalHint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(226, 232, 240, 0.55);
+  padding: 0 4px;
+}
+
+.modalHint a {
+  color: #93c5fd;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.optionList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.optionList li {
+  padding: 10px 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 13px;
+  color: rgba(226, 232, 240, 0.88);
+}
+
+.optionList li:last-child {
+  border-bottom: none;
+}
+
+/* ─── Drill-in header (Filters / Sorting) ───────────── */
+.drillHead {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.backBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: none;
+  background: linear-gradient(180deg, rgba(30, 58, 138, 0.85) 0%, rgba(23, 37, 84, 0.95) 100%);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.backBtn:hover {
+  filter: brightness(1.08);
+}
+
+.backBtn:focus-visible {
+  outline: 2px solid rgba(96, 165, 250, 0.6);
+  outline-offset: 2px;
+}
+
+.drillTitle {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.drillHeadSpacer {
+  width: 34px;
+}
+
+/* ─── Filters screen ───────────────────────────────── */
+.sectionLabel {
+  margin: 4px 0 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(203, 213, 225, 0.72);
+  line-height: 1.35;
+}
+
+.filterCard {
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(30, 29, 40, 0.95);
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.filterRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.filterRow:last-of-type {
+  border-bottom: none;
+}
+
+.filterInputGhost {
+  flex: 1;
+  min-height: 36px;
+  border-radius: 6px;
+  background: rgba(15, 14, 22, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.filterRowEllipsis {
+  width: 36px;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 1rem;
+  letter-spacing: 1px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.filterRowEllipsis:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.addFilterBtn {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  width: 100%;
+  padding: 12px 14px;
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: transparent;
+  color: #60a5fa;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.addFilterBtn:hover {
+  background: rgba(96, 165, 250, 0.06);
+}
+
+.addFilterBlock {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 52px;
+  margin-top: 8px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(30, 29, 40, 0.95);
+  color: #60a5fa;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.addFilterBlock:hover {
+  background: rgba(96, 165, 250, 0.06);
+}
+
+.displayLimitCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  margin-top: 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(30, 29, 40, 0.95);
+}
+
+.displayLimitLabel {
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.94);
+}
+
+.displayLimitValue {
+  font-size: 15px;
+  font-weight: 600;
+  color: #60a5fa;
+  font-variant-numeric: tabular-nums;
+}
+
+.helpText {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: rgba(203, 213, 225, 0.65);
+}
+
+/* ─── Sorting screen ───────────────────────────────── */
+.sortCard {
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(30, 29, 40, 0.95);
+  padding: 8px 0;
+  margin-bottom: 14px;
+}
+
+.radioRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  border: none;
+  width: 100%;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+}
+
+.radioRow:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.radioUi {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  margin-top: 2px;
+  border: 2px solid rgba(148, 163, 184, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  background: transparent;
+}
+
+.radioUiOn {
+  border-color: #3b82f6;
+  background: #3b82f6;
+}
+
+.radioUiOn::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.radioText {
+  font-size: 14px;
+  color: rgba(248, 250, 252, 0.94);
+  line-height: 1.4;
+}
+
+.sortExplain {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: rgba(203, 213, 225, 0.72);
+}
+
+.drillBody {
+  padding: 16px 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+

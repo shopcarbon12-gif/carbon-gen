@@ -5,9 +5,11 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   STOREFRONT_INSTAGRAM_AVATAR_SRC,
   STOREFRONT_INSTAGRAM_DISPLAY_NAME,
@@ -19,13 +21,18 @@ import {
   STOREFRONT_PREVIEW_TILE_OBJECT_POSITIONS,
   type InstagramMediaItem,
 } from "@/lib/instagram-feed";
-import { isHeroVideoUrl } from "@/lib/instagram-hero-media";
-import { InstagramWidgetEditorToolbar } from "./InstagramWidgetEditorToolbar";
+import { ElfsightSourcesBar } from "./ElfsightSourcesBar";
 import styles from "./storefront-section-preview.module.css";
 
 type TileCell =
   | { kind: "meta"; item: InstagramMediaItem }
   | { kind: "placeholder"; objectPosition: string };
+
+type PostPopupSlide = {
+  src: string;
+  objectPosition?: string;
+  alt: string;
+};
 
 function buildPlaceholderColumns(): TileCell[][] {
   return chunkPairs(STOREFRONT_PREVIEW_TILE_OBJECT_POSITIONS).map((pair) =>
@@ -106,6 +113,82 @@ function chunkPairs<T>(arr: readonly T[]): T[][] {
   return out;
 }
 
+function buildSlidesAndIndexedColumns(columns: TileCell[][]) {
+  const slides: PostPopupSlide[] = [];
+  const indexedColumns = columns.map((col) =>
+    col.map((cell) => {
+      if (cell.kind === "meta") {
+        const { item } = cell;
+        const alt =
+          item.caption && item.caption.length > 0
+            ? item.caption.slice(0, 120)
+            : `Instagram post ${item.id}`;
+        slides.push({ src: item.mediaUrl, alt });
+      } else {
+        slides.push({
+          src: STOREFRONT_INSTAGRAM_HERO_IMAGE,
+          objectPosition: cell.objectPosition,
+          alt: `Open @${STOREFRONT_INSTAGRAM_HANDLE} on Instagram (preview tile)`,
+        });
+      }
+      return { cell, index: slides.length - 1 };
+    }),
+  );
+  return { slides, indexedColumns };
+}
+
+/** Black-outline camera for popup header (Elfsight-style). */
+function PopupInstagramGlyph() {
+  return (
+    <svg
+      className={styles.popIgGlyph}
+      viewBox="0 0 24 24"
+      width={18}
+      height={18}
+      aria-hidden
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="3" y="3" width="18" height="18" rx="5" />
+      <circle cx="12" cy="12" r="3.25" />
+      <circle cx="17.25" cy="6.75" r="0.9" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function PopNavChevronLeft() {
+  return (
+    <svg className={styles.popNavIcon} viewBox="0 0 24 24" aria-hidden>
+      <path
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M14 6l-6 6 6 6"
+      />
+    </svg>
+  );
+}
+
+function PopNavChevronRight() {
+  return (
+    <svg className={styles.popNavIcon} viewBox="0 0 24 24" aria-hidden>
+      <path
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M10 6l6 6-6 6"
+      />
+    </svg>
+  );
+}
+
 export function StorefrontSectionPreview() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastArrowsRef = useRef({ left: false, right: false });
@@ -113,6 +196,67 @@ export function StorefrontSectionPreview() {
   const [canGoRight, setCanGoRight] = useState(false);
   const [columns, setColumns] = useState<TileCell[][]>(() => buildPlaceholderColumns());
   const [heroSrc, setHeroSrc] = useState(STOREFRONT_INSTAGRAM_HERO_IMAGE);
+  const [popupOpen, setPopupOpen] = useState(false);
+  const [popupIndex, setPopupIndex] = useState(0);
+  const [portalReady, setPortalReady] = useState(false);
+
+  const { slides, indexedColumns } = useMemo(
+    () => buildSlidesAndIndexedColumns(columns),
+    [columns],
+  );
+
+  useEffect(() => {
+    setPortalReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!popupOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [popupOpen]);
+
+  useEffect(() => {
+    if (!popupOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setPopupOpen(false);
+        return;
+      }
+      if (slides.length <= 1) return;
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        setPopupIndex((i) => (i - 1 + slides.length) % slides.length);
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        setPopupIndex((i) => (i + 1) % slides.length);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [popupOpen, slides.length]);
+
+  const openPopupAt = useCallback((index: number) => {
+    setPopupIndex(index);
+    setPopupOpen(true);
+  }, []);
+
+  const closePopup = useCallback(() => setPopupOpen(false), []);
+
+  const goPrev = useCallback(() => {
+    setPopupIndex((i) => (i - 1 + slides.length) % slides.length);
+  }, [slides.length]);
+
+  const goNext = useCallback(() => {
+    setPopupIndex((i) => (i + 1) % slides.length);
+  }, [slides.length]);
+
+  useEffect(() => {
+    if (!popupOpen || slides.length === 0) return;
+    setPopupIndex((i) => Math.min(i, slides.length - 1));
+  }, [slides.length, popupOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -226,6 +370,10 @@ export function StorefrontSectionPreview() {
     };
   }, [updateScrollArrows, columns.length]);
 
+  const safePopupIndex =
+    slides.length === 0 ? 0 : Math.min(popupIndex, slides.length - 1);
+  const activeSlide = slides[safePopupIndex];
+
   const scrollByStep = useCallback((dir: -1 | 1) => {
     const el = scrollRef.current;
     const firstCol = el?.querySelector<HTMLElement>("[data-ig-col]");
@@ -274,6 +422,92 @@ export function StorefrontSectionPreview() {
     </div>
   );
 
+  const popupPortal =
+    portalReady &&
+    popupOpen &&
+    activeSlide &&
+    createPortal(
+      <div
+        className={styles.popOverlay}
+        role="presentation"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) closePopup();
+        }}
+      >
+        <button
+          type="button"
+          className={styles.popClose}
+          onClick={closePopup}
+          aria-label="Close"
+        >
+          ×
+        </button>
+        {slides.length > 1 ? (
+          <>
+            <button
+              type="button"
+              className={styles.popNav}
+              data-dir="prev"
+              aria-label="Previous post"
+              onClick={(e) => {
+                e.stopPropagation();
+                goPrev();
+              }}
+            >
+              <PopNavChevronLeft />
+            </button>
+            <button
+              type="button"
+              className={styles.popNav}
+              data-dir="next"
+              aria-label="Next post"
+              onClick={(e) => {
+                e.stopPropagation();
+                goNext();
+              }}
+            >
+              <PopNavChevronRight />
+            </button>
+          </>
+        ) : null}
+        <div
+          className={styles.popFrame}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Instagram post"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className={styles.popHead}>
+            <span className={styles.popUser}>{STOREFRONT_INSTAGRAM_HANDLE}</span>
+            <div className={styles.popHeadActions}>
+              <a className={styles.popFollow} href={STOREFRONT_INSTAGRAM_URL} target="_blank" rel="noreferrer">
+                Follow
+              </a>
+              <PopupInstagramGlyph />
+            </div>
+          </div>
+          <div className={styles.popImageWrap}>
+            <Image
+              key={`${activeSlide.src}-${safePopupIndex}`}
+              src={activeSlide.src}
+              alt={activeSlide.alt}
+              fill
+              className={styles.popImage}
+              sizes="360px"
+              unoptimized={nextImageUnoptimized(activeSlide.src)}
+              style={
+                activeSlide.objectPosition
+                  ? { objectPosition: activeSlide.objectPosition }
+                  : undefined
+              }
+              priority
+            />
+          </div>
+        </div>
+      </div>,
+      document.body,
+    );
+
   return (
     <div className={styles.root}>
       {profileBar}
@@ -281,26 +515,15 @@ export function StorefrontSectionPreview() {
       <div className={styles.mediaGrid}>
         <div className={styles.heroCell}>
           <div className={styles.banner}>
-            {isHeroVideoUrl(heroSrc) ? (
-              <video
-                src={heroSrc}
-                muted
-                loop
-                playsInline
-                autoPlay
-                aria-label={`Instagram banner for @${STOREFRONT_INSTAGRAM_HANDLE}`}
-              />
-            ) : (
-              <Image
-                src={heroSrc}
-                alt={`Instagram banner for @${STOREFRONT_INSTAGRAM_HANDLE}`}
-                width={2000}
-                height={1200}
-                sizes="(max-width: 900px) 100vw, 50vw"
-                priority={false}
-                unoptimized={nextImageUnoptimized(heroSrc)}
-              />
-            )}
+            <Image
+              src={heroSrc}
+              alt={`Instagram banner for @${STOREFRONT_INSTAGRAM_HANDLE}`}
+              width={2000}
+              height={1200}
+              sizes="(max-width: 900px) 100vw, 50vw"
+              priority={false}
+              unoptimized={nextImageUnoptimized(heroSrc)}
+            />
             <div className={styles.instagramLink}>
               <a href={STOREFRONT_INSTAGRAM_URL} target="_blank" rel="noopener noreferrer">
                 @{STOREFRONT_INSTAGRAM_HANDLE}
@@ -317,9 +540,9 @@ export function StorefrontSectionPreview() {
               data-ig-scroll-viewport=""
             >
               <div className={styles.tileStrip} data-ig-strip="">
-                {columns.map((cells, colIndex) => (
+                {indexedColumns.map((cells, colIndex) => (
                   <div key={colIndex} className={styles.tileCol} data-ig-col="">
-                    {cells.map((cell, rowIndex) => {
+                    {cells.map(({ cell, index }, rowIndex) => {
                       if (cell.kind === "meta") {
                         const { item } = cell;
                         const alt =
@@ -327,13 +550,12 @@ export function StorefrontSectionPreview() {
                             ? item.caption.slice(0, 120)
                             : `Instagram post ${item.id}`;
                         return (
-                          <a
+                          <button
                             key={item.id}
-                            href={item.permalink}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                            type="button"
                             className={styles.tile}
                             aria-label={alt}
+                            onClick={() => openPopupAt(index)}
                           >
                             <Image
                               src={item.mediaUrl}
@@ -343,19 +565,18 @@ export function StorefrontSectionPreview() {
                               className={styles.tileImg}
                               unoptimized={nextImageUnoptimized(item.mediaUrl)}
                             />
-                          </a>
+                          </button>
                         );
                       }
                       const i = colIndex * 2 + rowIndex;
                       const objectPosition = cell.objectPosition;
                       return (
-                        <a
-                          key={`p-${colIndex}-${rowIndex}`}
-                          href={STOREFRONT_INSTAGRAM_URL}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <button
+                          key={`p-${colIndex}-${index}`}
+                          type="button"
                           className={styles.tile}
                           aria-label={`Open @${STOREFRONT_INSTAGRAM_HANDLE} on Instagram (preview tile ${i + 1})`}
+                          onClick={() => openPopupAt(index)}
                         >
                           <Image
                             src={STOREFRONT_INSTAGRAM_HERO_IMAGE}
@@ -366,7 +587,7 @@ export function StorefrontSectionPreview() {
                             style={{ objectPosition }}
                             unoptimized={nextImageUnoptimized(STOREFRONT_INSTAGRAM_HERO_IMAGE)}
                           />
-                        </a>
+                        </button>
                       );
                     })}
                   </div>
@@ -400,7 +621,9 @@ export function StorefrontSectionPreview() {
         </div>
       </div>
 
-      <InstagramWidgetEditorToolbar />
+      <ElfsightSourcesBar />
+
+      {popupPortal}
     </div>
   );
 }

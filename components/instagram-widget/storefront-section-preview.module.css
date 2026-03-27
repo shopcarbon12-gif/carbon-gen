@@ -249,8 +249,7 @@
   overflow: hidden;
 }
 
-.banner img,
-.banner video {
+.banner img {
   display: block;
   width: 100%;
   height: 100%;
@@ -258,8 +257,7 @@
   transition: transform 0.55s ease;
 }
 
-.banner:hover img,
-.banner:hover video {
+.banner:hover img {
   transform: scale(1.04);
 }
 
@@ -300,6 +298,18 @@
   );
   aspect-ratio: 1;
   max-width: 100%;
+}
+
+button.tile {
+  appearance: none;
+  -webkit-appearance: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+  cursor: pointer;
 }
 
 .tile:focus-visible {
@@ -376,5 +386,180 @@
 @media (max-width: 560px) {
   .tilesCell {
     min-height: min(95vw, 440px);
+  }
+}
+
+/* ─── Post popup (Elfsight-style; grid tiles only — hero unchanged) ─── */
+.popOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 56px;
+  box-sizing: border-box;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.popClose {
+  position: fixed;
+  top: 20px;
+  left: 24px;
+  z-index: 402;
+  width: 48px;
+  height: 48px;
+  border: none;
+  padding: 0;
+  background: none;
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 2.75rem;
+  font-weight: 200;
+  line-height: 1;
+  cursor: pointer;
+  font-family: system-ui, sans-serif;
+}
+
+.popClose:hover {
+  color: #fff;
+}
+
+.popClose:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+.popNav {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 401;
+  width: 40px;
+  height: 72px;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.88);
+  background: rgba(255, 255, 255, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease;
+}
+
+.popNav:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.popNav:focus-visible {
+  outline: 2px solid #0095f6;
+  outline-offset: 2px;
+}
+
+.popNav[data-dir="prev"] {
+  left: 12px;
+  border-radius: 0 999px 999px 0;
+  padding-left: 4px;
+}
+
+.popNav[data-dir="next"] {
+  right: 12px;
+  border-radius: 999px 0 0 999px;
+  padding-right: 4px;
+}
+
+.popNavIcon {
+  display: block;
+  width: 22px;
+  height: 22px;
+}
+
+.popFrame {
+  position: relative;
+  z-index: 401;
+  box-sizing: border-box;
+  width: min(360px, 90vw, calc(85vh * 3 / 4));
+  aspect-ratio: 3 / 4;
+  max-height: 85vh;
+  height: auto;
+  background: #fff;
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.5);
+}
+
+.popHead {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #fff;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.popUser {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #000;
+  letter-spacing: 0.01em;
+}
+
+.popHeadActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.popFollow {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #0095f6;
+  text-decoration: none;
+}
+
+.popFollow:hover {
+  text-decoration: underline;
+}
+
+.popIgGlyph {
+  flex-shrink: 0;
+  color: #000;
+}
+
+.popImageWrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: #0a0a0a;
+}
+
+.popImage {
+  object-fit: cover;
+}
+
+@media (max-width: 520px) {
+  .popOverlay {
+    padding: 44px 12px;
+  }
+
+  .popClose {
+    top: 12px;
+    left: 12px;
+    font-size: 2.25rem;
+  }
+
+  .popNav[data-dir="prev"] {
+    left: 4px;
+  }
+
+  .popNav[data-dir="next"] {
+    right: 4px;
   }
 }

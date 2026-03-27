@@ -60,6 +60,7 @@
     "sync:suggestion-rules": "node scripts/sync-suggestion-rules-from-xlsx.mjs",
     "deploy:coolify": "node scripts/deploy-coolify.mjs",
     "deploy:coolify:setup": "node scripts/setup-coolify-deploy.mjs",
+    "report:a11y-html": "node scripts/generate-a11y-widget-html-reports.mjs",
     "notify:test": "node scripts/notify-test.mjs",
     "notify:task-done": "powershell -ExecutionPolicy Bypass -File scripts/notify-task-complete.ps1",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
