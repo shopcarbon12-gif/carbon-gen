@@ -10,6 +10,7 @@ import carbonWordmark from "./assets-local/carbon-long-white.png";
 import { RefreshIcon } from "./RefreshIcon";
 import styles from "./page.module.css";
 import { formatAppDateTime } from "@/lib/formatAppDateTime";
+import { CARBON_A11Y_WIDGET_WREV } from "@/lib/carbon-a11y-widget-rev";
 
 type WidgetPosition = "left" | "right";
 
@@ -361,11 +362,11 @@ function toWidgetEmbedConfig(settings: AccessibilitySettings) {
 
 function buildInstallSnippet(settings: AccessibilitySettings) {
   const encoded = encodeURIComponent(JSON.stringify(toWidgetEmbedConfig(settings)));
-  return `<script src="https://app.shopcarbon.com/accessibility/widget?config=${encoded}&wrev=126" defer></script>`;
+  return `<script src="https://app.shopcarbon.com/accessibility/widget?config=${encoded}&wrev=${CARBON_A11Y_WIDGET_WREV}" defer></script>`;
 }
 
 function buildManagedInstallSnippet(scope = "default") {
-  return `<script src="https://app.shopcarbon.com/accessibility/widget?scope=${encodeURIComponent(scope)}&wrev=126" defer></script>`;
+  return `<script src="https://app.shopcarbon.com/accessibility/widget?scope=${encodeURIComponent(scope)}&wrev=${CARBON_A11Y_WIDGET_WREV}" defer></script>`;
 }
 
 function toButtonLabel(enabled: boolean) {
@@ -1269,7 +1270,7 @@ export default function AccessibilityPage() {
     script.defer = true;
     const cfg = encodeURIComponent(JSON.stringify(toWidgetEmbedConfig(settings)));
     const sc = encodeURIComponent(settingsScope || "default");
-    script.src = `/accessibility/widget?config=${cfg}&scope=${sc}&wrev=126&_ts=${Date.now()}`;
+    script.src = `/accessibility/widget?config=${cfg}&scope=${sc}&wrev=${CARBON_A11Y_WIDGET_WREV}&_ts=${Date.now()}`;
     script.onload = () => {
       setRuntimeWidgetMounted(true);
       const g = window as Window & {
@@ -1801,7 +1802,11 @@ export default function AccessibilityPage() {
           </section>
 
           {/* INSTALLATION SNIPPETS */}
-          <section id="snippets" className={styles.glassPanel}>
+          <section
+            id="snippets"
+            className={styles.glassPanel}
+            data-carbon-widget-wrev={CARBON_A11Y_WIDGET_WREV}
+          >
             <div className={styles.panelHeader}>
               <h2 className={styles.panelTitle}>Installation Snippets</h2>
               <button className={styles.panelAction} onClick={copySnippet}>
@@ -1812,7 +1817,7 @@ export default function AccessibilityPage() {
             <div className={styles.snippetSection}>
               <div>
                 <div className={styles.snippetLabel}>Site Snippet</div>
-                <div className={styles.snippetBox}>
+                <div className={styles.snippetBox} title={installSnippet || undefined}>
                   <code className={styles.snippetCode}>
                     {installSnippet ? installSnippet.slice(0, 72) + '...' : '<script src="https://example.com/accessibility.js" async></script>'}
                   </code>
@@ -1823,7 +1828,7 @@ export default function AccessibilityPage() {
               </div>
               <div>
                 <div className={styles.snippetLabel}>App Snippet</div>
-                <div className={styles.snippetBox}>
+                <div className={styles.snippetBox} title={managedInstallSnippet || undefined}>
                   <code className={styles.snippetCode}>
                     {managedInstallSnippet ? managedInstallSnippet.slice(0, 72) + '...' : 'const carbonAssist = require("carbon-assist");'}
                   </code>

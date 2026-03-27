@@ -33,6 +33,7 @@ function widgetPublicOrigin(req: NextRequest): string {
 }
 import { normalizeAccessibilityLogoUrl } from "@/lib/accessibilityLogoUrl";
 import { loadAccessibilityWidgetConfig } from "@/lib/accessibilityConfigRepository";
+import { CARBON_A11Y_WIDGET_WREV } from "@/lib/carbon-a11y-widget-rev";
 
 /** Inlined into widget JS so the default mark works under strict storefront CSP (no cross-origin img). */
 let carbonHoneycombDataUrl = "";
@@ -245,7 +246,7 @@ export async function GET(request: Request) {
         "</svg>"
     );
 
-  const js = `(function(){var __caRev=126;if(window.__carbonA11yRev===__caRev){return;}window.__carbonA11yRev=__caRev;window.__carbonA11yLoaded=true;
+  const js = `(function(){var __caRev=${CARBON_A11Y_WIDGET_WREV};if(window.__carbonA11yRev===__caRev){return;}window.__carbonA11yRev=__caRev;window.__carbonA11yLoaded=true;
 /* ca-assist-ui v3 studio | Phase A+B a11y (see docs/accessibility-widget-phase-a-b-spec.md)
  * Panel: non-modal named region (not aria-modal). No focus trap — Tab may move into page content.
  * Esc closes only while focus is inside the panel (keydown on panel). Space toggles switches; Arrow/Home/End in radiogroups.
