@@ -1,0 +1,18 @@
+---
+description: Full deploy from localhost to app.shopcarbon.com when user asks to deploy
+---
+
+# Deploy to app.shopcarbon.com
+
+When the user says **deploy**, **ship**, **push to prod**, or similar for this app:
+
+1. **Stage** meaningful changes: `app/`, `components/`, `lib/`, `shopify/snippets/` (Liquid), `docs/` tied to the change, `scripts/` if relevant. **Do not** bulk-add `tmp/`, root `*.png`, or Playwright logs unless the user asked.
+2. **Commit** on `main` with a clear message.
+3. **Push** `git push origin main` (Coolify builds from this repo).
+4. **Trigger Coolify**: from repo root, run  
+   `ALLOW_COOLIFY_DEPLOY=true npm run deploy:coolify`  
+   (required guard env var).
+5. **Shopify storefront** is separate: remind to update theme **`wrev=`** in `carbon-accessibility-widget.liquid` and add **`{% render 'carbon-account-links-a11y' %}`** when that snippet changed.
+6. **Verify** after build: `node tmp/check-widget-deploy.mjs` should show `__caRev` matching the widget in `route.ts`.
+
+Do **not** skip push; production will not pick up local-only commits.
