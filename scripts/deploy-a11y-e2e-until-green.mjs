@@ -27,7 +27,7 @@ function run(cmd, args, extraEnv = {}) {
   const res = spawnSync(cmd, args, {
     cwd: REPO,
     stdio: "inherit",
-    shell: process.platform === "win32",
+    shell: false,
     env: { ...process.env, ...extraEnv },
   });
   return res.status === 0;
@@ -47,12 +47,14 @@ function readLatestVerification() {
 }
 
 async function main() {
-  const env = { ALLOW_COOLIFY_DEPLOY: "true" };
+  /** Duplicate guard can block redeploy of same SHA; allow repeat attempts in this loop. */
+  const env = { ALLOW_COOLIFY_DEPLOY: "true", ALLOW_DUPLICATE_COOLIFY_DEPLOY: "true" };
 
   for (let round = 1; round <= MAX_DEPLOY_ROUNDS; round++) {
     console.log(`\n========== Deploy round ${round}/${MAX_DEPLOY_ROUNDS} ==========\n`);
 
-    if (!run("npm", ["run", "deploy:coolify"], env)) {
+    const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
+    if (!run(npmCmd, ["run", "deploy:coolify"], env)) {
       console.error("deploy:coolify failed — aborting loop.");
       process.exit(1);
     }
