@@ -313,6 +313,7 @@ var activeProfilePreset=null;
 var dyslexiaPresetCycle=0;
 var jumpLinkCycleIndex=0;
 var jumpLinkLastHref='';
+var __caAssistChromeMountKeyPrev='';
 var ui={};
 var rerenderPanel=function(){};
 var liveRegionRef=null;
@@ -593,6 +594,7 @@ var widgetCss='' +
   '.ca-assist-root button.ca-assist-profile-pill--dyslexia{line-height:1.15 !important}' +
   '.ca-assist-root button.ca-assist-profile-pill--dyslexia .ca-assist-dys-stack{font-size:inherit !important;line-height:inherit !important;font-family:inherit !important}' +
   '.ca-assist-root button.ca-assist-profile-pill--dyslexia .ca-assist-dys-sublabel{font-size:inherit !important;line-height:inherit !important;font-family:inherit !important}' +
+  ':host(.ca-a11y-invert-viewport-cb) .ca-assist-shell{pointer-events:auto !important}' +
   '.ca-assist-shell{position:relative;display:block;isolation:isolate;z-index:0;--ca-fab-size:52px}' +
   '.ca-assist-lang-he,.ca-assist-lang-he button,.ca-assist-lang-he .ca-assist-toggle__label,.ca-assist-lang-he .ca-assist-navrow__label,.ca-assist-lang-he .ca-assist-title{font-family:"Noto Sans Hebrew","Segoe UI","Arial Hebrew",Arial,sans-serif !important}' +
   '.ca-assist-launcher--fab{position:relative;z-index:30;display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;width:var(--ca-launcher-size,52px);height:var(--ca-launcher-size,52px);min-width:0;max-width:none;padding:0;border-radius:50%;border:none;outline:none;background:transparent;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;color:inherit;cursor:grab;touch-action:none;-webkit-tap-highlight-color:transparent;transition:transform .15s ease}' +
@@ -1981,6 +1983,9 @@ function ensureAssistHostMount(){
     html.appendChild(w);
   }catch(_m){}
 }
+function assistChromeMountKey(){
+  return state.contrastMode==='invert'?'invert':'wide';
+}
 function renderGlobalStyles(){
   ensureLocaleFonts();
   ensureAssistHostMount();
@@ -2007,6 +2012,7 @@ function renderGlobalStyles(){
     syncPauseAnimationsMedia();
     syncBigCursorOverlay();
     syncAssistHostZoomInverse();
+    __caAssistChromeMountKeyPrev=assistChromeMountKey();
     return;
   }
   syncPresetHostProfileClasses();
@@ -2047,7 +2053,8 @@ function renderGlobalStyles(){
     var invF=sat==='none'?'invert(1)':'invert(1) '+sat;
     /** Invert on body (not html): iOS WebKit often ignores filter on html. #carbon-a11y-widget is mounted under documentElement (sibling of body) so body{filter} does not become the containing block for position:fixed — avoids panel/FAB jump when toggling invert. */
     css.push('body{filter:'+invF+' !important;-webkit-filter:'+invF+' !important;background:#fff !important;}');
-    css.push('#carbon-a11y-widget{filter:invert(1) !important;-webkit-filter:invert(1) !important;}');
+    /** filter on the host makes fixed descendants use the host as CB; use full-viewport host + pointer-events so inner .ca-assist-shell can carry FAB size/position (see applyFabFreePosition / syncOpenDockLayout). */
+    css.push('#carbon-a11y-widget.ca-a11y-invert-viewport-cb{filter:invert(1) !important;-webkit-filter:invert(1) !important;left:0 !important;top:0 !important;right:auto !important;bottom:auto !important;width:100vw !important;height:100vh !important;max-width:none !important;max-height:none !important;margin:0 !important;pointer-events:none !important;}');
   }else if(state.highContrast||state.contrastMode==='dark'){
     css.push('html,body{background:#000 !important;color:#fff !important;}');
     css.push('main,#MainContent,main,[role=main],#main,.main-content,.content-for-layout{background:#000 !important;color:#fff !important;}');
@@ -2133,7 +2140,19 @@ function renderGlobalStyles(){
   syncBigCursorOverlay();
   syncAssistHostZoomInverse();
   try{
-    if(typeof window.__carbonA11yScheduleChromeReflow==='function'){
+    var _invH=document.getElementById('carbon-a11y-widget');
+    if(_invH){
+      if(state.contrastMode==='invert'){_invH.classList.add('ca-a11y-invert-viewport-cb');}
+      else{_invH.classList.remove('ca-a11y-invert-viewport-cb');}
+    }
+  }catch(_invC){}
+  var _mountK=assistChromeMountKey();
+  var _mountChg=_mountK!==__caAssistChromeMountKeyPrev;
+  __caAssistChromeMountKeyPrev=_mountK;
+  try{
+    if(_mountChg&&typeof window.__carbonA11yReflowChromeInstant==='function'){
+      window.__carbonA11yReflowChromeInstant();
+    }else if(typeof window.__carbonA11yScheduleChromeReflow==='function'){
       window.__carbonA11yScheduleChromeReflow();
     }
   }catch(_cr){}
@@ -4069,9 +4088,34 @@ function createWidget(){
     var rrD=resolveRightDockFabRect(sz);
     return clampFab(rrD.left,rrD.top,sz);
   }
+  function assistMotionTarget(){
+    if(state.contrastMode==='invert'&&wrap.__caAssistShell){return wrap.__caAssistShell;}
+    return wrap;
+  }
   function applyFabFreePosition(left,top){
-    wrap.style.left=Math.round(left)+'px';
-    wrap.style.top=Math.round(top)+'px';
+    var sh=wrap.__caAssistShell;
+    if(state.contrastMode==='invert'&&sh){
+      try{wrap.style.left='0';wrap.style.top='0';}catch(_w){}
+      sh.style.position='fixed';
+      sh.style.left=Math.round(left)+'px';
+      sh.style.top=Math.round(top)+'px';
+      sh.style.zIndex='2147483646';
+    }else{
+      if(sh){
+        try{
+          sh.style.position='';
+          sh.style.left='';
+          sh.style.top='';
+          sh.style.zIndex='';
+          sh.style.width='';
+          sh.style.height='';
+          sh.style.minWidth='';
+          sh.style.minHeight='';
+        }catch(_s){}
+      }
+      wrap.style.left=Math.round(left)+'px';
+      wrap.style.top=Math.round(top)+'px';
+    }
     wrap.style.right='auto';
     wrap.style.bottom='auto';
   }
@@ -4086,10 +4130,10 @@ function createWidget(){
   }
   function armWrapMotion(){
     if(shouldMinimizeMotion()){return;}
-    try{wrap.style.willChange='left, top, width, height';}catch(_wm){}
+    try{assistMotionTarget().style.willChange='left, top, width, height';}catch(_wm){}
   }
   function disarmWrapMotion(){
-    try{wrap.style.willChange='';}catch(_wm){}
+    try{assistMotionTarget().style.willChange='';}catch(_wm){}
   }
   function rootPaddingTransition(){
     return shouldMinimizeMotion()?'none':'padding-left .32s ease,padding-right .32s ease';
@@ -4176,6 +4220,7 @@ function createWidget(){
   scopedStyle.textContent=widgetCss;
   var shell=document.createElement('div');
   shell.className='ca-assist-root ca-assist-shell';
+  wrap.__caAssistShell=shell;
   shadow.appendChild(scopedStyle);
   shadow.appendChild(shell);
   var live=document.createElement('div');
@@ -4594,11 +4639,20 @@ function createWidget(){
         try{
           trigger.style.visibility='';
           trigger.style.pointerEvents='';
+          var mtOpen=assistMotionTarget();
           wrap.style.minWidth='';
           wrap.style.minHeight='';
-          wrap.style.overflow='visible';
-          wrap.style.width=miniSz+'px';
-          wrap.style.height=miniSz+'px';
+          if(state.contrastMode==='invert'){
+            wrap.style.overflow='visible';
+            wrap.style.width='';
+            wrap.style.height='';
+          }else{
+            wrap.style.overflow='visible';
+            wrap.style.width=miniSz+'px';
+            wrap.style.height=miniSz+'px';
+          }
+          mtOpen.style.width=miniSz+'px';
+          mtOpen.style.height=miniSz+'px';
           trigger.style.width=miniSz+'px';
           trigger.style.height=miniSz+'px';
           trigger.style.setProperty('--ca-launcher-size',miniSz+'px');
@@ -4620,8 +4674,16 @@ function createWidget(){
         var maxPanelH=Math.max(220,Math.round(vh-closedSz-fabGapClosed-topReserve-bottomInset));
         panel.style.maxHeight=maxPanelH+'px';
         panel.style.bottom=(closedSz+fabGapClosed+bottomInset)+'px';
-        wrap.style.width=closedSz+'px';
-        wrap.style.height=closedSz+'px';
+        var mtClosed=assistMotionTarget();
+        if(state.contrastMode==='invert'){
+          wrap.style.width='';
+          wrap.style.height='';
+        }else{
+          wrap.style.width=closedSz+'px';
+          wrap.style.height=closedSz+'px';
+        }
+        mtClosed.style.width=closedSz+'px';
+        mtClosed.style.height=closedSz+'px';
         trigger.style.width=closedSz+'px';
         trigger.style.height=closedSz+'px';
         trigger.style.setProperty('--ca-launcher-size',closedSz+'px');
@@ -4657,8 +4719,9 @@ function createWidget(){
         panel.style.display='flex';
         panel.style.opacity='0';
         panel.style.transform='translateY(22px)';
-        wrap.style.transition=dockMotionTransition();
-        try{void wrap.offsetWidth;}catch(_e0){}
+        var openMt=assistMotionTarget();
+        openMt.style.transition=dockMotionTransition();
+        try{void openMt.offsetWidth;}catch(_e0){}
         requestAnimationFrame(function(){
           syncOpenDockLayout();
           requestAnimationFrame(function(){
@@ -4688,24 +4751,25 @@ function createWidget(){
         }
         fabSnapToDefaultInFlight=true;
         armWrapMotion();
-        wrap.style.transition=dockMotionTransition();
+        var snapEl=assistMotionTarget();
+        snapEl.style.transition=dockMotionTransition();
         var snapDone=false;
         function finishSnap(){
           if(snapDone){return;}
           snapDone=true;
           fabSnapToDefaultInFlight=false;
           sessionManualFab=null;
-          try{wrap.removeEventListener('transitionend',onSnapEnd);}catch(_x){}
+          try{snapEl.removeEventListener('transitionend',onSnapEnd);}catch(_x){}
           runOpenReveal();
         }
         function onSnapEnd(ev){
-          if(ev.target!==wrap){return;}
+          if(ev.target!==snapEl){return;}
           if(ev.propertyName!=='left'&&ev.propertyName!=='top'){return;}
           finishSnap();
         }
-        wrap.addEventListener('transitionend',onSnapEnd);
+        snapEl.addEventListener('transitionend',onSnapEnd);
         setTimeout(finishSnap,720);
-        try{void wrap.offsetWidth;}catch(_eSnap){}
+        try{void snapEl.offsetWidth;}catch(_eSnap){}
         applyFabFreePosition(tgt.left,tgt.top);
       }
       if(sessionManualFab){
@@ -4720,15 +4784,23 @@ function createWidget(){
       closeAnimMs=shouldMinimizeMotion()?0:500;
       armWrapMotion();
       clearViewportPush();
-      wrap.style.transition=dockMotionTransition();
+      var closeMt=assistMotionTarget();
+      closeMt.style.transition=dockMotionTransition();
       panel.style.transition=panelHideTransition();
       panel.style.opacity='0';
       panel.style.transform='translateY(22px)';
       var tsClose=fabSize();
-      wrap.style.minWidth='';
-      wrap.style.minHeight='';
-      wrap.style.width=tsClose+'px';
-      wrap.style.height=tsClose+'px';
+      closeMt.style.minWidth='';
+      closeMt.style.minHeight='';
+      if(state.contrastMode==='invert'){
+        wrap.style.width='';
+        wrap.style.height='';
+      }else{
+        wrap.style.width=tsClose+'px';
+        wrap.style.height=tsClose+'px';
+      }
+      closeMt.style.width=tsClose+'px';
+      closeMt.style.height=tsClose+'px';
       trigger.style.visibility='';
       trigger.style.pointerEvents='';
       trigger.style.width=tsClose+'px';
@@ -4743,7 +4815,7 @@ function createWidget(){
         applyFabScreenCorner(dockOpenRight,tsClose);
       },closeAnimMs);
       setTimeout(function(){
-        wrap.style.transition='';
+        try{assistMotionTarget().style.transition='';}catch(_ct){}
         disarmWrapMotion();
       },Math.max(closeAnimMs,700));
     }
@@ -4784,8 +4856,9 @@ function createWidget(){
     try{trigger.releasePointerCapture(e.pointerId);}catch(_e){}
     trigger.classList.remove('ca-assist-launcher--dragging');
     if(launcherDrag.moved){
-      var lx=parseFloat(wrap.style.left)||0;
-      var ly=parseFloat(wrap.style.top)||0;
+      var mEl=assistMotionTarget();
+      var lx=parseFloat(mEl.style.left)||0;
+      var ly=parseFloat(mEl.style.top)||0;
       rememberManualFab(lx,ly);
       launcherDrag.suppressClick=true;
       if(panel.style.display!=='none'){syncOpenDockLayout();}
@@ -4799,8 +4872,9 @@ function createWidget(){
     launcherDrag.moved=false;
     launcherDrag.startX=e.clientX;
     launcherDrag.startY=e.clientY;
-    launcherDrag.origLeft=parseFloat(wrap.style.left)||0;
-    launcherDrag.origTop=parseFloat(wrap.style.top)||0;
+    var oEl=assistMotionTarget();
+    launcherDrag.origLeft=parseFloat(oEl.style.left)||0;
+    launcherDrag.origTop=parseFloat(oEl.style.top)||0;
     try{trigger.setPointerCapture(e.pointerId);}catch(_e){}
     trigger.classList.add('ca-assist-launcher--dragging');
     window.addEventListener('pointermove',onFabPointerMove,true);
@@ -4844,8 +4918,9 @@ function createWidget(){
       return;
     }
     if(sessionManualFab){
-      var lx=parseFloat(wrap.style.left)||0;
-      var ly=parseFloat(wrap.style.top)||0;
+      var rfEl=assistMotionTarget();
+      var lx=parseFloat(rfEl.style.left)||0;
+      var ly=parseFloat(rfEl.style.top)||0;
       var c=clampFab(lx,ly,sz);
       if(c.left!==lx||c.top!==ly){
         applyFabFreePosition(c.left,c.top);
@@ -4889,8 +4964,9 @@ function createWidget(){
   }catch(_caMount){
     body.appendChild(wrap);
   }
-  wrap.style.width=ts+'px';
-  wrap.style.height=ts+'px';
+  var initMt=assistMotionTarget();
+  initMt.style.width=ts+'px';
+  initMt.style.height=ts+'px';
   placeFabInitial();
   function refitDockIfDefault(){
     try{
@@ -4929,9 +5005,12 @@ function createWidget(){
       try{
         var ae=document.activeElement;
         if(!ae){return false;}
-        if(ae.id==='carbon-a11y-widget'){return true;}
         var w=document.getElementById('carbon-a11y-widget');
-        if(w&&w.shadowRoot&&w.shadowRoot.contains(ae)){return true;}
+        if(!w||!w.shadowRoot){return false;}
+        /** Only treat focus inside the open shadow tree as "in the widget". The host div itself must not
+         *  count: some browsers leave focus on the host or retarget oddly; counting the host made us
+         *  preventDefault on keys meant for the storefront (search, cart notes, checkout). */
+        if(w.shadowRoot.contains(ae)){return true;}
       }catch(_e){}
       return false;
     }
@@ -4983,9 +5062,21 @@ function createWidget(){
       function(ev){
         try{
           if(ev.altKey||ev.ctrlKey||ev.metaKey){return;}
+          if(ev.isComposing||(ev.keyCode===229)){return;}
           var k=ev.key;
           if(k.length!==1||k===' '||k==='\u00a0'){return;}
+          var aeDoc=document.activeElement;
+          if(aeDoc&&isDomTextEditingElement(aeDoc)&&!isLikelyInsideCarbonWidget(aeDoc)){return;}
+          try{
+            var path=(typeof ev.composedPath==='function'?ev.composedPath():[])||[];
+            for(var pi=0;pi<path.length;pi++){
+              var pn=path[pi];
+              if(pn&&pn.nodeType===1&&isDomTextEditingElement(pn)&&!isLikelyInsideCarbonWidget(pn)){return;}
+            }
+          }catch(_cp){}
           if(!activeInsideCarbonAssistHost()){return;}
+          var tEv=ev.target;
+          if(tEv&&isDomTextEditingElement(tEv)&&!isLikelyInsideCarbonWidget(tEv)){return;}
           var vis=pickVisibleStorefrontSearchInput();
           if(!vis||typeof vis.focus!=='function'){return;}
           ev.preventDefault();
@@ -5074,6 +5165,29 @@ function createWidget(){
           try{
             reflowFabToViewport();
             syncOpenDockLayout();
+          }catch(_e){}
+        });
+      });
+    }catch(_e){}
+  };
+  window.__carbonA11yReflowChromeInstant=function(){
+    try{
+      wrap.style.transition='none';
+      var sh=wrap.__caAssistShell;
+      if(sh){sh.style.transition='none';}
+      try{
+        wrap.style.willChange='';
+        if(sh){sh.style.willChange='';}
+      }catch(_wc){}
+      disarmWrapMotion();
+      refitAssistChromeFromState();
+      void wrap.offsetWidth;
+      if(sh){void sh.offsetWidth;}
+      requestAnimationFrame(function(){
+        requestAnimationFrame(function(){
+          try{
+            wrap.style.removeProperty('transition');
+            if(sh){sh.style.removeProperty('transition');}
           }catch(_e){}
         });
       });
