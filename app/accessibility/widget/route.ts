@@ -2016,6 +2016,17 @@ function renderGlobalStyles(){
     return;
   }
   syncPresetHostProfileClasses();
+  var __contrastChromeFabSnap=null;
+  try{
+    if(assistChromeMountKey()!==__caAssistChromeMountKeyPrev){
+      var __cfh=document.getElementById('carbon-a11y-widget');
+      var __cft=__cfh&&__cfh.shadowRoot&&__cfh.shadowRoot.querySelector('.ca-assist-launcher--fab');
+      if(__cft&&typeof __cft.getBoundingClientRect==='function'){
+        var __cfr=__cft.getBoundingClientRect();
+        __contrastChromeFabSnap={left:__cfr.left,top:__cfr.top,width:__cfr.width,height:__cfr.height};
+      }
+    }
+  }catch(_snapE){}
   if(state.dyslexiaTypeface){ensureDyslexiaFont();}
   try{
     if(state.legibleArialFont){root.classList.add('ca-a11y-legible-arial');}
@@ -2054,7 +2065,8 @@ function renderGlobalStyles(){
     /** Invert on body (not html): iOS WebKit often ignores filter on html. #carbon-a11y-widget is mounted under documentElement (sibling of body) so body{filter} does not become the containing block for position:fixed — avoids panel/FAB jump when toggling invert. */
     css.push('body{filter:'+invF+' !important;-webkit-filter:'+invF+' !important;background:#fff !important;}');
     /** filter on the host makes fixed descendants use the host as CB; use full-viewport host + pointer-events so inner .ca-assist-shell can carry FAB size/position (see applyFabFreePosition / syncOpenDockLayout). */
-    css.push('#carbon-a11y-widget.ca-a11y-invert-viewport-cb{filter:invert(1) !important;-webkit-filter:invert(1) !important;left:0 !important;top:0 !important;right:auto !important;bottom:auto !important;width:100vw !important;height:100vh !important;max-width:none !important;max-height:none !important;margin:0 !important;pointer-events:none !important;}');
+    /** Use inset stretch, not 100vw: vw includes scrollbar gutter on many engines while innerWidth/panel right:0 do not — toggling invert shifts scrollbar/body overflow and the docked FAB/panel jump. */
+    css.push('#carbon-a11y-widget.ca-a11y-invert-viewport-cb{filter:invert(1) !important;-webkit-filter:invert(1) !important;position:fixed !important;left:0 !important;top:0 !important;right:0 !important;bottom:0 !important;width:auto !important;height:auto !important;max-width:none !important;max-height:none !important;margin:0 !important;pointer-events:none !important;}');
   }else if(state.highContrast||state.contrastMode==='dark'){
     css.push('html,body{background:#000 !important;color:#fff !important;}');
     css.push('main,#MainContent,main,[role=main],#main,.main-content,.content-for-layout{background:#000 !important;color:#fff !important;}');
@@ -2151,11 +2163,15 @@ function renderGlobalStyles(){
   __caAssistChromeMountKeyPrev=_mountK;
   try{
     if(_mountChg&&typeof window.__carbonA11yReflowChromeInstant==='function'){
+      window.__caContrastChromeFabSnap=__contrastChromeFabSnap;
       window.__carbonA11yReflowChromeInstant();
     }else if(typeof window.__carbonA11yScheduleChromeReflow==='function'){
       window.__carbonA11yScheduleChromeReflow();
     }
   }catch(_cr){}
+  finally{
+    try{window.__caContrastChromeFabSnap=null;}catch(_z){}
+  }
 }
 
 function track(eventName,payload){
@@ -5172,6 +5188,16 @@ function createWidget(){
   };
   window.__carbonA11yReflowChromeInstant=function(){
     try{
+      var brSnap=null;
+      try{
+        var gs=window.__caContrastChromeFabSnap;
+        window.__caContrastChromeFabSnap=null;
+        if(gs&&typeof gs.left==='number'&&typeof gs.top==='number'){
+          brSnap=gs;
+        }else if(trigger&&typeof trigger.getBoundingClientRect==='function'){
+          brSnap=trigger.getBoundingClientRect();
+        }
+      }catch(_g){}
       wrap.style.transition='none';
       var sh=wrap.__caAssistShell;
       if(sh){sh.style.transition='none';}
@@ -5181,6 +5207,12 @@ function createWidget(){
       }catch(_wc){}
       disarmWrapMotion();
       refitAssistChromeFromState();
+      if(brSnap&&brSnap.width>=12&&brSnap.height>=12){
+        var szHold=Math.max(44,Math.round(brSnap.width)||fabSize());
+        var cHold=clampFab(Math.round(brSnap.left),Math.round(brSnap.top),szHold);
+        applyFabFreePosition(cHold.left,cHold.top);
+        syncOpenDockLayout();
+      }
       void wrap.offsetWidth;
       if(sh){void sh.offsetWidth;}
       requestAnimationFrame(function(){
