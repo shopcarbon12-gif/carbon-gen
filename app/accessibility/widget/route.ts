@@ -495,6 +495,44 @@ function bigCursorPointerTargetIsTextEntry(t){
     return ty==='text'||ty==='search'||ty==='email'||ty==='url'||ty==='tel'||ty==='password'||ty==='number'||ty==='date'||ty==='datetime-local'||ty==='month'||ty==='time'||ty==='week';
   }catch(_e){return false;}
 }
+/** Skip global shortcuts when focus is in any real text field (incl. shadow/custom controls). */
+function isDomTextEditingElement(el){
+  try{
+    if(!el || el.nodeType !== 1) return false;
+    if (el.isContentEditable) return true;
+    var tag = String(el.tagName || "").toUpperCase();
+    if (tag === "TEXTAREA") return true;
+    if (tag === "SELECT") return true;
+    if (tag === "INPUT") {
+      var ty = String(el.getAttribute("type") || "text").toLowerCase();
+      if (
+        ty === "hidden" ||
+        ty === "checkbox" ||
+        ty === "radio" ||
+        ty === "submit" ||
+        ty === "button" ||
+        ty === "range" ||
+        ty === "color" ||
+        ty === "image" ||
+        ty === "file" ||
+        ty === "reset"
+      ) {
+        return false;
+      }
+      return true;
+    }
+    var r = String(el.getAttribute("role") || "").toLowerCase();
+    if (r === "textbox" || r === "searchbox" || r === "combobox") return true;
+    if (el.closest) {
+      if (el.closest('textarea,select,[contenteditable="true"],[contenteditable="plaintext-only"]')) return true;
+      var inp = el.closest("input");
+      if (inp && inp !== el && isDomTextEditingElement(inp)) return true;
+    }
+  } catch (_e) {
+    /* ignore */
+  }
+  return false;
+}
 function syncBigCursorOverlay(){
   try{
     if(!state.bigCursor||(isCarbonAssistStudioHost()&&!shouldApplyPageWideAccessibilityCss())){
@@ -3569,11 +3607,8 @@ function handleMotorPresetNavKeydown(ev){
   var key=String(ev.key||'').toLowerCase();
   if('mhfbg'.indexOf(key)<0)return;
   var el=ev.target;
-  var tag=el&&el.tagName;
-  if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'){
-    if(bigCursorPointerTargetIsTextEntry(el)){return;}
-  }
-  try{if(el&&el.isContentEditable)return;}catch(_ce){}
+  var ae=document.activeElement;
+  if(isDomTextEditingElement(el)||isDomTextEditingElement(ae)){return;}
   ev.preventDefault();
   if(key==='h'){
     jumpToSelector('h1,h2,h3,h4,h5,h6,[role="heading"]',ann('jumpHeadingsOk'),ann('jumpHeadingsNone'));
@@ -4881,9 +4916,8 @@ function createWidget(){
       }
       if(k!=='a'){return;}
       var el=ev.target;
-      var tag=el&&el.tagName;
-      if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'){return;}
-      try{if(el&&el.isContentEditable){return;}}catch(_ce){}
+      var ae=document.activeElement;
+      if(isDomTextEditingElement(el)||isDomTextEditingElement(ae)){return;}
       ev.preventDefault();
       var closed=panel.style.display==='none'||panel.style.display==='';
       setOpen(closed);
