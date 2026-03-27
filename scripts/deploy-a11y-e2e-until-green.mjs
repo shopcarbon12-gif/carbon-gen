@@ -33,6 +33,28 @@ function run(cmd, args, extraEnv = {}) {
   return res.status === 0;
 }
 
+/** Windows: npm is `npm.cmd` and must run under shell when invoked as a single script line. */
+function runNode(scriptRelative, extraEnv = {}) {
+  const res = spawnSync(process.execPath, [join(REPO, scriptRelative)], {
+    cwd: REPO,
+    stdio: "inherit",
+    env: { ...process.env, ...extraEnv },
+  });
+  return res.status === 0;
+}
+
+function runNpm(scriptName, extraEnv = {}) {
+  const line =
+    process.platform === "win32" ? `npm.cmd run ${scriptName}` : `npm run ${scriptName}`;
+  const res = spawnSync(line, {
+    cwd: REPO,
+    stdio: "inherit",
+    shell: true,
+    env: { ...process.env, ...extraEnv },
+  });
+  return res.status === 0;
+}
+
 function readLatestVerification() {
   const pointer = join(REPO, "reports", ".last-a11y-verification-dir.txt");
   if (!existsSync(pointer)) return null;
@@ -53,18 +75,17 @@ async function main() {
   for (let round = 1; round <= MAX_DEPLOY_ROUNDS; round++) {
     console.log(`\n========== Deploy round ${round}/${MAX_DEPLOY_ROUNDS} ==========\n`);
 
-    const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
-    if (!run(npmCmd, ["run", "deploy:coolify"], env)) {
+    if (!runNpm("deploy:coolify", env)) {
       console.error("deploy:coolify failed — aborting loop.");
       process.exit(1);
     }
 
     console.log("\n--- Push Shopify accessibility snippet (wrev sync) ---\n");
-    run("node", ["scripts/push-carbon-accessibility-widget-theme.mjs"]);
+    runNode(join("scripts", "push-carbon-accessibility-widget-theme.mjs"));
 
     for (let attempt = 1; attempt <= REPORT_RETRIES; attempt++) {
       console.log(`\n--- Verification report attempt ${attempt}/${REPORT_RETRIES} ---\n`);
-      const okRun = run("node", ["scripts/generate-a11y-widget-html-reports.mjs"]);
+      const okRun = runNode(join("scripts", "generate-a11y-widget-html-reports.mjs"));
       const v = readLatestVerification();
 
       if (v?.ok) {
