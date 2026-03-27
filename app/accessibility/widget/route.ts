@@ -5017,36 +5017,85 @@ function createWidget(){
   },true);
   if(!window.__carbonA11yStoreSearchFocusGuard){
     window.__carbonA11yStoreSearchFocusGuard=true;
-    function activeInsideCarbonAssistHost(){
+    function isStorefrontSearchInput(el){
+      if(!el||el.nodeType!==1){return false;}
+      if(String(el.tagName||'')!=='INPUT'){return false;}
+      if(el.disabled||el.readOnly){return false;}
+      var ty=String(el.getAttribute('type')||'text').toLowerCase();
+      if(ty==='hidden'){return false;}
+      var nm=String(el.getAttribute('name')||'').toLowerCase();
+      if(ty==='search'||nm==='q'||nm==='query'){return true;}
+      return false;
+    }
+    function assistFocusBlocksStorefrontTyping(){
       try{
         var ae=document.activeElement;
         if(!ae){return false;}
         var w=document.getElementById('carbon-a11y-widget');
-        if(!w||!w.shadowRoot){return false;}
-        /** Only treat focus inside the open shadow tree as "in the widget". The host div itself must not
-         *  count: some browsers leave focus on the host or retarget oddly; counting the host made us
-         *  preventDefault on keys meant for the storefront (search, cart notes, checkout). */
-        if(w.shadowRoot.contains(ae)){return true;}
+        if(!w){return false;}
+        /** Host can hold focus after opening search; keys then never reach Shopify's input inside <predictive-search> (often in open shadow). */
+        if(ae===w){return true;}
+        if(w.shadowRoot&&w.shadowRoot.contains(ae)){return true;}
+      }catch(_e){}
+      return false;
+    }
+    function storefrontPathHasEditableOutsideWidget(ev){
+      try{
+        var path=(typeof ev.composedPath==='function'?ev.composedPath():[])||[];
+        for(var pi=0;pi<path.length;pi++){
+          var pn=path[pi];
+          if(pn&&pn.nodeType===1&&isDomTextEditingElement(pn)&&!isLikelyInsideCarbonWidget(pn)){return true;}
+        }
       }catch(_e){}
       return false;
     }
     function pickVisibleStorefrontSearchInput(){
       try{
-        var nodes=document.querySelectorAll('input[name="q"],input[type="search"]');
-        for(var i=0;i<nodes.length;i++){
-          var el=nodes[i];
-          if(!el||el.nodeType!==1){continue;}
-          if(el.closest&&el.closest('#carbon-a11y-widget')){continue;}
-          if(el.disabled||el.readOnly){continue;}
-          var ty=String(el.getAttribute('type')||'text').toLowerCase();
-          if(ty==='hidden'){continue;}
-          var cs=window.getComputedStyle(el);
-          if(cs.visibility==='hidden'||cs.display==='none'||parseFloat(cs.opacity||'1')<0.05){continue;}
-          var r=el.getBoundingClientRect();
-          if(r.width>=8&&r.height>=8&&r.bottom>0&&r.right>0){return el;}
+        var best=null;
+        var bestArea=0;
+        function consider(el){
+          if(!isStorefrontSearchInput(el)){return;}
+          if(isLikelyInsideCarbonWidget(el)){return;}
+          try{
+            var cs=window.getComputedStyle(el);
+            if(cs.visibility==='hidden'||cs.display==='none'||parseFloat(cs.opacity||'1')<0.05){return;}
+            var r=el.getBoundingClientRect();
+            if(r.width<8||r.height<8){return;}
+            if(r.bottom<=0||r.right<=0){return;}
+            var ar=Math.round(r.width*r.height);
+            if(ar>bestArea){bestArea=ar;best=el;}
+          }catch(_e){}
         }
+        forEachElementDepthFirst(document.documentElement,consider);
+        if(best){return best;}
       }catch(_q){}
       return null;
+    }
+    function resolveSearchFieldFromPointer(ev,t){
+      if(t&&isStorefrontSearchInput(t)){return t;}
+      if(t&&t.closest){
+        var c=t.closest('input[type="search"],input[name="q"],input[name="query"]');
+        if(c){return c;}
+      }
+      if(ev&&typeof ev.composedPath==='function'){
+        var path=ev.composedPath();
+        for(var i=0;i<path.length;i++){
+          var n=path[i];
+          if(n&&n.nodeType===1&&isStorefrontSearchInput(n)){return n;}
+        }
+      }
+      return null;
+    }
+    function blurCarbonAssistInnerFocus(){
+      try{
+        var w=document.getElementById('carbon-a11y-widget');
+        if(!w||!w.shadowRoot){return;}
+        var inner=w.shadowRoot.activeElement;
+        if(inner&&typeof inner.blur==='function'){inner.blur();}
+        try{
+          if(document.activeElement===w&&typeof w.blur==='function'){w.blur();}
+        }catch(_hb){}
+      }catch(_b){}
     }
     document.addEventListener(
       'pointerdown',
@@ -5054,22 +5103,31 @@ function createWidget(){
         try{
           var t=ev.target;
           if(!t||t.nodeType!==1){return;}
-          if(t.closest&&t.closest('#carbon-a11y-widget')){return;}
-          var field=null;
-          if(typeof t.matches==='function'&&(t.matches('input[type="search"]')||t.matches('input[name="q"]'))){
-            field=t;
-          }else if(t.closest){
-            field=t.closest('input[type="search"],input[name="q"]');
-          }
-          if(!field){return;}
-          var w=document.getElementById('carbon-a11y-widget');
-          if(!w||!w.shadowRoot){return;}
-          var inner=null;
           try{
-            inner=w.shadowRoot.activeElement;
-          }catch(_i){}
-          if(inner&&typeof inner.blur==='function'){inner.blur();}
+            var cp=typeof ev.composedPath==='function'?ev.composedPath():[];
+            for(var ci=0;ci<cp.length;ci++){
+              var node=cp[ci];
+              if(node&&node.nodeType===1&&node.id==='carbon-a11y-widget'){return;}
+            }
+          }catch(_cx){}
+          if(t.closest&&t.closest('#carbon-a11y-widget')){return;}
+          var field=resolveSearchFieldFromPointer(ev,t);
+          if(!field){return;}
+          blurCarbonAssistInnerFocus();
         }catch(_p){}
+      },
+      true,
+    );
+    document.addEventListener(
+      'focusin',
+      function(ev){
+        try{
+          var t=ev.target;
+          if(!t||t.nodeType!==1){return;}
+          if(isLikelyInsideCarbonWidget(t)){return;}
+          if(!isStorefrontSearchInput(t)){return;}
+          blurCarbonAssistInnerFocus();
+        }catch(_fi){}
       },
       true,
     );
@@ -5083,14 +5141,8 @@ function createWidget(){
           if(k.length!==1||k===' '||k==='\u00a0'){return;}
           var aeDoc=document.activeElement;
           if(aeDoc&&isDomTextEditingElement(aeDoc)&&!isLikelyInsideCarbonWidget(aeDoc)){return;}
-          try{
-            var path=(typeof ev.composedPath==='function'?ev.composedPath():[])||[];
-            for(var pi=0;pi<path.length;pi++){
-              var pn=path[pi];
-              if(pn&&pn.nodeType===1&&isDomTextEditingElement(pn)&&!isLikelyInsideCarbonWidget(pn)){return;}
-            }
-          }catch(_cp){}
-          if(!activeInsideCarbonAssistHost()){return;}
+          if(storefrontPathHasEditableOutsideWidget(ev)){return;}
+          if(!assistFocusBlocksStorefrontTyping()){return;}
           var tEv=ev.target;
           if(tEv&&isDomTextEditingElement(tEv)&&!isLikelyInsideCarbonWidget(tEv)){return;}
           var vis=pickVisibleStorefrontSearchInput();
