@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { formatAppDateTime } from "@/lib/formatAppDateTime";
 
 type ItemDetails = {
   itemId: string;
@@ -61,7 +62,7 @@ function formatLastSeen(value: string | null | undefined) {
   if (!raw) return "-";
   const parsed = Date.parse(raw);
   if (!Number.isFinite(parsed)) return raw;
-  return new Date(parsed).toLocaleString();
+  return formatAppDateTime(parsed);
 }
 
 export default function LightspeedCatalogItemPage({ itemId }: { itemId: string }) {

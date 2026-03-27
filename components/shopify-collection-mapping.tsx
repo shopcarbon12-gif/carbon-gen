@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ShopifyMenuItemsTree from "@/components/shopify-menu-items-tree";
+import { formatAppDateTime } from "@/lib/formatAppDateTime";
 import { normalizeMenuPath } from "@/lib/shopifyCollectionSkuParser";
 import {
   KPI_NEEDS_REVIEW_UNION_FILTER,
@@ -582,7 +583,7 @@ function formatDraftSavedAt(value: string | null | undefined) {
   if (!raw) return "Not saved yet";
   const ts = Date.parse(raw);
   if (!Number.isFinite(ts)) return "Not saved yet";
-  return new Date(ts).toLocaleString();
+  return formatAppDateTime(ts);
 }
 
 export default function ShopifyCollectionMapping() {
@@ -5791,7 +5792,10 @@ export default function ShopifyCollectionMapping() {
             </button>
             <h3>Collection Audit Report</h3>
             <p className="muted" style={{ marginTop: 4 }}>
-              Generated: {new Date(auditGeneratedAt || collectionAudit.generatedAt).toLocaleString()}
+              Generated:{" "}
+              {(auditGeneratedAt || collectionAudit.generatedAt)
+                ? formatAppDateTime(auditGeneratedAt || collectionAudit.generatedAt!)
+                : "—"}
             </p>
             <div className="kpi" style={{ marginTop: 10 }}>
               <div className="k">

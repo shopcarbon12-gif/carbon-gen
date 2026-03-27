@@ -2,10 +2,11 @@
   Carbon Assist widget (all pages). Launcher uses true bottom-right; shifts left only when overlapping other fixed FABs.
 
   In Shopify Admin: Online Store → Themes → Edit code → Layout → theme.liquid
-  Place this line just before </body>:
+  Place these lines just before </body> (snippet `carbon-account-links-a11y` labels icon-only /account links):
+    {% render 'carbon-account-links-a11y' %}
     {% render 'carbon-accessibility-widget' %}
 
-  If your theme uses a different layout (e.g. theme.liquid only has sections), add the same render
+  If your theme uses a different layout (e.g. theme.liquid only has sections), add the same renders
   to the main layout file that outputs </body>.
 
   Managed scope: loads the latest saved config from the Carbon app (Publish in /accessibility updates the DB;
@@ -15,6 +16,6 @@
   Bump wrev when widget script logic changes (cache bust).
 {% endcomment %}
 <script
-  src="https://app.shopcarbon.com/accessibility/widget?scope=default&wrev=119"
+  src="https://app.shopcarbon.com/accessibility/widget?scope=default&wrev=126"
   defer
 ></script>

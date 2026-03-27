@@ -245,7 +245,7 @@ export async function GET(request: Request) {
         "</svg>"
     );
 
-  const js = `(function(){var __caRev=119;if(window.__carbonA11yRev===__caRev){return;}window.__carbonA11yRev=__caRev;window.__carbonA11yLoaded=true;
+  const js = `(function(){var __caRev=126;if(window.__carbonA11yRev===__caRev){return;}window.__carbonA11yRev=__caRev;window.__carbonA11yLoaded=true;
 /* ca-assist-ui v3 studio | Phase A+B a11y (see docs/accessibility-widget-phase-a-b-spec.md)
  * Panel: non-modal named region (not aria-modal). No focus trap — Tab may move into page content.
  * Esc closes only while focus is inside the panel (keydown on panel). Space toggles switches; Arrow/Home/End in radiogroups.
@@ -345,6 +345,15 @@ function isCarbonAssistStudioHost(){
     return false;
   }
 }
+/** When embedded on /accessibility, studio sets __carbonA11yAllowHostAccessibilityPaint so contrast/invert/etc. apply to the page (otherwise renderGlobalStyles short-circuits and modes only affect the panel). */
+function shouldApplyPageWideAccessibilityCss(){
+  try{
+    if(!isCarbonAssistStudioHost()){return true;}
+    return window.__carbonA11yAllowHostAccessibilityPaint===true;
+  }catch(_e){
+    return false;
+  }
+}
 function onVideoPlayWhilePaused(ev){
   try{
     if(!state.pauseAnimations)return;
@@ -377,7 +386,7 @@ function __caScanAddedNodeForVideos(node){
 }
 function syncPauseAnimationsMedia(){
   try{
-    if(isCarbonAssistStudioHost()){
+    if(isCarbonAssistStudioHost()&&!shouldApplyPageWideAccessibilityCss()){
       if(__caVideoPauseBound){
         document.removeEventListener('play',onVideoPlayWhilePaused,true);
         __caVideoPauseBound=false;
@@ -487,7 +496,7 @@ function bigCursorPointerTargetIsTextEntry(t){
 }
 function syncBigCursorOverlay(){
   try{
-    if(!state.bigCursor||isCarbonAssistStudioHost()){
+    if(!state.bigCursor||(isCarbonAssistStudioHost()&&!shouldApplyPageWideAccessibilityCss())){
       __caTeardownBigCursorOverlay();
       return;
     }
@@ -567,7 +576,7 @@ var widgetCss='' +
   '.ca-assist-brand{display:inline-flex;align-items:center;min-width:0;max-width:100%}' +
   '.ca-assist-logo-img{display:block;max-width:min(200px,55vw);height:auto;object-fit:contain;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))}' +
   '.ca-assist-wordmark{font-weight:750;font-size:10px;letter-spacing:.2em !important;color:#f4f4f5;text-transform:uppercase !important;white-space:nowrap}' +
-  '.ca-assist-panel{position:fixed;z-index:1;top:auto;left:auto;right:auto;bottom:auto;max-width:min(520px,calc(100vw - 20px));width:100%;color:#e4e4e7;border:1px solid color-mix(in srgb,var(--ca-accent,#a78bfa) 38%,rgba(255,255,255,.1));padding:0;border-radius:22px;display:none;max-height:min(90vh,880px);overflow-x:hidden;overflow-y:hidden;flex-direction:column;background:linear-gradient(180deg,rgba(14,10,24,.18) 0%,rgba(18,12,30,.16) 45%,rgba(10,8,18,.22) 100%),linear-gradient(180deg,transparent 0%,transparent 58%,rgba(200,100,70,.11) 100%),linear-gradient(125deg,color-mix(in srgb,var(--ca-accent,#7c3aed) 26%,transparent) 0%,transparent 58%),radial-gradient(ellipse 95% 65% at 50% -5%,rgba(110,80,180,.26),transparent 55%),url(' + JSON.stringify(widgetPanelBg) + ') center center/cover no-repeat;background-color:#221f32;backdrop-filter:blur(16px) saturate(1.28);-webkit-backdrop-filter:blur(16px) saturate(1.28);box-shadow:0 32px 96px rgba(0,0,0,.82),0 0 0 1px rgba(255,255,255,.06) inset,0 0 72px color-mix(in srgb,var(--ca-accent,#7c3aed) 24%,transparent),0 1px 0 rgba(255,255,255,.1) inset,0 6px 36px color-mix(in srgb,var(--ca-accent,#8b5cf6) 32%,transparent)}' +
+  '.ca-assist-panel{position:fixed;z-index:1;top:auto;left:auto;right:auto;bottom:auto;max-width:min(520px,calc(100vw - 20px - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px)));width:100%;color:#e4e4e7;border:1px solid color-mix(in srgb,var(--ca-accent,#a78bfa) 38%,rgba(255,255,255,.1));padding:0;border-radius:22px;display:none;max-height:min(90dvh,880px,calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px) - 24px));overflow-x:hidden;overflow-y:hidden;flex-direction:column;background:linear-gradient(180deg,rgba(14,10,24,.18) 0%,rgba(18,12,30,.16) 45%,rgba(10,8,18,.22) 100%),linear-gradient(180deg,transparent 0%,transparent 58%,rgba(200,100,70,.11) 100%),linear-gradient(125deg,color-mix(in srgb,var(--ca-accent,#7c3aed) 26%,transparent) 0%,transparent 58%),radial-gradient(ellipse 95% 65% at 50% -5%,rgba(110,80,180,.26),transparent 55%),url(' + JSON.stringify(widgetPanelBg) + ') center center/cover no-repeat;background-color:#221f32;backdrop-filter:blur(16px) saturate(1.28);-webkit-backdrop-filter:blur(16px) saturate(1.28);box-shadow:0 32px 96px rgba(0,0,0,.82),0 0 0 1px rgba(255,255,255,.06) inset,0 0 72px color-mix(in srgb,var(--ca-accent,#7c3aed) 24%,transparent),0 1px 0 rgba(255,255,255,.1) inset,0 6px 36px color-mix(in srgb,var(--ca-accent,#8b5cf6) 32%,transparent)}' +
   '.ca-assist-panel,.ca-assist-shell .ca-assist-panel{display:flex;flex-direction:column;min-height:0;align-items:stretch}' +
   '.ca-assist-panel::before{content:"";pointer-events:none;position:absolute;inset:0;border-radius:inherit;z-index:0;opacity:.045;mix-blend-mode:overlay;background-image:url("data:image/svg+xml,%3Csvg xmlns%3D%22http://www.w3.org/2000/svg%22 viewBox%3D%220 0 256 256%22%3E%3Cfilter id%3D%22n%22%3E%3CfeTurbulence type%3D%22fractalNoise%22 baseFrequency%3D%220.85%22 numOctaves%3D%224%22 stitchTiles%3D%22stitch%22/%3E%3C/filter%3E%3Crect width%3D%22100%25%22 height%3D%22100%25%22 filter%3D%22url(%23n)%22 opacity%3D%220.65%22/%3E%3C/svg%3E");background-size:200px}' +
   '.ca-assist-panel::after{content:"";pointer-events:none;position:absolute;left:12%;right:12%;bottom:0;height:2px;border-radius:2px;z-index:0;background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--ca-accent,#c4b5fd) 55%,#fff),transparent);opacity:.55;box-shadow:0 0 20px color-mix(in srgb,var(--ca-accent,#a78bfa) 50%,transparent)}' +
@@ -586,7 +595,7 @@ var widgetCss='' +
   '.ca-assist-close{border:1px solid rgba(255,255,255,.14);background:rgba(0,0,0,.35);color:#fafafa;border-radius:14px;width:38px;height:38px;font-size:20px;line-height:1;cursor:pointer;flex:0 0 auto;transition:background .15s ease,border-color .15s ease,box-shadow .15s ease}' +
   '.ca-assist-close:hover{background:rgba(255,255,255,.1);border-color:color-mix(in srgb,var(--ca-accent,#c4b5fd) 45%,rgba(255,255,255,.25));box-shadow:0 0 20px color-mix(in srgb,var(--ca-accent,#7c3aed) 35%,transparent)}' +
   '.ca-assist-close:focus-visible{outline:2px solid color-mix(in srgb,var(--ca-accent,#c4b5fd) 70%,#fff);outline-offset:2px}' +
-  '.ca-assist-panel-body{flex:1 1 auto;min-height:0;max-height:100%;overflow-x:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain;touch-action:pan-y;padding:22px 18px 40px;display:flex;flex-direction:column;gap:20px;overflow-wrap:anywhere;word-wrap:break-word}' +
+  '.ca-assist-panel-body{flex:1 1 auto;min-height:0;max-height:100%;overflow-x:hidden;overflow-y:auto;scrollbar-gutter:stable;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain;touch-action:pan-y;padding:22px 18px 40px;display:flex;flex-direction:column;gap:20px;overflow-wrap:anywhere;word-wrap:break-word}' +
   '.ca-assist-block{display:flex;flex-direction:column;gap:8px}' +
   '.ca-assist-block > .ca-assist-sec{margin-bottom:0}' +
   '.ca-assist-stack{display:flex;flex-direction:column;gap:0;border:0;border-radius:0;background:transparent;overflow:visible}' +
@@ -644,6 +653,7 @@ var widgetCss='' +
   '.ca-assist-toggle.is-on .ca-assist-switch__thumb{transform:translateX(22px)}' +
   '.ca-assist-quick-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:7px;width:100%;max-width:100%;align-items:stretch}' +
   '.ca-assist-quick-grid--one{grid-template-columns:1fr !important}' +
+  '@media (max-width:480px){.ca-assist-panel{max-width:calc(100vw - 14px - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px)) !important;border-radius:18px}.ca-assist-panel-body{padding-left:14px;padding-right:14px;padding-bottom:calc(36px + env(safe-area-inset-bottom,0px))}.ca-assist-close{min-width:44px;min-height:44px}.ca-assist-launcher--fab{min-width:48px;min-height:48px}}' +
   '@media (max-width:380px){.ca-assist-quick-grid:not(.ca-assist-quick-grid--one){grid-template-columns:1fr}}' +
   '.ca-assist-quick-grid > .ca-assist-tile{height:100%;min-height:98px;box-sizing:border-box;max-width:100%}' +
   '.ca-assist-tile{position:relative;display:flex;flex-direction:column;align-items:stretch;gap:6px;text-align:left;border:1px solid rgba(255,255,255,.14);border-radius:16px;background:linear-gradient(180deg,rgba(38,40,56,.72) 0%,rgba(16,14,28,.88) 42%,rgba(8,9,16,.94) 100%);color:#e4e4e7;padding:10px 10px 8px;min-height:98px;max-width:100%;cursor:inherit;transition:background .14s ease,border-color .14s ease,box-shadow .14s ease;box-sizing:border-box;box-shadow:inset 0 1px 0 rgba(255,255,255,.2),inset 0 -1px 0 rgba(0,0,0,.42),0 2px 10px rgba(0,0,0,.28)}' +
@@ -1490,6 +1500,21 @@ function hydrateState(){
   }catch(_e){}
 }
 
+/** Storefront only: each full page load clears strong page-wide visual modes (e.g. invert) so the site
+ *  looks normal until the user opens the widget again. Other prefs (text size, fonts, links, motion) stay
+ *  persisted. Studio preview host skips this. Panel already starts closed in createWidget. */
+function applyStorefrontFreshSessionBaseline(){
+  if(isCarbonAssistStudioHost()){return;}
+  state.contrastMode='none';
+  state.highContrast=false;
+  state.plainLightUi=false;
+  state.saturation='normal';
+  state.hideImages=false;
+  state.readingGuide=false;
+  state.readingMask=false;
+  saveState();
+}
+
 function effectiveReducedMotion(){
   if(state.motionPreference==='reduce'){return true;}
   if(state.motionPreference==='allow'){return false;}
@@ -1909,9 +1934,18 @@ function syncEnhancedTooltips(){
   }catch(_e){}
 }
 
+function ensureAssistHostMount(){
+  try{
+    var w=document.getElementById('carbon-a11y-widget');
+    var html=document.documentElement;
+    if(!w||!html||w.parentNode===html){return;}
+    html.appendChild(w);
+  }catch(_m){}
+}
 function renderGlobalStyles(){
   ensureLocaleFonts();
-  if(isCarbonAssistStudioHost()){
+  ensureAssistHostMount();
+  if(isCarbonAssistStudioHost()&&!shouldApplyPageWideAccessibilityCss()){
     syncPresetHostProfileClasses();
     if(state.dyslexiaTypeface){ensureDyslexiaFont();}
     try{
@@ -1972,8 +2006,8 @@ function renderGlobalStyles(){
   if(state.contrastMode==='invert'){
     css.push('html{background:#fff !important;}');
     var invF=sat==='none'?'invert(1)':'invert(1) '+sat;
-    css.push('html{filter:'+invF+' !important;-webkit-filter:'+invF+' !important;}');
-    css.push('body{background:#fff !important;}');
+    /** Invert on body (not html): iOS WebKit often ignores filter on html. #carbon-a11y-widget is mounted under documentElement (sibling of body) so body{filter} does not become the containing block for position:fixed — avoids panel/FAB jump when toggling invert. */
+    css.push('body{filter:'+invF+' !important;-webkit-filter:'+invF+' !important;background:#fff !important;}');
     css.push('#carbon-a11y-widget{filter:invert(1) !important;-webkit-filter:invert(1) !important;}');
   }else if(state.highContrast||state.contrastMode==='dark'){
     css.push('html,body{background:#000 !important;color:#fff !important;}');
@@ -2059,6 +2093,11 @@ function renderGlobalStyles(){
   syncPauseAnimationsMedia();
   syncBigCursorOverlay();
   syncAssistHostZoomInverse();
+  try{
+    if(typeof window.__carbonA11yScheduleChromeReflow==='function'){
+      window.__carbonA11yScheduleChromeReflow();
+    }
+  }catch(_cr){}
 }
 
 function track(eventName,payload){
@@ -2627,7 +2666,7 @@ function resetAssistStateBaseline(){
 }
 function syncPresetHostProfileClasses(){
   try{
-    if(isCarbonAssistStudioHost()){
+    if(isCarbonAssistStudioHost()&&!shouldApplyPageWideAccessibilityCss()){
       root.classList.remove('ca-a11y-preset-blind');
       return;
     }
@@ -3594,7 +3633,7 @@ function handlePointerMove(event){
 }
 function syncReadingPointerMoveListener(){
   try{
-    if(isCarbonAssistStudioHost()){
+    if(isCarbonAssistStudioHost()&&!shouldApplyPageWideAccessibilityCss()){
       if(__readingPointerMoveBound){
         document.removeEventListener('mousemove',handlePointerMove);
         __readingPointerMoveBound=false;
@@ -3815,6 +3854,7 @@ function createWidget(){
   var launcherDrag={active:false,pointerId:null,startX:0,startY:0,origLeft:0,origTop:0,moved:false,suppressClick:false};
   var launcherPosKey=storageKey+'::fabPos';
   var sessionManualFab=null;
+  var fabSnapToDefaultInFlight=false;
   var dockOpenRight=String(config.position||'right')!=='left';
   var viewportPushBaseR=null;
   var viewportPushBaseL=null;
@@ -3832,11 +3872,23 @@ function createWidget(){
     if(state.oversizedUi){
       pw=Math.min(520,Math.round(pw*1.07)+36);
     }
-    return Math.round(pw);
+    pw=Math.round(pw);
+    var iw=window.innerWidth||0;
+    if(iw>0){
+      var sidePad=iw<=480?14:12;
+      var cap=Math.max(260,Math.round(iw-sidePad*2));
+      if(pw>cap){pw=cap;}
+    }
+    return pw;
   }
   function fabSafeInsets(){
     var iw=window.innerWidth||0,ih=window.innerHeight||0;
     var minL=8,minT=8,minR=8,minB=10;
+    if(iw>0&&iw<=480){
+      minL=Math.max(minL,12);
+      minR=Math.max(minR,12);
+      minB=Math.max(minB,Math.max(14,Math.round(10+0.02*ih)));
+    }
     try{
       var vv=window.visualViewport;
       if(vv&&typeof vv.width==='number'&&vv.width>8&&typeof vv.height==='number'&&vv.height>8){
@@ -3972,6 +4024,14 @@ function createWidget(){
     if(maxL<minL){maxL=minL;}
     if(maxT<minT){maxT=minT;}
     return{left:Math.min(maxL,Math.max(minL,left)),top:Math.min(maxT,Math.max(minT,top))};
+  }
+  function getDefaultFabClamped(sz){
+    if(config.position==='left'||!dockOpenRight){
+      var insD=fabSafeInsets();
+      return clampFab(insD.minL,insD.ih-insD.minB-sz,sz);
+    }
+    var rrD=resolveRightDockFabRect(sz);
+    return clampFab(rrD.left,rrD.top,sz);
   }
   function applyFabFreePosition(left,top){
     wrap.style.left=Math.round(left)+'px';
@@ -4477,7 +4537,8 @@ function createWidget(){
       if(panelOpen&&state.oversizedUi){
         pw=Math.min(520,Math.round(pw*1.06)+32);
       }
-      pw=Math.max(260,Math.min(pw,vw-8));
+      var vwPad=vw>0&&(vw<=480)?16:8;
+      pw=Math.max(260,Math.min(pw,Math.max(260,vw-vwPad)));
       resetPanelDockStyles();
       panel.style.position='fixed';
       panel.style.zIndex='2';
@@ -4555,29 +4616,70 @@ function createWidget(){
     var isOpen=Boolean(next);
     var closeAnimMs=0;
     if(isOpen){
-      armWrapMotion();
-      panel.style.display='flex';
-      panel.style.opacity='0';
-      panel.style.transform='translateY(22px)';
-      wrap.style.transition=dockMotionTransition();
-      try{void wrap.offsetWidth;}catch(_e0){}
-      requestAnimationFrame(function(){
-        syncOpenDockLayout();
+      function runOpenReveal(){
+        armWrapMotion();
+        panel.style.display='flex';
+        panel.style.opacity='0';
+        panel.style.transform='translateY(22px)';
+        wrap.style.transition=dockMotionTransition();
+        try{void wrap.offsetWidth;}catch(_e0){}
         requestAnimationFrame(function(){
           syncOpenDockLayout();
-          if(shouldMinimizeMotion()){
-            panel.style.opacity='1';
-            panel.style.transform='none';
-            disarmWrapMotion();
-          }else{
-            try{void panel.offsetWidth;}catch(_e3){}
-            panel.style.transition=panelRevealTransition();
-            panel.style.opacity='1';
-            panel.style.transform='translateY(0)';
-            setTimeout(function(){disarmWrapMotion();},720);
-          }
+          requestAnimationFrame(function(){
+            syncOpenDockLayout();
+            if(shouldMinimizeMotion()){
+              panel.style.opacity='1';
+              panel.style.transform='none';
+              disarmWrapMotion();
+            }else{
+              try{void panel.offsetWidth;}catch(_e3){}
+              panel.style.transition=panelRevealTransition();
+              panel.style.opacity='1';
+              panel.style.transform='translateY(0)';
+              setTimeout(function(){disarmWrapMotion();},720);
+            }
+          });
         });
-      });
+      }
+      function snapFabToDefaultThenOpen(){
+        var szSnap=Math.round(trigger.offsetWidth)||fabSize();
+        var tgt=getDefaultFabClamped(szSnap);
+        if(shouldMinimizeMotion()){
+          applyFabFreePosition(tgt.left,tgt.top);
+          sessionManualFab=null;
+          runOpenReveal();
+          return;
+        }
+        fabSnapToDefaultInFlight=true;
+        armWrapMotion();
+        wrap.style.transition=dockMotionTransition();
+        var snapDone=false;
+        function finishSnap(){
+          if(snapDone){return;}
+          snapDone=true;
+          fabSnapToDefaultInFlight=false;
+          sessionManualFab=null;
+          try{wrap.removeEventListener('transitionend',onSnapEnd);}catch(_x){}
+          runOpenReveal();
+        }
+        function onSnapEnd(ev){
+          if(ev.target!==wrap){return;}
+          if(ev.propertyName!=='left'&&ev.propertyName!=='top'){return;}
+          finishSnap();
+        }
+        wrap.addEventListener('transitionend',onSnapEnd);
+        setTimeout(finishSnap,720);
+        try{void wrap.offsetWidth;}catch(_eSnap){}
+        applyFabFreePosition(tgt.left,tgt.top);
+      }
+      if(sessionManualFab){
+        snapFabToDefaultThenOpen();
+      }else{
+        var szDef=Math.round(trigger.offsetWidth)||fabSize();
+        var defPos=getDefaultFabClamped(szDef);
+        applyFabFreePosition(defPos.left,defPos.top);
+        runOpenReveal();
+      }
     }else{
       closeAnimMs=shouldMinimizeMotion()?0:500;
       armWrapMotion();
@@ -4599,10 +4701,10 @@ function createWidget(){
       syncFabShellSize(shell,tsClose);
       syncLauncherGlyphMetrics();
       wrap.style.paddingBottom='';
-      applyFabScreenCorner(dockOpenRight,tsClose);
       setTimeout(function(){
         panel.style.display='none';
         resetPanelDockStyles();
+        applyFabScreenCorner(dockOpenRight,tsClose);
       },closeAnimMs);
       setTimeout(function(){
         wrap.style.transition='';
@@ -4684,10 +4786,12 @@ function createWidget(){
   });
   var fabReflowProbeTimer=null;
   function reflowFabToViewport(){
+    if(fabSnapToDefaultInFlight){return;}
     if(panel.style.display!=='none'){
       syncOpenDockLayout();
       return;
     }
+    try{panel.style.width=String(effectivePanelWidthPx())+'px';}catch(_pw){}
     var sz=Math.round(trigger.offsetWidth)||fabSize();
     if(!sessionManualFab&&dockOpenRight&&config.position!=='left'){
       if(fabReflowProbeTimer)clearTimeout(fabReflowProbeTimer);
@@ -4743,7 +4847,12 @@ function createWidget(){
 
   shell.appendChild(panel);
   shell.appendChild(trigger);
-  body.appendChild(wrap);
+  try{
+    var docRoot=document.documentElement;
+    if(docRoot){docRoot.appendChild(wrap);}else{body.appendChild(wrap);}
+  }catch(_caMount){
+    body.appendChild(wrap);
+  }
   wrap.style.width=ts+'px';
   wrap.style.height=ts+'px';
   placeFabInitial();
@@ -4840,6 +4949,18 @@ function createWidget(){
       applyProfile(profileName);
     }catch(_e){}
   };
+  window.__carbonA11yScheduleChromeReflow=function(){
+    try{
+      requestAnimationFrame(function(){
+        requestAnimationFrame(function(){
+          try{
+            reflowFabToViewport();
+            syncOpenDockLayout();
+          }catch(_e){}
+        });
+      });
+    }catch(_e){}
+  };
 }
 
 function primeStudioPreviewFromWindow(){
@@ -4855,6 +4976,7 @@ function primeStudioPreviewFromWindow(){
   }catch(_e){}
 }
 hydrateState();
+applyStorefrontFreshSessionBaseline();
 primeStudioPreviewFromWindow();
 function bootCarbonAssistWidget(){
   createWidget();

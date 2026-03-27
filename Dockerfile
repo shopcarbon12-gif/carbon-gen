@@ -17,6 +17,7 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
+ENV TZ=America/New_York
 
 RUN groupadd --gid 1001 nodejs \
   && useradd --uid 1001 --gid 1001 --shell /usr/sbin/nologin --create-home nextjs

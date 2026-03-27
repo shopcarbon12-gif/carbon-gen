@@ -9,6 +9,7 @@ import { PremiumToggle } from "@/components/premium-toggle";
 import carbonWordmark from "./assets-local/carbon-long-white.png";
 import { RefreshIcon } from "./RefreshIcon";
 import styles from "./page.module.css";
+import { formatAppDateTime } from "@/lib/formatAppDateTime";
 
 type WidgetPosition = "left" | "right";
 
@@ -360,11 +361,11 @@ function toWidgetEmbedConfig(settings: AccessibilitySettings) {
 
 function buildInstallSnippet(settings: AccessibilitySettings) {
   const encoded = encodeURIComponent(JSON.stringify(toWidgetEmbedConfig(settings)));
-  return `<script src="https://app.shopcarbon.com/accessibility/widget?config=${encoded}&wrev=119" defer></script>`;
+  return `<script src="https://app.shopcarbon.com/accessibility/widget?config=${encoded}&wrev=126" defer></script>`;
 }
 
 function buildManagedInstallSnippet(scope = "default") {
-  return `<script src="https://app.shopcarbon.com/accessibility/widget?scope=${encodeURIComponent(scope)}&wrev=119" defer></script>`;
+  return `<script src="https://app.shopcarbon.com/accessibility/widget?scope=${encodeURIComponent(scope)}&wrev=126" defer></script>`;
 }
 
 function toButtonLabel(enabled: boolean) {
@@ -375,7 +376,7 @@ function formatTimestamp(value?: string | null) {
   if (!value) return "Not available";
   const parsed = new Date(value);
   if (Number.isNaN(parsed.valueOf())) return "Not available";
-  return parsed.toLocaleString();
+  return formatAppDateTime(parsed);
 }
 
 function normalizeUrlInput(value: string) {
@@ -1231,6 +1232,7 @@ export default function AccessibilityPage() {
       delete gw.__carbonA11yStudioPreview;
       delete gw.__carbonA11yApplyStudioPreview;
       delete gw.__carbonA11yApplyStudioProfile;
+      delete (gw as { __carbonA11yAllowHostAccessibilityPaint?: boolean }).__carbonA11yAllowHostAccessibilityPaint;
     } catch {
       // no-op
     }
@@ -1260,12 +1262,14 @@ export default function AccessibilityPage() {
       readableFont: previewReadableFont,
       highlightLinks: previewLinkHighlight,
     };
+    (gw as unknown as { __carbonA11yAllowHostAccessibilityPaint?: boolean }).__carbonA11yAllowHostAccessibilityPaint =
+      true;
     const script = document.createElement("script");
     script.id = "carbon-a11y-runtime-script";
     script.defer = true;
     const cfg = encodeURIComponent(JSON.stringify(toWidgetEmbedConfig(settings)));
     const sc = encodeURIComponent(settingsScope || "default");
-    script.src = `/accessibility/widget?config=${cfg}&scope=${sc}&wrev=119&_ts=${Date.now()}`;
+    script.src = `/accessibility/widget?config=${cfg}&scope=${sc}&wrev=126&_ts=${Date.now()}`;
     script.onload = () => {
       setRuntimeWidgetMounted(true);
       const g = window as Window & {
@@ -1331,6 +1335,8 @@ export default function AccessibilityPage() {
       readableFont: previewReadableFont,
       highlightLinks: previewLinkHighlight,
     };
+    (g as unknown as { __carbonA11yAllowHostAccessibilityPaint?: boolean }).__carbonA11yAllowHostAccessibilityPaint =
+      true;
     g.__carbonA11yApplyStudioPreview?.();
   }, [
     runtimeWidgetMounted,

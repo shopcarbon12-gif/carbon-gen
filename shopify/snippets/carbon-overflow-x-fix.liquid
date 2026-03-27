@@ -1,0 +1,48 @@
+{% comment %}
+  Carbon — stop horizontal page “wiggle” / sideways scroll on mobile (vertical scroll unchanged).
+
+  Root cause (shopcarbon.com, Mar 2026 check):
+  - The announcement bar marquee uses `.announcement-bar--inner.announcement-bar--marquee` with a very wide
+    scrollWidth (duplicated text track). The inner wrapper has overflow:hidden, but PARENTS
+    `.announcement-bar` and `.announcement-bar-section` used overflow-x: visible, so the document
+    can still gain a few dozen px of horizontal scroll (e.g. 375px viewport → 408px scrollWidth).
+  - Carousels / gallery slides that sit slightly off-screen can add to the same effect.
+
+  Install:
+  1) Shopify Admin → Online store → Themes → Edit code
+  2) Snippets → Add snippet → name: carbon-overflow-x-fix → paste this file’s contents (or upload)
+  3) In layout/theme.liquid, inside <head> (before </head>), add:
+       {% render 'carbon-overflow-x-fix' %}
+
+  Or paste the <style> block into theme base.css / custom CSS if you prefer not to use a snippet.
+
+  Note: `overflow-x: hidden` on html/body does NOT remove vertical scrolling; overflow-y stays scrollable.
+{% endcomment %}
+<style id="carbon-overflow-x-fix">
+  /* Clip horizontal bleed; vertical scrolling unchanged */
+  html,
+  body {
+    overflow-x: hidden;
+    max-width: 100%;
+  }
+  @supports (overflow: clip) {
+    html,
+    body {
+      overflow-x: clip;
+    }
+  }
+  /* Marquee parents (Archetype / similar themes) */
+  .announcement-bar-section,
+  shopify-section.announcement-bar-section,
+  .announcement-bar {
+    overflow-x: clip;
+    max-width: 100%;
+  }
+  @supports not (overflow: clip) {
+    .announcement-bar-section,
+    shopify-section.announcement-bar-section,
+    .announcement-bar {
+      overflow-x: hidden;
+    }
+  }
+</style>

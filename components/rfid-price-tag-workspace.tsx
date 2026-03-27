@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CatalogItem, LabelMapping, RfidSettings } from "@/lib/rfid";
 import { DEFAULT_RFID_SETTINGS } from "@/lib/rfid";
 import StudioStatusBar from "@/components/studio-status-bar";
+import { formatAppDateTime } from "@/lib/formatAppDateTime";
 
 type SessionMeResponse = {
   user?: {
@@ -1426,7 +1427,7 @@ export default function RfidPriceTagWorkspace() {
                             aria-label={`Select log ${row.id}`}
                           />
                         </td>
-                        <td>{new Date(row.printedAt).toLocaleString()}</td>
+                        <td>{formatAppDateTime(row.printedAt)}</td>
                         <td>{row.lightspeedSystemId}</td>
                         <td>{row.itemName || "-"}</td>
                         <td>

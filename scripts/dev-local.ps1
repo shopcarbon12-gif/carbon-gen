@@ -94,6 +94,8 @@ if ($listenerPid) {
 
 Push-Location $repo
 try {
+  # Match production/Docker display timezone (US Eastern); Node on Windows may still vary for some APIs.
+  $env:TZ = "America/New_York"
   # Prevent OpenNext Cloudflare dev runtime from hijacking normal local Next dev.
   $env:VERCEL = "1"
   if (Test-Path $node20Dir) {

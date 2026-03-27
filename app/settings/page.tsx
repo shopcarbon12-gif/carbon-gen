@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { type MouseEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { formatAppDateTime } from "@/lib/formatAppDateTime";
 
 type ShopifyStatusResponse = {
   connected?: boolean;
@@ -638,7 +639,7 @@ export default function SettingsPage() {
           <span>
             {loadingStatus ? "Checking connection..." : connected ? "Connected" : "Not connected"}
             {normalizedShop ? <em> - {normalizedShop}</em> : null}
-            {connected && installedAt ? <em> - Installed {new Date(installedAt).toLocaleString()}</em> : null}
+            {connected && installedAt ? <em> - Installed {formatAppDateTime(installedAt)}</em> : null}
           </span>
         </div>
 
@@ -682,7 +683,7 @@ export default function SettingsPage() {
                 : "Not connected"}
             {dropboxEmail ? <em> - {dropboxEmail}</em> : null}
             {dropboxConnected && dropboxConnectedAt ? (
-              <em> - Connected {new Date(dropboxConnectedAt).toLocaleString()}</em>
+              <em> - Connected {formatAppDateTime(dropboxConnectedAt)}</em>
             ) : null}
           </span>
         </div>
@@ -721,7 +722,7 @@ export default function SettingsPage() {
                 ? "Connected"
                 : "Not connected"}
             {lightspeedStatusData?.checkedAt ? (
-              <em> - Checked {new Date(lightspeedStatusData.checkedAt).toLocaleString()}</em>
+              <em> - Checked {formatAppDateTime(lightspeedStatusData.checkedAt)}</em>
             ) : null}
           </span>
         </div>

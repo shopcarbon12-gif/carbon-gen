@@ -8,6 +8,7 @@ import {
   idbDeleteGeneration,
   idbListGenerations,
 } from "@/lib/indexeddb";
+import { formatAppDateTime } from "@/lib/formatAppDateTime";
 
 function includesAllTokens(haystack: string, tokens: string[]) {
   const h = haystack.toLowerCase();
@@ -207,7 +208,7 @@ export default function DashboardPage() {
                   >
                     <img src={`data:image/png;base64,${x.imageBase64}`} alt="Saved generation" />
                     <div className="tile-meta">
-                      <div className="tile-date">{new Date(x.createdAt).toLocaleString()}</div>
+                      <div className="tile-date">{formatAppDateTime(x.createdAt)}</div>
                       <div className="tile-prompt">
                         {x.prompt.length > 80 ? `${x.prompt.slice(0, 80)}...` : x.prompt}
                       </div>
@@ -232,7 +233,7 @@ export default function DashboardPage() {
             <div className="preview-head">
               <div>
                 <div className="tile-date">
-                  {selected ? new Date(selected.createdAt).toLocaleString() : "No selection"}
+                  {selected ? formatAppDateTime(selected.createdAt) : "No selection"}
                 </div>
                 <div className="card-title">Preview</div>
               </div>

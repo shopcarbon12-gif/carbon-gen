@@ -1228,8 +1228,10 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
 
       dailyModelUploadCleanupInFlightRef.current = true;
       try {
-        await resetDailyModelUploadsOnly();
-        window.localStorage.setItem(DAILY_MODEL_UPLOAD_CLEANUP_STORAGE_KEY, todayKey);
+        const cleaned = await resetDailyModelUploadsOnly();
+        if (cleaned) {
+          window.localStorage.setItem(DAILY_MODEL_UPLOAD_CLEANUP_STORAGE_KEY, todayKey);
+        }
       } finally {
         dailyModelUploadCleanupInFlightRef.current = false;
       }
@@ -3423,12 +3425,18 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
     }
   }
 
-  async function resetDailyModelUploadsOnly() {
-    const resp = await fetch("/api/models/uploads/reset", { method: "POST" });
-    const json = await parseJsonResponse(resp);
-    if (!resp.ok) throw new Error(json?.error || "Failed to reset daily model uploads.");
-    setPreviousModelUploads([]);
-    setPreviousUploadsVisible(false);
+  /** Best-effort midnight cleanup; never throws (avoids dev overlay when R2 is unset). */
+  async function resetDailyModelUploadsOnly(): Promise<boolean> {
+    try {
+      const resp = await fetch("/api/models/uploads/reset", { method: "POST" });
+      const json = await parseJsonResponse(resp);
+      if (!resp.ok) return false;
+      setPreviousModelUploads([]);
+      setPreviousUploadsVisible(false);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async function loadPreviousModelUploads() {
@@ -7566,8 +7574,11 @@ function buildMasterPanelPrompt(
                     <div className="catalog-title">
                       {product.title}
                       <span className="muted">
-                        {" "}
-                        ({product.handle}) | Barcode: {formatProductBarcodes(product)}
+                        {String(product.handle || "").trim()
+                          ? ` (${String(product.handle).trim()})`
+                          : ""}
+                        {" | Barcode: "}
+                        {formatProductBarcodes(product)}
                       </span>
                     </div>
                     <div className="row">
@@ -7628,7 +7639,7 @@ function buildMasterPanelPrompt(
             ) : null}
           </div>
           <div className="muted">
-            Product: {pushProductId || "none"}{pushProductHandle ? ` (${pushProductHandle})` : ""}
+            Product: {pushProductId || "none"}{pushProductHandle.trim() ? ` (${pushProductHandle.trim()})` : ""}
           </div>
           {pushImages.length ? (
             <div className="push-queue-grid">
@@ -7731,7 +7742,10 @@ function buildMasterPanelPrompt(
                     }}
                   >
                     <div className="push-variant-title">
-                      #{variant.position} {variant.color || "Color"} ({variant.variantCount})
+                      #{variant.position} {variant.color || "Color"}
+                      {Number.isFinite(variant.variantCount) && variant.variantCount > 1
+                        ? ` (${variant.variantCount})`
+                        : ""}
                     </div>
                     <div className="push-variant-preview">
                       {previewUrl ? (
@@ -7765,7 +7779,11 @@ function buildMasterPanelPrompt(
                 {pushColorMappingPreview.map((row, idx) => (
                   <div className="push-mapping-row" key={`${row.color}-${idx}`}>
                     <strong>{row.color}</strong>
-                    <span className="muted">({row.variantCount} variants)</span>
+                    {Number.isFinite(row.variantCount) && row.variantCount > 0 ? (
+                      <span className="muted">
+                        ({row.variantCount} {row.variantCount === 1 ? "variant" : "variants"})
+                      </span>
+                    ) : null}
                     <span>
                       {row.imagePosition
                         ? `Image #${row.imagePosition}`

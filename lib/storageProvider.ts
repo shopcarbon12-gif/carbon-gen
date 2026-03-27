@@ -53,6 +53,11 @@ function getR2Config(): R2Config | null {
   };
 }
 
+/** True when R2 env vars are set (local dev without R2 can skip storage routes gracefully). */
+export function isR2StorageConfigured(): boolean {
+  return getR2Config() !== null;
+}
+
 function getRequiredR2Config() {
   const cfg = getR2Config();
   if (!cfg) {

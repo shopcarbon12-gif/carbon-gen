@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SyncTogglesBar } from "@/components/sync-toggles-bar";
 import { setGlobalTask, updateGlobalTaskMeta } from "@/lib/globalTask";
+import { formatAppDateTime } from "@/lib/formatAppDateTime";
 
 type CartInventoryVariantRow = {
   id: string;
@@ -1335,7 +1336,7 @@ export default function ShopifyMappingCartsInventory() {
             <span style={{ fontWeight: 600, fontSize: 13 }}>Sync Activity</span>
             {syncLogEntries.length > 0 && (
               <span style={{ fontSize: 11, opacity: 0.7 }}>
-                Last: {new Date(syncLogEntries[0].synced_at).toLocaleString()} — {syncLogEntries[0].items_updated} updated, {syncLogEntries[0].errors} errors
+                Last: {formatAppDateTime(syncLogEntries[0].synced_at)} — {syncLogEntries[0].items_updated} updated, {syncLogEntries[0].errors} errors
               </span>
             )}
           </div>
@@ -1366,7 +1367,7 @@ export default function ShopifyMappingCartsInventory() {
                       style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}
                       title={entry.error_details || ""}
                     >
-                      <td style={{ padding: "3px 8px" }}>{new Date(entry.synced_at).toLocaleString()}</td>
+                      <td style={{ padding: "3px 8px" }}>{formatAppDateTime(entry.synced_at)}</td>
                       <td style={{ padding: "3px 8px", textAlign: "right" }}>{entry.items_checked}</td>
                       <td style={{ padding: "3px 8px", textAlign: "right" }}>{entry.items_updated}</td>
                       <td style={{ padding: "3px 8px", textAlign: "right", color: entry.variants_added > 0 ? "#4ade80" : undefined }}>{entry.variants_added}</td>

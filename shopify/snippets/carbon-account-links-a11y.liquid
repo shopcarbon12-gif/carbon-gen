@@ -1,0 +1,47 @@
+{% comment %}
+  Carbon — accessible names for icon-only /account links (e.g. `.premium-feature__link`).
+
+  Install: in layout/theme.liquid, before </body>, add:
+    {% render 'carbon-account-links-a11y' %}
+
+  See docs/carbon-account-links-a11y-BEFORE-AFTER.md for what this fixes and verification.
+{% endcomment %}
+{% liquid
+  assign account_label = 'customer.account.title' | t
+  if account_label == blank or account_label contains 'Translation missing'
+    assign account_label = 'Account'
+  endif
+%}
+<script id="carbon-account-links-a11y">
+  (function () {
+    var LABEL = {{ account_label | json }};
+    function needsName(a) {
+      if (a.getAttribute('aria-label') && String(a.getAttribute('aria-label')).trim()) return false;
+      var t = (a.textContent || '').replace(/\s+/g, ' ').trim();
+      if (t.length) return false;
+      if (a.querySelector('img[alt]:not([alt=""])')) return false;
+      var lb = a.getAttribute('aria-labelledby');
+      if (lb) {
+        var ok = lb.split(/\s+/).some(function (id) {
+          var el = document.getElementById(id);
+          return el && String(el.textContent || '').replace(/\s+/g, ' ').trim().length > 0;
+        });
+        if (ok) return false;
+      }
+      return true;
+    }
+    function run() {
+      document.querySelectorAll('a.premium-feature__link[href*="/account"]').forEach(function (a) {
+        if (!needsName(a)) return;
+        a.setAttribute('aria-label', LABEL);
+      });
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', run);
+    } else {
+      run();
+    }
+    setTimeout(run, 0);
+    document.addEventListener('shopify:section:load', run);
+  })();
+</script>
