@@ -29,4 +29,9 @@ COPY --from=builder /app/public ./public
 USER nextjs
 EXPOSE 3000
 
+# Coolify/Docker: probe a cheap route (not `/`, which redirects). Long start-period avoids
+# yellow/degraded while the standalone server binds on small VPS instances.
+HEALTHCHECK --interval=30s --timeout=8s --start-period=90s --retries=5 \
+  CMD ["node", "-e", "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+
 CMD ["node", "server.js", "-H", "0.0.0.0"]

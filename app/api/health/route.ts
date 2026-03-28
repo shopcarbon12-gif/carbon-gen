@@ -1,37 +1,16 @@
 import { NextResponse } from "next/server";
-import { getRedis } from "@/lib/redis";
 
+/**
+ * Liveness probe for reverse proxies (Coolify / Traefik). No DB or external calls.
+ */
 export async function GET() {
-  const redis = getRedis();
-
-  if (!redis) {
-    return NextResponse.json(
-      {
-        ok: true,
-        degraded: false,
-        redis: {
-          ok: false,
-          optional: true,
-          error: "Upstash env vars missing (rate limiting disabled)",
-        },
+  return NextResponse.json(
+    { ok: true },
+    {
+      status: 200,
+      headers: {
+        "Cache-Control": "no-store",
       },
-      { status: 200 }
-    );
-  }
-
-  try {
-    const pong = await redis.ping();
-    return NextResponse.json({
-      ok: true,
-      redis: { ok: pong === "PONG" },
-    });
-  } catch (err: any) {
-    return NextResponse.json(
-      {
-        ok: false,
-        redis: { ok: false, error: err?.message ?? "Redis ping failed" },
-      },
-      { status: 500 }
-    );
-  }
+    }
+  );
 }
