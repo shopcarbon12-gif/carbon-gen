@@ -126,7 +126,7 @@ console.log("Scanning", liquidKeys.length, "Liquid assets for AdSense…");
 
 let updated = 0;
 for (const key of liquidKeys) {
-  await sleep(250);
+  await sleep(400);
   const got = await getAsset(themeId, key);
   if (!got.ok) {
     console.warn("SKIP (GET failed):", key, got.status);
