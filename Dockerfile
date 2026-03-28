@@ -26,6 +26,9 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
+# Next.js image optimization writes under .next/cache at runtime; COPY leaves files root-owned.
+RUN mkdir -p /app/.next/cache && chown -R nextjs:nodejs /app
+
 USER nextjs
 EXPOSE 3000
 
