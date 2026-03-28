@@ -35,7 +35,10 @@ export default function LoginPage() {
 
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data?.error || `Login failed (${res.status})`);
+        const parts = [data?.error, data?.hint].filter(
+          (x): x is string => typeof x === "string" && x.trim().length > 0
+        );
+        throw new Error(parts.length ? parts.join(" — ") : `Login failed (${res.status})`);
       }
 
       const next =

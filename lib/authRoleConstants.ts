@@ -3,6 +3,9 @@ export type AppRole = string;
 /** Meta App Review: dashboard access limited to Instagram widget routes + allowlisted APIs. */
 export const META_REVIEW_ROLE = "meta_review";
 
+/** Canonical username for the Meta App Review test account (seed + login hints). */
+export const META_REVIEW_LOGIN_USERNAME = "meta-review@shopcarbon.com";
+
 export function normalizeUsername(value: string) {
   return String(value || "").trim().toLowerCase();
 }

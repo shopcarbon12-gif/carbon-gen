@@ -6,9 +6,8 @@ import {
   updateUserById,
   upsertRoles,
 } from "@/lib/authRepository";
-import { normalizeUsername } from "@/lib/authRoleConstants";
+import { META_REVIEW_LOGIN_USERNAME, normalizeUsername } from "@/lib/authRoleConstants";
 
-const USERNAME = "meta-review@shopcarbon.com";
 const ROLE = "meta_review";
 
 export type EnsureMetaReviewUserResult = { ok: true; action: "created" | "updated" };
@@ -24,7 +23,7 @@ export async function ensureMetaReviewUser(plainPassword: string): Promise<Ensur
 
   await upsertRoles([{ name: ROLE, is_system: true }]);
 
-  const username = normalizeUsername(USERNAME);
+  const username = normalizeUsername(META_REVIEW_LOGIN_USERNAME);
   const passwordHash = await bcrypt.hash(password, 12);
   const existing = await findUserByUsername(username);
 

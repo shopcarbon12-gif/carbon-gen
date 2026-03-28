@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { isMetaReviewRole } from "@/lib/authRoleConstants";
-import { authenticateUser, normalizeUsername } from "@/lib/userAuth";
+import {
+  isMetaReviewRole,
+  META_REVIEW_LOGIN_USERNAME,
+  normalizeUsername,
+} from "@/lib/authRoleConstants";
+import { authenticateUser, getUserByUsername } from "@/lib/userAuth";
 
 const DEFAULT_SESSION_USER_ID = "00000000-0000-0000-0000-000000000001";
 
@@ -109,29 +113,56 @@ export async function POST(req: Request) {
 
     const adminUsername =
       normalizeUsername(String(process.env.APP_ADMIN_USERNAME || "admin")) || "admin";
+    const adminAliases = new Set([adminUsername, "admin", "eliorp1"]);
 
-    // Preferred mode: table-backed username + password auth.
+    let appUser: Awaited<ReturnType<typeof authenticateUser>> = null;
     try {
-      const appUser = await authenticateUser(username, password);
-      if (appUser) {
-        const payload = isMetaReviewRole(appUser.role)
-          ? { success: true as const, next: "/studio/instagram-widget" as const }
-          : { success: true as const };
-        const res = NextResponse.json(payload);
-        setSessionCookies(req, res, {
-          id: appUser.id,
-          username: appUser.username,
-          role: appUser.role,
-        });
-        return res;
-      }
+      appUser = await authenticateUser(username, password);
     } catch (e: any) {
       console.warn("DB Auth unavailable/failed, falling back:", e?.message);
-      // Suppress error so we can proceed to the fallback mode
+      if (!adminAliases.has(username)) {
+        return NextResponse.json(
+          {
+            error: "Sign-in database is unavailable.",
+            hint: "Check COOLIFY_DATABASE_URL or DATABASE_URL on this server. Table-backed accounts cannot sign in until Postgres is reachable.",
+            code: "auth_db_unavailable",
+          },
+          { status: 503 }
+        );
+      }
     }
 
-    // Controlled fallback mode: admin username + master password.
-    const adminAliases = new Set([adminUsername, "admin", "eliorp1"]);
+    if (appUser) {
+      const payload = isMetaReviewRole(appUser.role)
+        ? { success: true as const, next: "/studio/instagram-widget" as const }
+        : { success: true as const };
+      const res = NextResponse.json(payload);
+      setSessionCookies(req, res, {
+        id: appUser.id,
+        username: appUser.username,
+        role: appUser.role,
+      });
+      return res;
+    }
+
+    if (username === META_REVIEW_LOGIN_USERNAME) {
+      try {
+        const row = await getUserByUsername(username);
+        if (!row) {
+          return NextResponse.json(
+            {
+              error: "Invalid username or password.",
+              hint: "This Meta review account is not in this server’s database. On Coolify, open a shell on the app container and run: npm run seed:meta-review-user -- shopcarbon",
+              code: "meta_review_not_provisioned",
+            },
+            { status: 401 }
+          );
+        }
+      } catch {
+        /* wrong password or other; fall through */
+      }
+    }
+
     if (!adminAliases.has(username)) {
       return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
     }
