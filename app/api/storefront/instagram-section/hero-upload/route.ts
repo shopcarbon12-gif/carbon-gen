@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import sharp from "sharp";
 import { isRequestAuthed } from "@/lib/auth";
-import { readSession } from "@/lib/userAuth";
+import { canManageInstagramSection, readSession } from "@/lib/userAuth";
 import { INSTAGRAM_HERO_HEIGHT, INSTAGRAM_HERO_WIDTH } from "@/lib/instagram-widget-constants";
 import { uploadBytesToStorage } from "@/lib/storageProvider";
 
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
   const session = readSession(req);
-  if (!session.isAuthed || session.role !== "admin") {
+  if (!canManageInstagramSection(session)) {
     return NextResponse.json({ ok: false, error: "Forbidden" }, { status: 403 });
   }
 

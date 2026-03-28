@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
+import { isMetaReviewRole } from "@/lib/authRoleConstants";
 import { authenticateUser, normalizeUsername } from "@/lib/userAuth";
 
 const DEFAULT_SESSION_USER_ID = "00000000-0000-0000-0000-000000000001";
@@ -104,7 +105,10 @@ export async function POST(req: Request) {
     try {
       const appUser = await authenticateUser(username, password);
       if (appUser) {
-        const res = NextResponse.json({ success: true });
+        const payload = isMetaReviewRole(appUser.role)
+          ? { success: true as const, next: "/studio/instagram-widget" as const }
+          : { success: true as const };
+        const res = NextResponse.json(payload);
         setSessionCookies(req, res, {
           id: appUser.id,
           username: appUser.username,

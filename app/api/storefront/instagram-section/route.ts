@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isRequestAuthed } from "@/lib/auth";
-import { readSession } from "@/lib/userAuth";
+import { canManageInstagramSection, readSession } from "@/lib/userAuth";
 import {
   normalizeInstagramAtLabel,
   normalizeWebUrlForStorage,
@@ -135,9 +135,9 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   if (!isRequestAuthed(req)) return unauthorized();
   const session = readSession(req);
-  if (!session.isAuthed || session.role !== "admin") {
+  if (!canManageInstagramSection(session)) {
     return NextResponse.json(
-      { ok: false, error: "Forbidden: admin role required to update Instagram section settings" },
+      { ok: false, error: "Forbidden: insufficient role to update Instagram section settings" },
       { status: 403 }
     );
   }

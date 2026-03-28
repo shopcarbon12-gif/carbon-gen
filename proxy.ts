@@ -1,5 +1,24 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { META_REVIEW_ROLE, parseRole } from "@/lib/authRoleConstants";
+
+const META_REVIEW_STATIC_ASSET =
+  /\.(?:ico|png|jpe?g|gif|webp|svg|css|js|map|txt|xml|json|woff2?|ttf|eot|wasm)$/i;
+
+const META_REVIEW_ALLOWED_API_PREFIXES = [
+  "/api/login",
+  "/api/logout",
+  "/api/auth/session",
+  "/api/studio/instagram-feed",
+  "/api/storefront/instagram-section",
+  "/api/instagram/meta/callback",
+];
+
+function isMetaReviewAllowedApi(pathname: string) {
+  return META_REVIEW_ALLOWED_API_PREFIXES.some(
+    (p) => pathname === p || pathname.startsWith(`${p}/`)
+  );
+}
 
 function normalize(value: unknown): string {
   return String(value ?? "").trim().toLowerCase();
@@ -27,6 +46,11 @@ function shouldBlockShopifyLiveUpdates(): boolean {
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const method = req.method.toUpperCase();
+
+  if (META_REVIEW_STATIC_ASSET.test(pathname)) {
+    return NextResponse.next();
+  }
+
   const legacyCollectionMappingPath = "/studio/shopify-collection-mapping";
   const publicCollectionMappingPath = "/shopify-collection-mapping";
 
@@ -103,6 +127,49 @@ export function proxy(req: NextRequest) {
     return res;
   }
 
+  const sessionRole = parseRole(req.cookies.get("carbon_gen_user_role")?.value || "");
+  const isAuthedCookie = req.cookies.get("carbon_gen_auth_v1")?.value === "true";
+
+  if (sessionRole === META_REVIEW_ROLE) {
+    if (!isAuthedCookie) {
+      if (pathname === "/login" || pathname.startsWith("/api/login")) {
+        return NextResponse.next();
+      }
+      if (pathname.startsWith("/api/")) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      const loginUrl = req.nextUrl.clone();
+      loginUrl.pathname = "/login";
+      return NextResponse.redirect(loginUrl);
+    }
+
+    if (pathname.startsWith("/api/")) {
+      if (isMetaReviewAllowedApi(pathname)) {
+        return NextResponse.next();
+      }
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    if (pathname === "/logout") {
+      return NextResponse.next();
+    }
+
+    if (pathname === "/login") {
+      const u = req.nextUrl.clone();
+      u.pathname = "/studio/instagram-widget";
+      return NextResponse.redirect(u);
+    }
+
+    const igRoot = "/studio/instagram-widget";
+    if (pathname === igRoot || pathname.startsWith(`${igRoot}/`)) {
+      return NextResponse.next();
+    }
+
+    const redirectIg = req.nextUrl.clone();
+    redirectIg.pathname = igRoot;
+    return NextResponse.redirect(redirectIg);
+  }
+
   const isAuthed = req.cookies.get("carbon_gen_auth_v1")?.value === "true";
   const protectedRoutes = [
     "/dashboard",
@@ -125,7 +192,9 @@ export function proxy(req: NextRequest) {
 
   if (pathname === "/login" && isAuthed) {
     const studioUrl = req.nextUrl.clone();
-    studioUrl.pathname = "/studio/images";
+    studioUrl.pathname = parseRole(req.cookies.get("carbon_gen_user_role")?.value || "") === META_REVIEW_ROLE
+      ? "/studio/instagram-widget"
+      : "/studio/images";
     return NextResponse.redirect(studioUrl);
   }
 
@@ -134,6 +203,8 @@ export function proxy(req: NextRequest) {
 
 export const config = {
   matcher: [
+    "/",
+    "/logout",
     "/api/:path*",
     "/shopify-collection-mapping",
     "/shopify-collection-mapping/:path*",
@@ -147,5 +218,6 @@ export const config = {
     "/activity/:path*",
     "/settings/:path*",
     "/login",
+    "/accessibility/:path*",
   ],
 };

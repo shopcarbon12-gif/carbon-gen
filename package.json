@@ -13,6 +13,7 @@
     "start:standalone": "node .next/standalone/server.js -H 0.0.0.0",
     "lint": "eslint",
     "hash-password": "node scripts/hash-password.mjs",
+    "seed:meta-review-user": "node scripts/seed-meta-review-user.mjs",
     "e2e": "node scripts/run-e2e.mjs",
     "check:upstash": "node scripts/check-upstash.mjs",
     "check:sync": "node scripts/check-sync.mjs",

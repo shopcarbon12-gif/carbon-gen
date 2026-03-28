@@ -16,7 +16,10 @@ function userPayload(row: any) {
 }
 
 function validUsername(value: string) {
-  return /^[a-z0-9][a-z0-9._-]{2,30}$/.test(value);
+  if (/^[a-z0-9][a-z0-9._-]{2,30}$/.test(value)) return true;
+  return (
+    /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,63}$/.test(value) && value.length >= 5 && value.length <= 254
+  );
 }
 
 function adminUsersErrorMessage(err: any) {
@@ -61,7 +64,10 @@ export async function POST(req: NextRequest) {
 
     if (!validUsername(username)) {
       return NextResponse.json(
-        { error: "Username must be 3-31 chars using letters, numbers, dot, underscore, or dash." },
+        {
+          error:
+            "Username must be 3-31 chars (letters, numbers, dot, underscore, dash) or a valid email address.",
+        },
         { status: 400 }
       );
     }

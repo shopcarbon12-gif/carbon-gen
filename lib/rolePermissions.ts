@@ -18,7 +18,7 @@ export const PERMISSION_OPTIONS: PermissionOption[] = [
   { key: "admin.roles", label: "Manage roles & permissions" },
 ];
 
-export const SYSTEM_ROLES = ["admin", "manager", "user"] as const;
+export const SYSTEM_ROLES = ["admin", "manager", "user", "meta_review"] as const;
 
 const MANAGER_ALLOWED = new Set([
   "models.read",
@@ -36,6 +36,7 @@ const USER_ALLOWED = new Set(["models.read", "items.read", "generate.run"]);
 export function defaultAllowedForRole(roleName: string, permission: string) {
   const role = String(roleName || "").trim().toLowerCase();
   if (role === "admin") return true;
+  if (role === "meta_review") return false;
   if (role === "manager") return MANAGER_ALLOWED.has(permission);
   if (role === "user") return USER_ALLOWED.has(permission);
   return false;

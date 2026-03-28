@@ -38,7 +38,9 @@ export default function LoginPage() {
         throw new Error(data?.error || `Login failed (${res.status})`);
       }
 
-      window.location.href = "/studio/images";
+      const next =
+        typeof data?.next === "string" && data.next.startsWith("/") ? data.next : "/studio/images";
+      window.location.href = next;
     } catch (e: any) {
       const msg = String(e?.message || "Login failed");
       if (msg.toLowerCase().includes("invalid username or password")) {
