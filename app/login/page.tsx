@@ -71,6 +71,7 @@ export default function LoginPage() {
           autoComplete="username"
           autoCapitalize="none"
           autoCorrect="off"
+          data-no-auto-capitalize="true"
           onKeyDown={(e) => {
             if (e.key === "Enter") onLogin();
           }}
@@ -83,6 +84,7 @@ export default function LoginPage() {
           onChange={(e) => setPassword(e.target.value)}
           placeholder="Enter Password"
           autoComplete="current-password"
+          data-no-auto-capitalize="true"
           onKeyDown={(e) => {
             if (e.key === "Enter") onLogin();
           }}
@@ -99,6 +101,7 @@ export default function LoginPage() {
         .login-shell {
           min-height: 100vh;
           position: relative;
+          z-index: 10;
           display: grid;
           place-items: center;
           padding: 24px;
@@ -108,7 +111,7 @@ export default function LoginPage() {
         }
         .login-card {
           position: relative;
-          z-index: 2;
+          z-index: 1;
           width: min(460px, 92vw);
           border-radius: 22px;
           padding: 38px 38px 34px;
