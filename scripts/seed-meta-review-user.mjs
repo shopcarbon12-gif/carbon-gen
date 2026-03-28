@@ -5,9 +5,19 @@
  *   node scripts/seed-meta-review-user.mjs <password>
  *   META_REVIEW_SEED_PASSWORD=... node scripts/seed-meta-review-user.mjs
  *
+ * Loads `.env.local` then `.env` from the project root when present.
  * Requires DATABASE_URL, COOLIFY_DATABASE_URL, or POSTGRES_URL (or .coolify-database-url file).
  */
+import { config as loadEnv } from "dotenv";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import { readFileSync } from "node:fs";
+
+const root = process.cwd();
+for (const name of [".env.local", ".env"]) {
+  const p = resolve(root, name);
+  if (existsSync(p)) loadEnv({ path: p });
+}
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import pg from "pg";
