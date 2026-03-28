@@ -5,6 +5,7 @@ import {
   META_REVIEW_LOGIN_USERNAME,
   normalizeUsername,
 } from "@/lib/authRoleConstants";
+import { runMetaReviewSeedIfConfigured } from "@/lib/runMetaReviewSeedIfConfigured";
 import { authenticateUser, getUserByUsername } from "@/lib/userAuth";
 
 const DEFAULT_SESSION_USER_ID = "00000000-0000-0000-0000-000000000001";
@@ -113,6 +114,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    await runMetaReviewSeedIfConfigured();
     const body = await req.json().catch(() => ({}));
     const username = normalizeUsername(String(body?.username || ""));
     const password = body?.password;

@@ -18,6 +18,7 @@
   assign _gtm = gtm_container_id | strip
 -%}
 {%- if _gtm != blank -%}
+<!-- Google Tag Manager — client "boss" for marketing/analytics tags. Do not add Meta/TikTok/GA browser pixels elsewhere in the theme; use GTM tags + triggers. If you use Stape, configure it server-side from this dataLayer/GTM—avoid duplicate browser pixels (same pixel ID) from Stape + GTM. -->
 <!-- Google Tag Manager -->
 <script>
 (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':

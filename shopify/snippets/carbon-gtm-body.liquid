@@ -10,6 +10,7 @@
   assign _gtm = gtm_container_id | strip
 -%}
 {%- if _gtm != blank -%}
+<!-- GTM noscript fallback — same stack policy as carbon-gtm-head.liquid -->
 <!-- Google Tag Manager (noscript) -->
 <noscript><iframe src="https://www.googletagmanager.com/ns.html?id={{ _gtm | escape }}"
 height="0" width="0" style="display:none;visibility:hidden" title="Google Tag Manager"></iframe></noscript>
