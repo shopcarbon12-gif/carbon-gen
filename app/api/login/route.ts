@@ -91,11 +91,24 @@ function setSessionCookies(
 
 /** Browsers open URLs with GET; login uses POST from /login. Redirect so bookmarks don’t show 405. */
 export async function GET(req: Request) {
-  const u = new URL(req.url);
-  u.pathname = "/login";
-  u.search = "";
-  u.hash = "";
-  return NextResponse.redirect(u);
+  const incoming = new URL(req.url);
+  const host =
+    req.headers.get("x-forwarded-host")?.split(",")[0]?.trim() ||
+    req.headers.get("host")?.trim() ||
+    incoming.host;
+  let proto = req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim().toLowerCase();
+  if (proto !== "http" && proto !== "https") {
+    proto = incoming.protocol === "https:" ? "https" : "http";
+  }
+  if (!host) {
+    const u = new URL(req.url);
+    u.pathname = "/login";
+    u.search = "";
+    u.hash = "";
+    return NextResponse.redirect(u);
+  }
+  const login = new URL("/login", `${proto}://${host}`);
+  return NextResponse.redirect(login);
 }
 
 export async function POST(req: Request) {

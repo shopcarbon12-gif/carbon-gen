@@ -28,6 +28,7 @@ Deep links (replace if Meta changes URLs):
 
 7. Complete **App Review** for production if users outside your Meta roles need access.
 8. Store **long-lived user/page tokens** only on the server (database or secrets), never in client bundles.
+9. **Meta App Review login (`meta_review` user):** Seeding from your laptop can hit a **different** Postgres than production. On Coolify, set **`META_REVIEW_AUTO_PROVISION=true`** and **`META_REVIEW_SEED_PASSWORD`** (≥8 chars), deploy, and the server creates/updates **`meta-review@shopcarbon.com`** in **the same DB** the app uses. Turn **`META_REVIEW_AUTO_PROVISION`** off after the first successful deploy if you prefer.
 
 Environment hints:
 
