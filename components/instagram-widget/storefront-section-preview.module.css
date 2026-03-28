@@ -231,9 +231,8 @@
 }
 
 /*
- * Carousel nav motion matched to Elfsight live editor (dash widget): opacity 0.85 idle,
- * hover → 1 + directional shadow, active scale ~0.943 + opacity 1, transition all 0.2s ease.
- * @see https://dash.elfsight.com/widget/d881cb77-4507-46ba-aa42-ae82cdabf435
+ * Carousel nav: opacity 0.85 idle, hover → 1 + directional shadow,
+ * active scale ~0.943 + opacity 1, transition all 0.2s ease.
  */
 .scrollBtn {
   position: absolute;
@@ -286,7 +285,7 @@
   transform: translate3d(0, -50%, 0) scale(1);
 }
 
-/* Mirrored semicircles vs classic Elfsight: curve toward grid, flat edge outward */
+/* Mirrored semicircles: curve toward grid, flat edge outward */
 .scrollBtn[data-side="prev"] {
   left: 0;
   border-radius: 0 30px 30px 0;
@@ -395,7 +394,7 @@ button.tile {
   display: block;
 }
 
-/* Elfsight-style hover: dim overlay + centered caption (dash preview). */
+/* Hover: dim overlay + centered caption. */
 .tileHover {
   position: absolute;
   inset: 0;
@@ -531,7 +530,7 @@ button.tile {
 }
 
 /*
- * Studio “mobile preview” (topbar phone toggle): Elfsight-like single column —
+ * Studio “mobile preview” (topbar phone toggle): narrow single column —
  * compact profile row, hero on top, 2×N grid with horizontal strip + arrows.
  * Scoped via main[data-ig-mobile-preview="true"] from workspace-shell.
  */
@@ -675,7 +674,7 @@ button.tile {
   justify-content: center;
 }
 
-/* ─── Post popup (matches shopcarbon Elfsight: full-viewport scroll + 640px column) ─── */
+/* ─── Post popup: full-viewport scroll + ~640px column ─── */
 .popOverlay {
   position: fixed;
   inset: 0;
@@ -807,7 +806,7 @@ button.tile {
   background: #fafafa;
 }
 
-/* Header: permalink opens post; icon-only like Elfsight .es-post-source */
+/* Header: permalink opens post; icon-only source link */
 .popSourceLink {
   display: inline-flex;
   align-items: center;
@@ -857,7 +856,7 @@ button.tile {
   object-fit: cover;
 }
 
-/* Meta row: Share aligned end (Elfsight .eapps-instagram-feed-popup-item-meta) */
+/* Meta row: Share aligned end */
 .popMetaRow {
   display: flex;
   align-items: center;

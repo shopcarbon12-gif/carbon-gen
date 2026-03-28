@@ -551,7 +551,7 @@ ${heroTag}
       <section className="iw-panel">
         <h2>Slider (feed strip)</h2>
         <p className="iw-hint" style={{ marginTop: 0 }}>
-          Matches Elfsight-style controls. Applies to the horizontal post grid on{" "}
+          Controls for the horizontal post grid on{" "}
           <Link href="/studio/instagram-widget" style={{ color: "rgba(56, 189, 248, 0.95)" }}>
             Instagram Widget
           </Link>{" "}

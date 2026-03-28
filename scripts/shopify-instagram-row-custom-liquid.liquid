@@ -10,10 +10,11 @@
   Steps in Shopify:
   1. Online Store → Themes → Customize → Home page
   2. Click the Custom Liquid section that contains the Instagram banner + feed
-  3. Remove any separate "Elfsight Instagram Feed" app block if it duplicates the widget
+  3. Remove any third-party Instagram app block (e.g. old embed widgets) if it duplicates this section
   4. Paste this code into that section and Save
 
-  Layout: left = large banner image + @shopcarbon link | right = Elfsight embed (Untitled Instagram Feed)
+  Right column: paste the Liquid fragment published from Carbon (Instagram widget studio).
+  Feed data comes from your Meta app + tokens configured in Carbon Settings — not a third-party widget host.
 {% endcomment %}
 
 <div class="row full-width-row-full">
@@ -35,47 +36,11 @@
           </div>
         </div>
       </div>
-      <div class="column ca-elfsight-col">
+      <div class="column ca-carbon-instagram-feed-col">
         {% comment %}
-          Hide Elfsight free-tier “Free Instagram Feed Widget” branding (link strip).
-          If a future update changes markup, the bottom cover still masks it.
+          Paste the full Liquid output from Carbon → Studio → Instagram widget (Publish / Layout flow).
+          Until then this column is intentionally empty — do not load third-party widget scripts here.
         {% endcomment %}
-        <style>
-          .ca-elfsight-col {
-            position: relative;
-            overflow: hidden;
-          }
-          .ca-elfsight-col a[href*="elfsight.com"],
-          .ca-elfsight-col [class*="Powered"],
-          .ca-elfsight-col [class*="powered"],
-          .ca-elfsight-col [class*="branding"],
-          .ca-elfsight-col [class*="Branding"],
-          .ca-elfsight-col .eapps-widget__powered,
-          .ca-elfsight-col .eapps-widget__powered-by,
-          .ca-elfsight-col [data-eapps-link="poweredBy"] {
-            display: none !important;
-            visibility: hidden !important;
-            height: 0 !important;
-            max-height: 0 !important;
-            overflow: hidden !important;
-            opacity: 0 !important;
-            pointer-events: none !important;
-          }
-          .ca-elfsight-col::after {
-            content: "";
-            position: absolute;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            height: 40px;
-            background: #ffffff;
-            z-index: 5;
-            pointer-events: none;
-          }
-        </style>
-        <!-- Elfsight Instagram Feed | Untitled Instagram Feed -->
-        <script src="https://elfsightcdn.com/platform.js" async></script>
-        <div class="elfsight-app-d881cb77-4507-46ba-aa42-ae82cdabf435" data-elfsight-app-lazy></div>
       </div>
     </div>
   </div>

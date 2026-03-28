@@ -1,6 +1,6 @@
 /**
  * Instagram feed for the storefront preview (/studio/instagram-widget).
- * Today: Elfsight embed (matches shopcarbon.com). Later: Meta Graph API — implement
+ * Meta Graph API (Carbon-owned). Legacy `elfsight` id kept only for env override.
  * fetch + map results to these shapes and render with the same grid UI.
  */
 

@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
 import {
   STOREFRONT_INSTAGRAM_HANDLE,
   STOREFRONT_INSTAGRAM_URL,
@@ -666,15 +667,19 @@ export function ElfsightSourcesBar() {
                 {open === "account" && (
                   <>
                     <p className={styles.modalHint}>
-                      Storefront source matches{" "}
-                      <a href={STOREFRONT_INSTAGRAM_URL}>Instagram {atHandle}</a>. Manage the real
-                      widget in{" "}
+                      Storefront preview matches{" "}
+                      <a href={STOREFRONT_INSTAGRAM_URL}>Instagram {atHandle}</a>. Wire your own Meta
+                      app and tokens in{" "}
+                      <Link href="/settings#integration-meta-instagram">
+                        Settings → Meta / Instagram integration
+                      </Link>
+                      . Create or open apps at{" "}
                       <a
-                        href="https://dash.elfsight.com/widget/d881cb77-4507-46ba-aa42-ae82cdabf435"
+                        href="https://developers.facebook.com/apps/"
                         target="_blank"
                         rel="noreferrer"
                       >
-                        Elfsight
+                        Meta for Developers
                       </a>
                       .
                     </p>

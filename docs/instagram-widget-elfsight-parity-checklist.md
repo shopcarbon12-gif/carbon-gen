@@ -1,6 +1,6 @@
-# Elfsight parity checklist (Phase 3)
+# Instagram widget parity checklist (Carbon + Meta)
 
-Use when replacing the embedded Elfsight block with the Carbon Instagram widget + Graph API. Compare against the [Elfsight editor](https://dash.elfsight.com/widget/d881cb77-4507-46ba-aa42-ae82cdabf435) in a **visible browser session** (MCP).
+Use when validating the Carbon Instagram widget against production. Compare layout and behavior in a **visible browser session** (e.g. Playwright MCP). Meta app setup: [instagram-meta-graph-api-setup.md](./instagram-meta-graph-api-setup.md) and [Meta for Developers](https://developers.facebook.com/apps/).
 
 - [ ] Sources: account connection, filters, sorting
 - [ ] Layout: column counts, gaps, responsive breakpoints

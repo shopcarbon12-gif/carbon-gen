@@ -127,7 +127,7 @@ function nextImageUnoptimized(src: string) {
   return /^https?:\/\//i.test(src);
 }
 
-/** White outline camera (matches storefront / Elfsight-style Follow control). */
+/** White outline camera (storefront Follow control). */
 function InstagramGlyph() {
   return (
     <svg
@@ -270,7 +270,7 @@ function buildSlidesAndIndexedColumns(columns: TileCell[][]) {
   return { slides, indexedColumns };
 }
 
-/** Black-outline camera for popup header (Elfsight-style). */
+/** Black-outline camera for popup header. */
 function PopupInstagramGlyph() {
   return (
     <svg
@@ -929,7 +929,7 @@ export function StorefrontSectionPreview() {
         ? { position: "fixed", left: 24, bottom: 100, zIndex: 55 }
         : undefined;
 
-  /* Keep ElfsightSourcesBar in a stable React tree position (never portaled). Nested body portals
+  /* Keep sources toolbar in a stable React tree position (never portaled). Nested body portals
    * (toolbar remount + modal portal) caused removeChild null crashes when toggling mobile preview. */
   const sourcesToolbar = (
     <div

@@ -1,4 +1,4 @@
-/* Elfsight-style Sources strip — horizontal triggers; modals mirror dashboard column layout. */
+/* Instagram sources strip — horizontal triggers; modals mirror dashboard column layout. */
 
 .srOnly {
   position: absolute;
@@ -149,7 +149,7 @@
   gap: 12px;
 }
 
-/* Add Instagram Source (Elfsight-style) */
+/* Add Instagram Source */
 .addIgHead {
   display: grid;
   grid-template-columns: minmax(72px, 1fr) auto minmax(72px, 1fr);

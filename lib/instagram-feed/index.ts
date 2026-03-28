@@ -5,8 +5,6 @@ export type {
   InstagramProfileSummary,
 } from "./types";
 export {
-  ELFSIGHT_PLATFORM_SCRIPT,
-  ELFSIGHT_WIDGET_CLASS,
   getInstagramFeedProvider,
   STOREFRONT_INSTAGRAM_AVATAR_SRC,
   STOREFRONT_INSTAGRAM_DISPLAY_NAME,

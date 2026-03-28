@@ -159,7 +159,7 @@ export function WorkspaceShell({
   const [shopifySubmenuOpen, setShopifySubmenuOpen] = useState(false);
   const [shopifyConfigSubmenuOpen, setShopifyConfigSubmenuOpen] = useState(false);
   const [metaAppConfigured, setMetaAppConfigured] = useState(false);
-  /** Elfsight-style: narrow “device” frame + grey workspace (all /studio/instagram-widget/* pages). */
+  /** Narrow device frame + grey workspace (all /studio/instagram-widget/* pages). */
   const [instagramMobilePreview, setInstagramMobilePreview] = useState(false);
   /** Snapshot of sources toolbar box in desktop mode — fixed overlay in mobile preview (pixel-identical on toggle). */
   const [instagramToolbarFreezeRect, setInstagramToolbarFreezeRect] =
@@ -1059,7 +1059,7 @@ export function WorkspaceShell({
         .shell.instagram-widget-mobile-preview .content.instagram-widget-content {
           background: #ebebeb;
         }
-        /* Narrow phone column — closer to Elfsight mobile editor canvas */
+        /* Narrow phone column — mobile editor canvas */
         .shell.instagram-widget-shell {
           --ig-studio-mobile-frame-max: 375px;
         }

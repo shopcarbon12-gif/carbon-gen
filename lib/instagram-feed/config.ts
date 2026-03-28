@@ -1,10 +1,5 @@
 import type { InstagramFeedProviderId } from "./types";
 
-/** Same widget as Shopify custom liquid + production homepage. */
-export const ELFSIGHT_WIDGET_CLASS = "elfsight-app-d881cb77-4507-46ba-aa42-ae82cdabf435";
-
-export const ELFSIGHT_PLATFORM_SCRIPT = "https://elfsightcdn.com/platform.js";
-
 /** Hero image from scripts/shopify-instagram-row-custom-liquid.liquid */
 export const STOREFRONT_INSTAGRAM_HERO_IMAGE =
   "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/DZ__3128.jpg?v=1733764412";
@@ -44,12 +39,12 @@ export const STOREFRONT_PREVIEW_TILE_OBJECT_POSITIONS: readonly string[] = [
 ];
 
 /**
- * Which backend powers the right column. `elfsight` = current production parity.
- * When Meta is wired, switch to `meta` and render from API data instead of the embed div.
+ * Feed source for typed config. Default is Meta (Graph API). Set
+ * `NEXT_PUBLIC_INSTAGRAM_FEED_PROVIDER=elfsight` only for legacy embed parity (deprecated).
  */
 export function getInstagramFeedProvider(): InstagramFeedProviderId {
-  const v = String(process.env.NEXT_PUBLIC_INSTAGRAM_FEED_PROVIDER || "elfsight")
+  const v = String(process.env.NEXT_PUBLIC_INSTAGRAM_FEED_PROVIDER || "meta")
     .trim()
     .toLowerCase();
-  return v === "meta" ? "meta" : "elfsight";
+  return v === "elfsight" ? "elfsight" : "meta";
 }

@@ -2,7 +2,7 @@
 export const INSTAGRAM_HERO_WIDTH = 2000;
 export const INSTAGRAM_HERO_HEIGHT = 1200;
 
-/** Elfsight-style slider defaults (horizontal feed strip). */
+/** Default slider behavior for the horizontal feed strip in studio + storefront preview. */
 export const INSTAGRAM_FEED_SLIDER_DEFAULTS = {
   feedSliderArrowsEnabled: true,
   feedSliderDragEnabled: true,
