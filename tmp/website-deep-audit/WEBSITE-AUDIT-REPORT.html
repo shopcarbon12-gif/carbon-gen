@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Shop Carbon — Website check-up report (easy read)</title>
+  <style>
+    :root { font-family: Georgia, "Times New Roman", serif; line-height: 1.55; color: #1a1a1a; }
+    body { max-width: 820px; margin: 0 auto; padding: 24px 18px 80px; }
+    h1 { font-size: 1.75rem; margin-top: 0; }
+    h2 { font-size: 1.25rem; margin-top: 2rem; border-bottom: 2px solid #111; padding-bottom: 6px; }
+    h3 { font-size: 1.05rem; margin-top: 1.25rem; }
+    .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-family: system-ui, sans-serif; font-weight: 600; margin-right: 6px; }
+    .asap { background: #ffe0e0; color: #7a0000; }
+    .soon { background: #fff4d6; color: #6b5500; }
+    .later { background: #e8f4ff; color: #003a6b; }
+    figure { margin: 16px 0; }
+    figcaption { font-size: 0.88rem; color: #444; margin-top: 8px; }
+    img.screenshot { width: 100%; height: auto; border: 1px solid #ccc; border-radius: 6px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.92rem; font-family: system-ui, sans-serif; }
+    th, td { border: 1px solid #ccc; padding: 10px; text-align: left; vertical-align: top; }
+    th { background: #f5f5f5; }
+    .box { background: #f9f9f9; border-left: 4px solid #333; padding: 12px 16px; margin: 16px 0; }
+    code, .mono { font-family: ui-monospace, monospace; font-size: 0.88em; }
+    ul { padding-left: 1.2rem; }
+    .footer { margin-top: 3rem; font-size: 0.85rem; color: #555; }
+  </style>
+</head>
+<body>
+
+<h1>Shop Carbon website check-up</h1>
+<p><strong>What this is:</strong> A practical health check of your public store (<strong>shopcarbon.com</strong>) in normal language. We looked at speed, mobile layout, accessibility basics, SEO signals, visuals, and clutter from extra apps — then wrote down what to fix first.</p>
+<p><strong>How we tested:</strong> One automated browser session (similar to Chrome) on <span class="mono">26 Mar 2026</span>. Numbers change with internet speed and time of day; use this as a guide, not a lab certificate.</p>
+<p><strong>Screenshots in this report:</strong> Real captures from that session (saved next to this file).</p>
+
+<h2>1. Quick summary — do these first (ASAP)</h2>
+<div class="box">
+  <p><span class="tag asap">ASAP</span> <strong>Fix horizontal scrolling on mobile.</strong> The page was slightly wider than the phone screen (about 408px content vs 375px wide). That usually means something is “sticking out” and users have to drag sideways — annoying and easy to miss in desktop testing.</p>
+  <p><span class="tag asap">ASAP</span> <strong>Name the hidden Account links.</strong> Four links to <span class="mono">/account</span> had no visible text and no label for screen readers. People using voice control or a screen reader cannot tell what those links do.</p>
+  <p><span class="tag asap">ASAP</span> <strong>Social sharing image (Open Graph) uses HTTP.</strong> Your main share image is listed as <span class="mono">http://shopcarbon.com/...</span>. Many platforms prefer <strong>https</strong>. Mixed content can break previews on Facebook, Slack, iMessage, etc.</p>
+  <p><span class="tag asap">ASAP</span> <strong>Product price shows empty “( )” next to $80.</strong> On a sample product page the price read like money plus empty brackets — looks like a small theme or app bug and hurts trust.</p>
+  <p><span class="tag asap">ASAP</span> <strong>Too many floating buttons on mobile.</strong> Chat, rewards, wishlist, and accessibility tools overlap sale buttons and product photos. Simplify spacing or stack them so taps are not accidental.</p>
+</div>
+
+<h2>2. Screenshots we took</h2>
+
+<figure>
+  <img class="screenshot" src="01-desktop-home.png" alt="Desktop view of Carbon homepage with Winter Sale hero" />
+  <figcaption><strong>Figure A — Desktop homepage.</strong> Strong hero and clear sale message. Many competing floating widgets (chat, rewards, wishlist, accessibility) sit on the edges.</figcaption>
+</figure>
+
+<figure>
+  <img class="screenshot" src="02-desktop-home-scrolled.png" alt="Desktop homepage scrolled to Men and Women split section" />
+  <figcaption><strong>Figure B — Desktop homepage (scrolled).</strong> Men / Women split looks premium. Large photos = beautiful but heavy for speed (see section 4).</figcaption>
+</figure>
+
+<figure>
+  <img class="screenshot" src="03-mobile-home-top.png" alt="Mobile homepage with Winter Sale and floating chat button" />
+  <figcaption><strong>Figure C — Mobile homepage.</strong> Sale text is readable. The round chat button sits close to “Shop Women” — easy to tap the wrong control.</figcaption>
+</figure>
+
+<figure>
+  <img class="screenshot" src="04-mobile-collection-all.png" alt="Mobile collection page showing Products hero and grid" />
+  <figcaption><strong>Figure D — Mobile “All products” collection.</strong> Two-column grid works. Again several overlays (gift icon, accessibility, heart) compete for attention near product images.</figcaption>
+</figure>
+
+<figure>
+  <img class="screenshot" src="05-desktop-product.png" alt="Desktop product page for Ann two-piece set" />
+  <figcaption><strong>Figure E — Desktop product page (sample).</strong> Good imagery and story text. Watch for the empty parentheses after price and small link text (“Shipping”) for older eyes.</figcaption>
+</figure>
+
+<h2>3. Speed &amp; “download weight” (beginner explanation)</h2>
+<p><strong>Plain English:</strong> “Speed” here means how long until the page feels usable, and how much data the browser downloads. Your homepage asked for <strong>hundreds</strong> of separate files in our sample — very normal for a busy Shopify store with tracking and apps, but it adds up.</p>
+<ul>
+  <li><strong>Time until main content painted (rough):</strong> about <strong>2.3 seconds</strong> for first meaningful paint on desktop in our run.</li>
+  <li><strong>Time until “load” event:</strong> about <strong>5–5.5 seconds</strong> on home and mobile in our run — many images and scripts load after the first paint.</li>
+  <li><strong>Many network requests:</strong> on the order of <strong>600+</strong> resource entries — scripts, images, fonts, tracking.</li>
+</ul>
+<p><strong>Why it matters:</strong> On slower phones or weak Wi‑Fi, heavy pages feel sluggish. Google also uses speed as one of many ranking hints.</p>
+<h3>What to improve (speed)</h3>
+<table>
+  <thead><tr><th>Priority</th><th>Idea</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr><td><span class="tag soon">Soon</span></td><td>Audit third-party scripts (chat, pixels, apps)</td><td>Each tag adds download and CPU. Remove what you do not actively use.</td></tr>
+    <tr><td><span class="tag soon">Soon</span></td><td>Compress hero and collection images; prefer modern formats where the theme allows</td><td>Big photos are the #1 bandwidth hog.</td></tr>
+    <tr><td><span class="tag later">Later</span></td><td>Run Google PageSpeed Insights on home, a collection, and a product</td><td>Free report with prioritized fixes for your exact theme.</td></tr>
+  </tbody>
+</table>
+
+<h2>4. Mobile experience</h2>
+<ul>
+  <li><strong>Horizontal overflow detected:</strong> scroll width wider than screen — fix layout/CSS so nothing extends past the screen edge.</li>
+  <li><strong>Tap targets:</strong> at least one icon link was about <strong>40×40</strong> pixels. Apple/Google often recommend ~44×44 minimum for comfortable tapping.</li>
+  <li><strong>Visual clutter:</strong> rewards + wishlist + accessibility + chat float over content — consider one “help” hub or calmer positioning on small screens.</li>
+</ul>
+
+<h2>5. Accessibility (everyone can use the site)</h2>
+<p>Your storefront images we checked had <strong>alt text present</strong> in the HTML (good). Remaining issues are mostly <strong>interactive controls</strong> and <strong>structure</strong>:</p>
+<ul>
+  <li><strong>Unnamed links (4):</strong> premium / account links with no text — add visible “Account” or an <span class="mono">aria-label</span>.</li>
+  <li><strong>Unnamed buttons (2):</strong> Swym wishlist close buttons without a readable name — add <span class="mono">aria-label="Close"</span> (or similar).</li>
+  <li><strong>Theme patterns:</strong> Mega menus use “menu” roles; automated scanners often flag these when keyboard behavior does not match strict patterns. A human accessibility review is still valuable.</li>
+  <li><strong>Carbon Assist widget:</strong> Helps visitors adjust contrast/text; it does <em>not</em> replace fixing broken links/buttons in the theme.</li>
+</ul>
+
+<h2>6. SEO (Google &amp; social)</h2>
+<ul>
+  <li><strong>Title and meta description:</strong> Present and sensible on the homepage.</li>
+  <li><strong>Canonical URL:</strong> Set to <span class="mono">https://shopcarbon.com/</span> (good).</li>
+  <li><strong>Home H1:</strong> We saw <strong>“WINTER SALE”</strong> as the main heading. That is fine for a campaign, but your brand + category words live mostly in the title tag — balance campaign H1s with evergreen wording if SEO is a priority.</li>
+  <li><strong>Structured data:</strong> Multiple JSON-LD blocks (good start). One breadcrumb snippet preview showed <strong>empty fields</strong> — worth cleaning so Google gets clean data.</li>
+  <li><strong>Open Graph image HTTP:</strong> Switch to <strong>https</strong> for the primary <span class="mono">og:image</span> URL.</li>
+  <li><strong>Broken URL check:</strong> A guessed URL <span class="mono">/collections/mens-jeans</span> returned <strong>404</strong>. If old ads or emails point there, add a redirect to the real jeans collection.</li>
+</ul>
+
+<h2>7. Trust, polish, and UI details</h2>
+<ul>
+  <li><strong>Empty price brackets</strong> on the sample product — fix soon; shoppers notice small errors.</li>
+  <li><strong>Social links in footer</strong> sometimes use <span class="mono">http://</span> — prefer <span class="mono">https://</span> everywhere.</li>
+  <li><strong>Console errors</strong> on product (Shop Pay / browser reporting): often third-party; track if checkout complaints appear.</li>
+  <li><strong>Many apps visible in logs</strong> (Kangaroo, Pop Convert, Swym wishlist, Tawk, multiple pixels): each adds weight and moving parts — keep only what you measure.</li>
+</ul>
+
+<h2>8. Priority cheat sheet</h2>
+<table>
+  <thead><tr><th>When</th><th>What</th></tr></thead>
+  <tbody>
+    <tr><td><span class="tag asap">This week</span></td><td>Remove mobile horizontal scroll; label <span class="mono">/account</span> links; fix <span class="mono">og:image</span> to HTTPS; fix empty price parentheses; reduce floating-widget overlap on mobile.</td></tr>
+    <tr><td><span class="tag soon">Next</span></td><td>Image compression + script audit; 404/redirect sweep for old collection URLs; JSON-LD cleanup; enlarge tiny tap targets.</td></tr>
+    <tr><td><span class="tag later">Ongoing</span></td><td>PageSpeed Insights passes; professional accessibility audit; A/B test hero and CTA placement.</td></tr>
+  </tbody>
+</table>
+
+<p class="footer">Raw numbers: see <span class="mono">audit-data.json</span> in this folder. Re-run checks after major theme or app changes.</p>
+
+</body>
+</html>

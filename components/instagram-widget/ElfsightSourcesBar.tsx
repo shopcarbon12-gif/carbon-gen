@@ -12,9 +12,36 @@ import {
   STOREFRONT_INSTAGRAM_HANDLE,
   STOREFRONT_INSTAGRAM_URL,
 } from "@/lib/instagram-feed";
+import {
+  normalizeInstagramAtLabel,
+  normalizeWebUrlForStorage,
+} from "@/lib/instagram-hero-text-normalize";
+import type { InstagramSectionStoredConfig } from "@/lib/instagramSectionConfigRepository";
+import { INSTAGRAM_HERO_HEIGHT, INSTAGRAM_HERO_WIDTH } from "@/lib/instagram-widget-constants";
 import styles from "./elfsight-sources-bar.module.css";
 
-type ModalKey = "account" | "add" | "filters" | "sorting" | null;
+type ModalKey = "account" | "add" | "filters" | "hero" | "sorting" | null;
+
+function dispatchInstagramSectionConfigUpdated() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent("instagram-section-config-updated"));
+}
+
+async function persistInstagramSectionPartial(
+  partial: Partial<InstagramSectionStoredConfig>,
+): Promise<void> {
+  const putRes = await fetch("/api/storefront/instagram-section?scope=default", {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ config: partial }),
+  });
+  const putData = (await putRes.json()) as { ok?: boolean; error?: string };
+  if (!putRes.ok || !putData?.ok) {
+    throw new Error(putData?.error || "Failed to save");
+  }
+  dispatchInstagramSectionConfigUpdated();
+}
 
 function normalizeInstagramQuery(raw: string): string {
   let s = raw.trim();
@@ -46,7 +73,24 @@ export function ElfsightSourcesBar() {
   const [addSearchDone, setAddSearchDone] = useState(false);
   const [addSelectedHandle, setAddSelectedHandle] = useState<string | null>(null);
   const addInputRef = useRef<HTMLInputElement>(null);
+  const heroFileInputRef = useRef<HTMLInputElement>(null);
+  const heroOnlineInputRef = useRef<HTMLInputElement>(null);
   const prevOpenRef = useRef<ModalKey | null>(null);
+
+  const defaultHeroLinkText = `@${STOREFRONT_INSTAGRAM_HANDLE}`;
+  const defaultHeroLinkHref = STOREFRONT_INSTAGRAM_URL;
+
+  const [heroDraft, setHeroDraft] = useState({
+    heroImageUrl: "",
+    heroLinkText: defaultHeroLinkText,
+    heroLinkHref: defaultHeroLinkHref,
+    heroAlt: "",
+  });
+  const [heroOnlineUrl, setHeroOnlineUrl] = useState("");
+  const [heroLoading, setHeroLoading] = useState(false);
+  const [heroBusy, setHeroBusy] = useState(false);
+  const [heroError, setHeroError] = useState<string | null>(null);
+  const [heroStatus, setHeroStatus] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -61,6 +105,51 @@ export function ElfsightSourcesBar() {
       setAddSearchDone(false);
       setAddSelectedHandle(null);
     }
+  }, [open]);
+
+  useEffect(() => {
+    if (open !== "hero") return;
+    setHeroError(null);
+    setHeroStatus(null);
+    setHeroOnlineUrl("");
+    let cancelled = false;
+    void (async () => {
+      setHeroLoading(true);
+      try {
+        const res = await fetch("/api/storefront/instagram-section?scope=default", {
+          credentials: "include",
+          cache: "no-store",
+        });
+        const data = (await res.json()) as {
+          ok?: boolean;
+          config?: InstagramSectionStoredConfig;
+          error?: string;
+        };
+        if (cancelled) return;
+        if (!res.ok || !data?.ok) {
+          throw new Error(data?.error || "Failed to load hero settings");
+        }
+        const c = data.config || {};
+        const linkHrefRaw = (c.heroLinkHref || "").trim() || STOREFRONT_INSTAGRAM_URL;
+        const linkTextRaw =
+          (c.heroLinkText || "").trim() || `@${STOREFRONT_INSTAGRAM_HANDLE}`;
+        setHeroDraft({
+          heroImageUrl: (c.heroImageUrl || "").trim(),
+          heroLinkText: normalizeInstagramAtLabel(linkTextRaw),
+          heroLinkHref: normalizeWebUrlForStorage(linkHrefRaw),
+          heroAlt: (c.heroAlt || "").trim(),
+        });
+      } catch (e: unknown) {
+        if (!cancelled) {
+          setHeroError(e instanceof Error ? e.message : "Load failed");
+        }
+      } finally {
+        if (!cancelled) setHeroLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [open]);
 
   const close = useCallback(() => {
@@ -95,6 +184,7 @@ export function ElfsightSourcesBar() {
 
   const isDrill = open === "filters" || open === "sorting";
   const isAddModal = open === "add";
+  const isHeroModal = open === "hero";
 
   const normalizedSearch = normalizeInstagramQuery(addQuery);
   const canDone =
@@ -118,6 +208,86 @@ export function ElfsightSourcesBar() {
     close();
   };
 
+  const onHeroFile = async (file: File | null) => {
+    if (!file) return;
+    setHeroBusy(true);
+    setHeroError(null);
+    setHeroStatus(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/storefront/instagram-section/hero-upload", {
+        method: "POST",
+        credentials: "include",
+        body: fd,
+      });
+      const data = (await res.json()) as { ok?: boolean; url?: string; error?: string };
+      if (!res.ok || !data?.ok) throw new Error(data?.error || "Upload failed");
+      const url = String(data.url || "").trim();
+      if (!url) throw new Error("No URL returned");
+      await persistInstagramSectionPartial({ heroImageUrl: url });
+      setHeroDraft((d) => ({ ...d, heroImageUrl: url }));
+      setHeroStatus("Uploaded and saved. Image was resized for Shopify (2000 x 1200).");
+    } catch (e: unknown) {
+      setHeroError(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setHeroBusy(false);
+      if (heroFileInputRef.current) heroFileInputRef.current.value = "";
+    }
+  };
+
+  const onHeroApplyOnlineUrl = async () => {
+    const raw = (
+      heroOnlineUrl.trim() ||
+      heroOnlineInputRef.current?.value?.trim() ||
+      ""
+    ).trim();
+    const httpsMatch = raw.match(/^https:\/\/(.*)$/i);
+    const u = normalizeWebUrlForStorage(httpsMatch ? `https://${httpsMatch[1]}` : raw);
+    if (!u) {
+      setHeroError("Enter an https image or video URL (Shopify-ready CDN).");
+      return;
+    }
+    setHeroBusy(true);
+    setHeroError(null);
+    setHeroStatus(null);
+    try {
+      await persistInstagramSectionPartial({ heroImageUrl: u });
+      setHeroDraft((d) => ({ ...d, heroImageUrl: u }));
+      setHeroOnlineUrl("");
+      setHeroStatus("Online URL saved. Use Shopify Files or a stable https URL for production.");
+    } catch (e: unknown) {
+      setHeroError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setHeroBusy(false);
+    }
+  };
+
+  const onHeroSaveLinkFields = async () => {
+    setHeroBusy(true);
+    setHeroError(null);
+    setHeroStatus(null);
+    try {
+      const linkText = normalizeInstagramAtLabel(
+        heroDraft.heroLinkText.trim() || defaultHeroLinkText,
+      );
+      const linkHref = normalizeWebUrlForStorage(
+        heroDraft.heroLinkHref.trim() || defaultHeroLinkHref,
+      );
+      await persistInstagramSectionPartial({
+        heroLinkText: linkText,
+        heroLinkHref: linkHref,
+        heroAlt: heroDraft.heroAlt.trim(),
+      });
+      setHeroDraft((d) => ({ ...d, heroLinkText: linkText, heroLinkHref: linkHref }));
+      setHeroStatus("Link label, URL, and alt text saved.");
+    } catch (e: unknown) {
+      setHeroError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setHeroBusy(false);
+    }
+  };
+
   const modal =
     mounted &&
     open &&
@@ -128,7 +298,7 @@ export function ElfsightSourcesBar() {
         onClick={handleOverlayPointer}
       >
         <div
-          className={styles.dialog}
+          className={[styles.dialog, isHeroModal && styles.dialogHero].filter(Boolean).join(" ")}
           role="dialog"
           aria-modal="true"
           aria-labelledby={titleId}
@@ -137,7 +307,7 @@ export function ElfsightSourcesBar() {
             <>
               <div className={styles.drillHead}>
                 <button type="button" className={styles.backBtn} onClick={handleBack}>
-                  <span aria-hidden>‹</span> Back
+                  <span aria-hidden>{"\u2039"}</span> Back
                 </button>
                 <h2 id={titleId} className={styles.drillTitle}>
                   {open === "filters" ? "Filters" : "Sorting"}
@@ -148,7 +318,7 @@ export function ElfsightSourcesBar() {
                   onClick={close}
                   aria-label="Close"
                 >
-                  ×
+                  {"\u00d7"}
                 </button>
               </div>
               <div className={styles.drillBody}>
@@ -165,7 +335,7 @@ export function ElfsightSourcesBar() {
                           className={styles.filterRowEllipsis}
                           aria-label="Row options"
                         >
-                          ···
+                          {"\u00b7\u00b7\u00b7"}
                         </button>
                       </div>
                       <div className={styles.filterRow}>
@@ -175,7 +345,7 @@ export function ElfsightSourcesBar() {
                           className={styles.filterRowEllipsis}
                           aria-label="Row options"
                         >
-                          ···
+                          {"\u00b7\u00b7\u00b7"}
                         </button>
                       </div>
                       <button type="button" className={styles.addFilterBtn}>
@@ -350,6 +520,137 @@ export function ElfsightSourcesBar() {
                 </div>
               </div>
             </>
+          ) : isHeroModal ? (
+            <>
+              <div className={styles.dialogHead}>
+                <span aria-hidden style={{ width: 34 }} />
+                <h2 id={titleId} className={styles.dialogTitle}>
+                  Hero picture
+                </h2>
+                <button type="button" className={styles.closeX} onClick={close} aria-label="Close">
+                  {"\u00d7"}
+                </button>
+              </div>
+              <div className={styles.heroModalBody}>
+                <p className={styles.heroDimNote}>
+                  Output is always cropped to{" "}
+                  <strong>
+                    {INSTAGRAM_HERO_WIDTH} x {INSTAGRAM_HERO_HEIGHT}
+                  </strong>{" "}
+                  (5:3) for Shopify.                   For best quality, use a source at least <strong>1200 x 720 px</strong>.
+                </p>
+                {heroLoading ? (
+                  <p className={styles.heroDimNote}>Loading...</p>
+                ) : null}
+                {heroError ? <p className={styles.heroError}>{heroError}</p> : null}
+                {heroStatus ? <p className={styles.heroStatus}>{heroStatus}</p> : null}
+
+                <div className={styles.heroSection}>
+                  <p className={styles.sectionLabel}>LINK & ACCESSIBILITY</p>
+                  <label className={styles.heroFieldLabel} htmlFor="hero-modal-link-text">
+                    Link label (center overlay on storefront)
+                    <input
+                      id="hero-modal-link-text"
+                      className={styles.heroFieldInput}
+                      value={heroDraft.heroLinkText}
+                      onChange={(e) =>
+                        setHeroDraft((d) => ({ ...d, heroLinkText: e.target.value }))
+                      }
+                      placeholder={defaultHeroLinkText}
+                      autoComplete="off"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                    />
+                  </label>
+                  <label className={styles.heroFieldLabel}>
+                    Link URL (opens in new tab on Shopify)
+                    <input
+                      className={styles.heroFieldInput}
+                      type="url"
+                      value={heroDraft.heroLinkHref}
+                      onChange={(e) =>
+                        setHeroDraft((d) => ({ ...d, heroLinkHref: e.target.value }))
+                      }
+                      placeholder={defaultHeroLinkHref}
+                      autoComplete="off"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                    />
+                  </label>
+                  <label className={styles.heroFieldLabel}>
+                    Hero alt text (accessibility)
+                    <input
+                      className={styles.heroFieldInput}
+                      value={heroDraft.heroAlt}
+                      onChange={(e) => setHeroDraft((d) => ({ ...d, heroAlt: e.target.value }))}
+                      placeholder={`Instagram banner for ${defaultHeroLinkText}`}
+                      autoComplete="off"
+                      autoCapitalize="sentences"
+                    />
+                  </label>
+                  <div className={styles.heroRowActions}>
+                    <button
+                      type="button"
+                      className={styles.heroBtn}
+                      disabled={heroBusy}
+                      onClick={() => void onHeroSaveLinkFields()}
+                    >
+                      {"Save link & alt"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className={styles.heroSection}>
+                  <p className={styles.sectionLabel}>UPLOAD</p>
+                  <p className={styles.heroDimNote}>
+                    JPEG, PNG, WebP, GIF, or video (MP4, WebM, MOV). Max 25 MB images / 80 MB video.
+                    Output is resized to {INSTAGRAM_HERO_WIDTH} x {INSTAGRAM_HERO_HEIGHT}.
+                  </p>
+                  <div className={styles.heroRowActions}>
+                    <label className={styles.heroFileLabel}>
+                      <input
+                        ref={heroFileInputRef}
+                        className={styles.heroFileInput}
+                        type="file"
+                        accept="image/*,video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v"
+                        disabled={heroBusy}
+                        onChange={(e) => void onHeroFile(e.target.files?.[0] ?? null)}
+                      />
+                      Choose file
+                    </label>
+                  </div>
+                </div>
+
+                <div className={styles.heroSection}>
+                  <p className={styles.sectionLabel}>ONLINE IMAGE OR VIDEO URL</p>
+                  <input
+                    ref={heroOnlineInputRef}
+                    id="hero-picture-online-url"
+                    className={styles.heroFieldInput}
+                    value={heroOnlineUrl}
+                    onChange={(e) => setHeroOnlineUrl(e.target.value)}
+                    placeholder="https://cdn.shopify.com/..."
+                    autoComplete="off"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    aria-label="Online hero image or video URL"
+                  />
+                  <div className={styles.heroRowActions}>
+                    <button
+                      type="button"
+                      className={styles.heroBtn}
+                      disabled={heroBusy}
+                      onClick={() => void onHeroApplyOnlineUrl()}
+                    >
+                      Use this URL
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </>
           ) : (
             <>
               <div className={styles.dialogHead}>
@@ -358,7 +659,7 @@ export function ElfsightSourcesBar() {
                   {open === "account" && atHandle}
                 </h2>
                 <button type="button" className={styles.closeX} onClick={close} aria-label="Close">
-                  ×
+                  {"\u00d7"}
                 </button>
               </div>
               <div className={styles.dialogBody}>
@@ -402,6 +703,13 @@ export function ElfsightSourcesBar() {
           onClick={() => setOpen((k) => (k === "account" ? null : "account"))}
         >
           {atHandle}
+        </button>
+        <button
+          type="button"
+          className={`${styles.trigger} ${styles.triggerHeroPicture} ${open === "hero" ? styles.triggerActive : ""}`}
+          onClick={() => setOpen((k) => (k === "hero" ? null : "hero"))}
+        >
+          Hero picture
         </button>
         <button
           type="button"

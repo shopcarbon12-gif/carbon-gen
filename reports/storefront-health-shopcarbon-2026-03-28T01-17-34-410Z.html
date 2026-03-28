@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>Shopify storefront health (deep) — shopcarbon.com</title>
+  <style>
+    :root { --bg:#0f1419; --card:#1a2332; --text:#e7ecf3; --muted:#8b9bb4; --ok:#3ecf8e; --bad:#ff6b6b; --warn:#f0c14a; --border:#2d3a4d; }
+    * { box-sizing: border-box; }
+    body { font-family: ui-sans-serif, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); margin: 0; line-height: 1.5; }
+    header { padding: 2rem 1.5rem; border-bottom: 1px solid var(--border); background: linear-gradient(180deg, #15202b 0%, var(--bg) 100%); }
+    h1 { margin: 0 0 0.5rem; font-size: 1.65rem; font-weight: 700; }
+    h2.section-title { margin: 2.5rem 0 0.75rem; font-size: 1.25rem; }
+    p.section-desc { color: var(--muted); margin: 0 0 1rem; max-width: 900px; }
+    .meta { color: var(--muted); font-size: 0.95rem; }
+    main { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
+    .summary { display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem; }
+    .pill { padding: 0.6rem 1rem; border-radius: 8px; background: var(--card); border: 1px solid var(--border); font-size: 0.95rem; }
+    .pill strong { font-size: 1.25rem; display: block; }
+    .pill.pass strong { color: var(--ok); }
+    .pill.fail strong { color: var(--bad); }
+    .pill.warn strong { color: var(--warn); }
+    table.main { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    table.main th, table.main td { border: 1px solid var(--border); padding: 0.65rem 0.75rem; vertical-align: top; text-align: left; }
+    table.main th { background: var(--card); color: var(--muted); font-weight: 600; }
+    tr.pass td:first-child { border-left: 3px solid var(--ok); }
+    tr.warn td:first-child { border-left: 3px solid var(--warn); }
+    tr.fail td:first-child { border-left: 3px solid var(--bad); }
+    .badge { display: inline-block; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.02em; }
+    .badge.ok { background: rgba(62,207,142,0.2); color: var(--ok); }
+    .badge.bad { background: rgba(255,107,107,0.2); color: var(--bad); }
+    .badge.warn { background: rgba(240,193,74,0.2); color: var(--warn); }
+    a { color: #7eb8ff; }
+    .scope { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1.5rem; }
+    .scope h2 { margin: 0 0 0.5rem; font-size: 1.1rem; }
+    .scope ul { margin: 0.5rem 0 0; padding-left: 1.25rem; color: var(--muted); }
+    pre.hdr, pre.snip { background: #0a0e14; border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem; overflow: auto; max-height: 220px; font-size: 0.78rem; margin: 0.5rem 0 0; }
+    details.sub { margin-top: 0.5rem; }
+    table.inner { width: 100%; border-collapse: collapse; font-size: 0.8rem; margin-top: 0.35rem; }
+    table.inner th, table.inner td { border: 1px solid var(--border); padding: 0.35rem 0.5rem; }
+    footer { padding: 1.5rem; color: var(--muted); font-size: 0.85rem; text-align: center; border-top: 1px solid var(--border); margin-top: 2rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Shopify storefront health report</h1>
+    <p class="meta">Target: <strong>www.shopcarbon.com</strong> / <strong>shopcarbon.com</strong> (public storefront only)</p>
+    <p class="meta">Run at: 2026-03-28T01:17:34.410Z (UTC)</p>
+  </header>
+  <main>
+    <div class="scope">
+      <h2>Scope &amp; methodology</h2>
+      <ul>
+        <li>HTTP(S) requests use Node <code>fetch</code> with timeouts (45s) and a labeled User-Agent.</li>
+        <li>Hosts are restricted to <code>shopcarbon.com</code> and <code>www.shopcarbon.com</code> only.</li>
+        <li><strong>Excluded by request:</strong> <code>app.shopcarbon.com</code> and all app API routes — not probed.</li>
+        <li>Status expectations are documented per row; content hints are heuristic (substring checks on the first ~96&nbsp;KB of each response).</li>
+        <li>Deep table (unless <code>--quick</code>): security header review, SEO tags, HTML weight, compression hint, <code>products.json</code>, sitemap child, 404 hygiene, mixed-content and image <code>alt</code> heuristics.</li>
+        <li>This is not a substitute for Lighthouse, CrUX, synthetic RUM, or Shopify Admin diagnostics.</li>
+      </ul>
+    </div>
+    <div class="scope"><h2>Observations</h2><ul><li>Starting from <strong>www.shopcarbon.com</strong>, the client was redirected to <a href="https://shopcarbon.com/" target="_blank" rel="noopener">https://shopcarbon.com/</a> (canonical host behavior).</li></ul></div>
+    <div class="summary">
+      <div class="pill pass"><strong>9</strong> passed</div>
+      <div class="pill warn"><strong>0</strong> warnings</div>
+      <div class="pill fail"><strong>0</strong> failed</div>
+      <div class="pill"><strong>9</strong> checks total</div>
+    </div>
+    <table class="main">
+      <thead>
+        <tr>
+          <th>Result</th>
+          <th>Check</th>
+          <th>HTTP</th>
+          <th>Total time</th>
+          <th>Final URL</th>
+          <th>Details</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="pass">
+        <td><span class="badge ok">PASS</span></td>
+        <td><strong>Homepage (www)</strong><br/><a href="https://www.shopcarbon.com/" target="_blank" rel="noopener">https://www.shopcarbon.com/</a></td>
+        <td>200</td>
+        <td>1665 ms</td>
+        <td><a href="https://shopcarbon.com/" target="_blank" rel="noopener">https://shopcarbon.com/</a></td>
+        <td class="notes"><pre class="hdr">{
+  &quot;content-type&quot;: &quot;text/html; charset=utf-8&quot;,
+  &quot;strict-transport-security&quot;: &quot;max-age=7889238&quot;,
+  &quot;x-shopid&quot;: &quot;&quot;,
+  &quot;x-shopify-stage&quot;: &quot;&quot;,
+  &quot;cf-ray&quot;: &quot;9e32cbcc9a131670-MIA&quot;,
+  &quot;server&quot;: &quot;cloudflare&quot;,
+  &quot;powered-by&quot;: &quot;&quot;
+}</pre><details class="sub"><summary>Body snippet</summary><pre class="snip">&lt;!doctype html&gt; &lt;script&gt; (function(){ var data = { &quot;@context&quot;: &quot;https://schema.org&quot;, &quot;@type&quot;: &quot;BreadcrumbList&quot;, &quot;itemListElement&quot;: [ { &quot;@type&quot;: &quot;ListItem&quot;, &quot;position&quot;: 1, &quot;item&quot;: { &quot;@id&quot;: &quot;&quot;, &quot;name&quot;: &quot;&quot; } }, { &quot;@type&quot;: &quot;ListItem&quot;, &quot;position&quot;: 2, &quot;item&quot;: { &quot;@id&quot;: &quot;&quot;, &quot;name&quot;: &quot;&quot; } }, { &quot;@type&quot;: &quot;ListItem&quot;, &quot;position&quot;: 3, &quot;item&quot;: { &quot;@id&quot;: &quot;&quot;, &quot;name&quot;: &quot;&quot; } } ] }; var script = document.createElement('script'); script.type = 'application/ld+json'; script.innerHTML = JSON.stringify(data, null, 2); document.head.appendChild(script); })(); &lt;/script&gt; &lt;script type=&quot;application/ld+js</pre></details></td>
+      </tr><tr class="pass">
+        <td><span class="badge ok">PASS</span></td>
+        <td><strong>Homepage (apex)</strong><br/><a href="https://shopcarbon.com/" target="_blank" rel="noopener">https://shopcarbon.com/</a></td>
+        <td>200</td>
+        <td>302 ms</td>
+        <td><a href="https://shopcarbon.com/" target="_blank" rel="noopener">https://shopcarbon.com/</a></td>
+        <td class="notes"><details class="sub"><summary>Redirect chain (1 hop(s))</summary>
+          <table class="inner"><thead><tr><th>URL</th><th>Status</th><th>Time</th><th>Location</th></tr></thead><tbody><tr><td>https://shopcarbon.com/</td><td>200</td><td>144 ms</td><td>—</td></tr></tbody></table></details><pre class="hdr">{
+  &quot;content-type&quot;: &quot;text/html; charset=utf-8&quot;,
+  &quot;strict-transport-security&quot;: &quot;max-age=7889238&quot;,
+  &quot;x-shopid&quot;: &quot;&quot;,
+  &quot;x-shopify-stage&quot;: &quot;&quot;,
+  &quot;cf-ray&quot;: &quot;9e32cbd26e721dd8-MIA&quot;,
+  &quot;server&quot;: &quot;cloudflare&quot;,
+  &quot;powered-by&quot;: &quot;&quot;
+}</pre><details class="sub"><summary>Body snippet</summary><pre class="snip">&lt;!doctype html&gt; &lt;script&gt; (function(){ var data = { &quot;@context&quot;: &quot;https://schema.org&quot;, &quot;@type&quot;: &quot;BreadcrumbList&quot;, &quot;itemListElement&quot;: [ { &quot;@type&quot;: &quot;ListItem&quot;, &quot;position&quot;: 1, &quot;item&quot;: { &quot;@id&quot;: &quot;&quot;, &quot;name&quot;: &quot;&quot; } }, { &quot;@type&quot;: &quot;ListItem&quot;, &quot;position&quot;: 2, &quot;item&quot;: { &quot;@id&quot;: &quot;&quot;, &quot;name&quot;: &quot;&quot; } }, { &quot;@type&quot;: &quot;ListItem&quot;, &quot;position&quot;: 3, &quot;item&quot;: { &quot;@id&quot;: &quot;&quot;, &quot;name&quot;: &quot;&quot; } } ] }; var script = document.createElement('script'); script.type = 'application/ld+json'; script.innerHTML = JSON.stringify(data, null, 2); document.head.appendChild(script); })(); &lt;/script&gt; &lt;script type=&quot;application/ld+js</pre></details></td>
+      </tr><tr class="pass">
+        <td><span class="badge ok">PASS</span></td>
+        <td><strong>Sample product (PDP)</strong><br/><a href="https://shopcarbon.com/products/gyda-2-piece-streetwear-set-72" target="_blank" rel="noopener">https://shopcarbon.com/products/gyda-2-piece-streetwear-set-72</a></td>
+        <td>200</td>
+        <td>312 ms</td>
+        <td><a href="https://shopcarbon.com/products/gyda-2-piece-streetwear-set-72" target="_blank" rel="noopener">https://shopcarbon.com/products/gyda-2-piece-streetwear-set-72</a></td>
+        <td class="notes"><pre class="hdr">{
+  &quot;content-type&quot;: &quot;text/html; charset=utf-8&quot;,
+  &quot;strict-transport-security&quot;: &quot;max-age=7889238&quot;,
+  &quot;x-shopid&quot;: &quot;&quot;,
+  &quot;x-shopify-stage&quot;: &quot;&quot;,
+  &quot;cf-ray&quot;: &quot;9e32cbd348bf1dd8-MIA&quot;,
+  &quot;server&quot;: &quot;cloudflare&quot;,
+  &quot;powered-by&quot;: &quot;&quot;
+}</pre><details class="sub"><summary>Body snippet</summary><pre class="snip">&lt;!doctype html&gt; &lt;script&gt; (function(){ var data = { &quot;@context&quot;: &quot;https://schema.org&quot;, &quot;@type&quot;: &quot;BreadcrumbList&quot;, &quot;itemListElement&quot;: [ { &quot;@type&quot;: &quot;ListItem&quot;, &quot;position&quot;: 1, &quot;item&quot;: { &quot;@id&quot;: &quot;&quot;, &quot;name&quot;: &quot;&quot; } }, { &quot;@type&quot;: &quot;ListItem&quot;, &quot;position&quot;: 2, &quot;item&quot;: { &quot;@id&quot;: &quot;&quot;, &quot;name&quot;: &quot;&quot; } }, { &quot;@type&quot;: &quot;ListItem&quot;, &quot;position&quot;: 3, &quot;item&quot;: { &quot;@id&quot;: &quot;&quot;, &quot;name&quot;: &quot;&quot; } } ] }; var script = document.createElement('script'); script.type = 'application/ld+json'; script.innerHTML = JSON.stringify(data, null, 2); document.head.appendChild(script); })(); &lt;/script&gt; &lt;script type=&quot;application/ld+js</pre></details></td>
+      </tr><tr class="pass">
+        <td><span class="badge ok">PASS</span></td>
+        <td><strong>Account login</strong><br/><a href="https://shopcarbon.com/account/login" target="_blank" rel="noopener">https://shopcarbon.com/account/login</a></td>
+        <td>200</td>
+        <td>324 ms</td>
+        <td><a href="https://shopcarbon.com/account/login" target="_blank" rel="noopener">https://shopcarbon.com/account/login</a></td>
+        <td class="notes"><pre class="hdr">{
+  &quot;content-type&quot;: &quot;text/html; charset=utf-8&quot;,
+  &quot;strict-transport-security&quot;: &quot;max-age=7889238&quot;,
+  &quot;x-shopid&quot;: &quot;&quot;,
+  &quot;x-shopify-stage&quot;: &quot;&quot;,
+  &quot;cf-ray&quot;: &quot;9e32cbd58eac1dd8-MIA&quot;,
+  &quot;server&quot;: &quot;cloudflare&quot;,
+  &quot;powered-by&quot;: &quot;&quot;
+}</pre><details class="sub"><summary>Body snippet</summary><pre class="snip">&lt;!doctype html&gt; &lt;script&gt; (function(){ var data = { &quot;@context&quot;: &quot;https://schema.org&quot;, &quot;@type&quot;: &quot;BreadcrumbList&quot;, &quot;itemListElement&quot;: [ { &quot;@type&quot;: &quot;ListItem&quot;, &quot;position&quot;: 1, &quot;item&quot;: { &quot;@id&quot;: &quot;&quot;, &quot;name&quot;: &quot;&quot; } }, { &quot;@type&quot;: &quot;ListItem&quot;, &quot;position&quot;: 2, &quot;item&quot;: { &quot;@id&quot;: &quot;&quot;, &quot;name&quot;: &quot;&quot; } }, { &quot;@type&quot;: &quot;ListItem&quot;, &quot;position&quot;: 3, &quot;item&quot;: { &quot;@id&quot;: &quot;&quot;, &quot;name&quot;: &quot;&quot; } } ] }; var script = document.createElement('script'); script.type = 'application/ld+json'; script.innerHTML = JSON.stringify(data, null, 2); document.head.appendChild(script); })(); &lt;/script&gt; &lt;script type=&quot;application/ld+js</pre></details></td>
+      </tr><tr class="pass">
+        <td><span class="badge ok">PASS</span></td>
+        <td><strong>Content page (Jeans)</strong><br/><a href="https://shopcarbon.com/pages/jeans" target="_blank" rel="noopener">https://shopcarbon.com/pages/jeans</a></td>
+        <td>200</td>
+        <td>108 ms</td>
+        <td><a href="https://shopcarbon.com/pages/jeans" target="_blank" rel="noopener">https://shopcarbon.com/pages/jeans</a></td>
+        <td class="notes"><pre class="hdr">{
+  &quot;content-type&quot;: &quot;text/html; charset=utf-8&quot;,
+  &quot;strict-transport-security&quot;: &quot;max-age=7889238&quot;,
+  &quot;x-shopid&quot;: &quot;&quot;,
+  &quot;x-shopify-stage&quot;: &quot;&quot;,
+  &quot;cf-ray&quot;: &quot;9e32cbd7bc3f1dd8-MIA&quot;,
+  &quot;server&quot;: &quot;cloudflare&quot;,
+  &quot;powered-by&quot;: &quot;&quot;
+}</pre><details class="sub"><summary>Body snippet</summary><pre class="snip">&lt;!doctype html&gt; &lt;script&gt; (function(){ var data = { &quot;@context&quot;: &quot;https://schema.org&quot;, &quot;@type&quot;: &quot;BreadcrumbList&quot;, &quot;itemListElement&quot;: [ { &quot;@type&quot;: &quot;ListItem&quot;, &quot;position&quot;: 1, &quot;item&quot;: { &quot;@id&quot;: &quot;&quot;, &quot;name&quot;: &quot;&quot; } }, { &quot;@type&quot;: &quot;ListItem&quot;, &quot;position&quot;: 2, &quot;item&quot;: { &quot;@id&quot;: &quot;&quot;, &quot;name&quot;: &quot;&quot; } }, { &quot;@type&quot;: &quot;ListItem&quot;, &quot;position&quot;: 3, &quot;item&quot;: { &quot;@id&quot;: &quot;&quot;, &quot;name&quot;: &quot;&quot; } } ] }; var script = document.createElement('script'); script.type = 'application/ld+json'; script.innerHTML = JSON.stringify(data, null, 2); document.head.appendChild(script); })(); &lt;/script&gt; &lt;script type=&quot;application/ld+js</pre></details></td>
+      </tr><tr class="pass">
+        <td><span class="badge ok">PASS</span></td>
+        <td><strong>robots.txt</strong><br/><a href="https://www.shopcarbon.com/robots.txt" target="_blank" rel="noopener">https://www.shopcarbon.com/robots.txt</a></td>
+        <td>200</td>
+        <td>184 ms</td>
+        <td><a href="https://shopcarbon.com/robots.txt" target="_blank" rel="noopener">https://shopcarbon.com/robots.txt</a></td>
+        <td class="notes"><pre class="hdr">{
+  &quot;content-type&quot;: &quot;text/plain; charset=utf-8&quot;,
+  &quot;strict-transport-security&quot;: &quot;max-age=7889238&quot;,
+  &quot;x-shopid&quot;: &quot;&quot;,
+  &quot;x-shopify-stage&quot;: &quot;&quot;,
+  &quot;cf-ray&quot;: &quot;9e32cbd8ef281dd8-MIA&quot;,
+  &quot;server&quot;: &quot;cloudflare&quot;,
+  &quot;powered-by&quot;: &quot;&quot;
+}</pre><details class="sub"><summary>Body snippet</summary><pre class="snip"># we use Shopify as our ecommerce platform # ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓ # ┃ Robots &amp; Agent policy ┃ # ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫ # ┃ Checkouts are for humans. ┃ # ┃ * Automated scraping, “buy-for-me” agents, or any end-to-end flow ┃ # ┃ that completes payment without a final human review step is not ┃ # ┃ permitted. ┃ # ┃ * Legitimate integrators must use the official Checkout Kit: ┃ # ┃ https://www.shopify.com/checkout-kit ┃ # ┃</pre></details></td>
+      </tr><tr class="pass">
+        <td><span class="badge ok">PASS</span></td>
+        <td><strong>sitemap.xml</strong><br/><a href="https://shopcarbon.com/sitemap.xml" target="_blank" rel="noopener">https://shopcarbon.com/sitemap.xml</a></td>
+        <td>200</td>
+        <td>97 ms</td>
+        <td><a href="https://shopcarbon.com/sitemap.xml" target="_blank" rel="noopener">https://shopcarbon.com/sitemap.xml</a></td>
+        <td class="notes"><pre class="hdr">{
+  &quot;content-type&quot;: &quot;application/xml; charset=utf-8&quot;,
+  &quot;strict-transport-security&quot;: &quot;max-age=7889238&quot;,
+  &quot;x-shopid&quot;: &quot;&quot;,
+  &quot;x-shopify-stage&quot;: &quot;&quot;,
+  &quot;cf-ray&quot;: &quot;9e32cbd998c11dd8-MIA&quot;,
+  &quot;server&quot;: &quot;cloudflare&quot;,
+  &quot;powered-by&quot;: &quot;&quot;
+}</pre><details class="sub"><summary>Body snippet</summary><pre class="snip">&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt; &lt;sitemapindex xmlns=&quot;http://www.sitemaps.org/schemas/sitemap/0.9&quot;&gt; &lt;!-- This is the parent sitemap linking to additional sitemaps for products, collections and pages as shown below. The sitemap can not be edited manually, but is kept up to date in real time. --&gt; &lt;sitemap&gt; &lt;loc&gt;https://shopcarbon.com/sitemap_products_1.xml?from=9217321369852&amp;amp;to=9251186639100&lt;/loc&gt; &lt;/sitemap&gt; &lt;sitemap&gt; &lt;loc&gt;https://shopcarbon.com/sitemap_pages_1.xml?from=107808424188&amp;amp;to=129950155004&lt;/loc&gt; &lt;/sitemap&gt; &lt;sitemap&gt; &lt;loc&gt;https://shopcarbon.com/sitemap_collections_1.xml?fro</pre></details></td>
+      </tr><tr class="pass">
+        <td><span class="badge ok">PASS</span></td>
+        <td><strong>Cart JSON (Shopify)</strong><br/><a href="https://shopcarbon.com/cart.js" target="_blank" rel="noopener">https://shopcarbon.com/cart.js</a></td>
+        <td>200</td>
+        <td>90 ms</td>
+        <td><a href="https://shopcarbon.com/cart.js" target="_blank" rel="noopener">https://shopcarbon.com/cart.js</a></td>
+        <td class="notes"><pre class="hdr">{
+  &quot;content-type&quot;: &quot;text/javascript; charset=utf-8&quot;,
+  &quot;strict-transport-security&quot;: &quot;max-age=7889238&quot;,
+  &quot;x-shopid&quot;: &quot;&quot;,
+  &quot;x-shopify-stage&quot;: &quot;&quot;,
+  &quot;cf-ray&quot;: &quot;9e32cbda3a6b1dd8-MIA&quot;,
+  &quot;server&quot;: &quot;cloudflare&quot;,
+  &quot;powered-by&quot;: &quot;&quot;
+}</pre><details class="sub"><summary>Body snippet</summary><pre class="snip">{&quot;token&quot;:&quot;6971625abae58b15af1bb6b4a390d0ca&quot;,&quot;note&quot;:null,&quot;attributes&quot;:{},&quot;original_total_price&quot;:0,&quot;total_price&quot;:0,&quot;total_discount&quot;:0,&quot;total_weight&quot;:0.0,&quot;item_count&quot;:0,&quot;items&quot;:[],&quot;requires_shipping&quot;:false,&quot;currency&quot;:&quot;USD&quot;,&quot;items_subtotal_price&quot;:0,&quot;cart_level_discount_applications&quot;:[],&quot;discount_codes&quot;:[]}</pre></details></td>
+      </tr><tr class="pass">
+        <td><span class="badge ok">PASS</span></td>
+        <td><strong>Collections /all</strong><br/><a href="https://shopcarbon.com/collections/all" target="_blank" rel="noopener">https://shopcarbon.com/collections/all</a></td>
+        <td>200</td>
+        <td>347 ms</td>
+        <td><a href="https://shopcarbon.com/collections/all" target="_blank" rel="noopener">https://shopcarbon.com/collections/all</a></td>
+        <td class="notes"><pre class="hdr">{
+  &quot;content-type&quot;: &quot;text/html; charset=utf-8&quot;,
+  &quot;strict-transport-security&quot;: &quot;max-age=7889238&quot;,
+  &quot;x-shopid&quot;: &quot;&quot;,
+  &quot;x-shopify-stage&quot;: &quot;&quot;,
+  &quot;cf-ray&quot;: &quot;9e32cbdacbe41dd8-MIA&quot;,
+  &quot;server&quot;: &quot;cloudflare&quot;,
+  &quot;powered-by&quot;: &quot;&quot;
+}</pre><details class="sub"><summary>Body snippet</summary><pre class="snip">&lt;!doctype html&gt; &lt;script&gt; (function(){ var data = { &quot;@context&quot;: &quot;https://schema.org&quot;, &quot;@type&quot;: &quot;BreadcrumbList&quot;, &quot;itemListElement&quot;: [ { &quot;@type&quot;: &quot;ListItem&quot;, &quot;position&quot;: 1, &quot;item&quot;: { &quot;@id&quot;: &quot;&quot;, &quot;name&quot;: &quot;&quot; } }, { &quot;@type&quot;: &quot;ListItem&quot;, &quot;position&quot;: 2, &quot;item&quot;: { &quot;@id&quot;: &quot;&quot;, &quot;name&quot;: &quot;&quot; } }, { &quot;@type&quot;: &quot;ListItem&quot;, &quot;position&quot;: 3, &quot;item&quot;: { &quot;@id&quot;: &quot;&quot;, &quot;name&quot;: &quot;&quot; } } ] }; var script = document.createElement('script'); script.type = 'application/ld+json'; script.innerHTML = JSON.stringify(data, null, 2); document.head.appendChild(script); })(); &lt;/script&gt; &lt;script type=&quot;application/ld+js</pre></details></td>
+      </tr>
+      </tbody>
+    </table>
+    
+    <h2 class="section-title">Deep scan — what to improve</h2>
+    <p class="meta section-desc">Extra probes for SEO, security headers, performance signals, and storefront behavior. <code>WARN</code> / <code>INFO</code> lines are candidates for theme, apps, or Shopify settings — not automatic failures.</p>
+    <div class="summary">
+      <div class="pill pass"><strong>12</strong> pass</div>
+      <div class="pill warn"><strong>1</strong> warn</div>
+      <div class="pill fail"><strong>0</strong> fail</div>
+      <div class="pill"><strong>13</strong> deep checks</div>
+    </div>
+    <table class="main deep">
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th>Check</th>
+          <th>Result</th>
+          <th>Details &amp; recommendations</th>
+        </tr>
+      </thead>
+      <tbody><tr class="pass">
+              <td>Routing &amp; TLS</td>
+              <td><strong>Cleartext HTTP → HTTPS (apex)</strong></td>
+              <td><span class="badge ok">PASS</span></td>
+              <td class="notes">OK: 301 → https://shopcarbon.com/</td>
+            </tr><tr class="pass">
+              <td>Routing &amp; TLS</td>
+              <td><strong>Bogus product handle (expect real 404)</strong></td>
+              <td><span class="badge ok">PASS</span></td>
+              <td class="notes">OK: HTTP 404, final URL: https://shopcarbon.com/products/this-product-definitely-does-not-exist-99999</td>
+            </tr><tr class="pass">
+              <td>Storefront API</td>
+              <td><strong>products.json?limit=1</strong></td>
+              <td><span class="badge ok">PASS</span></td>
+              <td class="notes">OK: 1 product(s) in sample payload</td>
+            </tr><tr class="pass">
+              <td>Storefront</td>
+              <td><strong>Search results (/search?q=…)</strong></td>
+              <td><span class="badge ok">PASS</span></td>
+              <td class="notes">HTTP 200, final: https://shopcarbon.com/search?q=denim</td>
+            </tr><tr class="pass">
+              <td>SEO / crawl</td>
+              <td><strong>First sitemap child reachable</strong></td>
+              <td><span class="badge ok">PASS</span></td>
+              <td class="notes">OK: https://shopcarbon.com/sitemap_products_1.xml?from=9217321369852&amp;amp;to=9251186639100 → 200 (348 ms)</td>
+            </tr><tr class="pass">
+              <td>Performance</td>
+              <td><strong>HTML compression (Accept-Encoding: br,gzip)</strong></td>
+              <td><span class="badge ok">PASS</span></td>
+              <td class="notes">OK: Content-Encoding reported: br</td>
+            </tr><tr class="pass">
+              <td>Security headers</td>
+              <td><strong>Homepage (apex)</strong></td>
+              <td><span class="badge ok">PASS</span></td>
+              <td class="notes">OK: HSTS present (max-age≈91 days)<br/>OK: CSP header present<br/>OK: X-Content-Type-Options: nosniff<br/>OK: Framing policy present (X-Frame-Options or CSP frame-ancestors)<br/>INFO: No Referrer-Policy — browser default applies<br/>INFO: No Permissions-Policy — optional hardening<br/>INFO: No Cross-Origin-Opener-Policy — optional isolation<br/>INFO: No Cross-Origin-Resource-Policy — optional</td>
+            </tr><tr class="warn">
+              <td>Performance</td>
+              <td><strong>Homepage HTML weight</strong></td>
+              <td><span class="badge warn">WARN</span></td>
+              <td class="notes">HTML document size: ~554.8 KB (568,130 chars)<br/>INFO: Large HTML — consider lazy sections and fewer app embeds above the fold</td>
+            </tr><tr class="pass">
+              <td>Security / quality</td>
+              <td><strong>Mixed content hints (http:// in href/src in first 200KB)</strong></td>
+              <td><span class="badge ok">PASS</span></td>
+              <td class="notes">OK: No obvious http:// absolute asset URLs in sample</td>
+            </tr><tr class="pass">
+              <td>Accessibility (heuristic)</td>
+              <td><strong>&lt;img&gt; tags missing alt (homepage HTML)</strong></td>
+              <td><span class="badge ok">PASS</span></td>
+              <td class="notes">Total &lt;img&gt;: 169, missing alt: 1 — decorative images should use alt=&quot;&quot;</td>
+            </tr><tr class="pass">
+              <td>SEO</td>
+              <td><strong>Homepage HTML signals</strong></td>
+              <td><span class="badge ok">PASS</span></td>
+              <td class="notes">OK: &lt;title&gt; (58 chars): Trendy Clothing &amp;amp; Apparel for Men &amp;amp; Women | Carbon<br/>OK: meta description (149 chars)<br/>OK: Canonical link present<br/>OK: Open Graph tags detected (~9 attributes)<br/>OK: twitter:card present<br/>INFO: JSON-LD script references: 4</td>
+            </tr><tr class="pass">
+              <td>SEO</td>
+              <td><strong>Sample PDP HTML signals</strong></td>
+              <td><span class="badge ok">PASS</span></td>
+              <td class="notes">OK: &lt;title&gt; (52 chars): Gyda 2-Piece Set ✨ Trendy Streetwear Outfit | Carbon<br/>OK: meta description (155 chars)<br/>OK: Canonical link present<br/>OK: Open Graph tags detected (~11 attributes)<br/>OK: twitter:card present<br/>INFO: JSON-LD script references: 4</td>
+            </tr><tr class="pass">
+              <td>Security headers</td>
+              <td><strong>PDP response headers (spot-check)</strong></td>
+              <td><span class="badge ok">PASS</span></td>
+              <td class="notes">OK: HSTS present (max-age≈91 days)<br/>OK: CSP header present<br/>OK: X-Content-Type-Options: nosniff<br/>OK: Framing policy present (X-Frame-Options or CSP frame-ancestors)<br/>INFO: No Referrer-Policy — browser default applies<br/>INFO: No Permissions-Policy — optional hardening<br/>INFO: No Cross-Origin-Opener-Policy — optional isolation<br/>INFO: No Cross-Origin-Resource-Policy — optional</td>
+            </tr></tbody>
+    </table>
+  </main>
+  <footer>
+    Generated by <code>scripts/run-shopify-storefront-health-report.mjs</code> in the carbon-gen repo.
+  </footer>
+</body>
+</html>

@@ -58,6 +58,14 @@ export type InstagramSectionStoredConfig = {
   profileFollowersCount?: string;
   profileFollowButtonLabel?: string;
   profileFollowButtonHref?: string;
+  /** Horizontal feed: show prev/next chevrons. */
+  feedSliderArrowsEnabled?: boolean;
+  /** Horizontal feed: click-drag to scroll (desktop pointer). */
+  feedSliderDragEnabled?: boolean;
+  /** Arrow / autoplay step animation length in seconds (e.g. 0.6). */
+  feedSliderAnimationSec?: number;
+  /** Autoplay interval in seconds; 0 = disabled. */
+  feedSliderAutoplaySec?: number;
 };
 
 function localFilePath() {

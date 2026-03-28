@@ -1,6 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import {
+  InstagramStudioMobilePreviewContext,
+  type InstagramToolbarFreezeRect,
+} from "@/components/instagram-widget/instagram-studio-mobile-preview-context";
 import { PublishChangesButton } from "@/components/instagram-widget/PublishChangesButton";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -155,6 +159,11 @@ export function WorkspaceShell({
   const [shopifySubmenuOpen, setShopifySubmenuOpen] = useState(false);
   const [shopifyConfigSubmenuOpen, setShopifyConfigSubmenuOpen] = useState(false);
   const [metaAppConfigured, setMetaAppConfigured] = useState(false);
+  /** Elfsight-style: narrow “device” frame + grey workspace (all /studio/instagram-widget/* pages). */
+  const [instagramMobilePreview, setInstagramMobilePreview] = useState(false);
+  /** Snapshot of sources toolbar box in desktop mode — fixed overlay in mobile preview (pixel-identical on toggle). */
+  const [instagramToolbarFreezeRect, setInstagramToolbarFreezeRect] =
+    useState<InstagramToolbarFreezeRect | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
   const [integrations, setIntegrations] = useState<IntegrationItem[]>([]);
   const [integrationsLoading, setIntegrationsLoading] = useState(true);
@@ -195,6 +204,28 @@ export function WorkspaceShell({
       setChatExpanded(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (!isInstagramWidgetRoute) return;
+    try {
+      setInstagramMobilePreview(window.localStorage.getItem("carbon_ig_mobile_preview") === "1");
+    } catch {
+      setInstagramMobilePreview(false);
+    }
+  }, [isInstagramWidgetRoute]);
+
+  useEffect(() => {
+    if (!isInstagramWidgetRoute) return;
+    try {
+      window.localStorage.setItem("carbon_ig_mobile_preview", instagramMobilePreview ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, [isInstagramWidgetRoute, instagramMobilePreview]);
+
+  useEffect(() => {
+    if (!isInstagramWidgetRoute) setInstagramToolbarFreezeRect(null);
+  }, [isInstagramWidgetRoute]);
 
   useEffect(() => {
     try {
@@ -415,7 +446,9 @@ export function WorkspaceShell({
     <div
       className={`shell ${chatExpanded && showChatPanel ? "chat-expanded" : ""} ${
         rightRailExtra ? "has-right-extra" : ""
-      } ${isInstagramWidgetRoute ? "instagram-widget-shell" : ""}`}
+      } ${isInstagramWidgetRoute ? "instagram-widget-shell" : ""} ${
+        isInstagramWidgetRoute && instagramMobilePreview ? "instagram-widget-mobile-preview" : ""
+      }`}
     >
       <svg
         aria-hidden
@@ -470,10 +503,12 @@ export function WorkspaceShell({
                   title="Meta / Instagram integration"
                   aria-label="Open Meta Instagram integration in Settings"
                 >
-                  <span
-                    className={`topbar-meta-dot ${metaAppConfigured ? "on" : "off"}`}
-                    aria-hidden
-                  />
+                  <span className="topbar-meta-label">META CONNECTION</span>
+                  <span className="topbar-meta-dot-box" aria-hidden>
+                    <span
+                      className={`topbar-meta-dot ${metaAppConfigured ? "on" : "off"}`}
+                    />
+                  </span>
                 </a>
                 <PublishChangesButton
                   suppressHydrationWarning
@@ -908,6 +943,49 @@ export function WorkspaceShell({
           aria-label="Close menu overlay"
           onClick={() => setMenuOpen(false)}
         />
+        ) : null}
+
+      {isInstagramWidgetRoute ? (
+        <button
+          suppressHydrationWarning
+          type="button"
+          className="instagram-preview-device-toggle"
+          onClick={() => {
+            const goingMobile = !instagramMobilePreview;
+            if (goingMobile) {
+              const el = document.querySelector("[data-ig-sources-toolbar-measure]");
+              if (el) {
+                const r = el.getBoundingClientRect();
+                setInstagramToolbarFreezeRect({
+                  left: r.left,
+                  top: r.top,
+                  width: r.width,
+                  height: r.height,
+                });
+              } else {
+                setInstagramToolbarFreezeRect(null);
+              }
+            } else {
+              setInstagramToolbarFreezeRect(null);
+            }
+            setInstagramMobilePreview((v) => !v);
+          }}
+          aria-pressed={instagramMobilePreview}
+          aria-label={instagramMobilePreview ? "Show desktop preview" : "Show mobile preview"}
+          title={instagramMobilePreview ? "Desktop preview" : "Mobile preview"}
+        >
+          {instagramMobilePreview ? (
+            <svg viewBox="0 0 24 24" width={20} height={20} aria-hidden fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="12" rx="1.5" />
+              <path d="M8 20h8M12 16v4" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 24 24" width={20} height={20} aria-hidden fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="7" y="2.5" width="10" height="19" rx="2" />
+              <line x1="12" y1="18" x2="12" y2="18.01" strokeWidth="2.25" />
+            </svg>
+          )}
+        </button>
       ) : null}
 
       <main
@@ -917,8 +995,26 @@ export function WorkspaceShell({
           isInstagramWidgetRoute ? "instagram-widget-content" : ""
         }`}
         style={drawerOpen ? { paddingLeft: "calc(13px + 255px + 13px)" } : undefined}
+        data-ig-mobile-preview={
+          isInstagramWidgetRoute && instagramMobilePreview ? "true" : undefined
+        }
       >
-        {children}
+        <InstagramStudioMobilePreviewContext.Provider
+          value={{
+            mobilePreview: Boolean(isInstagramWidgetRoute && instagramMobilePreview),
+            toolbarFreezeRect: instagramToolbarFreezeRect,
+          }}
+        >
+          {isInstagramWidgetRoute ? (
+            <div className="instagram-studio-preview-root">
+              <div className="instagram-mobile-preview-chrome">
+                <div className="instagram-mobile-preview-frame">{children}</div>
+              </div>
+            </div>
+          ) : (
+            children
+          )}
+        </InstagramStudioMobilePreviewContext.Provider>
       </main>
 
       <style jsx>{`
@@ -953,24 +1049,117 @@ export function WorkspaceShell({
           --content-right-pad: 0px;
           padding-right: 0;
           padding-left: 0;
+          transition: background-color 0.48s cubic-bezier(0.22, 1, 0.36, 1);
         }
         .shell.instagram-widget-shell.chat-expanded .content.instagram-widget-content {
           --content-right-pad: 0px;
           padding-right: 0;
         }
+        /* Elfsight-style editor: grey canvas + centered phone frame */
+        .shell.instagram-widget-mobile-preview .content.instagram-widget-content {
+          background: #ebebeb;
+        }
+        /* Narrow phone column — closer to Elfsight mobile editor canvas */
+        .shell.instagram-widget-shell {
+          --ig-studio-mobile-frame-max: 375px;
+        }
+        .instagram-studio-preview-root {
+          width: 100%;
+          min-height: 0;
+        }
+        .instagram-mobile-preview-chrome {
+          min-height: calc(100vh - 70px);
+          width: 100%;
+          box-sizing: border-box;
+          transition:
+            background-color 0.48s cubic-bezier(0.22, 1, 0.36, 1),
+            padding 0.48s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .shell:not(.instagram-widget-mobile-preview) .instagram-studio-preview-root .instagram-mobile-preview-chrome {
+          padding: 0;
+          display: block;
+          background: transparent;
+          overflow: visible;
+        }
+        .shell.instagram-widget-mobile-preview .instagram-studio-preview-root .instagram-mobile-preview-chrome {
+          padding: 24px 16px 40px;
+          display: flex;
+          flex-direction: column;
+          justify-content: flex-start;
+          align-items: center;
+          background: #ebebeb;
+          overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
+        }
+        .instagram-mobile-preview-frame {
+          width: 100%;
+          box-sizing: border-box;
+          overflow: hidden;
+          margin-left: auto;
+          margin-right: auto;
+          transition:
+            max-width 0.52s cubic-bezier(0.22, 1, 0.36, 1),
+            border-radius 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+            box-shadow 0.45s ease,
+            background-color 0.4s ease;
+        }
+        .shell:not(.instagram-widget-mobile-preview) .instagram-studio-preview-root .instagram-mobile-preview-frame {
+          max-width: 100%;
+          border-radius: 0;
+          background: transparent;
+          box-shadow: none;
+        }
+        .shell.instagram-widget-mobile-preview .instagram-studio-preview-root .instagram-mobile-preview-frame {
+          max-width: var(--ig-studio-mobile-frame-max, 430px);
+          border-radius: 14px;
+          background: #fff;
+          box-shadow: 0 12px 48px rgba(0, 0, 0, 0.16);
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .instagram-mobile-preview-chrome,
+          .instagram-mobile-preview-frame {
+            transition-duration: 0.01ms !important;
+          }
+        }
+        .instagram-preview-device-toggle {
+          position: fixed;
+          z-index: 60;
+          top: 78px;
+          right: 14px;
+          width: 44px;
+          height: 44px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0;
+          border: 1px solid rgba(0, 0, 0, 0.1);
+          border-radius: 8px;
+          background: #fff;
+          color: #374151;
+          cursor: pointer;
+          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+        }
+        .instagram-preview-device-toggle:hover {
+          background: #f9fafb;
+          color: #111827;
+        }
+        .instagram-preview-device-toggle:focus-visible {
+          outline: 2px solid #38bdf8;
+          outline-offset: 2px;
+        }
         .topbar-instagram-actions {
           display: inline-flex;
           align-items: center;
-          gap: 12px;
+          gap: 10px;
           flex-shrink: 0;
           margin-left: auto;
         }
         .topbar-meta-link {
           display: inline-flex;
           align-items: center;
-          justify-content: center;
-          width: 36px;
-          height: 36px;
+          gap: 10px;
+          min-height: 36px;
+          padding: 4px 6px 4px 12px;
           border-radius: 10px;
           border: 1px solid rgba(255, 255, 255, 0.22);
           background: rgba(255, 255, 255, 0.06);
@@ -979,6 +1168,24 @@ export function WorkspaceShell({
         }
         .topbar-meta-link:hover {
           background: rgba(255, 255, 255, 0.1);
+        }
+        .topbar-meta-dot-box {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 36px;
+          height: 36px;
+          flex-shrink: 0;
+          border-radius: 10px;
+          border: 1px solid rgba(255, 255, 255, 0.16);
+          background: rgba(0, 0, 0, 0.2);
+        }
+        .topbar-meta-label {
+          font-size: 0.68rem;
+          font-weight: 700;
+          letter-spacing: 0.06em;
+          color: rgba(255, 255, 255, 0.88);
+          white-space: nowrap;
         }
         .topbar-meta-dot {
           width: 12px;

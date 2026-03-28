@@ -1,0 +1,12 @@
+{
+  "ok": false,
+  "errors": [
+    "#snippets[data-carbon-widget-wrev]: got \"\" want \"126\"",
+    "Snippet box title check: no snippet boxes with full script in title",
+    "Storefront [Mobile probe]: script URL missing wrev=126 (empty)",
+    "Storefront: Mobile: widget host missing"
+  ],
+  "repoWrev": 126,
+  "outDir": "D:\\Projects\\My project\\carbon-gen\\reports\\a11y-html-verification-2026-03-27-06-28-40",
+  "generatedAt": "2026-03-27T06:29:15.183Z"
+}

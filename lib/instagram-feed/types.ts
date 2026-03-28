@@ -15,6 +15,8 @@ export type InstagramMediaItem = {
   mediaUrl: string;
   permalink: string;
   caption?: string;
+  /** ISO 8601 from Graph `timestamp` — used for popup date line */
+  timestamp?: string;
 };
 
 export type InstagramProfileSummary = {

@@ -3,6 +3,10 @@ import type { NextRequest } from "next/server";
 import { isRequestAuthed } from "@/lib/auth";
 import { readSession } from "@/lib/userAuth";
 import {
+  normalizeInstagramAtLabel,
+  normalizeWebUrlForStorage,
+} from "@/lib/instagram-hero-text-normalize";
+import {
   INSTAGRAM_HERO_HEIGHT,
   INSTAGRAM_HERO_WIDTH,
   loadInstagramSectionConfig,
@@ -76,6 +80,26 @@ function mergeInstagramConfig(
   if (mPx !== undefined) next.heroLinkFontSizeMobilePx = mPx;
   const fw = numInRange(o.heroLinkFontWeight, 100, 900);
   if (fw !== undefined) next.heroLinkFontWeight = fw;
+
+  if (typeof o.feedSliderArrowsEnabled === "boolean") {
+    next.feedSliderArrowsEnabled = o.feedSliderArrowsEnabled;
+  }
+  if (typeof o.feedSliderDragEnabled === "boolean") {
+    next.feedSliderDragEnabled = o.feedSliderDragEnabled;
+  }
+  const animSec = numInRange(o.feedSliderAnimationSec, 0.05, 3);
+  if (animSec !== undefined) next.feedSliderAnimationSec = animSec;
+  const autoSec = numInRange(o.feedSliderAutoplaySec, 0, 120);
+  if (autoSec !== undefined) next.feedSliderAutoplaySec = autoSec;
+
+  const lt = next.heroLinkText;
+  if (typeof lt === "string" && lt) next.heroLinkText = normalizeInstagramAtLabel(lt);
+  const ph = next.profileHandle;
+  if (typeof ph === "string" && ph) next.profileHandle = normalizeInstagramAtLabel(ph);
+  for (const k of ["heroLinkHref", "heroImageUrl", "profileFollowButtonHref"] as const) {
+    const v = next[k];
+    if (typeof v === "string" && v) (next as Record<string, string>)[k] = normalizeWebUrlForStorage(v);
+  }
 
   const urlKeys: (keyof InstagramSectionStoredConfig)[] = [
     "heroImageUrl",

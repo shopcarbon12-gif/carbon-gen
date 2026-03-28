@@ -42,12 +42,14 @@ function mapGraphMediaRow(row: GraphMediaRow): InstagramMediaItem | null {
   if (!mediaUrl) return null;
 
   const caption = row.caption;
+  const ts = row.timestamp;
   return {
     id,
     mediaType,
     mediaUrl,
     permalink,
     caption: typeof caption === "string" ? caption : undefined,
+    timestamp: typeof ts === "string" && ts.trim() ? ts.trim() : undefined,
   };
 }
 
@@ -68,6 +70,7 @@ export async function fetchInstagramBusinessMedia(params: {
     "thumbnail_url",
     "permalink",
     "caption",
+    "timestamp",
     "children{media_type,media_url,thumbnail_url}",
   ].join(",");
 

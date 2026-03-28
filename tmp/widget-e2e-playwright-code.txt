@@ -1,0 +1,277 @@
+async (page) => {
+  const errs = [];
+  page.on("console", (msg) => {
+    if (msg.type() === "error") errs.push({ type: "console", text: msg.text() });
+  });
+  page.on("requestfailed", (req) => {
+    const u = req.url();
+    if (u.includes("accessibility") || u.includes("shopcarbon"))
+      errs.push({ type: "requestfailed", url: u, err: req.failure()?.errorText });
+  });
+
+  await page.goto("https://www.shopcarbon.com/", {
+    waitUntil: "domcontentloaded",
+    timeout: 90000,
+  });
+  await page.waitForTimeout(5000);
+
+  const scriptProbe = await page.evaluate(() => {
+    const s = [...document.querySelectorAll("script[src]")].find((x) =>
+      String(x.src).includes("accessibility/widget")
+    );
+    return { scriptPresent: !!s, src: s ? s.src : null };
+  });
+
+  let bundleProbe = {};
+  if (scriptProbe.src) {
+    const r = await page.request.get(scriptProbe.src);
+    const t = await r.text();
+    const caRev = (t.match(/__caRev=(\d+)/) || [])[1];
+    const usage = (t.match(/var usageEndpoint="([^"]+)"/) || [])[1];
+    const widgetOrigin = (t.match(/var __caWidgetOrigin="([^"]+)"/) || [])[1];
+    bundleProbe = {
+      status: r.status(),
+      caRev,
+      usageEndpoint: usage,
+      __caWidgetOrigin: widgetOrigin,
+      badLoopback:
+        /0\.0\.0\.0|127\.0\.0\.1|localhost:\d+/.test(
+          (usage || "") + (widgetOrigin || "")
+        ),
+    };
+  }
+
+  const report = {
+    scriptProbe,
+    bundleProbe,
+    tests: [],
+    inventory: {},
+    consoleAndNetwork: errs,
+  };
+
+  async function run(name, fn) {
+    try {
+      const r = await page.evaluate(fn);
+      report.tests.push({ name, ok: r.ok !== false, detail: r });
+    } catch (e) {
+      report.tests.push({
+        name,
+        ok: false,
+        error: String(e && e.message ? e.message : e),
+      });
+    }
+  }
+
+  await run("widget_host_and_shadow", () => {
+    const w = document.querySelector("#carbon-a11y-widget");
+    return { ok: !!(w && w.shadowRoot) };
+  });
+
+  await run("open_panel_launcher", () => {
+    const root = document.querySelector("#carbon-a11y-widget")?.shadowRoot;
+    const b = root?.querySelector("button.ca-assist-launcher");
+    if (!b) return { ok: false, reason: "no launcher" };
+    b.click();
+    return { ok: true };
+  });
+  await page.waitForTimeout(800);
+
+  await run("panel_open_display_flex", () => {
+    const root = document.querySelector("#carbon-a11y-widget")?.shadowRoot;
+    const p = root?.querySelector("#ca-assist-panel");
+    const d = p ? p.style.display : "";
+    return { ok: d === "flex", display: d };
+  });
+
+  report.inventory = await page.evaluate(() => {
+    const root = document.querySelector("#carbon-a11y-widget")?.shadowRoot;
+    if (!root) return {};
+    const keys = [...root.querySelectorAll("[data-carbon-key]")].map((el) =>
+      el.getAttribute("data-carbon-key")
+    );
+    const links = [...root.querySelectorAll("a.ca-assist-footlink")].map(
+      (a) => ({
+        text: (a.textContent || "").trim().slice(0, 80),
+        href: a.href,
+        target: a.target || "",
+      })
+    );
+    return { dataCarbonKeyCount: keys.length, sampleKeys: keys.slice(0, 25), footerLinks: links, allKeys: keys };
+  });
+
+  await run("close_button", () => {
+    const root = document.querySelector("#carbon-a11y-widget")?.shadowRoot;
+    const c = root?.querySelector('[data-carbon-key="close"]');
+    if (!c) return { ok: false, reason: "no close" };
+    c.click();
+    return { ok: true };
+  });
+  await page.waitForTimeout(500);
+
+  await run("panel_closed_after_close", () => {
+    const root = document.querySelector("#carbon-a11y-widget")?.shadowRoot;
+    const p = root?.querySelector("#ca-assist-panel");
+    const d = p ? p.style.display : "";
+    const closed = d === "none" || d === "";
+    return { ok: closed, display: d };
+  });
+
+  await run("reopen_panel", () => {
+    const root = document.querySelector("#carbon-a11y-widget")?.shadowRoot;
+    root?.querySelector("button.ca-assist-launcher")?.click();
+    return { ok: true };
+  });
+  await page.waitForTimeout(800);
+
+  await run("tile_highContrast_applies_css", () => {
+    const root = document.querySelector("#carbon-a11y-widget")?.shadowRoot;
+    const t = root?.querySelector('[data-carbon-key="tile-highContrast"]');
+    if (!t) return { ok: false, reason: "missing tile-highContrast" };
+    t.click();
+    const st = document.querySelector("#carbon-a11y-style");
+    const txt = st?.textContent || "";
+    const ok = txt.includes("background:#000");
+    return { ok, styleSnippet: txt.slice(0, 200) };
+  });
+
+  await run("tile_highlightLinks_applies_css", () => {
+    const root = document.querySelector("#carbon-a11y-widget")?.shadowRoot;
+    root?.querySelector('[data-carbon-key="tile-highlightLinks"]')?.click();
+    const st = document.querySelector("#carbon-a11y-style");
+    const txt = st?.textContent || "";
+    return { ok: txt.includes("outline:2px dashed") };
+  });
+
+  await run("tile_readableFont_applies_css", () => {
+    const root = document.querySelector("#carbon-a11y-widget")?.shadowRoot;
+    const t = root?.querySelector('[data-carbon-key="tile-readableFont"]');
+    if (!t) return { ok: false, skipped: true };
+    t.click();
+    const st = document.querySelector("#carbon-a11y-style");
+    const txt = st?.textContent || "";
+    return { ok: txt.includes("Atkinson Hyperlegible") };
+  });
+
+  await run("cmd_text_larger_increases_root_percent", () => {
+    const root = document.querySelector("#carbon-a11y-widget")?.shadowRoot;
+    const b = root?.querySelector('[data-carbon-key="cmd-text-larger"]');
+    if (!b) return { ok: false, reason: "no cmd-text-larger" };
+    b.click();
+    const st = document.querySelector("#carbon-a11y-style");
+    const m = (st?.textContent || "").match(/:root\{font-size:(\d+)%/);
+    return { ok: !!(m && Number(m[1]) > 100), percent: m ? m[1] : null };
+  });
+
+  await run("radio_contrast_dark", () => {
+    const root = document.querySelector("#carbon-a11y-widget")?.shadowRoot;
+    const r = root?.querySelector('[data-carbon-key="rg-contrastMode-dark"]');
+    if (!r) return { ok: false, skipped: true };
+    r.click();
+    return { ok: true };
+  });
+
+  await run("radio_textSpacing_moderate", () => {
+    const root = document.querySelector("#carbon-a11y-widget")?.shadowRoot;
+    const r = root?.querySelector('[data-carbon-key="rg-textSpacing-moderate"]');
+    if (!r) return { ok: false, skipped: true };
+    r.click();
+    const st = document.querySelector("#carbon-a11y-style");
+    return { ok: (st?.textContent || "").includes("letter-spacing:0.04em") };
+  });
+
+  await run("profile_lowVision_click", () => {
+    const root = document.querySelector("#carbon-a11y-widget")?.shadowRoot;
+    const p = root?.querySelector('[data-carbon-key="profile-lowVision"]');
+    if (!p) return { ok: false, skipped: true };
+    p.click();
+    return { ok: true };
+  });
+
+  await run("profile_clear_click", () => {
+    const root = document.querySelector("#carbon-a11y-widget")?.shadowRoot;
+    const c = root?.querySelector('[data-carbon-key="profile-clear"]');
+    if (!c) return { ok: false, skipped: true };
+    c.click();
+    return { ok: true };
+  });
+
+  await run("cmd_jump_headings", () => {
+    const root = document.querySelector("#carbon-a11y-widget")?.shadowRoot;
+    const b = root?.querySelector('[data-carbon-key="cmd-jump-headings"]');
+    if (!b) return { ok: false, skipped: true };
+    b.click();
+    return { ok: true };
+  });
+
+  await run("cmd_jump_links", () => {
+    const root = document.querySelector("#carbon-a11y-widget")?.shadowRoot;
+    const b = root?.querySelector('[data-carbon-key="cmd-jump-links"]');
+    if (!b) return { ok: false, skipped: true };
+    b.click();
+    return { ok: true };
+  });
+
+  await run("footer_statement_link", () => {
+    const root = document.querySelector("#carbon-a11y-widget")?.shadowRoot;
+    const links = [...(root?.querySelectorAll("a.ca-assist-footlink") || [])];
+    const stmt = links.find((a) => /statement|accessibility|הצהרה/i.test(a.textContent || ""));
+    const href = stmt?.href || "";
+    const ok =
+      !!stmt &&
+      /shopcarbon\.com/i.test(href) &&
+      (/\/pages\/accessibility/i.test(href) || /accessibility/i.test(href));
+    return { ok, href, count: links.length };
+  });
+
+  await run("footer_feedback_or_mailto", () => {
+    const root = document.querySelector("#carbon-a11y-widget")?.shadowRoot;
+    const links = [...(root?.querySelectorAll("a.ca-assist-footlink") || [])];
+    const fb = links.find((a) => /feedback|יצירת קשר|contact/i.test(a.textContent || ""));
+    const href = fb?.href || "";
+    const ok = !fb || href.startsWith("mailto:") || /shopcarbon/i.test(href);
+    return { ok, href: href.slice(0, 120) };
+  });
+
+  await run("language_es_radio", () => {
+    const root = document.querySelector("#carbon-a11y-widget")?.shadowRoot;
+    const r = root?.querySelector('[data-carbon-key="rg-language-es"]');
+    if (!r) return { ok: false, skipped: true };
+    r.click();
+    return { ok: r.getAttribute("aria-checked") === "true" };
+  });
+
+  await run("reset_all", () => {
+    const root = document.querySelector("#carbon-a11y-widget")?.shadowRoot;
+    const r = root?.querySelector('[data-carbon-key="reset-all"]');
+    if (!r) return { ok: false, reason: "no reset-all" };
+    r.click();
+    return { ok: true };
+  });
+  await page.waitForTimeout(400);
+
+  await run("after_reset_style_mild", () => {
+    const st = document.querySelector("#carbon-a11y-style");
+    const txt = st?.textContent || "";
+    const ok = txt.includes(":root{font-size:100%");
+    return { ok, len: txt.length };
+  });
+
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(400);
+
+  await run("panel_closed_after_escape", () => {
+    const root = document.querySelector("#carbon-a11y-widget")?.shadowRoot;
+    const p = root?.querySelector("#ca-assist-panel");
+    const d = p ? p.style.display : "";
+    const closed = d === "none" || d === "";
+    return { ok: closed, display: d };
+  });
+
+  report.consoleAndNetwork = errs;
+  report.summary = {
+    passed: report.tests.filter((t) => t.ok).length,
+    failed: report.tests.filter((t) => !t.ok).length,
+    total: report.tests.length,
+  };
+  return report;
+}

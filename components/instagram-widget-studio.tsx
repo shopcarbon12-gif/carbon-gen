@@ -4,7 +4,11 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { InstagramSectionStoredConfig } from "@/lib/instagramSectionConfigRepository";
 import { isHeroVideoUrl } from "@/lib/instagram-hero-media";
-import { INSTAGRAM_HERO_HEIGHT, INSTAGRAM_HERO_WIDTH } from "@/lib/instagram-widget-constants";
+import {
+  INSTAGRAM_FEED_SLIDER_DEFAULTS,
+  INSTAGRAM_HERO_HEIGHT,
+  INSTAGRAM_HERO_WIDTH,
+} from "@/lib/instagram-widget-constants";
 
 const DEFAULT_HERO =
   "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/DZ__3128.jpg?v=1733764412";
@@ -30,6 +34,7 @@ function defaults(): InstagramSectionStoredConfig {
     profileFollowersCount: "3.8K",
     profileFollowButtonLabel: "Follow",
     profileFollowButtonHref: "https://www.instagram.com/shopcarbon/",
+    ...INSTAGRAM_FEED_SLIDER_DEFAULTS,
   };
 }
 
@@ -544,6 +549,69 @@ ${heroTag}
       </section>
 
       <section className="iw-panel">
+        <h2>Slider (feed strip)</h2>
+        <p className="iw-hint" style={{ marginTop: 0 }}>
+          Matches Elfsight-style controls. Applies to the horizontal post grid on{" "}
+          <Link href="/studio/instagram-widget" style={{ color: "rgba(56, 189, 248, 0.95)" }}>
+            Instagram Widget
+          </Link>{" "}
+          after Save.
+        </p>
+        <div className="iw-slider-grid">
+          <label className="iw-toggle-label">
+            <span>Arrows Control</span>
+            <input
+              type="checkbox"
+              checked={cfg.feedSliderArrowsEnabled !== false}
+              onChange={(e) => patch({ feedSliderArrowsEnabled: e.target.checked })}
+            />
+          </label>
+          <label className="iw-toggle-label">
+            <span>Drag Control</span>
+            <input
+              type="checkbox"
+              checked={cfg.feedSliderDragEnabled !== false}
+              onChange={(e) => patch({ feedSliderDragEnabled: e.target.checked })}
+            />
+          </label>
+          <label className="iw-range-label">
+            <span className="iw-range-head">
+              <span>Animation Speed</span>
+              <span className="iw-range-value">
+                {(cfg.feedSliderAnimationSec ?? INSTAGRAM_FEED_SLIDER_DEFAULTS.feedSliderAnimationSec).toFixed(2)} sec
+              </span>
+            </span>
+            <input
+              type="range"
+              min={0.1}
+              max={2}
+              step={0.05}
+              value={cfg.feedSliderAnimationSec ?? INSTAGRAM_FEED_SLIDER_DEFAULTS.feedSliderAnimationSec}
+              onChange={(e) => patch({ feedSliderAnimationSec: Number(e.target.value) })}
+            />
+          </label>
+          <label className="iw-range-label">
+            <span className="iw-range-head">
+              <span>Autoplay</span>
+              <span className="iw-range-value">
+                {(cfg.feedSliderAutoplaySec ?? 0) <= 0
+                  ? "0 sec"
+                  : `${(cfg.feedSliderAutoplaySec ?? 0).toFixed(1)} sec`}
+              </span>
+            </span>
+            <input
+              type="range"
+              min={0}
+              max={12}
+              step={0.5}
+              value={cfg.feedSliderAutoplaySec ?? 0}
+              onChange={(e) => patch({ feedSliderAutoplaySec: Number(e.target.value) })}
+            />
+          </label>
+        </div>
+      </section>
+
+      <section className="iw-panel">
         <h2>Previews (pic2 layout — sharp squares)</h2>
         <div className="iw-previews">
           <InstagramWidgetPreview mode="desktop" cfg={mergeWithDefaults(cfg)} heroSrc={heroSrc} />
@@ -612,6 +680,7 @@ ${heroTag}
           background: rgba(15, 23, 42, 0.5);
           color: #f8fafc;
           font-size: 0.88rem;
+          text-transform: none;
         }
         .iw-row {
           display: flex;
@@ -647,6 +716,7 @@ ${heroTag}
           border: 1px solid rgba(255, 255, 255, 0.16);
           background: rgba(15, 23, 42, 0.5);
           color: #f8fafc;
+          text-transform: none;
         }
         .iw-dropbox button,
         .iw-row button {
@@ -697,6 +767,59 @@ ${heroTag}
         }
         .iw-hint code {
           font-size: 0.85em;
+        }
+        .iw-slider-grid {
+          display: grid;
+          gap: 14px;
+          margin-top: 12px;
+          max-width: 420px;
+        }
+        .iw-toggle-label {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          font-size: 0.88rem;
+          font-weight: 600;
+          color: #f8fafc;
+          padding: 10px 12px;
+          background: rgba(15, 23, 42, 0.45);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 0;
+        }
+        .iw-toggle-label input {
+          width: 44px;
+          height: 24px;
+          accent-color: #38bdf8;
+          cursor: pointer;
+        }
+        .iw-range-label {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          padding: 10px 12px;
+          background: rgba(15, 23, 42, 0.45);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 0;
+        }
+        .iw-range-head {
+          display: flex;
+          justify-content: space-between;
+          align-items: baseline;
+          gap: 12px;
+          font-size: 0.88rem;
+          font-weight: 600;
+          color: #f8fafc;
+        }
+        .iw-range-value {
+          font-size: 0.82rem;
+          font-weight: 700;
+          color: #38bdf8;
+          white-space: nowrap;
+        }
+        .iw-range-label input[type="range"] {
+          width: 100%;
+          accent-color: #38bdf8;
         }
       `}</style>
     </div>

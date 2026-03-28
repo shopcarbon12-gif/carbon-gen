@@ -219,7 +219,8 @@ select {
   color: var(--control-fg);
   padding: 10px var(--control-padding-x);
   font: inherit;
-  text-transform: capitalize;
+  /* Do not capitalize: breaks URLs, @handles, emails, and code (was overriding component fixes). */
+  text-transform: none;
   outline: none;
   transition:
     border-color 0.16s ease,
@@ -235,7 +236,7 @@ textarea {
 input:not([type="checkbox"]):not([type="radio"]):not([type="range"])::placeholder,
 textarea::placeholder {
   color: var(--control-placeholder);
-  text-transform: capitalize;
+  text-transform: none;
 }
 
 input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,

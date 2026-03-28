@@ -8,8 +8,12 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
+  type PointerEvent,
+  type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import type { InstagramSectionStoredConfig } from "@/lib/instagramSectionConfigRepository";
 import {
   STOREFRONT_INSTAGRAM_AVATAR_SRC,
   STOREFRONT_INSTAGRAM_DISPLAY_NAME,
@@ -20,8 +24,12 @@ import {
   STOREFRONT_INSTAGRAM_URL,
   STOREFRONT_PREVIEW_TILE_OBJECT_POSITIONS,
   type InstagramMediaItem,
+  type InstagramMediaType,
 } from "@/lib/instagram-feed";
+import { isHeroVideoUrl } from "@/lib/instagram-hero-media";
+import { INSTAGRAM_FEED_SLIDER_DEFAULTS } from "@/lib/instagram-widget-constants";
 import { ElfsightSourcesBar } from "./ElfsightSourcesBar";
+import { useInstagramStudioPreview } from "./instagram-studio-mobile-preview-context";
 import styles from "./storefront-section-preview.module.css";
 
 type TileCell =
@@ -32,7 +40,73 @@ type PostPopupSlide = {
   src: string;
   objectPosition?: string;
   alt: string;
+  permalink: string;
+  caption?: string;
+  mediaType?: InstagramMediaType;
+  timestamp?: string;
+  isPlaceholder: boolean;
 };
+
+type FeedSliderConfig = {
+  feedSliderArrowsEnabled: boolean;
+  feedSliderDragEnabled: boolean;
+  feedSliderAnimationSec: number;
+  feedSliderAutoplaySec: number;
+};
+
+function mergeFeedSlider(raw: InstagramSectionStoredConfig | null | undefined): FeedSliderConfig {
+  return {
+    feedSliderArrowsEnabled:
+      raw?.feedSliderArrowsEnabled ?? INSTAGRAM_FEED_SLIDER_DEFAULTS.feedSliderArrowsEnabled,
+    feedSliderDragEnabled:
+      raw?.feedSliderDragEnabled ?? INSTAGRAM_FEED_SLIDER_DEFAULTS.feedSliderDragEnabled,
+    feedSliderAnimationSec:
+      raw?.feedSliderAnimationSec ?? INSTAGRAM_FEED_SLIDER_DEFAULTS.feedSliderAnimationSec,
+    feedSliderAutoplaySec:
+      raw?.feedSliderAutoplaySec ?? INSTAGRAM_FEED_SLIDER_DEFAULTS.feedSliderAutoplaySec,
+  };
+}
+
+function easeOutCubic(t: number) {
+  return 1 - (1 - t) ** 3;
+}
+
+/** Animate horizontal scroll; returns cancel fn. */
+function runScrollLeftAnimation(
+  el: HTMLElement,
+  targetLeft: number,
+  durationMs: number,
+  onComplete?: () => void,
+): () => void {
+  const max = Math.max(0, el.scrollWidth - el.clientWidth);
+  const clamped = Math.max(0, Math.min(max, targetLeft));
+  const from = el.scrollLeft;
+  const delta = clamped - from;
+  if (durationMs <= 0 || Math.abs(delta) < 0.5) {
+    el.scrollLeft = clamped;
+    onComplete?.();
+    return () => {};
+  }
+  const t0 = performance.now();
+  let raf = 0;
+  const tick = (now: number) => {
+    const u = Math.min(1, (now - t0) / durationMs);
+    el.scrollLeft = from + delta * easeOutCubic(u);
+    if (u < 1) raf = requestAnimationFrame(tick);
+    else onComplete?.();
+  };
+  raf = requestAnimationFrame(tick);
+  return () => cancelAnimationFrame(raf);
+}
+
+function getColumnStepPx(el: HTMLElement): number {
+  const firstCol = el.querySelector<HTMLElement>("[data-ig-col]");
+  const strip = el.querySelector<HTMLElement>("[data-ig-strip]");
+  if (!firstCol) return 0;
+  const gapRaw = strip ? getComputedStyle(strip).gap : "0px";
+  const gapPx = parseFloat(gapRaw) || 0;
+  return firstCol.offsetWidth + gapPx;
+}
 
 function buildPlaceholderColumns(): TileCell[][] {
   return chunkPairs(STOREFRONT_PREVIEW_TILE_OBJECT_POSITIONS).map((pair) =>
@@ -75,34 +149,82 @@ function InstagramGlyph() {
   );
 }
 
-function ChevronLeft() {
+/** Filled carets — shape of hit target is `.scrollBtn` (semicircle), not these paths. */
+function ElfsightSliderArrowPrev() {
   return (
-    <svg viewBox="0 0 24 24" width={20} height={20} aria-hidden className={styles.scrollChevron}>
-      <path
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M14 6l-6 6 6 6"
-      />
+    <svg
+      viewBox="0 0 16 16"
+      width={12}
+      height={12}
+      aria-hidden
+      className={styles.scrollChevron}
+    >
+      <path fill="currentColor" d="M11 3.2L4.8 8 11 12.8 11 3.2z" />
     </svg>
   );
 }
 
-function ChevronRight() {
+function ElfsightSliderArrowNext() {
   return (
-    <svg viewBox="0 0 24 24" width={20} height={20} aria-hidden className={styles.scrollChevron}>
-      <path
+    <svg
+      viewBox="0 0 16 16"
+      width={12}
+      height={12}
+      aria-hidden
+      className={styles.scrollChevron}
+    >
+      <path fill="currentColor" d="M5 3.2L11.2 8 5 12.8 5 3.2z" />
+    </svg>
+  );
+}
+
+/** Top-right type chip (Elfsight Instagram feed preview). */
+function TileTypeBadge({ mediaType }: { mediaType: InstagramMediaType }) {
+  if (mediaType === "IMAGE") return null;
+  if (mediaType === "VIDEO") {
+    return (
+      <span className={styles.tileBadge} aria-hidden>
+        <svg
+          className={styles.tileBadgeSvg}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        >
+          <rect x="2" y="6" width="14" height="12" rx="2" />
+          <polygon points="16 10 22 7 22 17 16 14 16 10" fill="currentColor" stroke="none" />
+        </svg>
+      </span>
+    );
+  }
+  return (
+    <span className={styles.tileBadge} aria-hidden>
+      <svg
+        className={styles.tileBadgeSvg}
+        viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
         strokeWidth={2}
-        strokeLinecap="round"
         strokeLinejoin="round"
-        d="M10 6l6 6-6 6"
-      />
-    </svg>
+        strokeLinecap="round"
+      >
+        <rect x="3" y="7" width="10" height="10" rx="1.5" />
+        <rect x="9" y="4" width="10" height="10" rx="1.5" />
+      </svg>
+    </span>
   );
+}
+
+function metaTileHoverCaption(item: InstagramMediaItem): string {
+  const t = item.caption?.trim();
+  if (t) return t;
+  return "View post on Instagram.";
+}
+
+function placeholderTileHoverCaption(): string {
+  return `Discover more on @${STOREFRONT_INSTAGRAM_HANDLE}.`;
 }
 
 function chunkPairs<T>(arr: readonly T[]): T[][] {
@@ -123,12 +245,23 @@ function buildSlidesAndIndexedColumns(columns: TileCell[][]) {
           item.caption && item.caption.length > 0
             ? item.caption.slice(0, 120)
             : `Instagram post ${item.id}`;
-        slides.push({ src: item.mediaUrl, alt });
+        slides.push({
+          src: item.mediaUrl,
+          alt,
+          permalink: item.permalink,
+          caption: item.caption,
+          mediaType: item.mediaType,
+          timestamp: item.timestamp,
+          isPlaceholder: false,
+        });
       } else {
         slides.push({
           src: STOREFRONT_INSTAGRAM_HERO_IMAGE,
           objectPosition: cell.objectPosition,
           alt: `Open @${STOREFRONT_INSTAGRAM_HANDLE} on Instagram (preview tile)`,
+          permalink: STOREFRONT_INSTAGRAM_URL,
+          caption: `${placeholderTileHoverCaption()}\n\nStudio preview — connect Meta in Settings for live captions and dates.`,
+          isPlaceholder: true,
         });
       }
       return { cell, index: slides.length - 1 };
@@ -159,54 +292,167 @@ function PopupInstagramGlyph() {
   );
 }
 
-function PopNavChevronLeft() {
+function formatInstagramPopupDate(iso?: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const diffDays = Math.floor((Date.now() - d.getTime()) / 86400000);
+  if (diffDays < 0) {
+    return d.toLocaleDateString("en-US", { month: "long", day: "numeric" });
+  }
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "1 day ago";
+  if (diffDays < 7) return `${diffDays} days ago`;
+  return d.toLocaleDateString("en-US", { month: "long", day: "numeric" });
+}
+
+function PopShareGlyph() {
   return (
-    <svg className={styles.popNavIcon} viewBox="0 0 24 24" aria-hidden>
-      <path
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M14 6l-6 6 6 6"
-      />
+    <svg
+      className={styles.popShareGlyph}
+      viewBox="0 0 24 24"
+      width={18}
+      height={18}
+      aria-hidden
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="18" cy="5" r="3" />
+      <circle cx="6" cy="12" r="3" />
+      <circle cx="18" cy="19" r="3" />
+      <path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98" />
     </svg>
   );
 }
 
-function PopNavChevronRight() {
-  return (
-    <svg className={styles.popNavIcon} viewBox="0 0 24 24" aria-hidden>
-      <path
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M10 6l6 6-6 6"
-      />
-    </svg>
-  );
+function PopupCaptionRich({ text }: { text: string }) {
+  const re = /#[A-Za-z0-9_]+|https?:\/\/[^\s]+/g;
+  const nodes: ReactNode[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) {
+      nodes.push(<span key={`t-${last}`}>{text.slice(last, m.index)}</span>);
+    }
+    const piece = m[0];
+    if (piece.startsWith("#")) {
+      const tag = piece.slice(1);
+      nodes.push(
+        <a
+          key={`h-${m.index}`}
+          className={styles.popHashtag}
+          href={`https://www.instagram.com/explore/tags/${encodeURIComponent(tag)}/`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          {piece}
+        </a>,
+      );
+    } else {
+      nodes.push(
+        <a
+          key={`u-${m.index}`}
+          className={styles.popUrlInCaption}
+          href={piece}
+          target="_blank"
+          rel="noreferrer"
+        >
+          {piece}
+        </a>,
+      );
+    }
+    last = m.index + piece.length;
+  }
+  if (last < text.length) {
+    nodes.push(<span key="t-end">{text.slice(last)}</span>);
+  }
+  return <>{nodes}</>;
 }
 
 export function StorefrontSectionPreview() {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const popupPostRefs = useRef<(HTMLElement | null)[]>([]);
   const lastArrowsRef = useRef({ left: false, right: false });
   const [canGoLeft, setCanGoLeft] = useState(false);
   const [canGoRight, setCanGoRight] = useState(false);
   const [columns, setColumns] = useState<TileCell[][]>(() => buildPlaceholderColumns());
-  const [heroSrc, setHeroSrc] = useState(STOREFRONT_INSTAGRAM_HERO_IMAGE);
+  const [feedHeroUrl, setFeedHeroUrl] = useState("");
+  const [sectionConfig, setSectionConfig] = useState<InstagramSectionStoredConfig | null>(null);
   const [popupOpen, setPopupOpen] = useState(false);
   const [popupIndex, setPopupIndex] = useState(0);
   const [portalReady, setPortalReady] = useState(false);
+  const [shareCopiedIndex, setShareCopiedIndex] = useState<number | null>(null);
+  const [feedSlider, setFeedSlider] = useState<FeedSliderConfig>(() => mergeFeedSlider(undefined));
+  const [isPointerDragging, setIsPointerDragging] = useState(false);
+  const scrollAnimCancelRef = useRef<(() => void) | null>(null);
+  const suppressTileClickRef = useRef(false);
+  const dragStateRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startScroll: number;
+    dragging: boolean;
+  } | null>(null);
+
+  const { mobilePreview: igMobilePreview, toolbarFreezeRect } = useInstagramStudioPreview();
 
   const { slides, indexedColumns } = useMemo(
     () => buildSlidesAndIndexedColumns(columns),
     [columns],
   );
 
+  const displayHeroSrc = useMemo(() => {
+    const saved = (sectionConfig?.heroImageUrl || "").trim();
+    if (saved) return saved;
+    const feed = feedHeroUrl.trim();
+    if (feed) return feed;
+    return STOREFRONT_INSTAGRAM_HERO_IMAGE;
+  }, [sectionConfig?.heroImageUrl, feedHeroUrl]);
+
+  const heroOverlayHref =
+    (sectionConfig?.heroLinkHref || "").trim() || STOREFRONT_INSTAGRAM_URL;
+  const heroOverlayText =
+    (sectionConfig?.heroLinkText || "").trim() || `@${STOREFRONT_INSTAGRAM_HANDLE}`;
+  const heroImageAlt =
+    (sectionConfig?.heroAlt || "").trim() ||
+    `Instagram banner for @${STOREFRONT_INSTAGRAM_HANDLE}`;
+  const heroLinkFontPx = sectionConfig?.heroLinkFontSizeDesktopPx ?? 28;
+  const heroLinkFontWeight = sectionConfig?.heroLinkFontWeight ?? 500;
+  const heroLinkColor = (sectionConfig?.heroLinkColor || "").trim() || "#ffffff";
+
   useEffect(() => {
     setPortalReady(true);
+  }, []);
+
+  useEffect(() => {
+    return () => scrollAnimCancelRef.current?.();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadSection = async () => {
+      try {
+        const res = await fetch("/api/storefront/instagram-section?scope=default", {
+          credentials: "include",
+          cache: "no-store",
+        });
+        const data = (await res.json()) as { ok?: boolean; config?: InstagramSectionStoredConfig };
+        if (cancelled || !data?.ok) return;
+        setSectionConfig(data.config || null);
+        setFeedSlider(mergeFeedSlider(data.config));
+      } catch {
+        /* keep defaults */
+      }
+    };
+    void loadSection();
+    const onUpdated = () => void loadSection();
+    window.addEventListener("instagram-section-config-updated", onUpdated);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("instagram-section-config-updated", onUpdated);
+    };
   }, []);
 
   useEffect(() => {
@@ -221,37 +467,26 @@ export function StorefrontSectionPreview() {
   useEffect(() => {
     if (!popupOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setPopupOpen(false);
-        return;
-      }
-      if (slides.length <= 1) return;
-      if (e.key === "ArrowLeft") {
-        e.preventDefault();
-        setPopupIndex((i) => (i - 1 + slides.length) % slides.length);
-      } else if (e.key === "ArrowRight") {
-        e.preventDefault();
-        setPopupIndex((i) => (i + 1) % slides.length);
-      }
+      if (e.key === "Escape") setPopupOpen(false);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [popupOpen, slides.length]);
+  }, [popupOpen]);
 
   const openPopupAt = useCallback((index: number) => {
     setPopupIndex(index);
     setPopupOpen(true);
   }, []);
 
+  const tryOpenPopupAt = useCallback(
+    (index: number) => {
+      if (suppressTileClickRef.current) return;
+      openPopupAt(index);
+    },
+    [openPopupAt],
+  );
+
   const closePopup = useCallback(() => setPopupOpen(false), []);
-
-  const goPrev = useCallback(() => {
-    setPopupIndex((i) => (i - 1 + slides.length) % slides.length);
-  }, [slides.length]);
-
-  const goNext = useCallback(() => {
-    setPopupIndex((i) => (i + 1) % slides.length);
-  }, [slides.length]);
 
   useEffect(() => {
     if (!popupOpen || slides.length === 0) return;
@@ -279,28 +514,28 @@ export function StorefrontSectionPreview() {
         if (cancelled) return;
 
         if (!res.ok) {
-          setHeroSrc(STOREFRONT_INSTAGRAM_HERO_IMAGE);
+          setFeedHeroUrl("");
           setColumns(buildPlaceholderColumns());
           return;
         }
 
         if (!json?.ok) {
-          setHeroSrc(STOREFRONT_INSTAGRAM_HERO_IMAGE);
+          setFeedHeroUrl("");
           setColumns(buildPlaceholderColumns());
           return;
         }
 
         if (json.source === "meta" && Array.isArray(json.items) && json.items.length >= 2) {
-          setHeroSrc(json.items[0].mediaUrl);
+          setFeedHeroUrl(json.items[0].mediaUrl);
           setColumns(chunkItemsToColumns(json.items));
           return;
         }
 
-        setHeroSrc(STOREFRONT_INSTAGRAM_HERO_IMAGE);
+        setFeedHeroUrl("");
         setColumns(buildPlaceholderColumns());
       } catch {
         if (!cancelled) {
-          setHeroSrc(STOREFRONT_INSTAGRAM_HERO_IMAGE);
+          setFeedHeroUrl("");
           setColumns(buildPlaceholderColumns());
         }
       }
@@ -372,18 +607,139 @@ export function StorefrontSectionPreview() {
 
   const safePopupIndex =
     slides.length === 0 ? 0 : Math.min(popupIndex, slides.length - 1);
-  const activeSlide = slides[safePopupIndex];
 
-  const scrollByStep = useCallback((dir: -1 | 1) => {
+  useLayoutEffect(() => {
+    if (!popupOpen || slides.length === 0) return;
+    const idx = Math.min(popupIndex, slides.length - 1);
+    requestAnimationFrame(() => {
+      popupPostRefs.current[idx]?.scrollIntoView({ block: "start", behavior: "auto" });
+    });
+  }, [popupOpen, popupIndex, slides.length]);
+
+  useEffect(() => {
+    if (!popupOpen) setShareCopiedIndex(null);
+  }, [popupOpen]);
+
+  const onViewportPointerDownCapture = useCallback(
+    (e: PointerEvent<HTMLDivElement>) => {
+      if (!feedSlider.feedSliderDragEnabled || e.button !== 0) return;
+      const el = scrollRef.current;
+      if (!el) return;
+      scrollAnimCancelRef.current?.();
+      scrollAnimCancelRef.current = null;
+      dragStateRef.current = {
+        pointerId: e.pointerId,
+        startX: e.clientX,
+        startScroll: el.scrollLeft,
+        dragging: false,
+      };
+      try {
+        el.setPointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+    },
+    [feedSlider.feedSliderDragEnabled],
+  );
+
+  const onViewportPointerMoveCapture = useCallback((e: PointerEvent<HTMLDivElement>) => {
+    const d = dragStateRef.current;
+    if (!d || d.pointerId !== e.pointerId) return;
     const el = scrollRef.current;
-    const firstCol = el?.querySelector<HTMLElement>("[data-ig-col]");
-    const strip = el?.querySelector<HTMLElement>("[data-ig-strip]");
-    if (!el || !firstCol) return;
-    const gapRaw = strip ? getComputedStyle(strip).gap : "10px";
-    const gapPx = parseFloat(gapRaw) || 10;
-    const step = firstCol.offsetWidth + gapPx;
-    el.scrollBy({ left: dir * step, behavior: "smooth" });
+    if (!el) return;
+    const dx = e.clientX - d.startX;
+    if (Math.abs(dx) > 5) {
+      if (!d.dragging) {
+        d.dragging = true;
+        setIsPointerDragging(true);
+      }
+      e.preventDefault();
+      el.scrollLeft = d.startScroll - dx;
+    }
   }, []);
+
+  const endViewportPointer = useCallback(
+    (e: PointerEvent<HTMLDivElement>) => {
+      const d = dragStateRef.current;
+      if (!d || d.pointerId !== e.pointerId) return;
+      const el = scrollRef.current;
+      dragStateRef.current = null;
+      setIsPointerDragging(false);
+      try {
+        el?.releasePointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+      if (d.dragging) {
+        suppressTileClickRef.current = true;
+        window.setTimeout(() => {
+          suppressTileClickRef.current = false;
+        }, 120);
+      }
+      updateScrollArrows();
+    },
+    [updateScrollArrows],
+  );
+
+  useEffect(() => {
+    const sec = feedSlider.feedSliderAutoplaySec;
+    if (sec <= 0) return;
+    const id = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      const el = scrollRef.current;
+      if (!el) return;
+      const maxScroll = el.scrollWidth - el.clientWidth;
+      if (maxScroll < 3) return;
+      const step = getColumnStepPx(el);
+      if (step <= 0) return;
+      scrollAnimCancelRef.current?.();
+      const animMs = feedSlider.feedSliderAnimationSec * 1000;
+      const next = el.scrollLeft >= maxScroll - 3 ? 0 : el.scrollLeft + step;
+      scrollAnimCancelRef.current = runScrollLeftAnimation(el, next, animMs, () => {
+        scrollAnimCancelRef.current = null;
+        updateScrollArrows();
+      });
+    }, sec * 1000);
+    return () => clearInterval(id);
+  }, [
+    feedSlider.feedSliderAutoplaySec,
+    feedSlider.feedSliderAnimationSec,
+    columns.length,
+    updateScrollArrows,
+  ]);
+
+  const handleShareForSlide = useCallback(async (permalink: string, rowIndex: number) => {
+    try {
+      if (typeof navigator !== "undefined" && navigator.share) {
+        await navigator.share({ url: permalink, title: "Instagram" });
+        return;
+      }
+      await navigator.clipboard.writeText(permalink);
+      setShareCopiedIndex(rowIndex);
+      window.setTimeout(() => {
+        setShareCopiedIndex((x) => (x === rowIndex ? null : x));
+      }, 2200);
+    } catch {
+      /* user cancelled share or clipboard blocked */
+    }
+  }, []);
+
+  const scrollByStep = useCallback(
+    (dir: -1 | 1) => {
+      const el = scrollRef.current;
+      if (!el) return;
+      const step = getColumnStepPx(el);
+      if (step <= 0) return;
+      scrollAnimCancelRef.current?.();
+      const target = el.scrollLeft + dir * step;
+      const animMs = feedSlider.feedSliderAnimationSec * 1000;
+      scrollAnimCancelRef.current = runScrollLeftAnimation(el, target, animMs, () => {
+        scrollAnimCancelRef.current = null;
+        updateScrollArrows();
+      });
+    },
+    [feedSlider.feedSliderAnimationSec, updateScrollArrows],
+  );
 
   const profileBar = (
     <div className={styles.profileBar}>
@@ -401,13 +757,15 @@ export function StorefrontSectionPreview() {
           <div className={styles.profileName}>{STOREFRONT_INSTAGRAM_DISPLAY_NAME}</div>
           <div className={styles.profileHandle}>@{STOREFRONT_INSTAGRAM_HANDLE}</div>
         </div>
-        <div className={`${styles.stat} ${styles.statPosts}`}>
-          <span className={styles.statValue}>{STOREFRONT_INSTAGRAM_POSTS_COUNT_LABEL}</span>
-          <span className={styles.statLabel}>Posts</span>
-        </div>
-        <div className={`${styles.stat} ${styles.statFollowers}`}>
-          <span className={styles.statValue}>{STOREFRONT_INSTAGRAM_FOLLOWERS_COUNT_LABEL}</span>
-          <span className={styles.statLabel}>Followers</span>
+        <div className={styles.statCluster}>
+          <div className={`${styles.stat} ${styles.statPosts}`}>
+            <span className={styles.statValue}>{STOREFRONT_INSTAGRAM_POSTS_COUNT_LABEL}</span>
+            <span className={styles.statLabel}>Posts</span>
+          </div>
+          <div className={`${styles.stat} ${styles.statFollowers}`}>
+            <span className={styles.statValue}>{STOREFRONT_INSTAGRAM_FOLLOWERS_COUNT_LABEL}</span>
+            <span className={styles.statLabel}>Followers</span>
+          </div>
         </div>
         <a
           className={styles.followBtn}
@@ -425,7 +783,7 @@ export function StorefrontSectionPreview() {
   const popupPortal =
     portalReady &&
     popupOpen &&
-    activeSlide &&
+    slides.length > 0 &&
     createPortal(
       <div
         className={styles.popOverlay}
@@ -442,104 +800,211 @@ export function StorefrontSectionPreview() {
         >
           ×
         </button>
-        {slides.length > 1 ? (
-          <>
-            <button
-              type="button"
-              className={styles.popNav}
-              data-dir="prev"
-              aria-label="Previous post"
-              onClick={(e) => {
-                e.stopPropagation();
-                goPrev();
-              }}
-            >
-              <PopNavChevronLeft />
-            </button>
-            <button
-              type="button"
-              className={styles.popNav}
-              data-dir="next"
-              aria-label="Next post"
-              onClick={(e) => {
-                e.stopPropagation();
-                goNext();
-              }}
-            >
-              <PopNavChevronRight />
-            </button>
-          </>
-        ) : null}
         <div
-          className={styles.popFrame}
+          className={styles.popInner}
           role="dialog"
           aria-modal="true"
-          aria-label="Instagram post"
+          aria-label="Instagram Feed popup"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className={styles.popHead}>
-            <span className={styles.popUser}>{STOREFRONT_INSTAGRAM_HANDLE}</span>
-            <div className={styles.popHeadActions}>
-              <a className={styles.popFollow} href={STOREFRONT_INSTAGRAM_URL} target="_blank" rel="noreferrer">
-                Follow
-              </a>
-              <PopupInstagramGlyph />
-            </div>
-          </div>
-          <div className={styles.popImageWrap}>
-            <Image
-              key={`${activeSlide.src}-${safePopupIndex}`}
-              src={activeSlide.src}
-              alt={activeSlide.alt}
-              fill
-              className={styles.popImage}
-              sizes="360px"
-              unoptimized={nextImageUnoptimized(activeSlide.src)}
-              style={
-                activeSlide.objectPosition
-                  ? { objectPosition: activeSlide.objectPosition }
-                  : undefined
-              }
-              priority
-            />
-          </div>
+          {slides.map((slide, i) => (
+            <article
+              key={`${slide.permalink}-${i}`}
+              ref={(el) => {
+                popupPostRefs.current[i] = el;
+              }}
+              className={styles.popPost}
+              data-ig-popup-post={i}
+              aria-current={i === safePopupIndex ? "true" : undefined}
+            >
+              <div className={styles.popHead}>
+                <a
+                  className={styles.popUserLink}
+                  href={STOREFRONT_INSTAGRAM_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {STOREFRONT_INSTAGRAM_HANDLE}
+                </a>
+                <div className={styles.popHeadActions}>
+                  <a
+                    className={styles.popFollow}
+                    href={STOREFRONT_INSTAGRAM_URL}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Follow
+                  </a>
+                  <a
+                    className={styles.popSourceLink}
+                    href={slide.permalink}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label="View on Instagram"
+                  >
+                    <PopupInstagramGlyph />
+                  </a>
+                </div>
+              </div>
+              <div className={styles.popImageWrap}>
+                <Image
+                  src={slide.src}
+                  alt={slide.alt}
+                  fill
+                  className={styles.popImage}
+                  sizes="(max-width: 720px) 100vw, 640px"
+                  unoptimized={nextImageUnoptimized(slide.src)}
+                  style={
+                    slide.objectPosition ? { objectPosition: slide.objectPosition } : undefined
+                  }
+                  priority={i === safePopupIndex}
+                />
+              </div>
+              <div className={styles.popPostBody}>
+                <div className={styles.popMetaRow}>
+                  <span className={styles.popMetaSpacer} aria-hidden />
+                  <div className={styles.popShareCluster}>
+                    <button
+                      type="button"
+                      className={styles.popShareBtn}
+                      onClick={() => handleShareForSlide(slide.permalink, i)}
+                    >
+                      <PopShareGlyph />
+                      <span>Share</span>
+                    </button>
+                    {shareCopiedIndex === i ? (
+                      <span className={styles.popShareHint}>Link copied</span>
+                    ) : null}
+                  </div>
+                </div>
+                <div className={styles.popCaptionBlock}>
+                  <a
+                    className={styles.popCaptionUser}
+                    href={slide.permalink}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {STOREFRONT_INSTAGRAM_HANDLE}
+                  </a>
+                  {slide.caption?.trim() ? (
+                    <div className={styles.popCaptionText}>
+                      <PopupCaptionRich text={slide.caption.trim()} />
+                    </div>
+                  ) : (
+                    <p className={styles.popCaptionFallback}>
+                      {slide.isPlaceholder
+                        ? "Studio preview tile — open Instagram for the full feed."
+                        : "View this post on Instagram for the full caption."}
+                    </p>
+                  )}
+                </div>
+                <p className={styles.popDate}>
+                  {slide.isPlaceholder
+                    ? "Studio preview"
+                    : formatInstagramPopupDate(slide.timestamp) || "Instagram"}
+                </p>
+              </div>
+            </article>
+          ))}
         </div>
       </div>,
       document.body,
     );
 
+  /* Nudge fixed toolbar slightly up in mobile preview vs frozen desktop rect (layout delta). */
+  const mobileToolbarTopOffsetPx = -20;
+
+  const sourcesToolbarFixedStyle: CSSProperties | undefined =
+    igMobilePreview && toolbarFreezeRect
+      ? {
+          position: "fixed",
+          left: toolbarFreezeRect.left,
+          top: toolbarFreezeRect.top + mobileToolbarTopOffsetPx,
+          width: toolbarFreezeRect.width,
+          height: toolbarFreezeRect.height,
+          zIndex: 55,
+          boxSizing: "border-box",
+        }
+      : igMobilePreview
+        ? { position: "fixed", left: 24, bottom: 100, zIndex: 55 }
+        : undefined;
+
+  /* Keep ElfsightSourcesBar in a stable React tree position (never portaled). Nested body portals
+   * (toolbar remount + modal portal) caused removeChild null crashes when toggling mobile preview. */
+  const sourcesToolbar = (
+    <div
+      className={styles.sourcesToolbarSlot}
+      style={igMobilePreview ? sourcesToolbarFixedStyle : undefined}
+      data-ig-sources-toolbar-measure=""
+      aria-live="polite"
+    >
+      <ElfsightSourcesBar />
+    </div>
+  );
+
   return (
+    <>
     <div className={styles.root}>
       {profileBar}
 
       <div className={styles.mediaGrid}>
         <div className={styles.heroCell}>
           <div className={styles.banner}>
-            <Image
-              src={heroSrc}
-              alt={`Instagram banner for @${STOREFRONT_INSTAGRAM_HANDLE}`}
-              width={2000}
-              height={1200}
-              sizes="(max-width: 900px) 100vw, 50vw"
-              priority={false}
-              unoptimized={nextImageUnoptimized(heroSrc)}
-            />
+            {isHeroVideoUrl(displayHeroSrc) ? (
+              <video
+                className={styles.bannerVideo}
+                src={displayHeroSrc}
+                width={2000}
+                height={1200}
+                muted
+                playsInline
+                loop
+                autoPlay
+                aria-label={heroImageAlt}
+              />
+            ) : (
+              <Image
+                src={displayHeroSrc}
+                alt={heroImageAlt}
+                width={2000}
+                height={1200}
+                sizes="(max-width: 900px) 100vw, 50vw"
+                priority={false}
+                unoptimized={nextImageUnoptimized(displayHeroSrc)}
+              />
+            )}
             <div className={styles.instagramLink}>
-              <a href={STOREFRONT_INSTAGRAM_URL} target="_blank" rel="noopener noreferrer">
-                @{STOREFRONT_INSTAGRAM_HANDLE}
+              <a
+                href={heroOverlayHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  fontFamily: "'Neuzeit Grotesk', ui-sans-serif, system-ui, sans-serif",
+                  fontSize: heroLinkFontPx,
+                  fontWeight: heroLinkFontWeight,
+                  color: heroLinkColor,
+                  textShadow: "0 1px 6px rgba(0,0,0,0.45)",
+                }}
+              >
+                {heroOverlayText}
               </a>
             </div>
           </div>
         </div>
 
         <div className={styles.tilesCell}>
-          <div className={styles.tileScrollOuter}>
+          <div className={styles.tileScrollOuter} dir="ltr">
             <div
               ref={scrollRef}
-              className={styles.tileScrollViewport}
+              className={`${styles.tileScrollViewport} ${feedSlider.feedSliderDragEnabled ? styles.tileScrollViewportGrab : ""} ${isPointerDragging ? styles.tileScrollViewportNoSelect : ""}`}
               data-ig-scroll-viewport=""
+              dir="ltr"
+              onPointerDownCapture={onViewportPointerDownCapture}
+              onPointerMoveCapture={onViewportPointerMoveCapture}
+              onPointerUpCapture={endViewportPointer}
+              onPointerCancelCapture={endViewportPointer}
             >
-              <div className={styles.tileStrip} data-ig-strip="">
+              <div className={styles.tileStrip} data-ig-strip="" dir="ltr">
                 {indexedColumns.map((cells, colIndex) => (
                   <div key={colIndex} className={styles.tileCol} data-ig-col="">
                     {cells.map(({ cell, index }, rowIndex) => {
@@ -555,7 +1020,7 @@ export function StorefrontSectionPreview() {
                             type="button"
                             className={styles.tile}
                             aria-label={alt}
-                            onClick={() => openPopupAt(index)}
+                            onClick={() => tryOpenPopupAt(index)}
                           >
                             <Image
                               src={item.mediaUrl}
@@ -565,6 +1030,12 @@ export function StorefrontSectionPreview() {
                               className={styles.tileImg}
                               unoptimized={nextImageUnoptimized(item.mediaUrl)}
                             />
+                            <TileTypeBadge mediaType={item.mediaType} />
+                            <span className={styles.tileHover} aria-hidden>
+                              <span className={styles.tileHoverCaption}>
+                                {metaTileHoverCaption(item)}
+                              </span>
+                            </span>
                           </button>
                         );
                       }
@@ -576,7 +1047,7 @@ export function StorefrontSectionPreview() {
                           type="button"
                           className={styles.tile}
                           aria-label={`Open @${STOREFRONT_INSTAGRAM_HANDLE} on Instagram (preview tile ${i + 1})`}
-                          onClick={() => openPopupAt(index)}
+                          onClick={() => tryOpenPopupAt(index)}
                         >
                           <Image
                             src={STOREFRONT_INSTAGRAM_HERO_IMAGE}
@@ -587,6 +1058,11 @@ export function StorefrontSectionPreview() {
                             style={{ objectPosition }}
                             unoptimized={nextImageUnoptimized(STOREFRONT_INSTAGRAM_HERO_IMAGE)}
                           />
+                          <span className={styles.tileHover} aria-hidden>
+                            <span className={styles.tileHoverCaption}>
+                              {placeholderTileHoverCaption()}
+                            </span>
+                          </span>
                         </button>
                       );
                     })}
@@ -595,35 +1071,36 @@ export function StorefrontSectionPreview() {
               </div>
             </div>
 
-            {canGoLeft ? (
+            {feedSlider.feedSliderArrowsEnabled && canGoLeft ? (
               <button
                 type="button"
                 className={styles.scrollBtn}
                 data-side="prev"
-                aria-label="Scroll Instagram grid left"
+                aria-label="Previous slide"
                 onClick={() => scrollByStep(-1)}
               >
-                <ChevronLeft />
+                <ElfsightSliderArrowPrev />
               </button>
             ) : null}
-            {canGoRight ? (
+            {feedSlider.feedSliderArrowsEnabled && canGoRight ? (
               <button
                 type="button"
                 className={styles.scrollBtn}
                 data-side="next"
-                aria-label="Scroll Instagram grid right"
+                aria-label="Next slide"
                 onClick={() => scrollByStep(1)}
               >
-                <ChevronRight />
+                <ElfsightSliderArrowNext />
               </button>
             ) : null}
           </div>
         </div>
       </div>
 
-      <ElfsightSourcesBar />
+      {sourcesToolbar}
 
       {popupPortal}
     </div>
+    </>
   );
 }

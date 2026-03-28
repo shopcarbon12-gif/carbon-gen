@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Before / after — horizontal scroll fix</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 16px; background: #111; color: #eee; }
+    h1 { font-size: 1.1rem; }
+    .row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+    figure { margin: 0; max-width: 100%; }
+    figcaption { font-size: 0.85rem; margin-top: 8px; color: #aaa; }
+    img { max-width: min(390px, 100%); height: auto; border: 1px solid #444; border-radius: 8px; }
+    .meta { background: #222; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <h1>Mobile homepage — before vs after overflow-x fix</h1>
+  <div class="meta">
+    <strong>Before:</strong> <code>scrollWidth 408px</code> vs <code>clientWidth 375px</code> (horizontal overflow).<br />
+    <strong>After:</strong> CSS injected in-session → <code>scrollWidth 375px</code> (no horizontal page scroll).
+  </div>
+  <div class="row">
+    <figure>
+      <figcaption><strong>Before</strong> — 01-before-fix.png</figcaption>
+      <img src="01-before-fix.png" alt="Before fix: note horizontal scrollbar at bottom" />
+    </figure>
+    <figure>
+      <figcaption><strong>After</strong> — 02-after-fix.png</figcaption>
+      <img src="02-after-fix.png" alt="After fix: same view without horizontal overflow" />
+    </figure>
+  </div>
+</body>
+</html>

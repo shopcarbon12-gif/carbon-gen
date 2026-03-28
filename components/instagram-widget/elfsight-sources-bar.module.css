@@ -759,3 +759,208 @@
   gap: 0;
 }
 
+/* Hero picture trigger — hover matches idle (no brightness / filter change). */
+.triggerHeroPicture:hover {
+  filter: none;
+}
+
+.triggerHeroPicture.triggerActive:hover {
+  filter: none;
+}
+
+.dialogHero {
+  width: min(480px, 100%);
+  max-height: none;
+  overflow: visible;
+}
+
+@media (max-height: 700px) {
+  .dialogHero {
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+  }
+}
+
+.dialogHero .dialogHead {
+  padding: 10px 14px;
+  flex-shrink: 0;
+}
+
+.heroModalBody {
+  padding: 14px 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dialogHero .heroModalBody {
+  padding: 8px 12px 10px;
+  gap: 8px;
+}
+
+.dialogHero .sectionLabel {
+  margin: 0 0 4px;
+}
+
+.dialogHero .heroDimNote {
+  line-height: 1.35;
+  font-size: 11px;
+}
+
+.dialogHero .heroSection {
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.dialogHero .heroSection:first-of-type {
+  padding-top: 0;
+}
+
+.dialogHero .heroFieldLabel {
+  gap: 3px;
+}
+
+.dialogHero .heroFieldInput {
+  padding: 7px 10px;
+  font-size: 13px;
+  text-transform: none;
+}
+
+.dialogHero .heroRowActions {
+  gap: 6px;
+  margin-top: 0;
+}
+
+.dialogHero .heroFileLabel,
+.dialogHero .heroBtn {
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+.dialogHero .heroStatus,
+.dialogHero .heroError {
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.heroFieldLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(203, 213, 225, 0.75);
+}
+
+.heroFieldInput {
+  padding: 10px 12px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.25);
+  color: rgba(248, 250, 252, 0.95);
+  font-size: 14px;
+  font-family: inherit;
+  /* Labels use uppercase; inputs inherit text-transform and must not. */
+  text-transform: none;
+}
+
+.heroFieldInput::placeholder {
+  text-transform: none;
+}
+
+.heroFieldInput:focus {
+  outline: none;
+  border-color: rgba(139, 92, 246, 0.45);
+}
+
+.heroDimNote {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(203, 213, 225, 0.72);
+}
+
+.heroSection {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.heroSection:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.heroRowActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.heroFileLabel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 9px;
+  background: rgba(0, 149, 246, 0.2);
+  color: #7dd3fc;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid rgba(0, 149, 246, 0.45);
+}
+
+.heroFileLabel:hover {
+  background: rgba(0, 149, 246, 0.28);
+}
+
+.heroFileInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.heroBtn {
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(248, 250, 252, 0.92);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.heroBtn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.heroBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.heroStatus {
+  margin: 0;
+  font-size: 12px;
+  color: rgba(52, 211, 153, 0.9);
+}
+
+.heroError {
+  margin: 0;
+  font-size: 12px;
+  color: rgba(248, 113, 113, 0.95);
+}
+
