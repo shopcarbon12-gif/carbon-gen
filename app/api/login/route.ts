@@ -85,6 +85,15 @@ function setSessionCookies(
   });
 }
 
+/** Browsers open URLs with GET; login uses POST from /login. Redirect so bookmarks don’t show 405. */
+export async function GET(req: Request) {
+  const u = new URL(req.url);
+  u.pathname = "/login";
+  u.search = "";
+  u.hash = "";
+  return NextResponse.redirect(u);
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
