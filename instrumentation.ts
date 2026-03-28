@@ -1,9 +1,10 @@
 /**
- * Runs once per Node.js process when Next loads instrumentation (may not run in all Docker/standalone setups).
- * Login POST also calls runMetaReviewSeedIfConfigured() so provisioning still happens.
+ * Intentionally empty: do not import DB/pg from instrumentation.
+ * Next.js compiles `instrumentation` with a webpack graph that cannot resolve Node builtins (`fs`),
+ * which breaks `pg` / `pg-connection-string` and surfaces as 500 + "Can't resolve 'fs'" in dev.
+ *
+ * Meta-review user seeding still runs from `app/api/login/route.ts` via `runMetaReviewSeedIfConfigured()`.
  */
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
-  const { runMetaReviewSeedIfConfigured } = await import("@/lib/runMetaReviewSeedIfConfigured");
-  await runMetaReviewSeedIfConfigured();
 }

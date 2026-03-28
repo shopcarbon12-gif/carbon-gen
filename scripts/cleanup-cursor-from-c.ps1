@@ -1,20 +1,12 @@
-# Run this script AFTER closing Cursor completely.
-# Deletes remaining Cursor/Codex data from C:\ drive.
+# Back-compat name: this no longer deletes C:\ paths (that lets Cursor recreate GB on C:).
+# It creates directory junctions so Roaming\Cursor, Local\Cursor, and %USERPROFILE%\.cursor
+# point at D:\Users\Elior\DevData\... — same as scripts\cursor-junctions-d-only.ps1.
+#
+# Close Cursor completely before running.
 
-$paths = @(
-    "C:\Users\Elior\AppData\Roaming\Cursor",
-    "C:\Users\Elior\.cursor"
-)
-
-foreach ($p in $paths) {
-    if (Test-Path $p) {
-        try {
-            Remove-Item $p -Recurse -Force -ErrorAction Stop
-            Write-Host "Deleted: $p"
-        } catch {
-            Write-Host "Failed: $p - $_"
-        }
-    }
+$junctionScript = Join-Path $PSScriptRoot "cursor-junctions-d-only.ps1"
+if (-not (Test-Path -LiteralPath $junctionScript)) {
+    throw "Missing $junctionScript"
 }
 
-Write-Host "Done. Launch Cursor from Desktop shortcut 'Cursor (D-Drive)'"
+& $junctionScript @args

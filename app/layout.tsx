@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import AutoCapitalizeFirstLetter from "@/components/auto-capitalize-first-letter";
@@ -17,6 +17,13 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Carbon Creative Studio",
   description: "AI image studio for Carbon operations",
+};
+
+/** Real devices need this so `100vw` / `(max-width: …px)` match the physical width (not a default ~980px layout viewport). */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

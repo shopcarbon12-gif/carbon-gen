@@ -4221,7 +4221,11 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        const desiredNodes = checked ? new Set<string>() : new Set(currentSelectedNodes);
+        // Always start from current menu-linked collections on the product. When `checked` is true,
+        // union in the requested nodes (additive push). Replacing the whole set here caused pushes to
+        // drop every existing managed collection that was not in this single request — wrong for
+        // "commit adds only" (see bulk-toggle from collection-mapping push planner).
+        const desiredNodes = new Set(currentSelectedNodes);
         if (checked) {
           for (const key of requestedNodeKeys) {
             desiredNodes.add(key);

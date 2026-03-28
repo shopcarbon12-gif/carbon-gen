@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import ShopifyMenuItemsTree from "@/components/shopify-menu-items-tree";
 import { formatAppDateTime } from "@/lib/formatAppDateTime";
 import { normalizeMenuPath } from "@/lib/shopifyCollectionSkuParser";
@@ -14,6 +14,20 @@ import {
   type ShopifyCollectionMappingRowWorkflow,
   type ShopifyCollectionMappingStatusBadgeTone,
 } from "@/lib/shopifyCollectionMappingKpi";
+
+function useMatchMediaMaxWidth(maxWidthPx: number): boolean {
+  const query = `(max-width: ${maxWidthPx}px)`;
+  return useSyncExternalStore(
+    (onChange) => {
+      if (typeof window === "undefined") return () => {};
+      const mq = window.matchMedia(query);
+      mq.addEventListener("change", onChange);
+      return () => mq.removeEventListener("change", onChange);
+    },
+    () => (typeof window !== "undefined" ? window.matchMedia(query).matches : false),
+    () => false
+  );
+}
 
 type MenuNode = {
   nodeKey: string;
@@ -623,6 +637,9 @@ export default function ShopifyCollectionMapping() {
   const [showRefreshClearConfirm, setShowRefreshClearConfirm] = useState(false);
   // Default to full loaded product view on first load.
   const [activeQueueTab, setActiveQueueTab] = useState<ShopifyCollectionMappingQueueTab>("all");
+  /** Idea 3 · KPI inbox (mobile prototype): full-width search, pill queue filters, dense thumb + title + pills + chevron rows. */
+  const isMobileIdea3Layout = useMatchMediaMaxWidth(900);
+  const [mobileIdea3ExpandedRowId, setMobileIdea3ExpandedRowId] = useState<string | null>(null);
   // Reports are consolidated behind a single modal trigger to reduce canvas clutter.
   const [showReportsModal, setShowReportsModal] = useState(false);
   const [queueJobs, setQueueJobs] = useState<QueueJob[]>([]);
@@ -1429,6 +1446,14 @@ export default function ShopifyCollectionMapping() {
     appliedFilterIncludeSynced,
     headerSortMode,
   ]);
+
+  useEffect(() => {
+    setMobileIdea3ExpandedRowId(null);
+  }, [activeQueueTab]);
+
+  useEffect(() => {
+    if (!isMobileIdea3Layout) setMobileIdea3ExpandedRowId(null);
+  }, [isMobileIdea3Layout]);
 
   const showHoldFromSyncColumn = activeQueueTab === "ready-push";
   const showApprovedColumn =
@@ -4814,7 +4839,7 @@ export default function ShopifyCollectionMapping() {
 
   return (
     <>
-      {isStandaloneCollectionMappingRoute ? (
+      {isStandaloneCollectionMappingRoute && !isMobileIdea3Layout ? (
         <div className="headerKpiOverlay" aria-label="Collection mapping summary">
           <div
             className={`headerKpiCard headerKpiCardLoaded${activeQueueTab === "all" ? " headerKpiCardActive" : ""}`}
@@ -4923,7 +4948,7 @@ export default function ShopifyCollectionMapping() {
       </div>
 
       <main
-        className={`page${workspaceHeight ? " pageExpanded" : ""}`}
+        className={`page${workspaceHeight ? " pageExpanded" : ""}${isStandaloneCollectionMappingRoute ? " pageStandaloneKpi" : ""}`}
         ref={pageScrollRef}
       >
       <div className="pageBody">
@@ -5028,8 +5053,74 @@ export default function ShopifyCollectionMapping() {
           >
             <span className="paneDividerGrip" />
           </button>
-          <main className={`card panel productPanel${treePaneCollapsed ? " treePaneCollapsed" : ""}`}>
+          <main
+            className={`card panel productPanel${treePaneCollapsed ? " treePaneCollapsed" : ""}${isMobileIdea3Layout ? " productPanelMobileIdea3" : ""}`}
+          >
+            {isMobileIdea3Layout ? (
+              <div className="i3-inbox-top" aria-label="Product inbox">
+                <div className="i3-inbox-brand">CARBON / COLLECTION MAPPING</div>
+                <input
+                  type="search"
+                  className="i3-search"
+                  id="collection-mapping-i3-search"
+                  value={search}
+                  onChange={(event) => {
+                    setSearch(event.target.value);
+                    resetPageForDataQuery();
+                  }}
+                  placeholder="Search products (title / sku / upc / type)…"
+                  aria-label="Search products"
+                  enterKeyHint="search"
+                />
+                <div className="i3-filters" role="toolbar" aria-label="Queue filters">
+                  <button
+                    type="button"
+                    className={activeQueueTab === "all" ? "on" : ""}
+                    aria-pressed={activeQueueTab === "all"}
+                    onClick={() => setActiveQueueTab("all")}
+                  >
+                    All
+                  </button>
+                  <button type="button" onClick={() => setActiveQueueTab("all")}>
+                    <em>{moduleSummary.totalLoaded}</em> Loaded
+                  </button>
+                  <button
+                    type="button"
+                    className={activeQueueTab === KPI_NEEDS_REVIEW_UNION_FILTER ? "on" : ""}
+                    aria-pressed={activeQueueTab === KPI_NEEDS_REVIEW_UNION_FILTER}
+                    onClick={() => setActiveQueueTab(KPI_NEEDS_REVIEW_UNION_FILTER)}
+                  >
+                    <em>{moduleSummary.reviewNeeded}</em> Needs review
+                  </button>
+                  <button
+                    type="button"
+                    className={activeQueueTab === "ready-push" ? "on" : ""}
+                    aria-pressed={activeQueueTab === "ready-push"}
+                    onClick={() => setActiveQueueTab("ready-push")}
+                  >
+                    <em>{moduleSummary.readyToPush}</em> Ready to push
+                  </button>
+                  <button
+                    type="button"
+                    className={activeQueueTab === "push-failed" ? "on" : ""}
+                    aria-pressed={activeQueueTab === "push-failed"}
+                    onClick={() => setActiveQueueTab("push-failed")}
+                  >
+                    <em>{moduleSummary.pushFailed}</em> Failed
+                  </button>
+                  <button
+                    type="button"
+                    className={activeQueueTab === "synced" ? "on" : ""}
+                    aria-pressed={activeQueueTab === "synced"}
+                    onClick={() => setActiveQueueTab("synced")}
+                  >
+                    <em>{moduleSummary.synced}</em> Synced
+                  </button>
+                </div>
+              </div>
+            ) : null}
             <div className="productControls">
+              {!isMobileIdea3Layout ? (
               <input
                 value={search}
                 onChange={(event) => {
@@ -5040,6 +5131,8 @@ export default function ShopifyCollectionMapping() {
                 aria-label="Search products"
                 className="productSearchInput"
               />
+              ) : null}
+              {!isMobileIdea3Layout ? (
               <button
                 type="button"
                 className="productSearchBtn productIconBtn productIconBtnGreen quickTooltip"
@@ -5055,6 +5148,7 @@ export default function ShopifyCollectionMapping() {
                   />
                 </svg>
               </button>
+              ) : null}
               <button
                 type="button"
                 className="productRefreshBtn productIconBtn quickTooltip"
@@ -5172,8 +5266,8 @@ export default function ShopifyCollectionMapping() {
               </div>
             ) : null}
 
-            <div className="tableWrap" ref={tableWrapRef}>
-              <table>
+            <div className={`tableWrap${isMobileIdea3Layout ? " tableWrap--i3" : ""}`} ref={tableWrapRef}>
+              <table className={isMobileIdea3Layout ? "tableMobileIdea3" : undefined}>
                 <thead>
                   <tr>
                     <th className="center stickyCheckboxCol">
@@ -5302,8 +5396,8 @@ export default function ShopifyCollectionMapping() {
                       return (
                         <tr
                           key={row.id}
-                          className={`${selectedProductRow ? "selectedProductRow " : ""}${isActiveRow ? "activeProductRow " : ""}${isManualReviewRow ? "manualReviewRow " : ""}statusTone-${workflow.statusBadgeTone}`.trim()}
-                          onClick={() => toggleRowSelectionFromRowClick(row.id)}
+                          className={`${selectedProductRow ? "selectedProductRow " : ""}${isActiveRow ? "activeProductRow " : ""}${isManualReviewRow ? "manualReviewRow " : ""}statusTone-${workflow.statusBadgeTone}${isMobileIdea3Layout ? " mobileIdea3Row" : ""}${isMobileIdea3Layout && mobileIdea3ExpandedRowId === row.id ? " mobileIdea3RowExpanded" : ""}`.trim()}
+                          onClick={isMobileIdea3Layout ? undefined : () => toggleRowSelectionFromRowClick(row.id)}
                         >
                           <td className="center stickyCheckboxCol">
                             <input
@@ -5355,13 +5449,57 @@ export default function ShopifyCollectionMapping() {
                             )}
                           </td>
                           <td className="productNameCol stickyProductNameCol">
-                            <div>{row.title}</div>
-                            <div className="muted tiny">UPC: {row.upc || "-"}</div>
-                            {(row.collectionConflictFlags?.length ?? 0) > 0 ? (
-                              <div className="muted tiny pathConflictBadge" title="Title/type may contradict an assigned category — open details">
-                                Category conflict
+                            {isMobileIdea3Layout ? (
+                              <div className="mobileIdea3NameHead">
+                                <div className="mobileIdea3NameText">
+                                  <div className="mobileIdea3Title">{row.title}</div>
+                                  <div className="muted tiny">UPC: {row.upc || "-"}</div>
+                                  {(row.collectionConflictFlags?.length ?? 0) > 0 ? (
+                                    <div
+                                      className="muted tiny pathConflictBadge"
+                                      title="Title/type may contradict an assigned category — open details"
+                                    >
+                                      Category conflict
+                                    </div>
+                                  ) : null}
+                                  <div className="mobileIdea3Pills">
+                                    <span className={`mobileIdea3MiniPill decision-${mappingDecision.toLowerCase()}`}>
+                                      {getUiStatusLabel(mappingDecision)}
+                                    </span>
+                                    <span className={`mobileIdea3MiniPill sync-${workflow.statusBadgeTone}`}>
+                                      {workflow.statusLabel}
+                                    </span>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  className="mobileIdea3RowChevron"
+                                  aria-expanded={mobileIdea3ExpandedRowId === row.id}
+                                  aria-label={
+                                    mobileIdea3ExpandedRowId === row.id ? "Collapse product details" : "Expand product details"
+                                  }
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setMobileIdea3ExpandedRowId((prev) => (prev === row.id ? null : row.id));
+                                  }}
+                                >
+                                  ▼
+                                </button>
                               </div>
-                            ) : null}
+                            ) : (
+                              <>
+                                <div>{row.title}</div>
+                                <div className="muted tiny">UPC: {row.upc || "-"}</div>
+                                {(row.collectionConflictFlags?.length ?? 0) > 0 ? (
+                                  <div
+                                    className="muted tiny pathConflictBadge"
+                                    title="Title/type may contradict an assigned category — open details"
+                                  >
+                                    Category conflict
+                                  </div>
+                                ) : null}
+                              </>
+                            )}
                           </td>
                           <td className="autoMappedCol">
                             {autoPathItems.length > 0 ? (
@@ -6383,7 +6521,7 @@ export default function ShopifyCollectionMapping() {
           overflow: hidden !important;
         }
         .page {
-          --shell-content-top-offset: var(--collection-mapping-shell-content-top-offset, 100px);
+          --shell-content-top-offset: var(--collection-mapping-shell-content-top-offset, 70px);
           --notice-bar-height: 37px;
           --bottom-dock-lane-height: 12px;
           --bottom-dock-offset: 2px;
@@ -9306,7 +9444,8 @@ export default function ShopifyCollectionMapping() {
           font-size: 12px;
           text-align: center;
         }
-        @media (max-width: 1200px) {
+        /* Narrow desktop / small laptop: KPI sizing only — workspace grid stays base (two-pane). */
+        @media (max-width: 1200px) and (min-width: 901px) {
           .headerKpiOverlay {
             right: 18px;
             gap: 6px;
@@ -9323,35 +9462,491 @@ export default function ShopifyCollectionMapping() {
           .headerKpiValue {
             font-size: 22px;
           }
-          .page {
-            height: auto;
-            max-height: none;
-            overflow: visible;
-            grid-template-rows: auto auto;
+        }
+        /* Idea 3 — mobile KPI inbox: horizontal KPI strip, product panel first, full-width search, scrollable tree band. ≤900px only. */
+        @media (max-width: 900px) {
+          :global(html),
+          :global(body) {
+            height: auto !important;
+            min-height: 100dvh !important;
+            overflow-x: hidden !important;
+            overflow-y: auto !important;
           }
-          .grid2 {
-            grid-template-columns: 1fr;
-            height: auto;
+          /* In-page anchors / focus scroll clear fixed shell + KPI strip (standalone route only). */
+          :global(.collection-mapping-standalone-route) {
+            scroll-padding-top: calc(
+              var(--collection-mapping-shell-content-top-offset, 70px) + 56px + env(safe-area-inset-top, 0px)
+            ) !important;
           }
-          .grid2 > .card.panel {
-            height: auto;
-            max-height: none;
-            overflow: visible;
+          .headerKpiOverlay {
+            position: fixed !important;
+            top: calc(
+              var(--collection-mapping-shell-content-top-offset, 70px) + 4px + env(safe-area-inset-top, 0px)
+            ) !important;
+            left: max(10px, env(safe-area-inset-left, 0px)) !important;
+            right: max(10px, env(safe-area-inset-right, 0px)) !important;
+            transform: none !important;
+            justify-content: flex-start !important;
+            flex-wrap: nowrap !important;
+            gap: 8px !important;
+            padding: 6px 4px 8px !important;
+            margin: 0 !important;
+            max-width: none !important;
+            width: auto !important;
+            overflow-x: auto !important;
+            overflow-y: hidden !important;
+            -webkit-overflow-scrolling: touch !important;
+            scrollbar-width: thin !important;
+            pointer-events: auto !important;
+            z-index: 2147483640 !important;
+            background: linear-gradient(
+              180deg,
+              rgba(11, 19, 34, 0.94) 0%,
+              rgba(11, 19, 34, 0.78) 70%,
+              transparent 100%
+            ) !important;
+            border-radius: 0 0 12px 12px !important;
           }
-          .paneDivider {
-            display: none;
+          .headerKpiOverlay::-webkit-scrollbar {
+            height: 4px !important;
+          }
+          .headerKpiOverlay::-webkit-scrollbar-thumb {
+            background: #3c4f70 !important;
+            border-radius: 4px !important;
+          }
+          .headerKpiOverlay::-webkit-scrollbar-track {
+            background: transparent !important;
+          }
+          /* Small inset only — fixed KPI does not consume flow; large padding-top read as empty gap. */
+          .page.pageStandaloneKpi {
+            padding-top: 8px !important;
+          }
+          .headerKpiCard {
+            flex-shrink: 0 !important;
+            width: 104px !important;
+            min-width: 104px !important;
+            max-width: 104px !important;
+          }
+          .headerKpiLabel {
+            font-size: 10px !important;
+          }
+          .headerKpiValue {
+            font-size: 20px !important;
+          }
+          .page,
+          .page.pageExpanded {
+            height: auto !important;
+            max-height: none !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            overflow-x: hidden !important;
+            overflow-y: visible !important;
+            padding-left: 8px !important;
+            padding-right: 8px !important;
+          }
+          .page.pageExpanded {
+            display: flex !important;
+            flex-direction: column !important;
+            overflow: visible !important;
+          }
+          .pageBody {
+            overflow: visible !important;
+            flex: 0 1 auto !important;
+          }
+          .workspaceSection.workspaceSectionExpanded {
+            height: auto !important;
+            flex: 0 1 auto !important;
+            min-height: 0 !important;
+          }
+          .workspaceGridHost.grid2 {
+            display: grid !important;
+            grid-template-columns: minmax(0, 1fr) !important;
+            grid-template-rows: auto auto !important;
+            height: auto !important;
+            min-height: 0 !important;
+            gap: 12px !important;
+            align-items: stretch !important;
+          }
+          .paneDivider,
+          .paneDivider.paneDividerCollapsed {
+            display: none !important;
           }
           .workspaceHeightDivider {
-            display: none;
+            display: none !important;
+          }
+          .grid2 > .productPanel {
+            order: -1 !important;
+          }
+          .grid2 > .treePaneHost {
+            order: 1 !important;
+          }
+          .grid2 > .paneDivider {
+            order: 0 !important;
+          }
+          .treePaneHost:not(.treePaneHostCollapsed) {
+            position: relative !important;
+            top: auto !important;
+            z-index: 10 !important;
+            width: 100% !important;
+            min-width: 0 !important;
+            max-width: none !important;
+            max-height: min(40vh, 320px) !important;
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
+            align-self: stretch !important;
+          }
+          .treePaneHost.treePaneHostCollapsed {
+            position: relative !important;
+            top: auto !important;
+            z-index: 10 !important;
+          }
+          .productPanel.treePaneCollapsed {
+            margin-left: 0 !important;
+          }
+          .productPanel.treePaneCollapsed::before {
+            display: none !important;
+          }
+          .productPanel.treePaneCollapsed .productControls {
+            padding-left: 12px !important;
+          }
+          .productPanel {
+            min-height: min(52vh, 520px) !important;
+            width: 100% !important;
+            min-width: 0 !important;
           }
           .productControls {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
+            display: flex !important;
+            flex-wrap: wrap !important;
+            gap: 10px !important;
+            align-items: center !important;
+            top: calc(var(--shell-content-top-offset, 70px) + 6px + env(safe-area-inset-top, 0px)) !important;
+          }
+          /* Standalone: fixed KPI cards are hidden on mobile — pills are in-page; do not reserve header band. */
+          .page.pageStandaloneKpi .productControls {
+            top: calc(var(--shell-content-top-offset, 70px) + 8px + env(safe-area-inset-top, 0px)) !important;
+          }
+          /* Full-width search row; flex % resolves to panel content box (Playwright 390px ≈ 294px inner). */
+          .productSearchInput {
+            flex: 0 0 100% !important;
+            width: 100% !important;
+            min-width: 100% !important;
+            max-width: none !important;
+            box-sizing: border-box !important;
+          }
+          .productControlsSpacer {
+            display: none !important;
+          }
+          .productControls .commitMenuWrap {
+            flex: 1 1 100% !important;
+            min-width: 0 !important;
+            max-width: none !important;
+          }
+          .productControls .commitMenuTrigger {
+            width: 100% !important;
+            justify-content: center !important;
+          }
+          .filtersDrawer {
+            width: 100% !important;
+            max-width: 100% !important;
+          }
+          .appliedFilterChips {
+            top: calc(var(--shell-content-top-offset, 70px) + 72px + env(safe-area-inset-top, 0px)) !important;
+          }
+          .page.pageStandaloneKpi .appliedFilterChips {
+            top: calc(var(--shell-content-top-offset, 70px) + 80px + env(safe-area-inset-top, 0px)) !important;
+          }
+          .commitMenu {
+            left: 10px !important;
+            right: 10px !important;
+            min-width: 0 !important;
+            max-width: none !important;
+            width: auto !important;
+          }
+          .tableWrap {
+            min-height: 280px !important;
+            scrollbar-width: thin !important;
+          }
+          .tableWrap::-webkit-scrollbar {
+            height: 6px !important;
+            width: 6px !important;
+          }
+          /* Idea 3 — KPI inbox: search + pill filters + dense card rows (see carbon-collection-mapping-3-ideas.html). */
+          /* Flatten inner card: one shell frame from .workspaceSection.card only (no nested bordered panel). */
+          .productPanel.productPanelMobileIdea3,
+          .grid2 > .card.panel.productPanel.productPanelMobileIdea3 {
+            border: none !important;
+            outline: none !important;
+            box-shadow: none !important;
+            background: transparent !important;
+            border-radius: 0 !important;
+            isolation: auto !important;
+          }
+          .productPanelMobileIdea3 {
+            padding-top: 4px !important;
+            padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)) !important;
+          }
+          /* Idea 3 · KPI inbox — full-width search + pill filters (prototype pic1). */
+          .i3-inbox-top {
+            position: sticky !important;
+            top: calc(var(--shell-content-top-offset, 70px) + env(safe-area-inset-top, 0px)) !important;
+            z-index: 11 !important;
+            padding: 2px 0 12px !important;
+            margin-bottom: 6px !important;
+            background: linear-gradient(180deg, rgba(15, 23, 42, 0.99) 0%, rgba(15, 23, 42, 0.94) 70%, transparent 100%) !important;
+          }
+          .page.pageStandaloneKpi .i3-inbox-top {
+            top: calc(var(--collection-mapping-shell-content-top-offset, 70px) + env(safe-area-inset-top, 0px)) !important;
+          }
+          .i3-inbox-brand {
+            margin: 0 0 10px !important;
+            font-size: 0.7rem !important;
+            font-weight: 800 !important;
+            letter-spacing: 0.08em !important;
+            color: #f1f5f9 !important;
+          }
+          .i3-search {
+            display: block !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 0 12px !important;
+            box-sizing: border-box !important;
+            padding: 12px 14px !important;
+            border-radius: 12px !important;
+            border: 1px solid #4c5d78 !important;
+            background: #121c30 !important;
+            color: #e5edf9 !important;
+            font-size: 16px !important;
+            min-height: 46px !important;
+          }
+          .i3-filters {
+            display: flex !important;
+            gap: 8px !important;
+            padding: 0 0 4px !important;
+            overflow-x: auto !important;
+            overflow-y: hidden !important;
+            -webkit-overflow-scrolling: touch !important;
+            scrollbar-width: none !important;
+          }
+          .i3-filters::-webkit-scrollbar {
+            display: none !important;
+          }
+          .i3-filters button {
+            flex: 0 0 auto !important;
+            padding: 8px 14px !important;
+            border-radius: 999px !important;
+            border: 1px solid #3b4c66 !important;
+            background: #111c2f !important;
+            color: #94a3b8 !important;
+            font-size: 0.74rem !important;
+            font-weight: 600 !important;
+            cursor: pointer !important;
+            font-family: inherit !important;
+            white-space: nowrap !important;
+          }
+          .i3-filters button.on {
+            background: rgba(99, 102, 241, 0.22) !important;
+            border-color: #818cf8 !important;
+            color: #e0e7ff !important;
+            box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.35) !important;
+          }
+          .i3-filters button em {
+            font-style: normal !important;
+            font-weight: 800 !important;
+            color: #c7d2fe !important;
+            margin-right: 4px !important;
+          }
+          .i3-filters button.on em {
+            color: #eef2ff !important;
+          }
+          .tableWrap--i3 {
+            padding: 0 !important;
+            box-sizing: border-box !important;
+          }
+          .mobileIdea3NameHead {
+            display: flex !important;
+            align-items: flex-start !important;
+            gap: 8px !important;
+            min-width: 0 !important;
+          }
+          .mobileIdea3NameText {
+            flex: 1 1 auto !important;
+            min-width: 0 !important;
+          }
+          .mobileIdea3Title {
+            font-size: 1rem !important;
+            font-weight: 700 !important;
+            line-height: 1.22 !important;
+            color: #f8fafc !important;
+            white-space: normal !important;
+            word-break: break-word !important;
+          }
+          .mobileIdea3Pills {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            gap: 4px !important;
+            margin-top: 6px !important;
+          }
+          .mobileIdea3MiniPill {
+            font-size: 0.58rem !important;
+            padding: 3px 8px !important;
+            border-radius: 999px !important;
+            font-weight: 600 !important;
+            background: #1e2948 !important;
+            border: 1px solid #334155 !important;
+            color: #c7d2fe !important;
+          }
+          .mobileIdea3MiniPill.decision-auto_mapped {
+            color: #bbf7d0 !important;
+            border-color: #166534 !important;
+            background: rgba(22, 101, 52, 0.2) !important;
+          }
+          .mobileIdea3MiniPill.decision-suggested {
+            color: #bfdbfe !important;
+            border-color: #1d4ed8 !important;
+            background: rgba(29, 78, 216, 0.18) !important;
+          }
+          .mobileIdea3MiniPill.decision-manual_review {
+            color: #fed7aa !important;
+            border-color: #c2410c !important;
+            background: rgba(194, 65, 12, 0.18) !important;
+          }
+          .mobileIdea3MiniPill.sync-review {
+            color: #fdba74 !important;
+            border-color: #b45309 !important;
+            background: rgba(180, 83, 9, 0.15) !important;
+          }
+          .mobileIdea3MiniPill.sync-add-pending {
+            color: #93c5fd !important;
+            border-color: #2563eb !important;
+            background: rgba(37, 99, 235, 0.12) !important;
+          }
+          .mobileIdea3MiniPill.sync-removal-pending {
+            color: #fca5a5 !important;
+            border-color: #b91c1c !important;
+            background: rgba(185, 28, 28, 0.12) !important;
+          }
+          .mobileIdea3MiniPill.sync-failed {
+            color: #fecaca !important;
+            border-color: #dc2626 !important;
+            background: rgba(220, 38, 38, 0.15) !important;
+          }
+          .mobileIdea3MiniPill.sync-synced {
+            color: #bbf7d0 !important;
+            border-color: #15803d !important;
+            background: rgba(21, 128, 61, 0.15) !important;
+          }
+          .mobileIdea3RowChevron {
+            flex-shrink: 0 !important;
+            width: 36px !important;
+            min-width: 36px !important;
+            height: 36px !important;
+            border-radius: 10px !important;
+            border: 1px solid #3c4f70 !important;
+            background: #122038 !important;
+            color: #94a3b8 !important;
+            font-size: 11px !important;
+            cursor: pointer !important;
+            padding: 0 !important;
+            transition: transform 0.2s ease !important;
+          }
+          .mobileIdea3RowExpanded .mobileIdea3RowChevron {
+            transform: rotate(180deg) !important;
+          }
+          .tableWrap table.tableMobileIdea3 {
+            width: 100% !important;
+            min-width: 0 !important;
+            table-layout: auto !important;
+            border-collapse: separate !important;
+            border-spacing: 0 10px !important;
+          }
+          .tableWrap table.tableMobileIdea3 thead {
+            display: none !important;
+          }
+          .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3Row {
+            display: grid !important;
+            grid-template-columns: auto 56px minmax(0, 1fr) !important;
+            gap: 0 10px !important;
+            align-items: start !important;
+            padding: 12px !important;
+            border: 1px solid #2a3a56 !important;
+            border-radius: 14px !important;
+            background: linear-gradient(180deg, #111c32, #0d1628) !important;
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22) !important;
+            height: auto !important;
+            min-height: 0 !important;
+            max-height: none !important;
+          }
+          .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3Row > td {
+            border-bottom: none !important;
+          }
+          .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3Row:not(.mobileIdea3RowExpanded) > td {
+            height: auto !important;
+            min-height: 0 !important;
+            max-height: none !important;
+          }
+          .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3Row:not(.mobileIdea3RowExpanded) td.stickyCheckboxCol {
+            grid-column: 1 !important;
+            grid-row: 1 / span 2 !important;
+            align-self: center !important;
+            padding: 0 !important;
+            position: static !important;
+            left: auto !important;
+            background: transparent !important;
+          }
+          .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3Row:not(.mobileIdea3RowExpanded) td.stickyEyeCol {
+            display: none !important;
+          }
+          .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3Row:not(.mobileIdea3RowExpanded) td.stickyPictureCol {
+            grid-column: 2 !important;
+            grid-row: 1 !important;
+            padding: 0 !important;
+            position: static !important;
+          }
+          .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3Row:not(.mobileIdea3RowExpanded) td.stickyPictureCol .thumb,
+          .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3Row:not(.mobileIdea3RowExpanded) td.stickyPictureCol .thumbPlaceholder {
+            border-radius: 10px !important;
+          }
+          .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3Row:not(.mobileIdea3RowExpanded) td.stickyProductNameCol {
+            grid-column: 3 !important;
+            grid-row: 1 !important;
+            padding: 0 !important;
+            position: static !important;
+            white-space: normal !important;
+          }
+          .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3Row:not(.mobileIdea3RowExpanded)
+            > td:not(.stickyCheckboxCol):not(.stickyPictureCol):not(.stickyProductNameCol) {
+            display: none !important;
+          }
+          .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3RowExpanded {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: stretch !important;
+          }
+          .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3RowExpanded > td {
+            display: block !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            position: static !important;
+            left: auto !important;
+            background: #0f1a2f !important;
+            border-bottom: 1px solid #24354e !important;
+            padding: 10px 12px !important;
+            white-space: normal !important;
+            overflow: visible !important;
+            height: auto !important;
+            min-height: 0 !important;
+            max-height: none !important;
+          }
+          .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3RowExpanded > td.stickyCheckboxCol {
+            border-bottom: 0 !important;
+            padding-bottom: 4px !important;
+          }
+          .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3RowExpanded .mobileIdea3Pills {
+            display: none !important;
           }
           .workflowRail,
           .reportHubGrid {
-            grid-template-columns: 1fr;
+            grid-template-columns: 1fr !important;
           }
         }
       `}</style>

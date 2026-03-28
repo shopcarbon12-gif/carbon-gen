@@ -1,3 +1,5 @@
+import "server-only";
+
 import { Pool } from "pg";
 import fs from "node:fs";
 

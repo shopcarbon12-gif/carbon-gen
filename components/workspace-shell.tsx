@@ -527,8 +527,10 @@ export function WorkspaceShell({
               <span className="topbar-brand-lock">
                 <img className="topbar-logo" src="/brand/carbon-long-white.png" alt="Carbon" />
               </span>
-              <span className="topbar-sep"> / </span>
-              <span className="topbar-page-lock">{currentTitle}</span>
+              <span className="topbar-page-cluster">
+                <span className="topbar-sep"> / </span>
+                <span className="topbar-page-lock">{currentTitle}</span>
+              </span>
             </div>
             {isInstagramWidgetRootPage ? (
               <div className="topbar-instagram-actions">
@@ -1342,8 +1344,16 @@ export function WorkspaceShell({
           opacity: 0.8;
           font-weight: 600;
         }
+        .topbar-page-cluster {
+          display: inline-flex;
+          align-items: center;
+          gap: 15px;
+          min-width: 0;
+          flex: 1 1 0;
+        }
         .topbar-page-lock {
           font-weight: 700;
+          flex: 1 1 0;
           min-width: 0;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -2368,25 +2378,141 @@ export function WorkspaceShell({
           }
         }
         @media (max-width: 900px) {
+          /* Single source for mobile header footprint → content offset (no duplicate padding rules elsewhere). */
+          .shell {
+            --shell-mobile-topbar-inner-height: 76px;
+            --shell-mobile-topbar-border: 2px;
+            --shell-mobile-menu-hit: 44px;
+            /* Extra space between menu button and logo only (title cluster unchanged). */
+            --shell-mobile-logo-offset-after-menu: 12px;
+            /* Layout box = bar height; optional paint scale (logo <img> only). */
+            --shell-mobile-logo-height: var(--shell-mobile-topbar-inner-height);
+            --shell-mobile-logo-scale: clamp(
+              1.08,
+              calc(var(--shell-mobile-topbar-inner-height) / var(--shell-mobile-menu-hit)),
+              1.55
+            );
+          }
+          .content {
+            padding-top: calc(
+              var(--shell-mobile-topbar-inner-height) + var(--shell-mobile-topbar-border)
+            );
+          }
           .topbar {
-            padding: 8px 12px;
-            gap: 10px;
+            padding: 0;
+            padding-left: env(safe-area-inset-left, 0px);
+            padding-right: env(safe-area-inset-right, 0px);
+            gap: 6px;
+            height: var(--shell-mobile-topbar-inner-height);
+            min-height: var(--shell-mobile-topbar-inner-height);
+            box-sizing: border-box;
+          }
+          .menu-toggle {
+            width: var(--shell-mobile-menu-hit);
+            height: var(--shell-mobile-menu-hit);
+            box-sizing: border-box;
           }
           .topbar-title {
-            gap: 10px;
+            gap: 6px;
+            min-width: 0;
+            font-size: 0.65rem;
+            letter-spacing: 0.02em;
+          }
+          .topbar-page-cluster {
+            margin-left: auto;
+            justify-content: flex-end;
+            gap: 6px;
+            flex: 0 1 auto;
             min-width: 0;
           }
+          .topbar-sep {
+            font-size: 0.85rem;
+            font-weight: 600;
+            flex-shrink: 0;
+          }
+          .topbar-brand-lock {
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: flex-start !important;
+            flex-shrink: 0 !important;
+            height: var(--shell-mobile-logo-height) !important;
+            max-height: var(--shell-mobile-logo-height) !important;
+            min-height: var(--shell-mobile-logo-height) !important;
+            max-width: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            margin-left: var(--shell-mobile-logo-offset-after-menu) !important;
+            background: transparent !important;
+            overflow: visible !important;
+            line-height: 0 !important;
+          }
           .topbar-logo {
-            max-width: min(42vw, 190px);
+            display: block !important;
+            height: var(--shell-mobile-logo-height) !important;
+            max-height: var(--shell-mobile-logo-height) !important;
+            width: auto !important;
+            max-width: none !important;
+            object-fit: contain !important;
+            object-position: left center !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            /*
+             * Slight weight, no blur (third arg 0): only 4 tiny offsets. Large stacks merge into a white blob on this PNG.
+             */
+            filter: drop-shadow(0.28px 0 0 rgba(255, 255, 255, 0.44))
+              drop-shadow(-0.28px 0 0 rgba(255, 255, 255, 0.44))
+              drop-shadow(0 0.28px 0 rgba(255, 255, 255, 0.44))
+              drop-shadow(0 -0.28px 0 rgba(255, 255, 255, 0.44)) !important;
+            transform: scale(var(--shell-mobile-logo-scale));
+            transform-origin: left center;
+          }
+          .topbar-page-lock {
+            flex: 0 1 auto;
+            min-width: 0;
+            text-align: right;
           }
         }
         @media (max-width: 520px) {
+          .shell {
+            --shell-mobile-topbar-inner-height: 72px;
+            --shell-mobile-menu-hit: 44px;
+            --shell-mobile-logo-offset-after-menu: 10px;
+          }
+          .topbar {
+            padding: 0;
+            padding-left: env(safe-area-inset-left, 0px);
+            padding-right: env(safe-area-inset-right, 0px);
+            height: var(--shell-mobile-topbar-inner-height);
+            min-height: var(--shell-mobile-topbar-inner-height);
+            box-sizing: border-box;
+          }
+          .menu-toggle {
+            width: var(--shell-mobile-menu-hit);
+            height: var(--shell-mobile-menu-hit);
+            box-sizing: border-box;
+          }
           .topbar-title {
-            font-size: 0.96rem;
+            font-size: 0.6rem;
+            gap: 4px;
+          }
+          .topbar-page-cluster {
+            gap: 4px;
+          }
+          .topbar-sep {
+            font-size: 0.78rem;
           }
           .topbar-logo {
-            height: 130px;
-            max-width: min(52vw, 165px);
+            height: var(--shell-mobile-logo-height) !important;
+            max-height: var(--shell-mobile-logo-height) !important;
+            max-width: none !important;
+            transform: scale(var(--shell-mobile-logo-scale));
+            transform-origin: left center;
+          }
+          .topbar-brand-lock {
+            height: var(--shell-mobile-logo-height) !important;
+            max-height: var(--shell-mobile-logo-height) !important;
+            min-height: var(--shell-mobile-logo-height) !important;
+            max-width: none !important;
           }
           .carbon-panel-wrap {
             left: 13px;

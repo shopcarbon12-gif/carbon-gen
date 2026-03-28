@@ -11,7 +11,6 @@ export default function ShopifyCollectionMappingPage() {
   }
 
   const standaloneRouteStyle = {
-    "--collection-mapping-shell-content-top-offset": "70px",
     marginTop: "-30px",
   } as CSSProperties;
 

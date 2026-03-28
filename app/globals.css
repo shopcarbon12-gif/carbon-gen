@@ -118,6 +118,26 @@ body:has(.collection-mapping-standalone-route) .app-bg-top-fade {
   display: none !important;
 }
 
+/* Collection mapping: --shell-content-top-offset chain matches workspace topbar (desktop 70px; mobile = bar height). */
+.collection-mapping-route,
+.collection-mapping-standalone-route {
+  --collection-mapping-shell-content-top-offset: 70px;
+}
+
+@media (max-width: 900px) {
+  .collection-mapping-route,
+  .collection-mapping-standalone-route {
+    --collection-mapping-shell-content-top-offset: 76px;
+  }
+}
+
+@media (max-width: 520px) {
+  .collection-mapping-route,
+  .collection-mapping-standalone-route {
+    --collection-mapping-shell-content-top-offset: 72px;
+  }
+}
+
 body:has(.accessibility-standalone-route) .app-bg-top-photo,
 body:has(.accessibility-standalone-route) .app-bg-top-fade {
   display: none !important;
@@ -161,14 +181,28 @@ body:has(.accessibility-standalone-route) .shell.chat-expanded .content.no-integ
   object-position: center center;
 }
 
-@media (max-width: 520px) {
+/* Must match workspace-shell mobile --shell-mobile-topbar-inner-height (FOUC guard). */
+@media (max-width: 900px) {
   .shell .topbar-brand-lock {
-    height: 44px;
-    max-width: min(58vw, 220px);
+    height: 76px;
+    max-width: none;
   }
 
   .shell .topbar-logo {
-    height: 44px;
+    height: 76px;
+    max-width: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .shell .topbar-brand-lock {
+    height: 72px;
+    max-width: none;
+  }
+
+  .shell .topbar-logo {
+    height: 72px;
+    max-width: none;
   }
 }
 

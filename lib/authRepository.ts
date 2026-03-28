@@ -1,3 +1,5 @@
+import "server-only";
+
 import { readFileSync } from "node:fs";
 import { Pool } from "pg";
 

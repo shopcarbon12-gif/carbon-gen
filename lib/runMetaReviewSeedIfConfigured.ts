@@ -1,3 +1,5 @@
+import "server-only";
+
 const GLOBAL_KEY = "__carbonMetaReviewSeedRan";
 
 /** Same plain password Meta reviewers use in submission notes (not a secret). */

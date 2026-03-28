@@ -1,0 +1,23 @@
+---
+description: UI/layout changes requested by the user apply to mobile only unless desktop is explicitly allowed
+alwaysApply: true
+---
+
+# Mobile-only UI changes (hard scope)
+
+Unless the user **explicitly** asks to change **desktop** (e.g. “desktop too”, “above 900px”, “both breakpoints”), treat every UI/layout request as **mobile only**.
+
+## Do
+
+- Scope JSX with the same mobile gate the feature already uses (e.g. `isMobileIdea3Layout` / `useMatchMediaMaxWidth(900)`), or add a dedicated mobile-only branch without altering the desktop render path.
+- Scope CSS with **`@media (max-width: 900px)`** (or the project’s agreed mobile breakpoint for that screen), or mobile-only class prefixes — **do not** change base/desktop rules that also affect wide viewports.
+- When unsure whether a shared component affects desktop, **split styles**: default = desktop unchanged; mobile overrides only inside the mobile media query or mobile-only class.
+
+## Do not
+
+- Change shared layout, spacing, typography, or table structure for **all** viewports when the user only asked for mobile behavior.
+- “Simplify” by refactoring desktop and mobile into one path if that would change desktop appearance without permission.
+
+## Permission wording
+
+Desktop changes require clear intent, e.g. **“change desktop”**, **“both mobile and desktop”**, **“≥901px”**, or **“default / wide layout”**.

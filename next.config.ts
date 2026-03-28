@@ -7,6 +7,14 @@ function isTruthy(value: string | undefined): boolean {
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  serverExternalPackages: ["pg"],
+  /** Avoid corrupted webpack filesystem pack cache in dev ("too many length or distance symbols"). */
+  webpack: (config, { dev }) => {
+    if (dev) {
+      config.cache = { type: "memory" };
+    }
+    return config;
+  },
   allowedDevOrigins: [
     "carbon-gen.shopcarbon.com",
     "carbon-gen.shopcarbon.co",

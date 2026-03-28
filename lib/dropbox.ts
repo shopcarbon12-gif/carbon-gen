@@ -1,4 +1,6 @@
-import { normalizeUsername } from "@/lib/userAuth";
+import "server-only";
+
+import { normalizeUsername } from "@/lib/authRoleConstants";
 import { ensureSqlReady, hasSqlDatabaseConfigured, sqlQuery } from "@/lib/sqlDb";
 import { findUserByUsername } from "@/lib/authRepository";
 
