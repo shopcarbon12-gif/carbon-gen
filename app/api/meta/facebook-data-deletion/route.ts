@@ -42,6 +42,11 @@ export async function GET() {
   });
 }
 
+/** Some crawlers probe with HEAD; respond quickly with 2xx and no body. */
+export async function HEAD() {
+  return new NextResponse(null, { status: 204 });
+}
+
 export async function POST(req: NextRequest) {
   const secret = String(process.env.META_APP_SECRET || "").trim();
   if (!secret) {
@@ -72,14 +77,13 @@ export async function POST(req: NextRequest) {
   }
 
   const confirmationCode = crypto.randomBytes(16).toString("hex");
-  // Status page: storefront privacy policy (human-readable); extend with a dedicated status page later.
-  const url = new URL("https://shopcarbon.com/policies/privacy-policy");
-  url.searchParams.set("data_deletion_request", confirmationCode);
+  const statusPage = new URL("https://shopcarbon.com/pages/facebook-data-deletion");
+  statusPage.searchParams.set("data_deletion_request", confirmationCode);
 
   // TODO: enqueue deletion for Meta app-scoped user id `parsed.userId` when you store Facebook-linked users.
 
   return NextResponse.json({
-    url: url.toString(),
+    url: statusPage.toString(),
     confirmation_code: confirmationCode,
   });
 }

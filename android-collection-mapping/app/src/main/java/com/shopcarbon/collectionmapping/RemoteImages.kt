@@ -1,0 +1,39 @@
+package com.shopcarbon.collectionmapping
+
+/**
+ * Hotlinked image URLs from the Stitch HTML exports (Image 2, 4, 6, 8).
+ */
+object RemoteImages {
+    const val settingsAvatar =
+        "https://lh3.googleusercontent.com/aida-public/AB6AXuC90VushlaI7LTEY7EgLOhUwcniRPw2BE88GqZN0RSRp0IuPq1M5OR05IxLXdYiJXMsbPGSI8x4j9bp34i_IIqkglY50janDawIesk7sPko1XgApqiE8AcUf6RouCBAb3YZHAg5Uht80zuKuYESsJWY8fsCPgJ8H4B3V7X5pPPWxuRcG_Dcas8w12-MolxgH5myHPvCEyJiqSoXKX7pJQzJWlrLiXy___SAb5_TOt8mT80ItLWo3iW7KggWOsKGErOueCuxq3NtYvY"
+
+    const val dashboardActivity1 =
+        "https://lh3.googleusercontent.com/aida-public/AB6AXuCTJ6_EfeUv8pA7pLKqjuRzv1me0O2zkTVauGEveMDsjZE_Rz7goIU8aKv2MnexfPeSNqma98jJOcBaLX53YTyyqrF9v7_DZ2yXCgNK0w5aBH2gKTxSdlm49jusrRVzJp2a6AnO257d95j2o8XuSXO7j16ByRsxk4r7M7HKaycvWSI5nAT_8g7SNMDsQlb9gErLXvB5HaKmdquTT_fzrnbxN-AWQHwdyS3x2T2Tj3yGhFfDC_l09yZvhSWOLQfRScJnaA_VN3yrvgE"
+
+    const val dashboardActivity2 =
+        "https://lh3.googleusercontent.com/aida-public/AB6AXuCgv5hrXXInBx5uw-Dd11sFJ8l4b0PtIV7jiIeRV40n0ECUJbyuaHOAtsozdWoFrN8nJ9K0OV9naru4zh_oU9u4SvpifFs914d4jKc12ckB7VzwoOcQYfq0XMT_oiIWnSTEOmG612CuNR1FlAryIwLKdQrPwL66lzmmWR62kbQuj8o-fZ9QCp686MRFqom0-BwFY4Qtx9uje0PHaCzDWe1AD-is3fY0xScv-vE0Dl_7pRZWWyqpc2PW5J6JKaKIsaJi6LZENdwe6YY"
+
+    const val dashboardActivity3 =
+        "https://lh3.googleusercontent.com/aida-public/AB6AXuCwnfcNNjX2ZrJ95jnokVTugjZiEDtPqURNDTVygvlnaw7LFdcyYZdBSciiQAyzyg-xLOX-LMD0z-ADdYOpP5qUFH5CJCTyvVO3ESY9zlHzVX9LTww4h2E6ZTD9HiaBAENzxFW2GPdigKiR6nIcPLpTDHsSYpZiDc7JIu4wQQh63lLKocl1sL861oSCabJPVF0z2hLdw-YDis64tWpFFCuzZT9DUAU7MA6nwhE9DCrUsHaynxyrYAXL64RkrgmAAETIqObppL0EWUg"
+
+    const val analyticsArctic =
+        "https://lh3.googleusercontent.com/aida-public/AB6AXuBY6EcSYSqEi9WJBWGGNfnLfSNzwGWJ3MpWVm-7dLxytBUNP4Ldvz4vfF-bNAN9zRvxMYxmc3qt9SSqq2Le9SP1JxkI03T-kfQ5FtvqPtTypOnh9oBc4TRufGNojuYDDrJw934fLQy1jOCFnq0gLLvSrMgDwhwzLQbJ_QMn-ICPruYyY2DjPibXO2zx8E537Jhdr_QVVkq6Ww1X2DnWv40Y88CHo4b4LwzNgfTGQTiFuvI_8Y6caXuSPiOmqRwqsocymdyDaOjIN2Q"
+
+    const val analyticsCarbon =
+        "https://lh3.googleusercontent.com/aida-public/AB6AXuCSD5I1Adi9tpoBQ98ResWoijv8f5X1QbHFZ28RKNo0EuM3oNJAe4myiDt7vxkLhvz7nfRK6VYed9TbIybjf3FbqygVRFHBnXikkzoXX1YsYIKEp1UAwOffG_VfmEfP0QKQrdDr9Lv0aqHLy3xlIpubXzC5DbFKOa16V38l2NQrvZzJJggYFFfq8Y2ymPQQnDR9xqb-mDS4uJwG8LsVoXk3TXNcHaIdyhbYT6ikbjnzo9Tj5sYHtWaBbNCrxMSJ_pj9SROj29WY5L4"
+
+    const val analyticsMidnight =
+        "https://lh3.googleusercontent.com/aida-public/AB6AXuDGZQiYAFPYbPhb7z-pKoZcKiVqSfhsxx3HmWlDM6ykT2kw4W2TXLYLzGQ5OfB77KU9ZLHl0SmX0pFYLUrtN2fweRudD45WG6LRXUKVeOsVY3Bx08TKKHdB89rXTs52UvyjbJ_Nismj2M1QdqXd3lHs0MZOlWaOiNS_tVjO01CexVDg1LMax-8hJJOK3AN37oNI4jyc480OkkrThFd5pu5KPyqRvH1XV0Mth98P74WgtOTgbMCtG-28gSg-kIRM9t9PxKeq6SEf3Vk"
+
+    const val mappingAvatar =
+        "https://lh3.googleusercontent.com/aida-public/AB6AXuAW0SSTJYroXt1NGnxDqmkLfjmALpMJ-Fd9aAWYUIKcjaiOd7Q93iyrKTeNCvJxn52xie3L7_TxS7ArjZNLU9MoHjUSRBkcb-dP7kjkLHxM3DDMuimm5t6M9sN-kKQMoSVtuH4AM1aajZOxSQcvMDmfXugbOHmzWSSMnpgUChRKCrVEHrNAvjsBYNhPE7tro5lfwIFSmx-xreg3PpnMzFsVGRFuiAQ2aEK2zJdrB3AxDGcxdWUFRgoWqeddLETDZDBgNiTuS9YKhfY"
+
+    const val mappingShoe =
+        "https://lh3.googleusercontent.com/aida-public/AB6AXuBjglJqoISecbM3YDcm6aUzsuBB0AkBjoLKJsXMn0--mLp9sGjUoJpkuNk3VNEwBWKdD1e2KXQjRDIVZvCIiOm7sY9H1VOZM7gIBKD7s_CnUG-sENsjWbOGqmG7xxx6DqmS_JQ9PwHLLyeQTBMHnyncihcEzyUHPh39VF_mcGtKVslTI0uaw0CKDMNtR3lmgPvb1B5CcHwyYVmm-kL2stdwufM2Uas2oiyeKJldHL5zg1fgBhdoVLXEVfFEt0YhwETUsjGmbSOkn7g"
+
+    const val mappingWatch =
+        "https://lh3.googleusercontent.com/aida-public/AB6AXuDDTaEpiHsHjuvxDgA6CyrNdhVl2i35CYFiEiaTE5W6u4ELpZdgM2coS3umc-r0Vr4x5SQ-KPKa_v2ehD2Qm288UjOwtkUkxXBJMMtb4aAhlo0NMrDqgYNIQleNnOoHpHT6YZ6GNxdol49ajOWaMmRp26Z01MTNVLbG1XilCjnFfTP8aJtHsZiITbxoaprWabeeyKE3QQgudc0yKhTxpA7PYoj6G0Z55hlNV0sI7Z_BX7XI5I-t1rUV4nRAEm-TwNkS5vul8cmnldU"
+
+    const val mappingHeadphones =
+        "https://lh3.googleusercontent.com/aida-public/AB6AXuC-2oRFKqitbdNeSwq2trI5yiyq4Cy2Ilt56E5cbiqQIGlJcUQQUaQD48dHQw7gn_RnVUkeDMw-dcwN1DJmqAqGkmy8AQ8cggO_LPb_UbrlAyDR97wSL0uZ5wRdmbM5vOaewQ14XzSO0RQpktNxzFQXUXeWqP7wdVpLYAHwLrh8XdzPzL-BeOC96KUnL9r0mM7nigmNcWqn-xKT5CnOfiLezOeG1cvN-hJw8bzrmVPJZXK59dynZhH7tXpF1NwIHFkwH-HlFUiPPIg"
+}

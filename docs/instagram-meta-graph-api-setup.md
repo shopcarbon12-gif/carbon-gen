@@ -24,11 +24,25 @@ Deep links (replace if Meta changes URLs):
 3. Under **Use cases** → **Customize** → **Permissions and features**, add the Graph permissions you need (e.g. `pages_show_list`, `instagram_basic`, `pages_read_engagement`; add commerce/insights only if required).
 4. Use a **Business / Creator** Instagram account linked to a **Facebook Page** (required for Graph API marketing feeds — not Basic Display alone).
 5. Under **Facebook Login** → **Settings**, set **Valid OAuth Redirect URIs** to match your app exactly (strict mode). Production URI **`https://app.shopcarbon.com/api/instagram/meta/callback`** is registered on app `2429351210871746`. The app exposes a **stub** handler at `GET /api/instagram/meta/callback` (requires Carbon login; completes token exchange later). For local dev, add e.g. `http://localhost:3000/api/instagram/meta/callback` if your dev server uses that origin.
-6. **User data deletion:** In **App settings → Basic**, set either a **data deletion instructions URL** or a **Data Deletion Request callback** (HTTPS). If the instructions URL field shows a `name_placeholder` validation error, use the callback instead: deploy the app, then set the callback to `https://app.shopcarbon.com/api/meta/facebook-data-deletion` (implemented in-repo; requires **`META_APP_SECRET`** for `signed_request` verification).
+6. **User data deletion (Basic settings)**  
+   - **Instructions URL (recommended for Go live when `app.shopcarbon.com` is unreachable from Meta’s crawler):**  
+     Use a **dedicated** storefront page — **not** the same URL as Privacy policy (Meta may show `name_placeholder should represent a valid URL`).  
+     **Canonical URL:** `https://shopcarbon.com/pages/facebook-data-deletion`  
+     - **Theme:** add `shopify/sections/carbon-meta-data-deletion.liquid` + `shopify/templates/page.carbon-meta-data-deletion.json`, then create a Page with handle `facebook-data-deletion` and template **carbon-meta-data-deletion**.  
+     - **Or** paste `shopify/meta-data-deletion-shopify-admin.html` (single `div.page-width.rte` — no extra comments) via **Show HTML** on that page.  
+     - **Or** run `npm run shopify:sync-meta-data-deletion-page` (needs `SHOPIFY_SHOP_DOMAIN` + `SHOPIFY_ADMIN_ACCESS_TOKEN` in `.env.local`) to create/update the page via the Admin API.  
+   - **Callback URL (full automation):** `https://app.shopcarbon.com/api/meta/facebook-data-deletion`  
+     - `GET` / `HEAD` return success for probes; `POST` accepts `signed_request` (needs **`META_APP_SECRET`**).  
+     - **Requires** `app.shopcarbon.com` to be **publicly reachable** (no timeout from the internet). If Go live shows **Broken URL**, fix Coolify/firewall/DNS first, or keep **instructions URL** until fixed.
 
-7. Complete **App Review** for production if users outside your Meta roles need access.
-8. Store **long-lived user/page tokens** only on the server (database or secrets), never in client bundles.
-9. **Meta App Review login (`meta_review` user):** Seeding from your laptop can hit a **different** Postgres than production. On Coolify in **production**, set only **`META_REVIEW_SEED_PASSWORD`** (≥8 chars); on each server start the app upserts **`meta-review@shopcarbon.com`** into **that** Postgres. For **local dev**, also set **`META_REVIEW_AUTO_PROVISION=true`** or startup skips (safety). Remove or rotate the password from env after review if you prefer.
+7. **Go live — “Broken URL detected”**  
+   - Meta expects HTTP **200–299** for crawled URLs (see [Sharing Debugger](https://developers.facebook.com/tools/debug/sharing/)).  
+   - If **`https://app.shopcarbon.com/`** times out, set **Website → Site URL** to a working URL (e.g. `https://shopcarbon.com/`) until the app host is fixed.  
+   - Run locally: `npm run verify:meta-urls` to print status codes for the main URLs.
+
+8. Complete **App Review** for production if users outside your Meta roles need access.
+9. Store **long-lived user/page tokens** only on the server (database or secrets), never in client bundles.
+10. **Meta App Review login (`meta_review` user):** Seeding from your laptop can hit a **different** Postgres than production. On Coolify in **production**, set only **`META_REVIEW_SEED_PASSWORD`** (≥8 chars); on each server start the app upserts **`meta-review@shopcarbon.com`** into **that** Postgres. For **local dev**, also set **`META_REVIEW_AUTO_PROVISION=true`** or startup skips (safety). Remove or rotate the password from env after review if you prefer.
 
 Environment hints:
 

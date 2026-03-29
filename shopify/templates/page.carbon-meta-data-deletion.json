@@ -1,0 +1,9 @@
+{
+  "sections": {
+    "main": {
+      "type": "carbon-meta-data-deletion",
+      "settings": {}
+    }
+  },
+  "order": ["main"]
+}

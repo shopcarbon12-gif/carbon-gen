@@ -1,0 +1,61 @@
+{% comment %}
+  Meta App Dashboard → Basic → User data deletion → "Data deletion instructions URL"
+
+  Theme setup:
+  1. Add this file + templates/page.carbon-meta-data-deletion.json to the live theme.
+  2. Online Store → Pages → Add page.
+     - Title: Facebook & Instagram data deletion (or similar)
+     - Handle: facebook-data-deletion  → URL https://shopcarbon.com/pages/facebook-data-deletion
+     - Theme template: carbon-meta-data-deletion
+     - Clear the page body (section supplies content).
+
+  No-Liquid fallback: paste shopify/meta-data-deletion-shopify-admin.html (body only) in Show HTML.
+{% endcomment %}
+<div class="page-width rte">
+  <p><em>Last updated: {{ 'now' | date: '%B %e, %Y' }}</em></p>
+
+  <p>
+    This page describes how to request deletion of data associated with our use of Meta technologies
+    (Facebook Login, Instagram, or related features) for the <strong>Carbon Social Feed</strong> integration.
+  </p>
+
+  <h2>What we may hold</h2>
+  <p>
+    If you used Facebook or Instagram to interact with our services, we may process identifiers or profile
+    information as described in our
+    <a href="/policies/privacy-policy">Privacy policy</a>.
+  </p>
+
+  <h2>How to request deletion</h2>
+  <p>Email us at <a href="mailto:support@shopcarbon.com">support@shopcarbon.com</a> with:</p>
+  <ul>
+    <li>Subject line: <strong>Meta data deletion request</strong></li>
+    <li>Your name and the email associated with your Facebook or Instagram account</li>
+    <li>A short description of what you want removed (e.g. app connection, marketing preferences)</li>
+  </ul>
+  <p>We will confirm receipt and respond within a reasonable time, as required by applicable law.</p>
+
+  <h2>Meta&rsquo;s own tools</h2>
+  <p>
+    You can also manage apps and data in your
+    <a href="https://www.facebook.com/settings?tab=applications" rel="noopener noreferrer" target="_blank">Facebook settings</a>
+    and Instagram account settings.
+  </p>
+
+  {% if request.url contains 'data_deletion_request=' %}
+    <h2>Request received</h2>
+    <p>
+      We have logged a data deletion request tied to this visit. If you need help, contact
+      <a href="mailto:support@shopcarbon.com">support@shopcarbon.com</a>.
+    </p>
+  {% endif %}
+</div>
+
+{% schema %}
+{
+  "name": "Meta data deletion (Carbon)",
+  "tag": "section",
+  "class": "section",
+  "settings": []
+}
+{% endschema %}
