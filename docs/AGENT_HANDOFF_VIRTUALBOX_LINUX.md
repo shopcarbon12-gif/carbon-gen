@@ -35,18 +35,23 @@
 
 ---
 
-## Master prompt (copy everything inside the fence)
+## Master prompt (copy everything inside the fence — single message)
 
 ```
 You are helping migrate Carbon development to Ubuntu inside VirtualBox on Windows.
 
 AUTHORITATIVE DOCS (do not substitute):
-1) VM + toolchain + Docker Engine + move policy + Coolify context:
+1) VM + toolchain + Docker Engine + move policy + Coolify + archive policy:
    carbon-gen repo → docs/virtualbox-linux-cursor-flutter-android-guide.html
    Read #agent-directive, #archive-policy, #canonical-plan, #start-here (Phases A–H), #docker-desktop-to-ubuntu, #coolify-prod, #migration-move-policy.
 2) Windows-only: Cursor/Codex/.cursor off C:\ onto D:\:
    carbon-gen repo root → C_DRIVE_MIGRATION_REPORT.md
    Use this ONLY for that Windows cleanup — NOT for the Ubuntu VM plan.
+
+STAY CURRENT ON THE VM: In ~/dev/carbon-gen (or the user’s clone path), run `git pull` on main so the HTML guide and this handoff include #archive-policy and the latest text. If `git pull` refuses:
+- Untracked docs/virtualbox-linux-cursor-flutter-android-guide.html (e.g. copied from a share): move/rename it aside (e.g. /tmp/virtualbox-guide.pre-pull.bak), then pull.
+- Modified C_DRIVE_MIGRATION_REPORT.md on the VM: `git checkout -- C_DRIVE_MIGRATION_REPORT.md` to take repo version, or stash first.
+- Only with full backups and explicit intent: `git fetch origin && git reset --hard origin/main` (wipes all local VM changes).
 
 STRICT PROHIBITIONS:
 - Do NOT plan to "transfer" or copy Docker Desktop's data into Ubuntu. Install Docker Engine in Ubuntu; docker compose re-pulls images. Use pg_dump/pg_restore only if local Postgres data must move.
@@ -55,11 +60,11 @@ STRICT PROHIBITIONS:
 - Do NOT confuse Coolify production (VPS) with VM docker compose (local dev).
 - Do NOT run carbon-gen and CarbonWMS compose both on host port 5432 without changing one file.
 - Do NOT install Ubuntu-host VirtualBox .deb inside the guest for Guest Additions; use Insert Guest Additions CD from the Windows host.
-- Do NOT advise deleting Windows project trees before: (1) full zip archives on D: (e.g. D:\archive-pre-linux-verify\ with dated zips), (2) user verification that Linux dev matches expectations. Archive first; delete only after explicit sign-off.
+- LOCKED USER POLICY — archive, not delete: Do NOT advise deleting Windows project trees (carbon-gen, CarbonWMS, etc.) until (1) full zip archives exist on D: (e.g. D:\archive-pre-linux-verify\ with dated zips of entire trees), (2) the user has fully verified Linux VM dev matches expectations. Default = keep Windows copies and zips until explicit sign-off.
 
-WHEN ADVISING: Quote or paraphrase the relevant section of the HTML guide; if the question is only Windows Cursor on D:, use C_DRIVE_MIGRATION_REPORT.md only.
+WHEN ADVISING: Quote or paraphrase the HTML guide for VM/Linux/Coolify; use C_DRIVE_MIGRATION_REPORT.md only for Windows Cursor-on-D: cleanup.
 
-User repos: carbon-gen, carbon-warehouse-management (CarbonWMS). Production for both: Coolify. Local Postgres: Docker Engine in VM per each repo's compose file.
+User repos: carbon-gen, carbon-warehouse-management (CarbonWMS). Production: Coolify. Local Postgres: Docker Engine in VM per each repo's compose file.
 ```
 
 ---
