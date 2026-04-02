@@ -9,7 +9,7 @@
 | If the user asks about… | Open and follow… |
 |-------------------------|------------------|
 | Ubuntu VM, VirtualBox, Guest Additions, toolchain (Node 20, Flutter, Android), **Docker Engine in Linux**, git clone into VM, move vs mirror, §15 checklist, **archive-to-D-before-delete**, **Coolify vs local Docker** | `docs/virtualbox-linux-cursor-flutter-android-guide.html` — especially `#agent-directive`, `#archive-policy`, `#start-here`, `#docker-desktop-to-ubuntu`, `#coolify-prod`, `#migration-move-policy` |
-| Moving **Windows Cursor / Codex / `.cursor`** off **C:\\** to **D:\\**, shortcuts, `CODEX_HOME`, `cleanup-cursor-from-c.ps1` | `C_DRIVE_MIGRATION_REPORT.md` (repo **root**) |
+| Moving **Windows Cursor / Codex / `.cursor`** off **C:\\** to **D:\\**, shortcuts, `CODEX_HOME`, `cleanup-cursor-from-c.ps1` | `C_DRIVE_MIGRATION_REPORT.md` (repo **root**) or **`docs/c-drive-migration-report.html`** (browser checklist) |
 
 **Never** treat `C_DRIVE_MIGRATION_REPORT.md` as the VM migration plan. **Never** invent steps that are not in the HTML guide for VM work.
 

@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>C:\ → D:\ migration — Cursor, Codex, .cursor (Windows only)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #14161c;
+      --bg-elevated: #1e222b;
+      --card: #252a35;
+      --text: #e8eaef;
+      --text-heading: #f2f4f8;
+      --muted: #9aa3b2;
+      --border: #3d4554;
+      --border-strong: #556070;
+      --accent: #7eb8ff;
+      --accent-hover: #a8d0ff;
+      --warn: #f0c14b;
+      --warn-bg: #2a2418;
+      --warn-text: #f5e6c8;
+      --ok: #6ee7a8;
+      --ok-bg: #18261f;
+      --ok-text: #c8f5dc;
+      --pending: #c4b5fd;
+      --pending-bg: #221c35;
+      --code-bg: #0f1117;
+      --table-head: #323846;
+    }
+    * { box-sizing: border-box; }
+    html { font-size: 18px; }
+    body {
+      font-family: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+      font-size: 1rem;
+      line-height: 1.65;
+      max-width: 52rem;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 3.5rem;
+      color: var(--text);
+      background: var(--bg);
+      -webkit-font-smoothing: antialiased;
+    }
+    h1 { font-size: 1.85rem; margin-top: 0; color: var(--text-heading); line-height: 1.25; }
+    h2 {
+      font-size: 1.3rem;
+      margin-top: 2rem;
+      padding-bottom: 0.45rem;
+      border-bottom: 2px solid var(--border-strong);
+      color: var(--text-heading);
+    }
+    h3 { font-size: 1.08rem; margin-top: 1.35rem; color: var(--text-heading); }
+    .meta { color: var(--muted); margin-bottom: 1.5rem; line-height: 1.6; }
+    a { color: var(--accent); text-underline-offset: 3px; }
+    a:hover { color: var(--accent-hover); }
+    code, .path {
+      font-family: "JetBrains Mono", ui-monospace, Consolas, monospace;
+      font-size: 0.88em;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.96rem; }
+    th, td { border: 1px solid var(--border); padding: 0.55rem 0.65rem; text-align: left; vertical-align: top; }
+    th { background: var(--table-head); color: var(--text-heading); font-weight: 700; }
+    td { background: var(--bg-elevated); }
+    tr:nth-child(even) td { background: var(--card); }
+    .badge {
+      display: inline-block;
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 0.2rem 0.5rem;
+      border-radius: 6px;
+      font-family: "JetBrains Mono", monospace;
+    }
+    .badge-done { background: var(--ok-bg); color: var(--ok-text); border: 1px solid var(--ok); }
+    .badge-pending { background: var(--warn-bg); color: var(--warn-text); border: 1px solid var(--warn); }
+    .badge-out { background: var(--pending-bg); color: var(--pending); border: 1px solid #5b4d8a; }
+    .badge-you { background: #2a1f1e; color: #ffd4ce; border: 1px solid #ff8b7a; }
+    .note, .warn, .ok {
+      padding: 0.85rem 1rem;
+      margin: 1.1rem 0;
+      border-radius: 0 8px 8px 0;
+      border-left: 4px solid;
+    }
+    .note { border-color: var(--accent); background: var(--bg-elevated); }
+    .warn { border-color: var(--warn); background: var(--warn-bg); color: var(--warn-text); }
+    .ok { border-color: var(--ok); background: var(--ok-bg); color: var(--ok-text); }
+    pre.code-block {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.88rem;
+      line-height: 1.55;
+      background: var(--code-bg);
+      padding: 1rem 1.1rem;
+      border-radius: 8px;
+      overflow: auto;
+      border: 1px solid var(--border);
+      margin: 1rem 0;
+    }
+    .toc {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.1rem 1.25rem;
+      margin: 1.25rem 0;
+    }
+    .toc ul { margin: 0.4rem 0 0; padding-left: 1.2rem; }
+    footer { margin-top: 2.5rem; padding-top: 1rem; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.92rem; }
+  </style>
+</head>
+<body>
+
+  <h1>C:\ drive migration — Cursor, Codex, and <code>.cursor</code></h1>
+  <p class="meta">
+    <strong>Windows host only.</strong> Last structured update: April 2, 2026 (markdown source: <code class="path">C_DRIVE_MIGRATION_REPORT.md</code>).
+    This page is the <strong>clear checklist</strong> of what ran vs what is still on you. It does <strong>not</strong> replace the Ubuntu / VirtualBox / Coolify guide.
+  </p>
+
+  <nav class="toc" aria-label="On this page">
+    <strong>Contents</strong>
+    <ul>
+      <li><a href="#scope">What this report covers (and does not)</a></li>
+      <li><a href="#execution">Execution status — full table</a></li>
+      <li><a href="#completed">Completed steps (detail)</a></li>
+      <li><a href="#pending">Pending — finish C:\ cleanup</a></li>
+      <li><a href="#target">Target layout after cleanup</a></li>
+      <li><a href="#related">Related: VM + archive policy (other docs)</a></li>
+      <li><a href="#agents">For AI assistants</a></li>
+    </ul>
+  </nav>
+
+  <section id="scope">
+    <h2>What this report covers (and does not)</h2>
+    <div class="ok">
+      <strong>In scope here:</strong> Moving <strong>Cursor</strong>, <strong>Codex</strong>, and <strong><code>.cursor</code></strong> data off <code>C:\</code> onto <code>D:\</code>, user env vars, desktop shortcut, and running the cleanup script <strong>after Cursor is fully closed</strong>.
+    </div>
+    <div class="note">
+      <strong>Out of scope here:</strong> VirtualBox, Ubuntu, Docker Engine in the VM, <code>git pull</code>, Coolify, production deploys, or <strong>D:\archive-pre-linux-verify\</strong> project zips — those live in
+      <a href="virtualbox-linux-cursor-flutter-android-guide.html#archive-policy"><code>docs/virtualbox-linux-cursor-flutter-android-guide.html</code></a>
+      and <a href="AGENT_HANDOFF_VIRTUALBOX_LINUX.md"><code>docs/AGENT_HANDOFF_VIRTUALBOX_LINUX.md</code></a>.
+    </div>
+  </section>
+
+  <section id="execution">
+    <h2>Execution status — full table</h2>
+    <p>Statuses reflect the <strong>written plan</strong> in <code class="path">C_DRIVE_MIGRATION_REPORT.md</code>. If you already finished the pending step manually, mark it yourself after checking <code>C:\</code> folder sizes.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Task</th>
+          <th>Who / where</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Copy Cursor app data to <code>D:\CursorData</code> (~27.5 GB)</td>
+          <td>You on Windows</td>
+          <td><span class="badge badge-done">Done</span> (per original report)</td>
+        </tr>
+        <tr>
+          <td>Copy Codex to <code>D:\.codex</code> (~236 MB)</td>
+          <td>You on Windows</td>
+          <td><span class="badge badge-done">Done</span></td>
+        </tr>
+        <tr>
+          <td>Copy <code>.cursor</code> to <code>D:\CursorData\.cursor-backup</code></td>
+          <td>You on Windows</td>
+          <td><span class="badge badge-done">Done</span></td>
+        </tr>
+        <tr>
+          <td>Set user env <code>CODEX_HOME</code> = <code>D:\.codex</code></td>
+          <td>You on Windows</td>
+          <td><span class="badge badge-done">Done</span></td>
+        </tr>
+        <tr>
+          <td>Desktop shortcut <strong>“Cursor (D-Drive)”</strong> → <code>D:\cursor\Cursor.exe</code> with <code>--default-data-dir "D:\CursorData"</code></td>
+          <td>You on Windows</td>
+          <td><span class="badge badge-done">Done</span></td>
+        </tr>
+        <tr>
+          <td>Delete <code>C:\Users\Elior\.codex</code></td>
+          <td>You on Windows</td>
+          <td><span class="badge badge-done">Done</span></td>
+        </tr>
+        <tr>
+          <td>Remove remaining Cursor data on <code>C:\</code>: <code>%AppData%\Roaming\Cursor</code> and <code>C:\Users\Elior\.cursor</code> (~13.5 GB) after copies are verified</td>
+          <td>You on Windows — run script</td>
+          <td><span class="badge badge-pending">Pending</span> — requires <strong>Cursor fully exited</strong></td>
+        </tr>
+        <tr>
+          <td>Run <code>scripts\cleanup-cursor-from-c.ps1</code> from carbon-gen repo</td>
+          <td>PowerShell on Windows</td>
+          <td><span class="badge badge-pending">Pending</span> (same gate: Cursor closed)</td>
+        </tr>
+        <tr>
+          <td>Zip Windows project trees to <code>D:\archive-pre-linux-verify\</code> before any delete of project folders</td>
+          <td>You on Windows</td>
+          <td><span class="badge badge-out">Other doc</span> — <a href="virtualbox-linux-cursor-flutter-android-guide.html#archive-policy">#archive-policy</a></td>
+        </tr>
+        <tr>
+          <td>VM: Ubuntu toolchain, <code>git pull</code>, <code>npm run build</code>, Postgres 5432 discipline</td>
+          <td>Ubuntu VM</td>
+          <td><span class="badge badge-out">Other doc</span> — not tracked in this C:\ report</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="meta">Repository script path (adjust if your clone path differs):</p>
+    <pre class="code-block">powershell -ExecutionPolicy Bypass -File "d:\Projects\My project\carbon-gen\scripts\cleanup-cursor-from-c.ps1"</pre>
+  </section>
+
+  <section id="completed">
+    <h2>Completed steps (detail)</h2>
+    <ul>
+      <li><strong>Cursor</strong> primary data on <code>D:\CursorData</code>.</li>
+      <li><strong>Codex</strong> on <code>D:\.codex</code>; <code>CODEX_HOME</code> points there.</li>
+      <li><strong>.cursor</strong> backed up under <code>D:\CursorData\.cursor-backup</code>.</li>
+      <li>Old <code>C:\Users\Elior\.codex</code> removed.</li>
+      <li>Launch via <strong>Cursor (D-Drive)</strong> shortcut so new sessions use D:, not C:.</li>
+    </ul>
+  </section>
+
+  <section id="pending">
+    <h2>Pending — finish C:\ cleanup</h2>
+    <div class="warn">
+      <strong>~13.5 GB</strong> may still sit on <code>C:\</code> under <code>AppData\Roaming\Cursor</code> and <code>C:\Users\Elior\.cursor</code> while those folders are locked by a running Cursor process.
+    </div>
+    <ol>
+      <li>Quit <strong>Cursor</strong> completely (check Task Manager for stray processes).</li>
+      <li>Run the cleanup script (command above) from an elevated or normal PowerShell as required by the script.</li>
+      <li>Open Cursor only via <strong>Cursor (D-Drive)</strong> — do not use an old shortcut that still points at default C:\ data.</li>
+      <li>Optionally verify free space on <code>C:\</code> and that the two paths above are gone or empty.</li>
+    </ol>
+  </section>
+
+  <section id="target">
+    <h2>Target layout after cleanup</h2>
+    <table>
+      <thead>
+        <tr><th>Data</th><th>C:\</th><th>D:\</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Cursor</td><td>Should be cleared after pending step</td><td><code>D:\CursorData</code> ✓</td></tr>
+        <tr><td>Codex</td><td>Removed ✓</td><td><code>D:\.codex</code> ✓</td></tr>
+        <tr><td>.cursor backup</td><td>Should be cleared after pending step</td><td><code>D:\CursorData\.cursor-backup</code> ✓</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="related">
+    <h2>Related: VM + archive policy (other docs)</h2>
+    <ul>
+      <li><a href="virtualbox-linux-cursor-flutter-android-guide.html"><strong>VirtualBox + Ubuntu + Carbon</strong></a> — full VM plan, Coolify, Docker Engine, <code>#archive-policy</code>.</li>
+      <li><a href="AGENT_HANDOFF_VIRTUALBOX_LINUX.md"><strong>Agent handoff</strong></a> — master prompt and VM git-pull troubleshooting.</li>
+    </ul>
+  </section>
+
+  <section id="agents" class="note" style="margin-top: 2rem;">
+    <h2 style="margin-top: 0; border: none; font-size: 1.2rem;">For AI assistants</h2>
+    <ul style="margin-bottom: 0;">
+      <li>Use <strong>this page</strong> or <code class="path">C_DRIVE_MIGRATION_REPORT.md</code> only for <strong>Windows C:\ → D:\</strong> Cursor/Codex/<code>.cursor</code> cleanup.</li>
+      <li>For <strong>VM / Linux / Coolify / archive zips for project folders</strong>, use <code class="path">virtualbox-linux-cursor-flutter-android-guide.html</code> — do not merge into one improvised plan.</li>
+    </ul>
+  </section>
+
+  <footer>
+    Plain-text twin: <code class="path">C_DRIVE_MIGRATION_REPORT.md</code> (repo root). Open this file in a browser via <code>file:///…/docs/c-drive-migration-report.html</code>.
+  </footer>
+</body>
+</html>
