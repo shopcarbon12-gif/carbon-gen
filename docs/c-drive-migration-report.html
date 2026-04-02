@@ -127,6 +127,7 @@
       <li><a href="#scope">What this report covers (and does not)</a></li>
       <li><a href="#execution">Execution status — full table</a></li>
       <li><a href="#completed">Completed steps (detail)</a></li>
+      <li><a href="#backup-script">Automated backup: D:\backup c + zip + optional scp to Ubuntu</a></li>
       <li><a href="#pending">Pending — finish C:\ cleanup</a></li>
       <li><a href="#target">Target layout after cleanup</a></li>
       <li><a href="#related">Related: VM + archive policy (other docs)</a></li>
@@ -210,8 +211,36 @@
         </tr>
       </tbody>
     </table>
-    <p class="meta">Repository script path (adjust if your clone path differs):</p>
+    <p class="meta">Junction / redirect script (adjust path if your clone differs):</p>
     <pre class="code-block">powershell -ExecutionPolicy Bypass -File "d:\Projects\My project\carbon-gen\scripts\cleanup-cursor-from-c.ps1"</pre>
+  </section>
+
+  <section id="backup-script">
+    <h2>Automated backup: <code>D:\backup c</code>, zips, optional Ubuntu <code>scp</code></h2>
+    <div class="warn">
+      <strong>Close Cursor completely</strong> before running (tray + Task Manager). Do <strong>not</strong> run from Cursor’s integrated terminal. Use an external PowerShell window. Optional: <code>-StopCursorProcesses</code> on the backup script to kill Cursor processes first.
+    </div>
+    <p><code class="path">scripts\backup-c-to-d-and-ubuntu.ps1</code> does the following <strong>end-to-end on Windows</strong>:</p>
+    <ul>
+      <li>Creates <strong><code>D:\backup c\</code></strong> with one subfolder per source path (e.g. <code>AppData-Roaming-Cursor</code>, <code>UserProfile-dot-cursor</code>, <code>AppData-Local-Cursor</code>).</li>
+      <li><strong>Robocopy</strong> copies each tree from <code>C:\</code> into the matching subfolder.</li>
+      <li>Builds a <strong>zip per folder</strong> under <code>D:\backup c\archives\</code> (uses Windows <code>tar.exe</code>).</li>
+      <li>Writes <strong><code>D:\backup c\BACKUP_REPORT_&lt;timestamp&gt;.txt</code></strong> with <strong>C: free space before/after</strong> and approximate <strong>GB backed</strong> (sizes measured on D: after copy).</li>
+      <li>If you pass <strong><code>-SshHost</code></strong> and <strong><code>-SshUser</code></strong>, uploads each zip with <strong><code>scp</code></strong> to <code>~/backup-from-windows-c/archives/</code> on the VM. Use <strong><code>-SshPort 22</code></strong> with your <strong>bridged IP</strong>, or <strong><code>-SshPort 2222</code></strong> if the host forwards <code>2222 → guest 22</code> (VirtualBox NAT). Install <strong>OpenSSH Client</strong> on Windows if <code>scp</code> is missing. SSH keys or interactive auth must work; <code>BatchMode</code> requires keys.</li>
+    </ul>
+    <p>By default the script <strong>does not delete</strong> anything on <code>C:\</code>. To remove sources <em>after</em> a good copy + zip, add <strong><code>-DeleteSourcesAfterCopy</code></strong> (use only when you trust the backup).</p>
+    <p><strong>Dry run:</strong></p>
+    <pre class="code-block">powershell -ExecutionPolicy Bypass -File "d:\Projects\My project\carbon-gen\scripts\backup-c-to-d-and-ubuntu.ps1" -WhatIf</pre>
+    <p><strong>Example (bridged VM, port 22):</strong></p>
+    <pre class="code-block">powershell -ExecutionPolicy Bypass -File "d:\Projects\My project\carbon-gen\scripts\backup-c-to-d-and-ubuntu.ps1" `
+  -StopCursorProcesses `
+  -SshHost "192.168.x.x" -SshUser "eliorp1" -SshPort 22</pre>
+    <p><strong>Example (NAT forward localhost:2222 → guest:22):</strong></p>
+    <pre class="code-block">powershell -ExecutionPolicy Bypass -File "d:\Projects\My project\carbon-gen\scripts\backup-c-to-d-and-ubuntu.ps1" `
+  -StopCursorProcesses `
+  -SshHost "127.0.0.1" -SshUser "eliorp1" -SshPort 2222</pre>
+    <p><strong>Skip Ubuntu upload:</strong> add <code>-SkipScp</code>.</p>
+    <p class="meta">The AI/agent in Cursor <strong>cannot</strong> run this safely for you while this IDE holds locks on the same files; you (or another agent in a non-Cursor shell) must run it.</p>
   </section>
 
   <section id="completed">

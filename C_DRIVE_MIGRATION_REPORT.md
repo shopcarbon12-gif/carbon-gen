@@ -5,6 +5,8 @@
 
 **Readable HTML checklist (same content, execution table):** [`docs/c-drive-migration-report.html`](docs/c-drive-migration-report.html) — open in a browser (`file:///…/docs/c-drive-migration-report.html`).
 
+**Full backup to `D:\backup c\` + per-folder zips + optional `scp` to Ubuntu:** run [`scripts/backup-c-to-d-and-ubuntu.ps1`](scripts/backup-c-to-d-and-ubuntu.ps1) from a **non-Cursor** PowerShell after closing Cursor (see HTML section *Automated backup*). Produces `BACKUP_REPORT_<timestamp>.txt` with **GB backed** and **C: free before/after**.
+
 **Scope of this file (strict):** Windows **only** — moving **Cursor / Codex / `.cursor`** usage off **`C:\`** onto **`D:\`**, shortcuts, and `CODEX_HOME`.  
 **Not in scope:** VirtualBox, Ubuntu, Docker Engine, git clone into a VM, or Coolify. For **all of that**, the canonical document is:
 
