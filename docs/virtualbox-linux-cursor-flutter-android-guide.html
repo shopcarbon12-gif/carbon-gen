@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VirtualBox + Linux + Cursor + Flutter + Android + Carbon-gen / CarbonWMS — Guide (D: drive)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #14161c;
+      --bg-elevated: #1e222b;
+      --card: #252a35;
+      --text: #e8eaef;
+      --text-heading: #f2f4f8;
+      --muted: #9aa3b2;
+      --border: #3d4554;
+      --border-strong: #556070;
+      --accent: #7eb8ff;
+      --accent-hover: #a8d0ff;
+      --warn: #f0c14b;
+      --warn-bg: #2a2418;
+      --warn-text: #f5e6c8;
+      --danger: #ff8b7a;
+      --danger-bg: #2a1f1e;
+      --danger-text: #ffd4ce;
+      --ok: #6ee7a8;
+      --ok-bg: #18261f;
+      --ok-text: #c8f5dc;
+      --code-bg: #0f1117;
+      --table-head: #323846;
+    }
+    * { box-sizing: border-box; }
+    html { font-size: 18px; }
+    body {
+      font-family: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+      font-size: 1rem;
+      line-height: 1.65;
+      max-width: 48rem;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 3.5rem;
+      color: var(--text);
+      background: var(--bg);
+      -webkit-font-smoothing: antialiased;
+    }
+    h1, h2, h3 {
+      font-family: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+      font-weight: 700;
+      color: var(--text-heading);
+      line-height: 1.3;
+      letter-spacing: -0.02em;
+    }
+    h1 { font-size: 1.85rem; margin-top: 0; margin-bottom: 0.75rem; }
+    h2 {
+      font-size: 1.35rem;
+      margin-top: 2.25rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 2px solid var(--border-strong);
+    }
+    h3 { font-size: 1.12rem; margin-top: 1.5rem; font-weight: 700; }
+    .meta {
+      color: var(--muted);
+      font-size: 1.02rem;
+      line-height: 1.6;
+      margin-bottom: 1.75rem;
+    }
+    .meta strong { color: var(--text); }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.15rem 1.35rem;
+      margin: 1.15rem 0;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+    }
+    .disk {
+      font-family: "JetBrains Mono", ui-monospace, Consolas, monospace;
+      font-size: 0.92rem;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      color: var(--text);
+    }
+    a {
+      color: var(--accent);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+    a:hover { color: var(--accent-hover); }
+    ol.steps { padding-left: 1.4rem; }
+    ol.steps li { margin: 0.55rem 0; }
+    ul { padding-left: 1.4rem; }
+    ul li { margin: 0.4rem 0; }
+    .note {
+      border-left: 4px solid var(--accent);
+      padding: 0.75rem 1rem;
+      background: var(--bg-elevated);
+      margin: 1.15rem 0;
+      border-radius: 0 8px 8px 0;
+      color: var(--text);
+    }
+    .warn {
+      border-left: 4px solid var(--warn);
+      padding: 0.75rem 1rem;
+      background: var(--warn-bg);
+      margin: 1.15rem 0;
+      border-radius: 0 8px 8px 0;
+      color: var(--warn-text);
+    }
+    .danger {
+      border-left: 4px solid var(--danger);
+      padding: 0.75rem 1rem;
+      background: var(--danger-bg);
+      margin: 1.15rem 0;
+      border-radius: 0 8px 8px 0;
+      color: var(--danger-text);
+    }
+    .ok {
+      border-left: 4px solid var(--ok);
+      padding: 0.75rem 1rem;
+      background: var(--ok-bg);
+      margin: 1.15rem 0;
+      border-radius: 0 8px 8px 0;
+      color: var(--ok-text);
+    }
+    code, .path {
+      font-family: "JetBrains Mono", ui-monospace, Consolas, monospace;
+      font-size: 0.9em;
+      background: var(--code-bg);
+      color: #d8dce6;
+      padding: 0.12em 0.4em;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.98rem;
+      margin: 1rem 0;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 0.6rem 0.7rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: var(--table-head);
+      color: var(--text-heading);
+      font-weight: 700;
+      font-family: "Atkinson Hyperlegible", system-ui, sans-serif;
+    }
+    td { background: var(--bg-elevated); }
+    tr:nth-child(even) td { background: var(--card); }
+    .toc {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem 1.4rem;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+    }
+    .toc strong { color: var(--text-heading); font-size: 1.05rem; }
+    .toc ul { list-style: none; padding-left: 0; margin: 0.5rem 0 0; }
+    .toc li { margin: 0.45rem 0; }
+    .toc a { font-size: 1.02rem; }
+    footer {
+      margin-top: 3rem;
+      font-size: 0.95rem;
+      color: var(--muted);
+      line-height: 1.55;
+      border-top: 1px solid var(--border);
+      padding-top: 1.25rem;
+    }
+    pre, .code-block {
+      font-family: "JetBrains Mono", ui-monospace, Consolas, monospace;
+      font-size: 0.92rem;
+      line-height: 1.6;
+      background: var(--code-bg);
+      color: #dce2ec;
+      padding: 1.1rem 1.2rem;
+      border-radius: 8px;
+      overflow: auto;
+      border: 1px solid var(--border);
+      margin: 1rem 0;
+    }
+    .runbook {
+      background: linear-gradient(180deg, #1a2332 0%, var(--card) 100%);
+      border: 2px solid var(--accent);
+      border-radius: 12px;
+      padding: 1.35rem 1.5rem 1.5rem;
+      margin: 1.5rem 0 2rem;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+    }
+    .runbook h2 { margin-top: 0; border-bottom-color: var(--accent); font-size: 1.45rem; }
+    .runbook h3 { font-size: 1.08rem; color: var(--accent); margin-top: 1.35rem; }
+    .runbook h3:first-of-type { margin-top: 0.75rem; }
+    .checkpoint {
+      background: var(--code-bg);
+      border-left: 3px solid var(--ok);
+      padding: 0.65rem 0.9rem;
+      margin: 0.75rem 0;
+      font-size: 0.98rem;
+    }
+    .stop-here {
+      background: var(--danger-bg);
+      border: 1px solid var(--danger);
+      color: var(--danger-text);
+      padding: 1rem 1.15rem;
+      border-radius: 8px;
+      margin: 1rem 0;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>VirtualBox + Linux + Cursor + Flutter + Android + your Carbon projects</h1>
+  <p class="meta">Beginner step-by-step · Keep projects and heavy tools on <strong>D:</strong> · Minimize use of <strong>C:</strong> · Includes <strong>carbon-gen</strong> and <strong>carbon-warehouse-management</strong> (CarbonWMS) tooling · <strong>Coolify</strong> (VPS) is where <strong>both</strong> apps run in production — see <a href="#coolify-prod">§13.0</a> · Local dev Postgres: <strong>Docker Engine inside Ubuntu</strong> (not Docker Desktop “moved”); Desktop on Windows is <strong>optional</strong> until Engine works, then quit/uninstall to reclaim disk — <a href="#docker-desktop-to-ubuntu">§10.8b</a> · <a href="#agent-directive">Assistant contract</a> + <code class="path">docs/AGENT_HANDOFF_VIRTUALBOX_LINUX.md</code></p>
+
+  <section class="runbook" id="canonical-plan" aria-labelledby="canonical-plan-title" style="border-color: var(--ok);">
+    <h2 id="canonical-plan-title">Canonical report &amp; plan — follow this</h2>
+    <p><strong>This file</strong> (<code class="path">docs/virtualbox-linux-cursor-flutter-android-guide.html</code>) is the <strong>single report and guide</strong> for moving Carbon development into Ubuntu on VirtualBox. Windows-only Cursor/C:\ cleanup is documented separately in <code class="path">C_DRIVE_MIGRATION_REPORT.md</code> (repo root) until Linux is the daily driver.</p>
+
+    <h3 id="agent-directive">Automation &amp; assistant contract — read before advising</h3>
+    <div class="stop-here">
+      <p><strong>Two documents — do not merge their scopes:</strong></p>
+      <table>
+        <thead><tr><th>Topic</th><th>Authoritative file</th><th>Agent must</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>VirtualBox, Ubuntu install, Guest Additions, shared folders, Node/Flutter/Android, <strong>Docker Engine in Linux</strong>, clone/move repos into VM, §15 move policy, <strong>Coolify vs local compose</strong></td>
+            <td><strong>This HTML guide</strong> (<code class="path">docs/virtualbox-linux-cursor-flutter-android-guide.html</code>)</td>
+            <td>Follow section order Phases A–H and §15; cite anchors (e.g. <code>#docker-desktop-to-ubuntu</code>, <code>#coolify-prod</code>).</td>
+          </tr>
+          <tr>
+            <td>Moving Windows <strong>Cursor / Codex / .cursor</strong> off <strong>C:\</strong> onto <strong>D:\</strong>, shortcuts, <code>CODEX_HOME</code>, cleanup script while Cursor closed</td>
+            <td><code class="path">C_DRIVE_MIGRATION_REPORT.md</code> only</td>
+            <td>Do <strong>not</strong> use this markdown file as the VM migration plan; it does not replace Phases A–H.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p><strong>Hard prohibitions (avoid common agent mistakes):</strong></p>
+      <ul>
+        <li><strong>No Docker Desktop → VM “transfer”:</strong> Do not instruct copying Docker Desktop’s internal disk, WSL2 Docker data, or image store into Ubuntu. Install <strong>Docker Engine</strong> in the guest; <code>docker compose up</code> re-pulls images. Data: <code>pg_dump</code> / restore only if preserving local DB — <a href="#docker-desktop-to-ubuntu">§10.8b</a>.</li>
+        <li><strong>No BIOS/installer automation:</strong> Do not claim an API can press firmware keys, click Ubuntu install wizards, or enter passwords in the VM — see <a href="#start-here">§0b stop box</a>.</li>
+        <li><strong>No long-term host junctions / shared-folder workspaces:</strong> Daily git work lives under <code>~/dev/…</code> inside the VM disk, not on <code>/media/sf_*</code> permanently — <a href="#migration-move-policy">§15</a>.</li>
+        <li><strong>Separate production from dev:</strong> Live sites and prod Postgres are on <strong>Coolify</strong> (VPS). VM <code>docker compose</code> is <strong>local dev only</strong> — <a href="#coolify-prod">§13.0</a>.</li>
+        <li><strong>One Postgres port in the VM:</strong> carbon-gen and CarbonWMS compose both use host <code>5432</code> by default — do not run both stacks simultaneously without changing one published port.</li>
+        <li><strong>Guest Additions source:</strong> Use <strong>Devices → Insert Guest Additions CD</strong> from the host VirtualBox version; do not install <code>virtualbox-*_Ubuntu_*_amd64.deb</code> from <code>D:\downloads</code> <em>inside the guest</em> (wrong use case).</li>
+      </ul>
+      <p><strong>Copy-paste prompt for another session:</strong> use the full text in <code class="path">docs/AGENT_HANDOFF_VIRTUALBOX_LINUX.md</code> (same repo).</p>
+    </div>
+
+    <h3>Why (C: space)</h3>
+    <p>Goal: stop <strong>C:\</strong> from filling with dev caches (<code>node_modules</code>, Docker layers, IDE data). The VirtualBox <strong>host</strong> still needs a <strong>fixed ~300+ MB</strong> on C: (program under <code class="path">C:\Program Files\Oracle\VirtualBox</code> + kernel drivers under <code class="path">C:\Windows\System32\drivers</code>) — that cannot move to D:. The <strong>VM disk (.vdi)</strong> and <strong>default machine folder</strong> live on <strong>D:</strong> (e.g. <code class="path">D:\VMs\VirtualBox</code>); <code>node_modules</code>, Gradle, Android SDK, Linux Cursor data, and Docker images grow <strong>inside that VDI</strong> (i.e. on D: from Windows’ view), not as endless scatter on C:.</p>
+    <p><strong>Automation (repo):</strong> <code class="path">scripts/virtualbox-end-to-end.ps1</code> (download + sync + elevate) · <code class="path">scripts/install-virtualbox-d-drive.ps1</code> · <code class="path">scripts/download-virtualbox-installers.ps1</code></p>
+
+    <h3>Mandatory practices</h3>
+    <ol class="steps">
+      <li><strong>Repos in the VM.</strong> Keep carbon-gen, CarbonWMS, and other projects under e.g. <code>~/projects</code>, <code>~/dev</code>, or <code>/srv/...</code> <strong>inside Ubuntu</strong>. <strong><code>git push</code> regularly.</strong> Git + remote is the source of truth — not “files only on one disk.” Disk experiments on C: or D: must not equal product loss.</li>
+      <li><strong>Linux-native dev stack in Ubuntu.</strong> Run <strong>Node, Docker Engine, Flutter, Android tooling, builds</strong> in the guest so <code>node_modules</code> and Docker images grow <strong>inside the VDI</strong>, not on Windows C:.</li>
+      <li><strong>Cursor only in Ubuntu.</strong> Use <strong>Cursor for Linux inside the VM</strong> for daily Carbon work so Windows C: does not absorb Cursor caches. After that habit sticks, you can uninstall or stop using Cursor on Windows (see §15).</li>
+      <li><strong>Production = Coolify (VPS).</strong> The live sites for carbon-gen and CarbonWMS run as Coolify-managed containers with linked Postgres and Traefik — not as “whatever is in your VM.” After <code>git push</code>, deploy from your Coolify workflow (see <a href="#coolify-prod">§13.0</a>).</li>
+    </ol>
+
+    <div class="warn"><strong>Deleting the VM disk is not “like clearing a cache.”</strong> Removing the <code>.vdi</code> deletes the whole guest — including any work not pushed to Git. Snapshots help rollback; <strong>Git + push</strong> protects your app and site source.</div>
+  </section>
+
+  <section class="runbook" id="start-here" aria-labelledby="start-here-title">
+    <h2 id="start-here-title">START HERE — Full install &amp; move Carbon projects (you are at §5)</h2>
+    <p><strong>Host:</strong> If VirtualBox is not installed yet, prefer <code class="path">scripts/virtualbox-end-to-end.ps1</code> from the carbon-gen repo (downloads to <code>D:\downloads</code>, default VM folder on <code>D:\VMs\VirtualBox</code>, Oracle MSI to default <strong>C:</strong> path — see <a href="#canonical-plan">Canonical plan</a>). Otherwise use Phase B below. Your <code>D:\downloads</code> folder may already contain installers (Ubuntu ISO, Flutter, Node 20 Linux, Cursor .deb, Android Studio, cmdline-tools, VirtualBox Win + Extension Pack, <code>get-docker.sh</code>, etc.). Follow the phases <strong>in order</strong>. BIOS keys and Ubuntu installer clicks are <em>you only</em>.</p>
+
+    <h3>Phase A — §5 Before you install (Windows host) <em>you only</em></h3>
+    <ol class="steps">
+      <li><strong>BIOS / UEFI virtualization.</strong> Restart the PC → enter firmware setup (often Del, F2, F10, or Esc at boot) → find and <strong>Enable</strong> Intel <strong>VT-x</strong> / AMD <strong>SVM</strong> / <strong>AMD-V</strong>. Save and exit.</li>
+      <li><strong>Free RAM.</strong> Close browsers, Docker-heavy stacks, and other VMs before starting VirtualBox the first time (~16 GB host RAM total).</li>
+      <li><strong>Hyper-V vs VirtualBox.</strong> If the VM fails with a virtualization error: open <strong>Turn Windows features on or off</strong> and note whether Hyper-V / Virtual Machine Platform / Windows Hypervisor Platform are on. Search the web for <code>Windows 11 VirtualBox Hyper-V</code> and your VirtualBox version — follow Oracle/Microsoft guidance (sometimes “Windows Hypervisor Platform” helps; sometimes you must disable conflicting features).</li>
+      <li><strong>Windows Update.</strong> Install pending updates and reboot once.</li>
+    </ol>
+    <div class="checkpoint"><strong>Checkpoint:</strong> You are ready for Phase B when you have rebooted after any BIOS change and Windows is idle enough to install software.</div>
+
+    <h3>Phase B — Install VirtualBox on Windows (host)</h3>
+    <ol class="steps">
+      <li>Open File Explorer → go to <code class="path">D:\downloads</code>.</li>
+      <li>Double-click <code class="path">VirtualBox-7.2.6a-172322-Win.exe</code> (or run <code class="path">scripts/install-virtualbox-d-drive.ps1</code>). Accept UAC. Prefer <strong>default C:</strong> install if a custom D: path fails (see <a href="#vbox">§6</a>).</li>
+      <li>Reboot if the installer asks.</li>
+      <li>Start <strong>Oracle VM VirtualBox</strong> from the Start menu.</li>
+      <li>Menu <strong>File → Preferences → General</strong> → set <strong>Default Machine Folder</strong> to <code class="path">D:\VMs\VirtualBox</code> (create the folder if needed).</li>
+      <li>Menu <strong>File → Tools → Extension Pack Manager → Install</strong> → select <code class="path">D:\downloads\Oracle_VirtualBox_Extension_Pack-7.2.6.vbox-extpack</code> → agree to license.</li>
+    </ol>
+    <div class="checkpoint"><strong>Checkpoint:</strong> VirtualBox opens without errors; Extension Pack shows as installed for 7.2.6.</div>
+
+    <h3>Phase C — Create the VM and attach the Ubuntu ISO</h3>
+    <ol class="steps">
+      <li>In VirtualBox click <strong>New</strong>. Name: <code>UbuntuDev</code> (or similar). Type: Linux, Version: Ubuntu (64-bit).</li>
+      <li>RAM: <strong>6144 MB</strong> (6 GB) recommended on your hardware; 8192 MB only if the host stays responsive.</li>
+      <li>Create a <strong>VDI</strong>, <strong>dynamically allocated</strong>, size <strong>200 GB</strong> (or at least 128 GB).</li>
+      <li>Select the VM → <strong>Settings</strong> → <strong>System → Processor</strong>: 2 CPUs. <strong>Display</strong>: max video memory.</li>
+      <li><strong>Storage</strong> → empty IDE/SATA optical drive → choose disk file → <code class="path">D:\downloads\ubuntu-24.04.4-desktop-amd64.iso</code>.</li>
+    </ol>
+    <div class="checkpoint"><strong>Checkpoint:</strong> VM exists; ISO is attached; no start yet until you are ready for a long install.</div>
+
+    <h3>Phase D — Install Ubuntu inside the VM <em>you only</em></h3>
+    <ol class="steps">
+      <li>Click <strong>Start</strong> on the VM. The Ubuntu installer should appear.</li>
+      <li>Choose <strong>Install Ubuntu</strong> → keyboard → optional third-party drivers → <strong>Erase disk and install Ubuntu</strong> (this is only the <em>virtual</em> disk).</li>
+      <li>Create your Linux username and password. Wait for completion → <strong>Restart</strong> → if asked, press Enter to remove “installation medium” (VirtualBox usually ejects the ISO).</li>
+    </ol>
+    <div class="checkpoint"><strong>Checkpoint:</strong> You can log in to the Ubuntu desktop inside the VM.</div>
+
+    <h3 id="phase-e-detail">Phase E — Guest Additions <em>(you only — inside Ubuntu + one host menu)</em></h3>
+    <p><strong>What this fixes:</strong> smooth mouse (no “captured” feeling), <strong>auto-resize</strong> when you drag the VM window, shared-folder support (<code>vboxsf</code>), better clipboard integration, and sometimes time sync. <strong>Do Phase E before Phase F</strong> if you rely on shared folders.</p>
+    <p><strong>Same content, deeper reference:</strong> <a href="#guest">§9 — Guest Additions</a> (below). This Phase E block is the step-by-step you follow now.</p>
+
+    <h4>E.0 — Preconditions (check these first)</h4>
+    <ul>
+      <li><strong>Ubuntu is running</strong> and you are <strong>logged in</strong> to the desktop (not stuck at login screen).</li>
+      <li>The <strong>VirtualBox window</strong> for <code>UbuntuDev</code> is active — the menu bar says <strong>File / Machine / View / Input / Devices / Help</strong> (host menus), not only Ubuntu’s own top bar inside the guest.</li>
+      <li><strong>Extension Pack</strong> is installed on <strong>Windows</strong> (Phase B). Without it, some Devices menu actions fail.</li>
+      <li>Let any <strong>first-boot “Software Updater”</strong> finish or postpone it — avoid running a full distro upgrade <em>at the same moment</em> as Guest Additions build (reduces kernel mismatch errors).</li>
+    </ul>
+
+    <h4>E.1 — Insert the Guest Additions CD (on the host, one click path)</h4>
+    <ol class="steps">
+      <li>Click the <strong>VirtualBox VM window</strong> title bar or inside the guest so VirtualBox has focus (not only your Windows taskbar).</li>
+      <li>In the <strong>top menu</strong> of that window (Oracle VM VirtualBox), open <strong>Devices</strong>.</li>
+      <li>Click <strong>Insert Guest Additions CD image…</strong>
+        <ul>
+          <li>If it is <strong>grayed out</strong>: ensure the VM is <strong>Running</strong>. If still grayed out, try <strong>Devices → Optical Drives → Remove disk from virtual drive</strong>, wait a few seconds, then <strong>Insert Guest Additions CD image</strong> again.</li>
+          <li>If you see an error about unable to mount: shut down Ubuntu gracefully, open VM <strong>Settings → Storage</strong>, ensure the virtual optical drive is empty or set to “Host Drive” as appropriate, start VM, retry.</li>
+        </ul>
+      </li>
+      <li>Within a few seconds, Ubuntu may pop up <strong>“VBox_GAs_…”</strong> or “CD / Removable Media” — you can use that, or continue in the terminal in E.3–E.4 (recommended).</li>
+    </ol>
+
+    <h4>E.2 — Install kernel headers &amp; build tools (Ubuntu Terminal)</h4>
+    <p>Open <strong>Terminal</strong> in Ubuntu (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd> on most setups). Run exactly:</p>
+    <pre class="code-block">sudo apt update
+sudo apt install -y build-essential dkms linux-headers-$(uname -r)</pre>
+    <ul>
+      <li>Enter your Linux password when prompted (characters do not echo — that is normal).</li>
+      <li>Wait until the command completes with no red “E:” errors. If <code>linux-headers-$(uname -r)</code> fails, reboot Ubuntu once, run <code>sudo apt update</code> again, retry the same install line — your kernel may have updated after first boot.</li>
+    </ul>
+
+    <h4>E.3 — Locate the mounted Guest Additions disc</h4>
+    <p>In Terminal, list your user’s media mount point (Ubuntu Desktop usually mounts CDs under <code class="path">/media/&lt;yourusername&gt;/</code>):</p>
+    <pre class="code-block">ls /media/$USER/</pre>
+    <p>You should see a folder whose name starts with <strong>VBox_GAs_</strong> (version numbers match your VirtualBox, e.g. 7.2.x). If you see nothing:</p>
+    <ul>
+      <li>Repeat <strong>E.1</strong> (Insert Guest Additions CD image).</li>
+      <li>Open the <strong>Files</strong> app → look under <strong>Other Locations</strong> or a disc icon on the sidebar → note the path shown in the address bar.</li>
+    </ul>
+
+    <h4>E.4 — Run the Linux installer script</h4>
+    <pre class="code-block">cd /media/$USER/VBox_GAs_*
+sudo ./VBoxLinuxAdditions.run</pre>
+    <ul>
+      <li>The installer prints progress. A <strong>successful</strong> run ends without a fatal error; you may see warnings — note the <strong>last 10–15 lines</strong> if it fails.</li>
+      <li>If it says <strong>kernel headers</strong> or <strong>gcc</strong> missing: go back to <strong>E.2</strong>, install packages, run <strong>E.4</strong> again.</li>
+      <li><strong>Do not</strong> install the file <code>virtualbox-*_Ubuntu_*_amd64.deb</code> from <code>D:\downloads</code> <em>inside the guest</em> — that package is for running VirtualBox on bare-metal Ubuntu, not for Guest Additions inside a VM.</li>
+    </ul>
+
+    <h4>E.5 — Reboot the guest (required)</h4>
+    <ol class="steps">
+      <li>When the installer finishes, run: <pre class="code-block" style="margin:0.5rem 0;">sudo reboot</pre> or use Ubuntu’s <strong>Power Off / Restart</strong> menu inside the VM.</li>
+      <li>After reboot, log in again.</li>
+    </ol>
+
+    <h4>E.6 — Verify it worked</h4>
+    <ul>
+      <li><strong>Resize test:</strong> Drag the <strong>corner</strong> of the VirtualBox window on Windows. The Ubuntu desktop resolution should <strong>adjust</strong> without huge black borders (may take a second).</li>
+      <li><strong>Mouse test:</strong> Move the pointer across the guest edge — it should feel integrated, not “trapped” inside the VM.</li>
+      <li><strong>Optional terminal check:</strong> <pre class="code-block" style="margin:0.5rem 0;">lsmod | grep -E 'vboxguest|vboxsf'</pre> You should see modules such as <code>vboxguest</code> (and after shared folders are used, <code>vboxsf</code>).</li>
+    </ul>
+
+    <div class="checkpoint"><strong>Checkpoint E:</strong> Guest Additions installed, guest rebooted, window resize works. On Windows you can run <code class="path">powershell -ExecutionPolicy Bypass -File scripts/verify-virtualbox-phases-a-through-e.ps1</code> (from the carbon-gen repo) while the VM is <strong>running</strong> — Phase E is OK only if reported Guest Additions match the host (e.g. <strong>7.2.x</strong> with VirtualBox 7.2.6). Proceed to <strong>Phase F</strong> (shared folders + <code>vboxsf</code> user group).</div>
+
+    <h4>E.6b — Host reports wrong Guest Additions version (e.g. 6.0.x with VirtualBox 7.2.x)</h4>
+    <p>If <strong>Windows</strong> reports <code>Additions version: 6.0.0</code> (or anything not matching your host’s <strong>7.2.x</strong>), Ubuntu is almost certainly using the <strong>wrong packages</strong> (<code>virtualbox-guest-*</code> from Ubuntu’s repos) instead of Oracle’s installer from the CD. That breaks resize/shared folders for your real host version.</p>
+    <ol class="steps">
+      <li>In Ubuntu: <pre class="code-block">dpkg -l | grep -i virtualbox-guest</pre> If you see packages, remove them, e.g.: <pre class="code-block">sudo apt remove -y virtualbox-guest-utils virtualbox-guest-x11 virtualbox-guest-dkms</pre> (add any other <code>virtualbox-guest-*</code> lines <code>apt</code> lists.)</li>
+      <li>Re-run <strong>E.1–E.5</strong> using <strong>Devices → Insert Guest Additions CD image</strong> from your <strong>7.2.6</strong> host, then <code>sudo ./VBoxLinuxAdditions.run</code>, reboot.</li>
+      <li>On Windows, re-check with: <code class="path">scripts/verify-virtualbox-phases-a-through-e.ps1</code> — Guest Additions major.minor should match <strong>7.2</strong>.</li>
+    </ol>
+
+    <h4>E.7 — If something fails (common fixes)</h4>
+    <table>
+      <thead><tr><th>Symptom</th><th>What to do</th></tr></thead>
+      <tbody>
+        <tr><td>“Insert Guest Additions CD” does nothing</td><td>Repeat E.1; confirm Extension Pack on host; remove virtual disc then insert again.</td></tr>
+        <tr><td><code>sudo: ./VBoxLinuxAdditions.run: command not found</code></td><td>Wrong folder — run <code>ls /media/$USER/</code>, <code>cd</code> into the <code>VBox_GAs_*</code> directory, <code>ls</code> to confirm <code>VBoxLinuxAdditions.run</code> exists.</td></tr>
+        <tr><td>Build errors about kernel / headers</td><td>Complete E.2; ensure kernel matches: <code>uname -r</code> and installed <code>linux-headers-$(uname -r)</code>; reboot and retry.</td></tr>
+        <tr><td>Screen still doesn’t resize</td><td>View menu on host: try <strong>Auto-resize Guest Display</strong> (VirtualBox 7). Reboot guest again after GA install.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Phase F — Shared folders = <em>transport only</em> (not your final workspace)</h3>
+    <p><strong>Your goal is a true <em>move</em> to Linux:</strong> project files, Cursor usage, and Docker-based dev should ultimately live <strong>only</strong> inside the VM disk (e.g. under <code>~/dev/</code>, <code>~/.config/</code>), <strong>not</strong> mirrored from Windows and <strong>not</strong> via junctions/symlinks on the host. Shared folders are a <strong>temporary pipe</strong> to copy data in; after you verify builds on Linux, you <strong>delete or archive</strong> the old Windows copies (see <a href="#migration-move-policy">§15 — Move checklist</a>).</p>
+    <p><strong>Option 1 (simplest):</strong> In VirtualBox <strong>Settings → Shared Folders</strong>, add <strong>Folder Path</strong> <code class="path">D:\downloads</code>, <strong>Folder Name</strong> <code>downloads</code>, <strong>Auto-mount</strong> + <strong>Make Permanent</strong>. Typical mount: <code class="path">/media/sf_downloads</code>. Use it to <strong>copy</strong> installers into the guest (e.g. <code>~/installers</code> or <code>/opt</code>), not to build daily from the share.</p>
+    <p><strong>Option 2:</strong> Create <code class="path">D:\DevShared</code>, share it as <code>devshared</code>, and copy only the smaller Linux installers into it from <code>D:\downloads</code>.</p>
+    <p>Files you will use <strong>inside Linux</strong> from the share: <code>node-v20.20.2-linux-x64.tar.xz</code>, <code>flutter_linux_3.41.6-stable.tar.xz</code>, <code>cursor-linux-x64.deb</code>, <code>anydesk_8.0.2_amd64.deb</code> (remote desktop), <code>commandlinetools-linux-14742923_latest.zip</code>, optional <code>android-studio-panda2-linux.tar.gz</code>, <code>get-docker.sh</code>. See <code>D:\downloads\ANYDESK-README.txt</code> for AnyDesk install commands. <strong>Do not</strong> install <code>virtualbox-7.2_…noble_amd64.deb</code> inside the guest — that is for running VirtualBox on bare-metal Ubuntu, not for a VM guest.</p>
+    <p>In Ubuntu terminal, add your user to the share group (then log out and back in):</p>
+    <pre class="code-block">sudo usermod -aG vboxsf $USER</pre>
+    <p>After re-login, the share is often at <code class="path">/media/sf_devshared</code> (if empty, reboot the VM once).</p>
+
+    <h3>Phase G — Install toolchain inside Ubuntu (order matters)</h3>
+    <p>Run updates, base packages, Git identity, Node 20, Flutter, Android cmdline tools path, Cursor .deb, Docker — the detailed commands are in <a href="#devtools">§10</a> of this guide. Short order:</p>
+    <ol class="steps">
+      <li><code>sudo apt update &amp;&amp; sudo apt install -y git curl unzip xz-utils zip openjdk-17-jdk build-essential</code></li>
+      <li>Expand Node from the shared folder under <code>/opt</code> or your home; add <code>bin</code> to <code>PATH</code> (see §10.7).</li>
+      <li>Expand Flutter tarball to <code>~/development/flutter</code>; add to <code>PATH</code>; run <code>flutter doctor</code>.</li>
+      <li>Install Android cmdline tools + SDK paths (§10.3 / Android docs) or install Android Studio from the copied <code>.tar.gz</code>.</li>
+      <li><code>sudo apt install -y ./cursor-linux-x64.deb</code> from the folder where you copied the .deb (or <code>sudo dpkg -i …</code> then <code>sudo apt -f install</code> if dependencies complain).</li>
+      <li>Docker: prefer official Ubuntu steps; if you use <code>get-docker.sh</code>, read it first, then <code>sudo sh get-docker.sh</code>, then add user to <code>docker</code> group and re-login.</li>
+    </ol>
+
+    <h3>Phase H — Put carbon-gen &amp; CarbonWMS into the VM (then <em>move</em>, don’t mirror)</h3>
+    <p><strong>Best method (clean):</strong> In Ubuntu, <code>mkdir -p ~/dev</code> and <strong>git clone</strong> from your remote (§10.2). That creates a <strong>single</strong> home on Linux; you then <strong>stop using</strong> the Windows trees and remove them when ready (§15).</p>
+    <p><strong>Copy method (one-time import):</strong> Use shared folder <code>myprojects</code> → <code>/media/sf_myprojects</code> only to <code>cp -a</code> (or <code>rsync -a</code>) into <code>~/dev/carbon-gen</code> and <code>~/dev/carbon-warehouse-management</code>. Remove <code>node_modules</code> before or after copy; run <code>npm ci</code> on Linux. <strong>Do not</strong> keep editing the copy under <code>/media/sf_*</code> as your daily workspace — that would be <em>mirroring</em> Windows. After <code>npm run build</code> / smoke tests pass, follow §15 to delete Windows originals.</p>
+    <div class="warn"><strong>Port conflict:</strong> Both repos use Postgres on host port <strong>5432</strong> in their compose files. Do not run both stacks at once unless you change one file to e.g. <code>5433:5432</code>.</div>
+
+    <div class="stop-here">
+      <strong>Where automation must stop:</strong> No MCP or API can press BIOS keys, click Ubuntu’s “Install” wizard, or type your passwords inside the VM. If any step fails, note the <strong>exact error text</strong> (or screenshot), which <strong>phase</strong> you were in, and search or ask with that message — most issues are virtualization settings, shared-folder group membership, or Docker/Node PATH.
+    </div>
+  </section>
+
+  <section class="runbook" id="migration-move-policy" aria-labelledby="migration-title" style="border-color: var(--ok);">
+    <h2 id="migration-title">§15 — Move everything to Linux (not mirror, not junction)</h2>
+    <p>Use this checklist when Linux is installed and tooling works. Goal: <strong>canonical</strong> copies on the <strong>guest disk</strong> only; Windows folders are <strong>removed or archived</strong> after you verify — no ongoing sync, no host junctions pointing at project roots.</p>
+
+    <h3>What “move” means here</h3>
+    <ul>
+      <li><strong>Move</strong> = copy into the VM filesystem → verify (build, tests, Docker compose, Cursor opens repo) → then delete or zip-archive the old Windows path.</li>
+      <li><strong>Not mirror:</strong> Don’t treat <code>/media/sf_downloads</code> or <code>/media/sf_myprojects</code> as the place you <code>git commit</code> every day; copy <em>out</em> to <code>~/dev/…</code> first.</li>
+      <li><strong>Not junction/symlink on Windows:</strong> No NTFS junction from <code>C:\…</code> to <code>D:\Projects\…</code> as a substitute for living on Linux — you want data <em>inside</em> the <code>.vdi</code>.</li>
+    </ul>
+
+    <h3>Checklist — projects (Carbon-gen, CarbonWMS, other repos)</h3>
+    <ol class="steps">
+      <li>Ensure trees live under e.g. <code>~/dev/carbon-gen</code>, <code>~/dev/carbon-warehouse-management</code>, and any other repos under <code>~/dev/&lt;name&gt;</code>.</li>
+      <li>Fresh <code>npm ci</code> (and <code>flutter pub get</code> for WMS mobile) on Linux; fix any env files (<code>.env</code>, <code>.env.local</code>) from templates — <strong>do not commit secrets</strong>.</li>
+      <li>Run smoke checks (e.g. <code>npm run dev</code>, <code>docker compose up</code>, <code>flutter doctor</code>) from the <strong>Linux</strong> paths only.</li>
+      <li>Optional: zip backup of old Windows folders to <code>D:\backup-pre-linux-migration\</code> dated.</li>
+      <li>When satisfied, <strong>delete</strong> (or keep only the zip) <code>D:\Projects\My project\carbon-gen</code>, <code>…\carbon-warehouse-management</code>, and other migrated repos on Windows.</li>
+      <li>Remove or disable VirtualBox <strong>shared folders</strong> for those paths if you no longer need import (optional cleanup).</li>
+    </ol>
+
+    <h3>Checklist — Cursor (Windows → Linux)</h3>
+    <ol class="steps">
+      <li>Install and open Cursor <strong>in Ubuntu</strong> (you already have <code>cursor-linux-x64.deb</code>).</li>
+      <li>Manually copy what you care about from Windows: e.g. <code>%APPDATA%\Cursor\User\settings.json</code>, <code>keybindings.json</code>, <code>snippets\</code>, and <code>%USERPROFILE%\.cursor\mcp.json</code> into the Linux Cursor config locations (under <code>~/.config</code> / Cursor’s docs — paths differ slightly from Windows).</li>
+      <li>Re-install extensions in Linux Cursor: <code>Dart-Code.dart-code</code>, <code>Dart-Code.flutter</code>, plus any others from your repo recommendations.</li>
+      <li>After Linux is your daily driver for Carbon work, you may <strong>uninstall Cursor on Windows</strong> or stop using it — that’s the “move” of your editor habit, not a file mirror.</li>
+    </ol>
+
+    <h3>Checklist — Docker</h3>
+    <ol class="steps">
+      <li>Use <strong>Docker Engine + compose plugin inside Ubuntu</strong> for carbon-gen / CarbonWMS Postgres stacks. See <a href="#docker-desktop-to-ubuntu">§10.8b</a> — you do <strong>not</strong> copy Docker Desktop’s ~10 GB into Ubuntu; you install Engine fresh and re-pull images.</li>
+      <li>Windows <strong>Docker Desktop</strong> images/volumes are <strong>not</strong> the same disk as Linux. Usually you <strong>re-pull</strong> images with compose on Linux rather than migrating volumes. If you had critical local DB data on Windows, export with <code>pg_dump</code> first, then import in Linux.</li>
+      <li>When everything runs in the VM, <strong>quit Docker Desktop</strong> on Windows or uninstall it if you want zero Docker on the host.</li>
+    </ol>
+
+    <h3>Checklist — installers &amp; D:\downloads</h3>
+    <ol class="steps">
+      <li>After Linux copies of Node tarball, Flutter, Android tools, etc. are extracted and verified, you may <strong>keep</strong> <code>D:\downloads</code> as a cold archive or delete duplicates to save space — your choice.</li>
+    </ol>
+
+    <div class="warn"><strong>VirtualBox stays on Windows</strong> until you someday switch to Linux bare metal. Only the <em>projects, Cursor data, and Docker dev workflow</em> move into the guest in the sense above.</div>
+  </section>
+
+  <nav class="toc" aria-label="Table of contents">
+    <strong>Contents</strong>
+    <ul>
+      <li><a href="#canonical-plan">0. Canonical plan (mandatory) — this document is the report</a>
+        <ul>
+          <li><a href="#agent-directive">Automation &amp; assistant contract</a></li>
+        </ul>
+      </li>
+      <li><a href="#start-here">0b. START HERE — full install &amp; move projects</a></li>
+      <li><a href="#phase-e-detail">Phase E (detail) — Guest Additions — your steps</a></li>
+      <li><a href="#analysis">1. Your D: drive (analysis)</a></li>
+      <li><a href="#choices">2. What fits your need (VirtualBox + Linux)</a></li>
+      <li><a href="#paths">3. Healthy folder layout on D:</a></li>
+      <li><a href="#downloads">4. Official download links</a></li>
+      <li><a href="#before">5. Before you install (BIOS &amp; Windows)</a></li>
+      <li><a href="#vbox">6. Install VirtualBox (on D:)</a></li>
+      <li><a href="#vm">7. Create the Linux VM</a></li>
+      <li><a href="#ubuntu">8. Install Ubuntu inside the VM</a></li>
+      <li><a href="#guest">9. Guest Additions (recommended)</a></li>
+      <li><a href="#devtools">10. Cursor, Flutter, Gradle, Android SDK, Git (inside Linux)</a>
+        <ul>
+          <li><a href="#docker-desktop-to-ubuntu">10.8b Docker Desktop → Ubuntu (no image transfer)</a></li>
+        </ul>
+      </li>
+      <li><a href="#sharing">11. Shared folders — stay off C:</a></li>
+      <li><a href="#trouble">12. When something goes wrong</a></li>
+      <li><a href="#carbon-stack">13. Carbon-gen &amp; CarbonWMS — stack, extensions, Docker</a>
+        <ul>
+          <li><a href="#coolify-prod">13.0 Coolify — production (both apps)</a></li>
+        </ul>
+      </li>
+      <li><a href="#d-downloads">14. D:\downloads — pinned files for the Linux VM</a></li>
+      <li><a href="#migration-move-policy">15. Move to Linux (not mirror) — full checklist</a></li>
+    </ul>
+  </nav>
+
+  <h2 id="analysis">1. Your D: drive (analysis)</h2>
+  <div class="card disk" role="region" aria-label="Disk snapshot">
+Volume letter:     D:
+File system label:  DATA
+File system:        NTFS
+Total size:         ~931 GB (about 1,000,006,887,014 bytes)
+Free space:         ~707 GB (about 758,649,917,440 bytes)
+
+Host RAM (snapshot): ~16 GB total — plan the VM memory carefully (see section 7).
+  </div>
+  <div class="ok">
+    <strong>Verdict:</strong> D: has plenty of room for a large dynamically allocated virtual disk (Android SDK, emulators, Gradle caches, and Flutter can grow to tens of gigabytes over time). The limiting factor on your snapshot is <strong>RAM</strong>, not disk space.
+  </div>
+
+  <h2 id="choices">2. What fits your need (VirtualBox + Linux)</h2>
+  <h3>VirtualBox</h3>
+  <p><strong>Oracle VirtualBox 7.x</strong> (current stable from virtualbox.org) matches your goal: run a full Linux desktop where <strong>Cursor, Flutter, Gradle, and the Android SDK</strong> all live <em>inside the virtual disk file on D:</em>. Windows C: is not where that bulk data grows.</p>
+  <div class="note">
+    VirtualBox itself may still write <strong>small</strong> configuration data under your Windows user profile (often on C:). That is normal and tiny compared to Android SDK + emulators. You avoid the big growth on C: by storing the <strong>VM disk (.vdi)</strong> on D: and by <strong>not</strong> mapping shared folders to <code>C:\</code>.
+  </div>
+
+  <h3>Which Linux?</h3>
+  <p><strong>Ubuntu Desktop LTS (24.04 LTS or 22.04 LTS)</strong> is the best default for beginners with Flutter and Android tooling: huge community, clear docs, and straightforward drivers for VirtualBox Guest Additions.</p>
+  <ul>
+    <li><strong>Pick 24.04 LTS</strong> if you want the newest long-term stack.</li>
+    <li><strong>Pick 22.04 LTS</strong> if you hit a rare compatibility issue and want maximum “battle-tested” references online.</li>
+  </ul>
+  <p>Alternatives (Fedora, Debian) work, but troubleshooting Android + Flutter on a first VM is easier on Ubuntu LTS.</p>
+
+  <h2 id="paths">3. Healthy folder layout on D:</h2>
+  <p>Use a predictable structure so backups and upgrades are simple:</p>
+  <div class="card">
+    <p class="path">D:\VMs\VirtualBox\</p>
+    <p>Default machine folder (VirtualBox setting). All <code>.vdi</code> / snapshot files live here — <strong>this is where the space is used</strong>.</p>
+    <p class="path">D:\VMs\ISOs\</p>
+    <p>Store the Ubuntu <code>.iso</code> installer (optional after install; you can delete to save space).</p>
+    <p class="path">D:\DevShared\</p>
+    <p>Optional <strong>single</strong> Windows folder to share <em>into</em> Linux if you want file exchange. Keep it on <strong>D:</strong> only — never point a share at <code>C:\</code> if your goal is to keep C: clean.</p>
+  </div>
+  <p>Inside Linux (on the virtual disk, not on Windows letters):</p>
+  <table>
+    <thead><tr><th>Purpose</th><th>Typical path inside Ubuntu</th></tr></thead>
+    <tbody>
+      <tr><td>Your projects</td><td><code>/home/yourname/dev/</code> or <code>~/dev/</code></td></tr>
+      <tr><td>Flutter SDK</td><td><code>~/development/flutter</code> (common convention)</td></tr>
+      <tr><td>Android SDK</td><td><code>~/Android/Sdk</code> (common with Android Studio)</td></tr>
+      <tr><td>Gradle caches</td><td><code>~/.gradle/</code> (grows with builds)</td></tr>
+      <tr><td>Git (SSH keys for <code>git@github.com:…</code>)</td><td><code>~/.ssh/</code> (e.g. <code>id_ed25519</code>, <code>id_ed25519.pub</code>)</td></tr>
+      <tr><td>Cursor user data</td><td>Under <code>~/.config/</code> and related (AppImage/deb layout)</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="downloads">4. Official download links</h2>
+  <p>Always download from vendor sites. If a mirror looks suspicious, stop.</p>
+  <table>
+    <thead><tr><th>Item</th><th>Official URL</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>VirtualBox for Windows hosts</td>
+        <td><a href="https://www.virtualbox.org/wiki/Downloads">https://www.virtualbox.org/wiki/Downloads</a></td>
+      </tr>
+      <tr>
+        <td>VirtualBox Extension Pack (optional; USB 2.0/3.0, etc. — match major version to VirtualBox)</td>
+        <td><a href="https://www.virtualbox.org/wiki/Downloads">https://www.virtualbox.org/wiki/Downloads</a> (same page, Extension Pack section)</td>
+      </tr>
+      <tr>
+        <td>Ubuntu Desktop LTS</td>
+        <td><a href="https://ubuntu.com/download/desktop">https://ubuntu.com/download/desktop</a></td>
+      </tr>
+      <tr>
+        <td>Ubuntu ISO directory (direct picks)</td>
+        <td><a href="https://releases.ubuntu.com/">https://releases.ubuntu.com/</a></td>
+      </tr>
+      <tr>
+        <td>Flutter (Linux install docs)</td>
+        <td><a href="https://docs.flutter.dev/get-started/install/linux">https://docs.flutter.dev/get-started/install/linux</a></td>
+      </tr>
+      <tr>
+        <td>Android Studio (easiest Android SDK + emulator UI)</td>
+        <td><a href="https://developer.android.com/studio">https://developer.android.com/studio</a></td>
+      </tr>
+      <tr>
+        <td>Android command-line tools only (advanced minimal SDK)</td>
+        <td><a href="https://developer.android.com/studio#command-tools">https://developer.android.com/studio#command-tools</a></td>
+      </tr>
+      <tr>
+        <td>Cursor (Linux)</td>
+        <td><a href="https://cursor.com/download">https://cursor.com/download</a></td>
+      </tr>
+      <tr>
+        <td>AnyDesk (Ubuntu/Debian .deb)</td>
+        <td><a href="https://anydesk.com/en/downloads/linux">https://anydesk.com/en/downloads/linux</a> · repo pool: <a href="https://deb.anydesk.com/pool/main/a/anydesk/">https://deb.anydesk.com/pool/main/a/anydesk/</a></td>
+      </tr>
+      <tr>
+        <td>Node.js 20 LTS (Linux x64 tarball — matches carbon-gen Docker <code>node:20-bookworm</code>)</td>
+        <td><a href="https://nodejs.org/dist/v20.20.2/node-v20.20.2-linux-x64.tar.xz">https://nodejs.org/dist/v20.20.2/node-v20.20.2-linux-x64.tar.xz</a> · index: <a href="https://nodejs.org/dist/index.json">https://nodejs.org/dist/index.json</a></td>
+      </tr>
+      <tr>
+        <td>Git (downloads &amp; docs — Windows installer optional on host; Linux uses <code>apt</code> in the VM)</td>
+        <td><a href="https://git-scm.com/download/win">https://git-scm.com/download/win</a> · <a href="https://git-scm.com/download/linux">https://git-scm.com/download/linux</a> · <a href="https://git-scm.com/book/en/v2">Pro Git book</a></td>
+      </tr>
+      <tr>
+        <td>Docker Engine on Ubuntu (official; replaces “Docker Desktop” inside Linux)</td>
+        <td><a href="https://docs.docker.com/engine/install/ubuntu/">https://docs.docker.com/engine/install/ubuntu/</a> · convenience script: <a href="https://get.docker.com/">https://get.docker.com/</a></td>
+      </tr>
+      <tr>
+        <td>VirtualBox for Ubuntu 24.04 host (.deb) — only if Ubuntu is the <strong>physical</strong> OS; <strong>not</strong> for inside a VM (guests use Guest Additions ISO from the Devices menu)</td>
+        <td><a href="https://download.virtualbox.org/virtualbox/7.2.6/virtualbox-7.2_7.2.6-172322~Ubuntu~noble_amd64.deb">https://download.virtualbox.org/virtualbox/7.2.6/virtualbox-7.2_7.2.6-172322~Ubuntu~noble_amd64.deb</a></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 id="before">5. Before you install (BIOS &amp; Windows)</h2>
+  <ol class="steps">
+    <li><strong>Enable virtualization in firmware (BIOS/UEFI).</strong> Names vary: Intel VT-x, AMD-V, SVM Mode. If VirtualBox says acceleration is unavailable, this is the first place to check.</li>
+    <li><strong>Close heavy apps</strong> before first VM boot. With ~16 GB host RAM, Android emulator + IDE + browser together can exhaust memory.</li>
+    <li><strong>Hyper-V / other hypervisors:</strong> If VirtualBox fails to start a 64-bit guest or complains about virtualization, search for your Windows version + “VirtualBox Hyper-V” — fixes vary (Windows Hypervisor Platform, disabling conflicting features, or updating VirtualBox). Do not panic; this is common on Windows 10/11.</li>
+    <li><strong>Windows updates:</strong> Install pending updates; reboot. Reduces odd driver conflicts.</li>
+  </ol>
+
+  <h2 id="vbox">6. Install VirtualBox (host: C: app · VMs on D:)</h2>
+  <div class="warn"><strong>Oracle MSI reality:</strong> A custom install directory on D: often fails (<code>CheckTargetDir</code> / invalid name). The <strong>supported</strong> approach in this repo is <code class="path">scripts/install-virtualbox-d-drive.ps1</code>: program on <strong>C:</strong>, <strong>default machine folder</strong> on <code class="path">D:\VMs\VirtualBox</code>. Same idea as <a href="#canonical-plan">Canonical plan</a>.</div>
+  <ol class="steps">
+    <li>Download the Windows installer from the VirtualBox Downloads page (link above), or use <code class="path">scripts/download-virtualbox-installers.ps1</code>.</li>
+    <li>Run the installer to the <strong>default location</strong> on C: if a custom D: path fails; then set <strong>Default Machine Folder</strong> to D: (next steps). Optional: try D: only if the wizard accepts it without errors.</li>
+    <li>Finish the install. Reboot if the installer requests it.</li>
+    <li>Open VirtualBox. Go to <strong>File → Preferences → General</strong>. Set <strong>Default Machine Folder</strong> to <code>D:\VMs\VirtualBox</code> (create the folder first if needed).</li>
+    <li>Optional: install the <strong>Extension Pack</strong> (same version as VirtualBox): File → Tools → Extension Pack Manager → Install. Match versions exactly.</li>
+  </ol>
+  <div class="warn">
+    <strong>Network drivers prompt:</strong> VirtualBox may install virtual network adapters. Windows may show a firewall prompt — allow for “Private” networks if you trust your home network.
+  </div>
+
+  <h2 id="vm">7. Create the Linux VM</h2>
+  <p>These values are tuned for your <strong>~16 GB RAM</strong> host and <strong>Flutter + Gradle + Cursor + Android</strong>.</p>
+  <ol class="steps">
+    <li>VirtualBox → <strong>New</strong>. Name: <code>UbuntuDev</code>. Type: Linux. Version: Ubuntu (64-bit).</li>
+    <li><strong>Memory:</strong> Use <strong>6144 MB (6 GB)</strong> as a safer default. If you rarely run anything heavy on Windows while developing, you can try <strong>8192 MB (8 GB)</strong>; if the host freezes, reduce VM RAM.</li>
+    <li><strong>Hard disk:</strong> Create a virtual hard disk now. Format: <strong>VDI</strong>. Storage: <strong>Dynamically allocated</strong> (grows as needed). Size: <strong>128 GB</strong> minimum; <strong>200 GB</strong> is comfortable for Android SDK + a few system images + Gradle over time. Your D: free space supports this.</li>
+    <li>Before first boot: select the VM → <strong>Settings</strong>:
+      <ul>
+        <li><strong>System → Processor:</strong> 2 CPUs (try 3 only if the host stays responsive).</li>
+        <li><strong>Display → Video Memory:</strong> increase to the maximum allowed (often 128 MB).</li>
+        <li><strong>Storage:</strong> under the empty optical drive, click the disk icon and <strong>Choose a disk file</strong> → select your Ubuntu ISO from <code>D:\VMs\ISOs\</code>.</li>
+      </ul>
+    </li>
+  </ol>
+  <div class="danger">
+    <strong>Android emulator inside a VM (nested virtualization):</strong> Often <strong>slow or unsupported</strong> in VirtualBox. Beginners should plan on <strong>a physical Android phone with USB debugging</strong> for day-to-day Flutter runs, or accept very slow emulators. Building APKs with Gradle still works without a running emulator.
+  </div>
+
+  <h2 id="ubuntu">8. Install Ubuntu inside the VM</h2>
+  <ol class="steps">
+    <li>Start the VM. Ubuntu installer appears. Choose <strong>Install Ubuntu</strong>.</li>
+    <li>Keyboard layout: your language.</li>
+    <li>Updates: you can check “Install third-party software” for drivers (Wi‑Fi, etc.) — useful in VMs.</li>
+    <li>Disk: <strong>Erase disk and install Ubuntu</strong> (this refers to the <em>virtual</em> disk only, not your Windows D: partition).</li>
+    <li>Create your user name and password. Use a strong password.</li>
+    <li>Wait for completion → restart when asked → press Enter if prompted to remove installation medium (VirtualBox may auto-eject ISO).</li>
+  </ol>
+
+  <h2 id="guest">9. Guest Additions (recommended)</h2>
+  <p><strong>Full step-by-step (what to click, what to type, how to verify):</strong> use <a href="#phase-e-detail">Phase E — Guest Additions</a> in the START HERE runbook above. The summary below is a shortcut checklist only.</p>
+  <p><strong>Why install:</strong> Better mouse integration, <strong>auto-resize</strong> of the guest desktop when you resize the VirtualBox window, <strong>shared folders</strong> (<code>vboxsf</code>), and optional clipboard improvements.</p>
+  <ol class="steps">
+    <li><strong>Host menu:</strong> With the Ubuntu VM focused, <strong>Devices → Insert Guest Additions CD image</strong>.</li>
+    <li><strong>Guest prep:</strong> <code>sudo apt update</code> then install <code>build-essential</code>, <code>dkms</code>, and <code>linux-headers-$(uname -r)</code> (exact block in Phase E).</li>
+    <li><strong>Guest install:</strong> <code>cd /media/$USER/VBox_GAs_*</code> then <code>sudo ./VBoxLinuxAdditions.run</code>.</li>
+    <li><strong>Reboot:</strong> <code>sudo reboot</code> — then confirm resize + mouse (Phase E.6).</li>
+  </ol>
+  <div class="warn">
+    If the installer complains about missing headers or compiler, install the packages in Phase <strong>E.2</strong> and run <code>VBoxLinuxAdditions.run</code> again. Do <strong>not</strong> install the host-style <code>virtualbox-*_Ubuntu_*_amd64.deb</code> inside the VM for this purpose.
+  </div>
+
+  <h2 id="devtools">10. Cursor, Flutter, Gradle, Android SDK (inside Linux)</h2>
+  <p>Work in this order: base packages → Java → Android tooling → Flutter → Cursor.</p>
+
+  <h3>10.1 Base packages (terminal in Ubuntu)</h3>
+  <pre class="code-block">sudo apt update
+sudo apt install -y git curl unzip xz-utils zip openjdk-17-jdk build-essential</pre>
+  <p>Verify Java: <code>java -version</code> (should mention 17).</p>
+
+  <h3>10.2 Git (version control — required)</h3>
+  <p><strong>carbon-gen</strong> and <strong>carbon-warehouse-management</strong> are Git repositories. You need Git inside the Ubuntu VM to clone, branch, commit, and pull/push.</p>
+  <p>The command above already installs Git (<code>git</code> is in the <code>apt install</code> list). Verify:</p>
+  <pre class="code-block">git --version</pre>
+  <p><strong>First-time identity</strong> (use your real name and the email tied to GitHub / your host):</p>
+  <pre class="code-block">git config --global user.name "Your Name"
+git config --global user.email "you@example.com"</pre>
+  <p><strong>HTTPS vs SSH:</strong> Cloning with HTTPS prompts for credentials; many people use a <a href="https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens">personal access token</a> as the password. SSH (<code>git@github.com:…</code>) needs an SSH key in <code>~/.ssh/</code> and the public key added to your Git host — Cursor’s built-in Git UI works with either once Git is configured.</p>
+  <div class="note">
+    <strong>Windows vs VM:</strong> Git on <strong>Windows</strong> (e.g. <a href="https://git-scm.com/download/win">Git for Windows</a>) and Git inside the <strong>VM</strong> are separate installations with separate configs and SSH keys. If you clone only inside the VM, configure Git and keys there.
+  </div>
+
+  <h3>10.3 Android SDK (beginner-friendly path: Android Studio)</h3>
+  <ol class="steps">
+    <li>Download Linux Android Studio from the official Android Studio link above.</li>
+    <li>Extract to something like <code>~/android-studio</code> (inside the VM disk).</li>
+    <li>Run the studio installer wizard; let it install the <strong>Android SDK</strong> to <code>~/Android/Sdk</code> (default is fine).</li>
+    <li>In SDK Manager, install at least: <strong>Android SDK Platform-Tools</strong>, a recent <strong>Platform</strong> (API level your Flutter project needs), and <strong>Command-line Tools</strong>.</li>
+  </ol>
+  <p>Add to your shell profile (<code>~/.bashrc</code> or <code>~/.profile</code>):</p>
+  <pre class="code-block">export ANDROID_HOME=$HOME/Android/Sdk
+export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
+export PATH=$PATH:$ANDROID_HOME/platform-tools</pre>
+  <p>Then: <code>source ~/.bashrc</code> and test <code>adb version</code>.</p>
+
+  <h3>10.4 Flutter</h3>
+  <ol class="steps">
+    <li>Follow the official Linux install page (link above). Typical flow: download the Linux bundle, unpack to <code>~/development/flutter</code>, add <code>export PATH="$PATH:$HOME/development/flutter/bin"</code> to <code>~/.bashrc</code>, run <code>flutter doctor</code>.</li>
+    <li>Accept licenses: <code>flutter doctor --android-licenses</code></li>
+  </ol>
+
+  <h3>10.5 Gradle</h3>
+  <p>Gradle is pulled automatically by Flutter/Android projects. Caches live under <code>~/.gradle</code> inside Linux — still on your virtual disk (D: from Windows’ point of view). If disk grows too much, you can occasionally run <code>rm -rf ~/.gradle/caches</code> (only if you understand builds will re-download dependencies).</p>
+
+  <h3 id="install-cursor-ubuntu">10.6 Cursor on Ubuntu (guest)</h3>
+  <div class="warn">
+    <strong>What installing Cursor on Ubuntu does <em>not</em> do:</strong> The AI assistant in <strong>this</strong> Cursor window (on Windows, attached to your repo) <strong>cannot run commands inside the VM</strong> or “take over” Linux Cursor automatically. Linux Cursor is a separate app. To work in the VM from one editor, use <strong>Cursor’s Remote - SSH</strong> (or open the Linux folder from a project cloned inside the guest) in a <em>new</em> Cursor window connected to the VM.
+  </div>
+  <p><strong>Fast path — you already have</strong> <code class="path">cursor-linux-x64.deb</code> on Windows under <code class="path">D:\downloads</code> (shared folder name <code>downloads</code> → usually <code class="path">/media/&lt;you&gt;/sf_downloads/</code> in Ubuntu after Guest Additions + <code>vboxsf</code> group + re-login).</p>
+  <ol class="steps">
+    <li>In Ubuntu Terminal, confirm the file exists: <pre class="code-block">ls -la /media/$USER/sf_downloads/cursor-linux-x64.deb</pre> If “No such file”, list <code class="path">/media/$USER/</code> and adjust the path, or copy: <code>mkdir -p ~/installers &amp;&amp; cp /media/$USER/sf_downloads/cursor-linux-x64.deb ~/installers/</code></li>
+    <li><strong>Option A — helper script</strong> from the carbon-gen repo (if your VM can see the shared <code>myprojects</code> tree): <pre class="code-block">chmod +x "/media/$USER/sf_myprojects/carbon-gen/scripts/guest/install-cursor-on-ubuntu.sh"
+bash "/media/$USER/sf_myprojects/carbon-gen/scripts/guest/install-cursor-on-ubuntu.sh"</pre> If the path has spaces (e.g. <code>My project</code>), use quotes as shown or copy the script to <code>~</code> first.</li>
+    <li><strong>Option B — manual install:</strong> <pre class="code-block">sudo apt update
+sudo apt install -y /media/$USER/sf_downloads/cursor-linux-x64.deb</pre> If dependencies fail: <code>sudo apt -f install -y</code> then retry.</li>
+    <li>Launch from the app grid (search “Cursor”) or run <code>cursor</code> in Terminal.</li>
+    <li>In Cursor → Extensions, install what your repos need (see <a href="#carbon-stack">section 13</a>): <code>Dart-Code.dart-code</code>, <code>Dart-Code.flutter</code> for CarbonWMS mobile; others per <code>.vscode/extensions.json</code>.</li>
+  </ol>
+  <div class="note">
+    Cursor’s data in Linux lives under your Linux home (e.g. <code>~/.config</code> / app data) — it does <strong>not</strong> grow Windows <code>C:\</code> caches, which matches the <a href="#canonical-plan">canonical plan</a> (Cursor daily driver in Linux).
+  </div>
+
+  <h3>10.7 Node.js 20 + npm (carbon-gen &amp; CarbonWMS web)</h3>
+  <p>Both repos are <strong>Next.js</strong> apps on <strong>Node</strong>. carbon-gen’s production Docker image uses <strong>Node 20</strong> (<code>node:20-bookworm-slim</code>) and is what <strong>Coolify</strong> builds and runs on your VPS. Align the VM with <strong>Node 20 LTS</strong> for parity.</p>
+  <p>Recommended: unpack the official Linux x64 tarball from <code>D:\downloads</code> (see section 14) into e.g. <code>~/opt/node-v20.20.2-linux-x64</code> and prepend <code>bin</code> to <code>PATH</code>, or use <a href="https://github.com/nvm-sh/nvm">nvm</a> to install 20.x inside the VM.</p>
+  <p>Then in each repo: <code>npm ci</code> (or <code>npm install</code>) per project instructions.</p>
+
+  <h3>10.8 Docker: Desktop (Windows) vs Engine (Linux VM)</h3>
+  <p><strong>Docker Desktop</strong> is for <strong>Windows and macOS</strong>. It is <strong>not</strong> what you install inside Ubuntu in VirtualBox.</p>
+  <p>Inside the VM, install <strong>Docker Engine + Docker Compose plugin</strong> using Docker’s Ubuntu guide (or copy <code>get-docker.sh</code> from <code>D:\downloads</code>). After install, <code>docker compose up -d</code> in carbon-gen and CarbonWMS works like on Windows Desktop.</p>
+  <div class="warn">
+    <strong>RAM:</strong> Postgres in Docker inside a 6–8 GB VM plus Cursor and Flutter is tight. If the VM swaps heavily, give the VM more RAM (when the host allows) or stop containers when not needed.
+  </div>
+  <p>Both projects use <strong>PostgreSQL 18</strong> images locally:</p>
+  <ul>
+    <li><strong>carbon-gen:</strong> <code>docker-compose.local.yml</code> → <code>postgres:18-alpine</code>, DB <code>postgres</code>, port <code>5432</code>.</li>
+    <li><strong>carbon-warehouse-management:</strong> <code>docker-compose.yml</code> → <code>postgres:18-alpine</code>, DB <code>carbon_wms</code>, port <code>5432</code>.</li>
+  </ul>
+  <p>Do not run both compose files at once if both map <code>5432:5432</code> unless you change the host port on one stack.</p>
+
+  <h3 id="docker-desktop-to-ubuntu">10.8b Docker Desktop (Windows, ~10 GB on D:) → Ubuntu VM</h3>
+  <p><strong>You do not migrate or “copy” Docker Desktop into Ubuntu.</strong> Docker Desktop is a <strong>Windows/macOS app</strong> with its own Linux VM (WSL2 or Hyper-V). Your Ubuntu VirtualBox guest is a <strong>separate</strong> Linux machine with its own Docker daemon (<strong>Docker Engine</strong>). Image layers and volumes from Desktop are <strong>not</strong> the same filesystem as inside Ubuntu — there is no supported drag-and-drop of Desktop’s internal disk into the guest.</p>
+  <div class="card">
+    <p><strong>What you actually do</strong></p>
+    <ol class="steps">
+      <li>In Ubuntu: install <strong>Docker Engine + Compose plugin</strong> (§10.8, Docker’s Ubuntu docs, or <code>get-docker.sh</code>).</li>
+      <li>Clone repos <strong>inside</strong> the VM and run <code>docker compose -f docker-compose.local.yml up -d</code> (carbon-gen) or the CarbonWMS compose file — Docker <strong>downloads</strong> <code>postgres:18-alpine</code> etc. again into the <strong>VM disk</strong>. Small download cost; same result as on Desktop.</li>
+      <li><strong>Database data:</strong> If you only used throwaway local Postgres, you need <strong>nothing</strong> from Desktop. If you have <strong>real data</strong> you must keep: on Windows, while the old container runs, run <code>pg_dump</code> to a file, copy the file into the VM (shared folder/USB), then <code>psql</code> / <code>pg_restore</code> into the new container. The guide already states this under <a href="#migration-move-policy">§15 — Checklist — Docker</a>.</li>
+      <li>When the VM workflow works: <strong>quit Docker Desktop</strong> on Windows or <strong>uninstall</strong> it to reclaim the ~10 GB (use Docker Desktop’s troubleshooting / “Clean / Purge data” if you want to free space before uninstall).</li>
+    </ol>
+  </div>
+  <div class="note" id="agent-briefing-docker">
+    <strong>For assistants / agents (copy as context):</strong> User has Docker Desktop on Windows consuming ~10 GB (may be on D:). Target state is <strong>Docker Engine inside Ubuntu VirtualBox</strong> for carbon-gen and CarbonWMS local Postgres. <em>Do not</em> instruct copying Docker Desktop’s VM disk or image store into Linux. <em>Do</em> instruct: install Docker Engine in Ubuntu; <code>docker compose up</code> to re-pull images; optional <code>pg_dump</code>/<code>pg_restore</code> for data migration; then uninstall Docker Desktop on Windows to reclaim space. Production databases live on <strong>Coolify</strong>, not on either Docker Desktop or the dev VM, unless explicitly testing against a dump.
+  </div>
+
+  <h3>10.9 Playwright (both repos)</h3>
+  <p>DevDependencies include <code>@playwright/test</code> / <code>playwright</code>. After <code>npm ci</code>, run <code>npx playwright install</code> <strong>inside Linux</strong> to pull browsers into the VM disk. Expect several hundred MB.</p>
+
+  <h3>10.10 PowerShell scripts on Linux</h3>
+  <p>carbon-gen’s <code>package.json</code> uses <code>powershell</code> for some scripts (<code>dev</code>, <code>db:local:*</code> helpers, etc.). On Ubuntu, either:</p>
+  <ul>
+    <li>Install <strong>PowerShell</strong> for Linux (<a href="https://learn.microsoft.com/powershell/scripting/install/install-ubuntu">Microsoft install guide</a>) and adjust paths if needed, or</li>
+    <li>Invoke the underlying tools directly (e.g. <code>npm run dev:raw</code> / <code>docker compose -f docker-compose.local.yml …</code>) instead of the PowerShell wrapper scripts.</li>
+  </ul>
+  <p>CarbonWMS <code>dev</code> uses <code>node scripts/run-next-dev.mjs</code> — no PowerShell required.</p>
+
+  <h2 id="sharing">11. Shared folders — stay off C:</h2>
+  <p><strong>Best for your goal:</strong> keep code <em>inside</em> the VM (<code>~/dev/...</code>) and use Git to push/pull. <strong>No shared folder required.</strong></p>
+  <p>If you must share files with Windows:</p>
+  <ol class="steps">
+    <li>Create <code>D:\DevShared\</code> on Windows.</li>
+    <li>VirtualBox → VM Settings → Shared Folders → add folder path <code>D:\DevShared</code>, name <code>devshared</code>, enable Auto-mount.</li>
+    <li>In Ubuntu, Guest Additions must be working. The share often appears under <code>/media/sf_devshared</code> (may need adding your user to the <code>vboxsf</code> group — search “VirtualBox vboxsf group Ubuntu”).</li>
+  </ol>
+  <div class="danger">
+    Do <strong>not</strong> add a shared folder pointing at <code>C:\</code> if your objective is to keep C: from growing. Point shares only at <strong>D:\…</strong>.
+  </div>
+
+  <h2 id="trouble">12. When something goes wrong</h2>
+  <table>
+    <thead><tr><th>Symptom</th><th>What to check</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>“VT-x is not available” / virtualization error</td>
+        <td>Enable virtualization in BIOS. Ensure no conflicting hypervisor feature blocks VirtualBox on your Windows edition.</td>
+      </tr>
+      <tr>
+        <td>VM is extremely slow</td>
+        <td>Lower display resolution; ensure Guest Additions installed; reduce VMs RAM if host is swapping; close Windows apps.</td>
+      </tr>
+      <tr>
+        <td>Host freezes when starting Android emulator inside VM</td>
+        <td>Expected on limited RAM. Use a <strong>physical device</strong> with USB debugging, or build without running an emulator inside the nested VM.</td>
+      </tr>
+      <tr>
+        <td><code>flutter doctor</code> cannot find Android SDK</td>
+        <td>Confirm <code>ANDROID_HOME</code> and <code>PATH</code> lines; reopen terminal; SDK installed via Studio or cmdline tools.</td>
+      </tr>
+      <tr>
+        <td>Shared folder empty or permission denied</td>
+        <td>Guest Additions installed? User in <code>vboxsf</code> group? Correct host path on D:?</td>
+      </tr>
+      <tr>
+        <td>Virtual disk fills up</td>
+        <td>Increase VDI size in VirtualBox Media Manager (and grow partition inside Linux) or prune <code>~/.gradle</code> / old SDK images in Android Studio SDK Manager.</td>
+      </tr>
+      <tr>
+        <td>Black screen after Ubuntu install</td>
+        <td>Increase video memory; try disabling 3D acceleration in VM display settings (trade-offs apply).</td>
+      </tr>
+      <tr>
+        <td><code>docker compose</code> not found in VM</td>
+        <td>Install Docker Engine <em>and</em> the compose plugin from Docker’s Ubuntu docs; log out/in after adding your user to the <code>docker</code> group.</td>
+      </tr>
+      <tr>
+        <td>Port 5432 already in use in VM</td>
+        <td>Only one stack can own host port 5432; stop the other compose project or change the published port in one <code>docker-compose</code> file.</td>
+      </tr>
+      <tr>
+        <td><code>git push</code> / clone fails (auth)</td>
+        <td>Set <code>user.name</code> / <code>user.email</code>; for HTTPS use a token; for SSH add <code>~/.ssh</code> key to GitHub/GitLab and test <code>ssh -T git@github.com</code>.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 id="carbon-stack">13. Carbon-gen &amp; CarbonWMS — stack, extensions, Docker</h2>
+  <p>This section is derived from the repos’ <code>package.json</code>, <code>docker-compose</code> files, <code>Dockerfile</code>, and <code>.vscode/extensions.json</code> (as of the last update to this guide).</p>
+
+  <h3 id="coolify-prod">13.0 Coolify — production hosting (carbon-gen &amp; CarbonWMS)</h3>
+  <p><strong>Coolify</strong> is the operational home for <strong>both</strong> Carbon web applications in production: your VPS runs the Coolify control plane, builds images from Git, runs containers behind <strong>Traefik</strong> (TLS, routes), and attaches <strong>managed PostgreSQL</strong> services. That environment is <em>not</em> the same as the Ubuntu VM’s local <code>docker compose</code> — the VM is for development; Coolify is for what customers and integrations hit on the public internet.</p>
+  <div class="card">
+    <p><strong>carbon-gen</strong> (e.g. <code>app.shopcarbon.com</code>):</p>
+    <ul>
+      <li><strong>Deploy:</strong> <code>npm run deploy:coolify</code> (see <code class="path">scripts/deploy-coolify.mjs</code>); optional <code class="path">.coolify-deploy.local.json</code> (gitignored) for webhook URL + API token; setup helper <code>npm run deploy:coolify:setup</code>.</li>
+      <li><strong>Database:</strong> Production Postgres is the Coolify-linked service; app env uses <code>DATABASE_URL</code>, <code>COOLIFY_DATABASE_URL</code>, and related vars (see <code class="path">lib/sqlDb.ts</code>, <code class="path">lib/authRepository.ts</code>).</li>
+      <li><strong>Health:</strong> Point Coolify / Docker healthchecks at <code>GET /api/health</code> (fast, no DB). Full ops notes: <code class="path">docs/coolify-runbook.md</code>.</li>
+      <li><strong>Scheduled work:</strong> Cron-style jobs can run as <strong>Coolify scheduled tasks</strong> or external HTTPS cron hitting public routes (see <code class="path">docs/CRON_SETUP.md</code>).</li>
+      <li><strong>Object storage:</strong> Cloudflare <strong>R2</strong> (S3-compatible) remains a separate service; only that CF surface is required for media, not Workers.</li>
+    </ul>
+    <p><strong>carbon-warehouse-management (CarbonWMS):</strong> Same <strong>Coolify + Postgres + container</strong> pattern on your stack — one Coolify app (or project) per service, healthcheck on a liveness-style HTTP path, env for DB URL and secrets. Flutter mobile builds still happen on your dev machine or CI; the Next/API backend ships like carbon-gen.</p>
+  </div>
+
+  <h3>13.1 carbon-gen (ShopCarbon / Next.js)</h3>
+  <table>
+    <thead><tr><th>Area</th><th>What the repo uses</th></tr></thead>
+    <tbody>
+      <tr><td>Runtime / framework</td><td>Next.js <strong>16.1.6</strong>, React <strong>19.2.3</strong>, TypeScript <strong>5</strong></td></tr>
+      <tr><td>Node (prod image)</td><td><strong>Node 20</strong> (<code>node:20-bookworm-slim</code> in <code>Dockerfile</code>)</td></tr>
+      <tr><td>Styling</td><td>Tailwind CSS <strong>4</strong></td></tr>
+      <tr><td>Lint</td><td>ESLint <strong>9</strong>, <code>eslint-config-next</code> <strong>16.1.6</strong></td></tr>
+      <tr><td>Local database</td><td>Docker: <code>postgres:18-alpine</code> via <code>docker-compose.local.yml</code></td></tr>
+      <tr><td>Production</td><td><strong>Coolify</strong> — Dockerfile → Next standalone container, Traefik ingress, linked Postgres (<code>DATABASE_URL</code> / <code>COOLIFY_DATABASE_URL</code>), <code>npm run deploy:coolify</code>, <code class="path">docs/coolify-runbook.md</code></td></tr>
+      <tr><td>E2E</td><td>Playwright <strong>^1.58.2</strong></td></tr>
+      <tr><td>Other notable tooling</td><td>R2 via AWS S3 SDK; many <code>.mjs</code> scripts</td></tr>
+      <tr><td>Recommended Cursor/VS Code extensions (<code>.vscode/extensions.json</code>)</td><td><code>github.copilot-chat</code>, <code>google.geminicodeassist</code>, <code>openai.chatgpt</code>, <code>beilunyang.cursor-rules</code> — availability may differ by editor/OS; install what the marketplace offers on Linux.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>13.2 carbon-warehouse-management (CarbonWMS — web + Flutter mobile)</h3>
+  <table>
+    <thead><tr><th>Area</th><th>What the repo uses</th></tr></thead>
+    <tbody>
+      <tr><td>Runtime / framework</td><td>Next.js <strong>16.2.1</strong>, React <strong>19.2.4</strong>, TypeScript <strong>5</strong></td></tr>
+      <tr><td>Node</td><td>Align with <strong>Node 20 LTS</strong> (same family as carbon-gen Docker)</td></tr>
+      <tr><td>DB migrations / scripts</td><td><code>tsx</code> for TypeScript CLI scripts</td></tr>
+      <tr><td>Local database</td><td>Docker: <code>postgres:18-alpine</code> via <code>docker-compose.yml</code>, database <code>carbon_wms</code></td></tr>
+      <tr><td>Production</td><td><strong>Coolify</strong> on the same VPS pattern as carbon-gen (container + linked Postgres + Traefik); configure healthchecks and env in the Coolify UI per app</td></tr>
+      <tr><td>E2E</td><td>Playwright <strong>^1.58.2</strong></td></tr>
+      <tr><td>Mobile app</td><td>Flutter project under <code>mobile/carbon_wms/</code> — Dart SDK <strong>^3.5.0</strong> in <code>pubspec.yaml</code></td></tr>
+      <tr><td>Recommended extensions</td><td><code>Dart-Code.dart-code</code>, <code>Dart-Code.flutter</code> (required for a good Flutter/Dart experience in Cursor)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>13.3 Docker Desktop (your Windows host) and this VM</h3>
+  <p>Keep using <strong>Docker Desktop on Windows</strong> for work you do directly on Windows. For development <strong>inside the Ubuntu VM</strong>, install <strong>Docker Engine</strong> — same <code>docker compose</code> CLI patterns, no need for Docker Desktop inside the guest.</p>
+  <div class="note">
+    Running <strong>Docker Desktop</strong> and <strong>VirtualBox</strong> together on Windows can interact with <strong>Hyper-V / WSL2 backend</strong> settings. If VirtualBox VMs fail to start with virtualization errors, search for your Windows build + “VirtualBox Docker Desktop” — you may need to adjust Windows features or VirtualBox version per Oracle’s release notes.
+  </div>
+
+  <h2 id="d-downloads">14. D:\downloads — pinned files for the Linux VM</h2>
+  <p>Copy these from Windows <code>D:\downloads</code> into the VM (shared folder on <strong>D:</strong>, USB, or drag-and-drop if Guest Additions supports it). Versions are chosen to match <strong>VirtualBox 7.2.6</strong>, <strong>Node 20</strong> (carbon-gen Docker), <strong>Flutter 3.41.6 stable</strong> (Linux), and current Android Studio / cmdline-tools links.</p>
+  <table>
+    <thead><tr><th>File (expected name)</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>VirtualBox-7.2.6a-172322-Win.exe</code></td><td>VirtualBox for Windows host</td></tr>
+      <tr><td><code>Oracle_VirtualBox_Extension_Pack-7.2.6.vbox-extpack</code></td><td>Extension Pack (match VB 7.2.6)</td></tr>
+      <tr><td><code>ubuntu-24.04.4-desktop-amd64.iso</code></td><td>Ubuntu installer (large; download if not already present)</td></tr>
+      <tr><td><code>flutter_linux_3.41.6-stable.tar.xz</code></td><td>Flutter SDK for Linux</td></tr>
+      <tr><td><code>android-studio-panda2-linux.tar.gz</code></td><td>Android Studio (optional; large)</td></tr>
+      <tr><td><code>commandlinetools-linux-14742923_latest.zip</code></td><td>Android SDK cmdline-tools</td></tr>
+      <tr><td><code>cursor-linux-x64.deb</code></td><td>Cursor for Ubuntu/Debian</td></tr>
+      <tr><td><code>anydesk_8.0.2_amd64.deb</code></td><td>AnyDesk remote desktop (Ubuntu amd64); install notes in <code>ANYDESK-README.txt</code></td></tr>
+      <tr><td><code>node-v20.20.2-linux-x64.tar.xz</code></td><td>Node 20 LTS — matches carbon-gen <code>node:20</code> image</td></tr>
+      <tr><td><code>virtualbox-7.2_7.2.6-172322~Ubuntu~noble_amd64.deb</code></td><td>VirtualBox <strong>for Ubuntu-as-host</strong> only; skip inside the VM — use <strong>Guest Additions</strong> from VirtualBox’s menu instead</td></tr>
+      <tr><td><code>get-docker.sh</code></td><td>Docker Engine convenience installer (review before <code>sudo sh</code>)</td></tr>
+      <tr><td><em>(no extra file)</em></td><td><strong>Git</strong> — install with <code>sudo apt install git</code> (already in §10.1). On Windows host only, optional: <a href="https://git-scm.com/download/win">Git for Windows</a> installer.</td></tr>
+      <tr><td><code>REF-*.html</code></td><td>Saved copies of vendor documentation pages for offline reading</td></tr>
+      <tr><td><code>REF-docker-engine-install-ubuntu.html</code></td><td>Docker’s “Install Docker Engine on Ubuntu” page (for the VM)</td></tr>
+      <tr><td><code>Docker Desktop Installer.exe</code> (if already on your PC)</td><td><strong>Windows only</strong> — keep using this on the host; do not substitute it for Linux inside the VM</td></tr>
+    </tbody>
+  </table>
+
+  <div class="ok">
+    <strong>Summary:</strong> Your D: drive is large enough for a generous dynamic VDI and all dev artifacts. VirtualBox + Ubuntu LTS + Cursor + Flutter + Android Studio + <strong>Node 20</strong> + <strong>Docker Engine</strong> covers local development for carbon-gen and CarbonWMS; <strong>Coolify</strong> on your VPS runs production for both. With ~16 GB host RAM, size the VM at <strong>6–8 GB RAM</strong>, prefer <strong>physical Android devices</strong> over nested emulators, and avoid <strong>any shared folder on C:</strong> if you want Windows C: to stay clean.
+  </div>
+
+  <footer>
+    This file is a static guide only. Versions and download URLs change; always verify on the vendor’s site. Disk and RAM numbers were captured from your system at guide creation time — re-check before allocating VM disk size. carbon-gen / carbon-warehouse-management stack tables reflect <code>package.json</code>, Docker compose, and <code>.vscode/extensions.json</code> in those repos as of the last guide edit. Production deployment for carbon-gen is documented in-repo in <code class="path">docs/coolify-runbook.md</code> and related deploy scripts; CarbonWMS follows the same Coolify operational model on your server.
+  </footer>
+</body>
+</html>

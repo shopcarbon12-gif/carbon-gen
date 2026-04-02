@@ -1,6 +1,22 @@
 # C:\ Drive Migration Report
 
-**Date:** March 13, 2026
+**Date:** March 13, 2026  
+**Updated:** April 2, 2026 — scope clarified for agents (see “For AI assistants”)
+
+**Scope of this file (strict):** Windows **only** — moving **Cursor / Codex / `.cursor`** usage off **`C:\`** onto **`D:\`**, shortcuts, and `CODEX_HOME`.  
+**Not in scope:** VirtualBox, Ubuntu, Docker Engine, git clone into a VM, or Coolify. For **all of that**, the canonical document is:
+
+- **`docs/virtualbox-linux-cursor-flutter-android-guide.html`** (open in browser; read **`#agent-directive`** first)
+
+There is also a copy-paste agent contract: **`docs/AGENT_HANDOFF_VIRTUALBOX_LINUX.md`**.
+
+---
+
+## For AI assistants
+
+- If the user’s question is **VM + Ubuntu + Carbon repos + Docker in Linux + production Coolify**, **do not** answer from this markdown alone. Open the **HTML guide** above and follow its phases and prohibitions (especially: no Docker Desktop → VM disk copy; production is Coolify; dev Postgres is `docker compose` in the VM).
+- If the question is **only** finishing **Cursor on D:** / **cleanup-cursor-from-c.ps1** / **CODEX_HOME**, use **this file** and the script paths below.
+- **Never** merge the two documents into one improvised plan.
 
 ---
 
@@ -55,3 +71,20 @@
 - **CODEX_HOME** = `D:\.codex` (set in user environment)
 - **Cursor** = `D:\cursor\Cursor.exe` with `--default-data-dir "D:\CursorData"`
 - **Shortcut** = Desktop shortcut "Cursor (D-Drive)"
+
+---
+
+## VirtualBox + Ubuntu + Cursor + Flutter (canonical guide)
+
+**The full VM migration report and step-by-step plan are only in the HTML guide:**
+
+- **`docs/virtualbox-linux-cursor-flutter-android-guide.html`**
+- Section **`#agent-directive`** — document hierarchy + hard prohibitions for assistants
+- **`docs/AGENT_HANDOFF_VIRTUALBOX_LINUX.md`** — master prompt to paste into a new agent chat
+
+Open the HTML in a browser (path depends on your clone; example):  
+`file:///…/carbon-gen/docs/virtualbox-linux-cursor-flutter-android-guide.html`
+
+It includes Phases A–H, **§10.8b Docker Desktop vs Ubuntu Engine**, **§13.0 Coolify (production)**, **§15 move checklist**, and stack tables for carbon-gen / CarbonWMS.
+
+**This markdown file** stays limited to **Windows Cursor / Codex / `.cursor` relocation to D:**. When daily development moves to **Linux Cursor in the VM**, treat this file as **host-side legacy** and follow the HTML guide §15 for editor migration.
