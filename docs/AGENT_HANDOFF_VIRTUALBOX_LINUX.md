@@ -26,6 +26,14 @@
 
 ---
 
+## If `git pull` on the VM refuses (common after copying from a share)
+
+- **`docs/virtualbox-linux-cursor-flutter-android-guide.html` untracked:** Git will not overwrite it with the tracked version. **Rename or move** it aside (e.g. `/tmp/virtualbox-guide.pre-pull.bak`), then `git pull`.
+- **`C_DRIVE_MIGRATION_REPORT.md` modified locally:** Discard VM-only edits with `git checkout -- C_DRIVE_MIGRATION_REPORT.md` if you want the repo copy, **or** `git stash push -m vm` first, then pull, then inspect stash.
+- **Clean tree = match GitHub exactly:** only after backups: `git fetch origin && git reset --hard origin/main` (discards **all** local commits and uncommitted changes in that clone — do not run casually).
+
+---
+
 ## Master prompt (copy everything inside the fence)
 
 ```
