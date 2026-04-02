@@ -246,6 +246,7 @@
         <li><strong>Separate production from dev:</strong> Live sites and prod Postgres are on <strong>Coolify</strong> (VPS). VM <code>docker compose</code> is <strong>local dev only</strong> — <a href="#coolify-prod">§13.0</a>.</li>
         <li><strong>One Postgres port in the VM:</strong> carbon-gen and CarbonWMS compose both use host <code>5432</code> by default — do not run both stacks simultaneously without changing one published port.</li>
         <li><strong>Guest Additions source:</strong> Use <strong>Devices → Insert Guest Additions CD</strong> from the host VirtualBox version; do not install <code>virtualbox-*_Ubuntu_*_amd64.deb</code> from <code>D:\downloads</code> <em>inside the guest</em> (wrong use case).</li>
+        <li><strong>No premature deletion on Windows:</strong> Do <strong>not</strong> advise deleting Windows project trees (or “move = delete”) until the user has <strong>fully verified</strong> the Linux workflow. Required sequence: <strong>zip-archive everything to D:</strong> (dated archives), keep originals until sign-off — <a href="#archive-policy">§15 archive policy</a>.</li>
       </ul>
       <p><strong>Copy-paste prompt for another session:</strong> use the full text in <code class="path">docs/AGENT_HANDOFF_VIRTUALBOX_LINUX.md</code> (same repo).</p>
     </div>
@@ -260,6 +261,7 @@
       <li><strong>Linux-native dev stack in Ubuntu.</strong> Run <strong>Node, Docker Engine, Flutter, Android tooling, builds</strong> in the guest so <code>node_modules</code> and Docker images grow <strong>inside the VDI</strong>, not on Windows C:.</li>
       <li><strong>Cursor only in Ubuntu.</strong> Use <strong>Cursor for Linux inside the VM</strong> for daily Carbon work so Windows C: does not absorb Cursor caches. After that habit sticks, you can uninstall or stop using Cursor on Windows (see §15).</li>
       <li><strong>Production = Coolify (VPS).</strong> The live sites for carbon-gen and CarbonWMS run as Coolify-managed containers with linked Postgres and Traefik — not as “whatever is in your VM.” After <code>git push</code>, deploy from your Coolify workflow (see <a href="#coolify-prod">§13.0</a>).</li>
+      <li><strong>Archive on D:, do not delete early.</strong> When retiring Windows working copies, <strong>zip-archive everything to D:</strong> (dated archives) before any deletion. Keep originals until Linux is fully verified — <a href="#archive-policy">§15</a>.</li>
     </ol>
 
     <div class="warn"><strong>Deleting the VM disk is not “like clearing a cache.”</strong> Removing the <code>.vdi</code> deletes the whole guest — including any work not pushed to Git. Snapshots help rollback; <strong>Git + push</strong> protects your app and site source.</div>
@@ -394,7 +396,7 @@ sudo ./VBoxLinuxAdditions.run</pre>
     </table>
 
     <h3>Phase F — Shared folders = <em>transport only</em> (not your final workspace)</h3>
-    <p><strong>Your goal is a true <em>move</em> to Linux:</strong> project files, Cursor usage, and Docker-based dev should ultimately live <strong>only</strong> inside the VM disk (e.g. under <code>~/dev/</code>, <code>~/.config/</code>), <strong>not</strong> mirrored from Windows and <strong>not</strong> via junctions/symlinks on the host. Shared folders are a <strong>temporary pipe</strong> to copy data in; after you verify builds on Linux, you <strong>delete or archive</strong> the old Windows copies (see <a href="#migration-move-policy">§15 — Move checklist</a>).</p>
+    <p><strong>Your goal is a true <em>move</em> to Linux:</strong> project files, Cursor usage, and Docker-based dev should ultimately live <strong>only</strong> inside the VM disk (e.g. under <code>~/dev/</code>, <code>~/.config/</code>), <strong>not</strong> mirrored from Windows and <strong>not</strong> via junctions/symlinks on the host. Shared folders are a <strong>temporary pipe</strong> to copy data in; after Linux builds work, you <strong>zip-archive the Windows trees to D:</strong> and keep them until full verification — <strong>do not delete</strong> Windows originals early (see <a href="#archive-policy">§15 archive policy</a>).</p>
     <p><strong>Option 1 (simplest):</strong> In VirtualBox <strong>Settings → Shared Folders</strong>, add <strong>Folder Path</strong> <code class="path">D:\downloads</code>, <strong>Folder Name</strong> <code>downloads</code>, <strong>Auto-mount</strong> + <strong>Make Permanent</strong>. Typical mount: <code class="path">/media/sf_downloads</code>. Use it to <strong>copy</strong> installers into the guest (e.g. <code>~/installers</code> or <code>/opt</code>), not to build daily from the share.</p>
     <p><strong>Option 2:</strong> Create <code class="path">D:\DevShared</code>, share it as <code>devshared</code>, and copy only the smaller Linux installers into it from <code>D:\downloads</code>.</p>
     <p>Files you will use <strong>inside Linux</strong> from the share: <code>node-v20.20.2-linux-x64.tar.xz</code>, <code>flutter_linux_3.41.6-stable.tar.xz</code>, <code>cursor-linux-x64.deb</code>, <code>anydesk_8.0.2_amd64.deb</code> (remote desktop), <code>commandlinetools-linux-14742923_latest.zip</code>, optional <code>android-studio-panda2-linux.tar.gz</code>, <code>get-docker.sh</code>. See <code>D:\downloads\ANYDESK-README.txt</code> for AnyDesk install commands. <strong>Do not</strong> install <code>virtualbox-7.2_…noble_amd64.deb</code> inside the guest — that is for running VirtualBox on bare-metal Ubuntu, not for a VM guest.</p>
@@ -414,8 +416,8 @@ sudo ./VBoxLinuxAdditions.run</pre>
     </ol>
 
     <h3>Phase H — Put carbon-gen &amp; CarbonWMS into the VM (then <em>move</em>, don’t mirror)</h3>
-    <p><strong>Best method (clean):</strong> In Ubuntu, <code>mkdir -p ~/dev</code> and <strong>git clone</strong> from your remote (§10.2). That creates a <strong>single</strong> home on Linux; you then <strong>stop using</strong> the Windows trees and remove them when ready (§15).</p>
-    <p><strong>Copy method (one-time import):</strong> Use shared folder <code>myprojects</code> → <code>/media/sf_myprojects</code> only to <code>cp -a</code> (or <code>rsync -a</code>) into <code>~/dev/carbon-gen</code> and <code>~/dev/carbon-warehouse-management</code>. Remove <code>node_modules</code> before or after copy; run <code>npm ci</code> on Linux. <strong>Do not</strong> keep editing the copy under <code>/media/sf_*</code> as your daily workspace — that would be <em>mirroring</em> Windows. After <code>npm run build</code> / smoke tests pass, follow §15 to delete Windows originals.</p>
+    <p><strong>Best method (clean):</strong> In Ubuntu, <code>mkdir -p ~/dev</code> and <strong>git clone</strong> from your remote (§10.2). That creates a <strong>single</strong> home on Linux; you then <strong>stop using</strong> the Windows trees for daily work and <strong>archive them to D:</strong> as zip when ready — <strong>no deletion</strong> on Windows until §15 verification sign-off.</p>
+    <p><strong>Copy method (one-time import):</strong> Use shared folder <code>myprojects</code> → <code>/media/sf_myprojects</code> only to <code>cp -a</code> (or <code>rsync -a</code>) into <code>~/dev/carbon-gen</code> and <code>~/dev/carbon-warehouse-management</code>. Remove <code>node_modules</code> before or after copy; run <code>npm ci</code> on Linux. <strong>Do not</strong> keep editing the copy under <code>/media/sf_*</code> as your daily workspace — that would be <em>mirroring</em> Windows. After <code>npm run build</code> / smoke tests pass, follow §15: <strong>zip-archive Windows originals to D:</strong>, do not delete yet.</p>
     <div class="warn"><strong>Port conflict:</strong> Both repos use Postgres on host port <strong>5432</strong> in their compose files. Do not run both stacks at once unless you change one file to e.g. <code>5433:5432</code>.</div>
 
     <div class="stop-here">
@@ -425,11 +427,15 @@ sudo ./VBoxLinuxAdditions.run</pre>
 
   <section class="runbook" id="migration-move-policy" aria-labelledby="migration-title" style="border-color: var(--ok);">
     <h2 id="migration-title">§15 — Move everything to Linux (not mirror, not junction)</h2>
-    <p>Use this checklist when Linux is installed and tooling works. Goal: <strong>canonical</strong> copies on the <strong>guest disk</strong> only; Windows folders are <strong>removed or archived</strong> after you verify — no ongoing sync, no host junctions pointing at project roots.</p>
+    <p>Use this checklist when Linux is installed and tooling works. Goal: <strong>canonical</strong> copies on the <strong>guest disk</strong> only; <strong>no ongoing sync</strong>, no host junctions pointing at project roots.</p>
+
+    <div class="ok" id="archive-policy">
+      <strong>Archive first — no deletion until verified (locked policy).</strong> You are <strong>not</strong> deleting Windows project folders as the default next step. After Linux smoke tests pass, <strong>zip-archive the full Windows trees</strong> (carbon-gen, CarbonWMS, and anything else you rely on) to <strong>D:</strong>, e.g. <code class="path">D:\archive-pre-linux-verify\</code> with <strong>dated</strong> names (<code>carbon-gen-YYYY-MM-DD.zip</code>, <code>carbon-wms-YYYY-MM-DD.zip</code>). Keep the originals on disk until you have <strong>explicitly confirmed</strong> everything behaves as expected in the VM (and backups are tested if you care). Only then may you delete Windows copies — or keep the zips indefinitely. Assistants must <strong>not</strong> recommend deleting before this archive + verification step.
+    </div>
 
     <h3>What “move” means here</h3>
     <ul>
-      <li><strong>Move</strong> = copy into the VM filesystem → verify (build, tests, Docker compose, Cursor opens repo) → then delete or zip-archive the old Windows path.</li>
+      <li><strong>Move</strong> = copy into the VM filesystem → verify (build, tests, Docker compose, Cursor opens repo) → <strong>zip-archive</strong> old Windows paths to <strong>D:</strong> → only after full verification, optionally delete originals (or keep zips only).</li>
       <li><strong>Not mirror:</strong> Don’t treat <code>/media/sf_downloads</code> or <code>/media/sf_myprojects</code> as the place you <code>git commit</code> every day; copy <em>out</em> to <code>~/dev/…</code> first.</li>
       <li><strong>Not junction/symlink on Windows:</strong> No NTFS junction from <code>C:\…</code> to <code>D:\Projects\…</code> as a substitute for living on Linux — you want data <em>inside</em> the <code>.vdi</code>.</li>
     </ul>
@@ -439,8 +445,8 @@ sudo ./VBoxLinuxAdditions.run</pre>
       <li>Ensure trees live under e.g. <code>~/dev/carbon-gen</code>, <code>~/dev/carbon-warehouse-management</code>, and any other repos under <code>~/dev/&lt;name&gt;</code>.</li>
       <li>Fresh <code>npm ci</code> (and <code>flutter pub get</code> for WMS mobile) on Linux; fix any env files (<code>.env</code>, <code>.env.local</code>) from templates — <strong>do not commit secrets</strong>.</li>
       <li>Run smoke checks (e.g. <code>npm run dev</code>, <code>docker compose up</code>, <code>flutter doctor</code>) from the <strong>Linux</strong> paths only.</li>
-      <li>Optional: zip backup of old Windows folders to <code>D:\backup-pre-linux-migration\</code> dated.</li>
-      <li>When satisfied, <strong>delete</strong> (or keep only the zip) <code>D:\Projects\My project\carbon-gen</code>, <code>…\carbon-warehouse-management</code>, and other migrated repos on Windows.</li>
+      <li><strong>Required:</strong> Create <code class="path">D:\archive-pre-linux-verify\</code> (or similar on <strong>D:</strong>). <strong>Zip-archive</strong> each Windows project tree you are retiring from daily use — full folders, not cherry-pick — with <strong>date in the filename</strong>. This is your safety net until verification is complete.</li>
+      <li><strong>Do not delete</strong> <code>D:\Projects\My project\carbon-gen</code>, <code>…\carbon-warehouse-management</code>, or other migrated repos on Windows until you have <strong>finished verifying</strong> Linux and are satisfied the zips are good. After sign-off, you may delete originals, or keep both zips and folders until disk pressure forces a choice.</li>
       <li>Remove or disable VirtualBox <strong>shared folders</strong> for those paths if you no longer need import (optional cleanup).</li>
     </ol>
 

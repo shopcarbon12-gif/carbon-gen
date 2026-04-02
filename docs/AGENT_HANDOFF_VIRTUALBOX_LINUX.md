@@ -8,7 +8,7 @@
 
 | If the user asks about… | Open and follow… |
 |-------------------------|------------------|
-| Ubuntu VM, VirtualBox, Guest Additions, toolchain (Node 20, Flutter, Android), **Docker Engine in Linux**, git clone into VM, move vs mirror, §15 checklist, **Coolify vs local Docker** | `docs/virtualbox-linux-cursor-flutter-android-guide.html` — especially `#agent-directive`, `#start-here`, `#docker-desktop-to-ubuntu`, `#coolify-prod`, `#migration-move-policy` |
+| Ubuntu VM, VirtualBox, Guest Additions, toolchain (Node 20, Flutter, Android), **Docker Engine in Linux**, git clone into VM, move vs mirror, §15 checklist, **archive-to-D-before-delete**, **Coolify vs local Docker** | `docs/virtualbox-linux-cursor-flutter-android-guide.html` — especially `#agent-directive`, `#archive-policy`, `#start-here`, `#docker-desktop-to-ubuntu`, `#coolify-prod`, `#migration-move-policy` |
 | Moving **Windows Cursor / Codex / `.cursor`** off **C:\\** to **D:\\**, shortcuts, `CODEX_HOME`, `cleanup-cursor-from-c.ps1` | `C_DRIVE_MIGRATION_REPORT.md` (repo **root**) |
 
 **Never** treat `C_DRIVE_MIGRATION_REPORT.md` as the VM migration plan. **Never** invent steps that are not in the HTML guide for VM work.
@@ -23,6 +23,7 @@
 4. **Production:** **Coolify** (VPS) runs production Next + linked Postgres. VM `docker compose` is **local dev only**.
 5. **Port 5432:** carbon-gen and CarbonWMS default compose both map **5432** — do not run both at once without changing one host port.
 6. **Guest Additions:** From host menu **Insert Guest Additions CD**; do **not** install `virtualbox-*_Ubuntu_*_amd64.deb` from downloads **inside the guest** for GA (wrong package purpose).
+7. **Windows originals:** Do **not** advise **deleting** Windows project folders until the user has **zip-archived** them to **D:** (e.g. `D:\archive-pre-linux-verify\`, dated zip names) **and** fully verified the Linux VM workflow. Default = **archive, not delete**.
 
 ---
 
@@ -42,7 +43,7 @@ You are helping migrate Carbon development to Ubuntu inside VirtualBox on Window
 AUTHORITATIVE DOCS (do not substitute):
 1) VM + toolchain + Docker Engine + move policy + Coolify context:
    carbon-gen repo → docs/virtualbox-linux-cursor-flutter-android-guide.html
-   Read #agent-directive, #canonical-plan, #start-here (Phases A–H), #docker-desktop-to-ubuntu, #coolify-prod, #migration-move-policy.
+   Read #agent-directive, #archive-policy, #canonical-plan, #start-here (Phases A–H), #docker-desktop-to-ubuntu, #coolify-prod, #migration-move-policy.
 2) Windows-only: Cursor/Codex/.cursor off C:\ onto D:\:
    carbon-gen repo root → C_DRIVE_MIGRATION_REPORT.md
    Use this ONLY for that Windows cleanup — NOT for the Ubuntu VM plan.
@@ -54,6 +55,7 @@ STRICT PROHIBITIONS:
 - Do NOT confuse Coolify production (VPS) with VM docker compose (local dev).
 - Do NOT run carbon-gen and CarbonWMS compose both on host port 5432 without changing one file.
 - Do NOT install Ubuntu-host VirtualBox .deb inside the guest for Guest Additions; use Insert Guest Additions CD from the Windows host.
+- Do NOT advise deleting Windows project trees before: (1) full zip archives on D: (e.g. D:\archive-pre-linux-verify\ with dated zips), (2) user verification that Linux dev matches expectations. Archive first; delete only after explicit sign-off.
 
 WHEN ADVISING: Quote or paraphrase the relevant section of the HTML guide; if the question is only Windows Cursor on D:, use C_DRIVE_MIGRATION_REPORT.md only.
 
