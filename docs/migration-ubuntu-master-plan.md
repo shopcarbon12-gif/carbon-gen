@@ -2,7 +2,35 @@
 
 **Status:** Documentation for your review. **Do not execute** backup, sync, uninstall, or deletes until **you** explicitly approve each phase.
 
-**Goals (your words summarized):** Keep **all Cursor transcripts** and profile data in backups; keep **project archives separate** from Cursor zips (except where Cursor/other apps naturally mix inside profile folders); mirror **`D:\backup c`** to Ubuntu; run **carbon-gen** at **localhost:3000** and **carbon-warehouse-management** (CarbonWMS) at **localhost:3040** under **`/home/eliorp1/dev/...`**; bring **every tree under `D:\Projects`** along in backups and Ubuntu planning (git or not); **no junctions, no mirrors** on Windows; **one Cursor** on Ubuntu only; eventually **clean the Windows PC** of dev tooling once Ubuntu is 100% trusted (personal scope, see §8).
+**Goals (your words summarized):** Keep **all Cursor transcripts** and profile data in backups; keep **project archives separate** from Cursor zips (except where Cursor/other apps naturally mix inside profile folders); mirror **`D:\backup c`** to Ubuntu; run **carbon-gen** at **localhost:3000** and **carbon-warehouse-management** (CarbonWMS) at **localhost:3040** under **`/home/eliorp1/dev/...`**; include **`D:\Projects`** in backups (the two active repos under **`My project`**, plus **`carbon-gen-backups-outside`** and any loose zips/scripts you keep); **no junctions, no mirrors** on Windows; **one Cursor** on Ubuntu only; eventually **clean the Windows PC** of dev tooling once Ubuntu is 100% trusted (personal scope, see §8).
+
+---
+
+## Current state — please review (aligned with disk, 2026-04)
+
+This section is the **snapshot** you asked for; if your folders change, update this block.
+
+### `D:\Projects\My project\` (expected contents)
+
+| Name | Role |
+|------|------|
+| **`carbon-gen\`** | Git repo → `shopcarbon12-gif/carbon-gen`, **`main`**. Single canonical Next.js tree. Accessibility, Instagram-style widget, Shopify collection mapping, and similar features live **inside** this repo (e.g. `app/accessibility\`), not in sibling copies. |
+| **`carbon-warehouse-management\`** | Git repo → `shopcarbon12-gif/carbon-warehouse-management`, **`main`**. CarbonWMS. |
+| **`carbon-gen-backup-2026-03-02_*.zip`** (if present) | Optional local snapshots; keep until you no longer need recovery from that date. |
+| **`vscode-migration-beginner-guide.ts`** (if present) | Loose file; backup or delete per your preference — not part of either repo unless you move it. |
+
+**No longer on disk (removed by choice):** full-copy sandboxes **`carbon-gen-side-accessibility`**, **`carbon-gen-side-accessibility-2`**, and their **`.zip`** archives; plus **`shop-carbon-app`**, **`shopify-ai-backend`**, **`carbon-gen1`**, **`carbon-stu`**, **`cursor-safe-archive`**, **`gemini old studio`**, **`Gemini Studio`**, **`User`**, **`.tmp_empty_delete`**. Those were used historically so alternate UIs would not affect the main theme; going forward the plan assumes **one `carbon-gen` clone** and isolation via **routes/branches**, not duplicate project roots.
+
+### `D:\Projects\` (outside `My project`)
+
+| Name | Role |
+|------|------|
+| **`carbon-gen-backups-outside\`** | e.g. dated source trees without `.git` — still **mirror** with backups / Ubuntu prep. |
+
+### Dev workflow (reference)
+
+- **Prefer:** feature branches, or clearly scoped routes/components under **`carbon-gen`**, so `localhost:3000` always reflects one tree.
+- **Avoid:** copying the whole repo to a sibling folder unless you have a rare, time-boxed reason — it complicates git state and backups.
 
 ---
 
@@ -12,7 +40,7 @@ On your machine, **`D:\Projects`** currently has **two** top-level entries:
 
 | Top-level folder | Typical role |
 |------------------|--------------|
-| **`D:\Projects\My project\`** | Active repos only (see inventory); duplicate full-copy sandboxes were removed after you consolidated work into **carbon-gen**. |
+| **`D:\Projects\My project\`** | **Two** git repos + optional zips/scripts (see **Current state**). |
 | **`D:\Projects\carbon-gen-backups-outside\`** | e.g. dated snapshot folder(s) without `.git` — still **copy** into `D:\backup c\...` or mirror to Ubuntu as part of “everything on D: that matters.” |
 
 There is **no** requirement that every folder be a git repo. Non-git trees still move via **robocopy / zip / rsync** like any other project backup.
@@ -27,26 +55,24 @@ There is **no** requirement that every folder be a git repo. Non-git trees still
 | **CarbonWMS** | `D:\Projects\My project\carbon-warehouse-management` | `/home/eliorp1/dev/carbon-warehouse-management` | **http://localhost:3040** |
 | **Full backup mirror** | `D:\backup c\` (entire tree) | `/home/eliorp1/backup-from-windows-c/` | (not a web app) |
 
-**Other repos / folders** under `D:\Projects\My project\` (see inventory) can use **`/home/eliorp1/dev/<folder-name>`** (or a subfolder you prefer) once you decide which you run on Ubuntu day to day.
+**Loose files** under `My project` (zips, scripts) do not need a separate Ubuntu dev path unless you unpack them on purpose.
 
 **Mirror (this plan):** means **file copy or sync** (e.g. `rsync`, `scp -r`, shared folder + copy) so Ubuntu holds a **duplicate** of the backup tree as of the last sync. It is **not** a Windows **junction**, **symlink**, or other “one path points at another” trick — those are unrelated.
 
 ---
 
-## Inventory: everything under `D:\Projects\My project\`
+## Inventory: git repos and extras (summary)
 
-Use this as the **checklist** for backups, Ubuntu layout, and **Phase 0** git hygiene. Rows reflect an **automated scan** of the disk layout and `git` metadata; **re-run** `git status` / `git remote -v` before you cut over.
+Use this as the **checklist** for backups, Ubuntu layout, and **Phase 0** git hygiene. **Re-run** `git status` / `git remote -v` before cutover. Details and rationale are in **Current state** above.
 
-| Folder | Git | Remote / branch (when present) | Notes |
-|--------|-----|--------------------------------|--------|
-| **carbon-gen** | Yes | `origin` → `shopcarbon12-gif/carbon-gen`, **main** | Primary Next.js app; **deploy:** `npm run deploy:coolify` (with env gate per repo docs). Accessibility / widget / collection-mapping work lives here (e.g. `app/accessibility`); no separate sibling clone required. |
-| **carbon-warehouse-management** | Yes | `origin` → `shopcarbon12-gif/carbon-warehouse-management`, **main** | CarbonWMS; deploy per that repo (Coolify/README). |
+| Folder | Git | Remote / branch | Notes |
+|--------|-----|-----------------|--------|
+| **carbon-gen** | Yes | `origin` → `shopcarbon12-gif/carbon-gen`, **main** | **Deploy:** `npm run deploy:coolify` (env gate per repo docs). |
+| **carbon-warehouse-management** | Yes | `origin` → `shopcarbon12-gif/carbon-warehouse-management`, **main** | Deploy per that repo (Coolify/README). |
 
-**Removed from disk (your choice, 2026-04):** full-copy sandboxes used so alternate UIs would not affect the main theme — **`carbon-gen-side-accessibility`**, **`carbon-gen-side-accessibility-2`**, plus **`shop-carbon-app`**, **`shopify-ai-backend`**, **`carbon-gen1`**, **`carbon-stu`**, **`cursor-safe-archive`**, **`gemini old studio`**, **`Gemini Studio`**, **`User`**, **`.tmp_empty_delete`**, and the **`carbon-gen-side-accessibility*.zip`** archives. If anything was never pushed to GitHub, it existed only in those trees (now gone).
+**Also plan backups for:** **`D:\Projects\carbon-gen-backups-outside\`** (non-git snapshots); optional **`carbon-gen-backup-*.zip`** and other loose files under **`My project`** if you still keep them there.
 
-You may still have **other** files under `My project` (e.g. dated **`carbon-gen-backup-*.zip`**, loose scripts); include or exclude from backups as you prefer.
-
-**`D:\Projects\carbon-gen-backups-outside\`:** e.g. **`carbon-gen-src-20260213-125031`** — **no `.git`** in scan; **copy** with other backups.
+**Historical (removed 2026-04):** duplicate **`carbon-gen`** sandboxes and other folders listed in **Current state** — not part of migration scope anymore.
 
 ---
 
@@ -86,7 +112,7 @@ Windows backups are mirrored on this machine at:
 Use it as the canonical offline reference for:
   - Cursor profile / transcript archives: backup-from-windows-c/archives/ (e.g. AppData-Roaming-Cursor.zip, UserProfile-dot-cursor.zip)
   - Project zip/trees if present: backup-from-windows-c/project-repos/ (and archives under it) or any project zips under archives/projects/
-  - Any full-folder copies of D:\Projects\My project (if you mirrored them under backup-from-windows-c or elsewhere)
+  - Optional: full-folder copy of D:\Projects\My project (e.g. if you zipped the folder for zips/extras beyond the two repos)
 
 Do not delete or rewrite files there unless I explicitly ask. For day-to-day work, prefer /home/eliorp1/dev/... for repos you actively develop (e.g. carbon-gen, carbon-warehouse-management) after restore/clone.
 ```
@@ -97,15 +123,15 @@ Adjust subpaths if your sync layout differs.
 
 ## Phase 0 — Pre-flight (before any backup)
 
-Run **for every git repo** you care about, and **list** non-git folders for manual copy:
+Run for **both** repos (**carbon-gen**, **carbon-warehouse-management**) and note any **non-git** trees you still mirror (**`carbon-gen-backups-outside`**, optional zips):
 
 | Check | Why |
 |--------|-----|
 | `git status` | Know WIP vs clean. |
-| Unpushed commits vs `origin` | Ubuntu `git clone` sees **remote**, not unpushed local commits. **No remote** = nothing to push until you **`git remote add`**. |
-| **Coolify / production** | When you request it, **commit**, **push**, and **`npm run deploy:coolify`** (carbon-gen) or the **warehouse** equivalent so **web/apps** match **origin** and production is current. **Side branches** and **local-only repos** may have **no** deploy step. |
-| **Flutter / other apps** | If Flutter (or other) roots live elsewhere, repeat checks there. |
-| **Secrets** | `.env.local` etc. — copy securely to Ubuntu; never commit. **Scan** untracked files for tokens before zipping or uploading. |
+| Unpushed commits vs `origin` | Ubuntu `git clone` sees **remote**, not unpushed local commits. |
+| **Coolify / production** | When you request it: **commit**, **push**, **`npm run deploy:coolify`** (carbon-gen) or warehouse equivalent so production matches **origin**. |
+| **Flutter / other apps** | If Flutter (or other) roots live outside this inventory, repeat checks there. |
+| **Secrets** | `.env.local` etc. — copy securely to Ubuntu; never commit. |
 
 ---
 
@@ -123,7 +149,7 @@ Run **for every git repo** you care about, and **list** non-git folders for manu
 - Defaults: **`D:\Projects\My project\carbon-gen`**, **`D:\Projects\My project\carbon-warehouse-management`**
 - Default output root **`D:\backup c\project-repos\`** (override with **`-BackupRoot`** if you want another folder under `D:\backup c`).
 - By default **excludes** `node_modules`, `.next`, etc. (use **`-FullTree`** if you insist on everything).
-- **To include all other `D:\Projects\...` trees:** add paths to this script over time, or run a **separate** full-folder copy of **`D:\Projects\My project`** and **`D:\Projects\carbon-gen-backups-outside`** into `D:\backup c\` (or straight to Ubuntu).
+- **Optional:** copy **`D:\Projects\carbon-gen-backups-outside`** and any **`carbon-gen-backup-*.zip`** (or all of **`My project`**) into `D:\backup c\` or straight to Ubuntu if you want them beside the scripted repo zips.
 
 ---
 
@@ -145,7 +171,7 @@ Again: **mirror = duplicate files by copying/syncing**, not a junction or symlin
 
 ## Phase 4 — Ubuntu dev dirs and **localhost:3000** / **3040**
 
-1. Place working copies under **`/home/eliorp1/dev/carbon-gen`** and **`/home/eliorp1/dev/carbon-warehouse-management`** (clone from git, or unpack from `backup-from-windows-c/project-repos`, plus **`.env`**). **Other** folders from the inventory: **`/home/eliorp1/dev/<name>`** as you need them.
+1. Place working copies under **`/home/eliorp1/dev/carbon-gen`** and **`/home/eliorp1/dev/carbon-warehouse-management`** (clone from git, or unpack from `backup-from-windows-c/project-repos`, plus **`.env`**). These are the **only** git app roots in scope; unpack any extra zips only if you still use them.
 2. **`npm install`**, Docker/DB per each README.
 3. **Port conflict:** if both compose files bind host **5432**, change one.
 4. **carbon-gen → :3000**, **carbon-warehouse-management → :3040** (bind **0.0.0.0** if you test from Windows host via port forward).
@@ -180,7 +206,7 @@ You stated that **after** Ubuntu is fully working and synced, you intend to **re
 | Goal | Script / doc |
 |------|--------------|
 | Cursor profile → `D:\backup c` + profile zips | `scripts/backup-c-to-d-and-ubuntu.ps1` |
-| carbon-gen + carbon-warehouse-management → `D:\backup c\project-repos\` | `scripts/backup-projects-to-d.ps1` (extend for more paths if you want every folder under `My project`) |
+| carbon-gen + carbon-warehouse-management → `D:\backup c\project-repos\` | `scripts/backup-projects-to-d.ps1` (optional: extend paths for zips / `carbon-gen-backups-outside`) |
 | Claude Code prompts | `docs/claude-code-backup-c-drive-prompts.md` |
 | This plan (HTML twin) | `docs/migration-ubuntu-master-plan.html` |
 
@@ -191,7 +217,7 @@ You stated that **after** Ubuntu is fully working and synced, you intend to **re
 | Risk | Mitigation |
 |------|------------|
 | Unpushed work lost | Push before treating remote as truth; project backup keeps `.git` by default. |
-| Local-only repos | (Historical) No `origin` — backup **folder** was the safety net. |
+| Deleted local-only repos | Already removed from disk; if you recreate any, add **`git remote`** or rely on backups. |
 | Huge sync | Exclude heavy dirs or use `rsync`; plan disk/time. |
 | Missing `.env` on Ubuntu | Checklist + secure copy. |
 | Postgres port clash | Change one compose host port. |
@@ -201,10 +227,10 @@ You stated that **after** Ubuntu is fully working and synced, you intend to **re
 
 ## Confirmation checklist (you sign when true)
 
-- [ ] Phase 0 done for **all** git repos you rely on + inventory of non-git folders.
-- [ ] Phase 1A + 1B completed; `D:\backup c` layout understood (`archives` vs `project-repos` vs any **full `Projects`** copy).
+- [ ] Phase 0 done for **carbon-gen** + **carbon-warehouse-management** + any **non-git** backup trees you still use (`carbon-gen-backups-outside`, optional zips).
+- [ ] Phase 1A + 1B completed; `D:\backup c` layout understood (`archives` vs `project-repos`; optional extra copies of `My project` / `carbon-gen-backups-outside`).
 - [ ] Phase 2 full tree at `~/backup-from-windows-c/`.
-- [ ] Phase 4: **3000** = carbon-gen, **3040** = carbon-warehouse-management, behavior verified; other dev dirs as needed.
+- [ ] Phase 4: **3000** = carbon-gen, **3040** = carbon-warehouse-management, behavior verified.
 - [ ] Phase 5: Windows Cursor retired; single Cursor on Ubuntu.
 - [ ] (Optional personal) Windows PC cleaned per §8 only when you are ready.
 
