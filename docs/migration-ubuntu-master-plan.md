@@ -206,9 +206,15 @@ You stated that **after** Ubuntu is fully working and synced, you intend to **re
 
 ## After Ubuntu is canonical: are `D:\` / `C:\` paths irrelevant?
 
-**For daily development: yes.** You work in **`/home/eliorp1/dev/...`** on Ubuntu.
+**For daily development on Ubuntu: mostly yes** — you work in **`/home/eliorp1/dev/...`**.
 
-**Still touch once or occasionally:** git remote URLs, Coolify/production env, docs or scripts with hardcoded `D:\`, webhooks/tunnels aimed at old Windows localhost.
+**Windows paths often still matter:** git remote URLs, Coolify/production env, docs or scripts with hardcoded `D:\`, webhooks/tunnels aimed at old Windows localhost, and **any time you or an agent still runs commands on Windows**.
+
+### Hard lock for agents (Windows + occasional Windows use)
+
+**All agents** (Cursor and others) must **minimize unnecessary writes to `C:\`**. Use **`C:\` only when required** (OS, or a tool with no practical alternative). Put generated files, temp work, large outputs, and “clean up later” artifacts on **`D:\`**, the **workspace**, or project **`tmp/`** (gitignored) — **plenty of room there**; **do not** treat **`C:\`** as a scratch disk.
+
+This repo encodes that as an always-on Cursor rule: **`.cursor/rules/windows-minimize-c-drive-writes.mdc`**. Copy that file into other repos (e.g. **carbon-warehouse-management**) if you want the same behavior there.
 
 ---
 
@@ -220,6 +226,7 @@ You stated that **after** Ubuntu is fully working and synced, you intend to **re
 | carbon-gen + carbon-warehouse-management → `D:\backup c\project-repos\` | `scripts/backup-projects-to-d.ps1` (optional: extend paths for zips / `carbon-gen-backups-outside`) |
 | Claude Code prompts | `docs/claude-code-backup-c-drive-prompts.md` |
 | This plan (HTML twin) | `docs/migration-ubuntu-master-plan.html` |
+| Agents: avoid unnecessary `C:\` writes on Windows | `.cursor/rules/windows-minimize-c-drive-writes.mdc` |
 
 ---
 
@@ -233,6 +240,7 @@ You stated that **after** Ubuntu is fully working and synced, you intend to **re
 | Missing `.env` on Ubuntu | Checklist + secure copy. |
 | Postgres port clash | Change one compose host port. |
 | Accidental secret in zip | Review untracked files (e.g. `dropbox-*.json`, `.env`) before archiving. |
+| `C:\` filled by agent/temp junk | Follow **`.cursor/rules/windows-minimize-c-drive-writes.mdc`**; outputs on **D:** or workspace **`tmp/`**. |
 
 ---
 

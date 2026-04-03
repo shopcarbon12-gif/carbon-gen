@@ -1,0 +1,29 @@
+---
+description: Hard lock — on Windows, avoid unnecessary writes to C:; use D: or workspace for generated/temp files
+alwaysApply: true
+---
+
+# Windows: minimize writes to `C:\` (hard lock)
+
+Applies whenever work runs on **Windows** for this user’s machine (even if the “goal” is Ubuntu later).
+
+## Non-negotiable behavior
+
+1. **Treat `C:\` as restricted.** Use it **only** when **required** by the OS or a tool with **no reasonable** alternative (e.g. installing to `Program Files`, reading existing profile data the user already has on C:).
+2. **Do not** create **unnecessary** files on **`C:\`** — especially large, repeated, or disposable artifacts (logs, dumps, extracted zips, build outputs, scratch downloads, bulk temp data).
+3. **Prefer** paths on **`D:\`** (or the **current workspace / repo** on D:) for:
+   - anything the user or agent generates for the task;
+   - temp working files (use a folder under the repo’s `tmp/`, or `D:\…` tooling paths the project documents, e.g. **`D:\CarbonWmsTooling`** for CarbonWMS / Flutter when the repo says so);
+   - outputs the user might delete or clean later — **D:** has room; **C:** should not absorb that churn by default.
+4. When suggesting **PowerShell / cmd / Node** commands, **default** output paths, caches, and `-OutFile` targets to **`D:\...`** or the **workspace** unless something must live on C:.
+5. **Do not** advise scattering long-lived caches or big artifacts under **`%TEMP%` on C:**` if the same work can use **`D:\`** or project **`tmp/`** (gitignored) instead.
+6. If a tool **insists** on `%LOCALAPPDATA%` / `%USERPROFILE%` on C:, use it — but **do not** add **extra** redundant copies or huge exports there when **D:** works.
+
+## Related docs
+
+- **`docs/migration-ubuntu-master-plan.md`** — section *After Ubuntu is canonical: are `D:\` / `C:\` paths irrelevant?*
+- **CarbonWMS / Flutter on D:** — **`carbon-warehouse-management`** `AGENTS.md`, `REMINDER-WINDOWS-D.md`, `mobile/carbon_wms/README.md`
+
+## After Ubuntu is “canonical” for daily dev
+
+`D:\` and `C:\` on the Windows PC can **still matter** for backups, hardcoded paths in scripts, and **not** filling **C:** during occasional Windows-side work — same rule applies when agents touch this machine.

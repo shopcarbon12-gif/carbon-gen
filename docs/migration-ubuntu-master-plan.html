@@ -323,7 +323,11 @@ For day-to-day editing, prefer live clones under /home/eliorp1/dev/ (e.g. carbon
   </div>
 
   <h2 id="paths-irrelevant">Are <code>D:\</code> / <code>C:\</code> irrelevant after?</h2>
-  <p><strong>For daily dev: yes</strong> — you work under <code>/home/eliorp1/dev/...</code>. <strong>Still relevant sometimes:</strong> git remotes, Coolify/production, hardcoded paths in docs/scripts, webhooks/tunnels pointing at old Windows localhost.</p>
+  <p><strong>For daily development on Ubuntu: mostly yes</strong> — you work under <code>/home/eliorp1/dev/...</code>.</p>
+  <p><strong>Windows paths often still matter:</strong> git remotes, Coolify/production, hardcoded <code>D:\</code> in docs/scripts, webhooks/tunnels aimed at old Windows localhost, and <strong>any time you or an agent runs work on Windows</strong>.</p>
+  <div class="warn">
+    <strong>Hard lock (agents):</strong> On Windows, <strong>do not</strong> use <code>C:\</code> for unnecessary files. Use <code>C:\</code> <strong>only when required</strong> (OS or tool with no practical alternative). Put generated/temp/large/“clean later” outputs on <strong><code>D:\</code></strong>, the <strong>workspace</strong>, or project <code>tmp/</code>. Always-on rule: <code>.cursor/rules/windows-minimize-c-drive-writes.mdc</code> — copy into other repos (e.g. carbon-warehouse-management) if you want the same.
+  </div>
 
   <h2 id="tooling">Tooling reference</h2>
   <table>
@@ -332,6 +336,7 @@ For day-to-day editing, prefer live clones under /home/eliorp1/dev/ (e.g. carbon
       <tr><td>Cursor → <code>D:\backup c</code></td><td><code>scripts/backup-c-to-d-and-ubuntu.ps1</code></td></tr>
       <tr><td>Two repos → <code>D:\backup c\project-repos\</code></td><td><code>scripts/backup-projects-to-d.ps1</code> (optional: add paths for zips / <code>carbon-gen-backups-outside</code>)</td></tr>
       <tr><td>Claude prompts</td><td><code>docs/claude-code-backup-c-drive-prompts.md</code></td></tr>
+      <tr><td>Agents: avoid unnecessary <code>C:\</code> writes</td><td><code>.cursor/rules/windows-minimize-c-drive-writes.mdc</code></td></tr>
     </tbody>
   </table>
 
