@@ -148,6 +148,9 @@
   <div class="warn">
     <strong>Your correction:</strong> <code>localhost:3000</code> = <strong>carbon-gen</strong> at <code>D:\Projects\My project\carbon-gen</code>. <code>localhost:3040</code> = <strong>carbon-warehouse-management</strong>. Ubuntu dev dirs: <code>/home/eliorp1/dev/carbon-gen</code> and <code>/home/eliorp1/dev/carbon-warehouse-management</code>.
   </div>
+  <div class="ok">
+    <strong>D: hard lock:</strong> Do <strong>not</strong> delete <code>D:\Projects\...</code> (or other D: project trees) for migration. Copy/mirror to Ubuntu and <strong>replace</strong> stale copies <strong>on Ubuntu</strong> only. When you uninstall Windows Cursor is <strong>your</strong> choice — not part of this plan (see Phase 3 + markdown goals).
+  </div>
 
   <nav class="toc" aria-label="On this page">
     <strong>Contents</strong>
@@ -162,9 +165,8 @@
       <li><a href="#phase0">Phase 0 — Pre-flight</a></li>
       <li><a href="#phase1">Phase 1 — Backups on D:</a></li>
       <li><a href="#phase2">Phase 2 — Sync full <code>D:\backup c</code></a></li>
-      <li><a href="#phase3">Phase 3 — C: vs D:</a></li>
+      <li><a href="#phase3">Phase 3 — D: projects (hard lock) vs C:</a></li>
       <li><a href="#phase4">Phase 4 — localhost 3000 / 3040</a></li>
-      <li><a href="#phase5">Phase 5 — One Cursor on Ubuntu</a></li>
       <li><a href="#personal">Personal: clean Windows PC</a></li>
       <li><a href="#paths-irrelevant">Are Windows paths irrelevant?</a></li>
       <li><a href="#tooling">Tooling &amp; checklist</a></li>
@@ -303,17 +305,17 @@ For day-to-day editing, prefer live clones under /home/eliorp1/dev/ (e.g. carbon
   <p><code>scripts/backup-projects-to-d.ps1</code> — defaults to carbon-gen + carbon-warehouse-management. Default output <code>D:\backup c\project-repos\</code> (<code>-BackupRoot</code> to override). Excludes <code>node_modules</code>, <code>.next</code>, etc. unless <code>-FullTree</code>. <strong>Optional:</strong> copy <code>carbon-gen-backups-outside</code> and any <code>carbon-gen-backup-*.zip</code> into <code>D:\backup c\</code> or Ubuntu alongside scripted zips.</p>
 
   <h2 id="phase2">Phase 2 — Ubuntu: full <code>D:\backup c</code> mirror</h2>
-  <p>Replace or archive old <code>~/backup-from-windows-c</code>, then copy the <strong>entire</strong> <code>D:\backup c</code> tree to <code>/home/eliorp1/backup-from-windows-c/</code> (<code>rsync</code>, <code>scp -r</code>, or shared folder). Quote paths for the space in <code>backup c</code>.</p>
+  <p>On Ubuntu, <strong>remove or empty</strong> existing <code>~/backup-from-windows-c/</code> when you want to <strong>replace</strong> it with a <strong>fresh</strong> sync (you accept losing the previous Ubuntu-side mirror). Then copy the <strong>whole</strong> current <code>D:\backup c</code> tree to <code>/home/eliorp1/backup-from-windows-c/</code> (<code>rsync</code>, <code>scp -r</code>, or shared folder). Quote paths for the space in <code>backup c</code>.</p>
+  <p class="meta"><strong>Windows <code>D:\Projects\...</code> is not deleted</strong> here — only the Ubuntu backup destination is replaced/updated.</p>
   <p class="meta" style="margin-top:0.75rem;"><strong>Again:</strong> mirror = duplicate files by copying/syncing — not a junction or symlink.</p>
 
-  <h2 id="phase3">Phase 3 — C: vs D:</h2>
-  <p>Projects on <strong>D:</strong> are not required to be deleted for migration. Optional: <code>-DeleteSourcesAfterCopy</code> on the <strong>Cursor</strong> backup script removes only Cursor profile paths on <strong>C:</strong>, not <code>D:\Projects\...</code>.</p>
+  <h2 id="phase3">Phase 3 — D: projects (hard lock) vs C: Cursor profile</h2>
+  <p><strong><code>D:\Projects</code> and other D: project directories — do not delete for migration (or any purpose in this plan).</strong> They stay on Windows. You <strong>copy / mirror</strong> to Ubuntu and <strong>replace</strong> stale trees <strong>on Ubuntu</strong> (e.g. <code>~/backup-from-windows-c/</code> or <code>~/dev/...</code> when <strong>you</strong> refresh them), not by removing sources from <strong>D:</strong>.</p>
+  <p>This plan <strong>never</strong> tells you to delete or “clean up” <code>D:\Projects\...</code> to finish migration. <code>/home/eliorp1/dev/...</code> working copies are clone/unpack/rsync — refresh those Linux paths when you want current backups; <strong>D:</strong> remains intact.</p>
+  <p><strong>Cursor on C:</strong> optional <code>-DeleteSourcesAfterCopy</code> on the backup script removes <strong>only</strong> Cursor profile paths on <strong>C:</strong>, <strong>not</strong> <code>D:\Projects\...</code>.</p>
 
   <h2 id="phase4">Phase 4 — <code>localhost:3000</code> and <code>:3040</code></h2>
-  <p>Working trees under <code>/home/eliorp1/dev/carbon-gen</code> and <code>.../carbon-warehouse-management</code> (the only git app roots in scope), <code>npm install</code>, env files, Docker per README. Resolve Postgres <code>5432</code> clash if both stacks use it. Bind <code>0.0.0.0</code> if you hit dev servers from the Windows host via port forwarding. Verify real app behavior, not only that ports listen.</p>
-
-  <h2 id="phase5">Phase 5 — One Cursor on Ubuntu</h2>
-  <p>After stable verification: uninstall Cursor on Windows. No junctions, no mirrors. Single Cursor on Ubuntu for dev/build/design.</p>
+  <p>Working trees under <code>/home/eliorp1/dev/carbon-gen</code> and <code>.../carbon-warehouse-management</code> (the only git app roots in scope). When Ubuntu should match <strong>new</strong> backups, <strong>replace or refresh</strong> those <strong>Linux</strong> directories — still <strong>do not</strong> delete Windows <code>D:\Projects\...</code> for that alone. <code>npm install</code>, env files, Docker per README. Resolve Postgres <code>5432</code> clash if both stacks use it. Bind <code>0.0.0.0</code> if you hit dev servers from the Windows host via port forwarding. Verify real app behavior, not only that ports listen.</p>
 
   <h2 id="personal">Personal end state (your statement)</h2>
   <div class="ok">
@@ -337,9 +339,9 @@ For day-to-day editing, prefer live clones under /home/eliorp1/dev/ (e.g. carbon
   <ul>
     <li>Phase 0 done for <strong>both</strong> repos + any non-git trees you use (<code>carbon-gen-backups-outside</code>, optional zips).</li>
     <li>Phase 1A + 1B complete; understand <code>archives</code> vs <code>project-repos</code> (optional extra copies).</li>
-    <li>Phase 2: full tree at <code>~/backup-from-windows-c/</code>.</li>
+    <li>Phase 2: full tree at <code>~/backup-from-windows-c/</code> (Ubuntu side replaced with current sync).</li>
+    <li>Phase 3: <code>D:\Projects\...</code> never deleted for migration; Ubuntu copies refreshed as you choose.</li>
     <li>Phase 4: 3000 = carbon-gen, 3040 = carbon-warehouse-management, behavior OK.</li>
-    <li>Phase 5: Windows Cursor retired.</li>
     <li>Optional: Windows PC cleaned per your personal plan when ready.</li>
   </ul>
 
