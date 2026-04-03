@@ -1,7 +1,0 @@
-<resources>
-    <style name="Theme.CollectionMapping" parent="android:Theme.Material.NoActionBar">
-        <item name="android:statusBarColor">@color/surface</item>
-        <item name="android:navigationBarColor">@color/surface</item>
-        <item name="android:windowBackground">@color/surface</item>
-    </style>
-</resources>

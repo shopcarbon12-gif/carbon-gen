@@ -1,0 +1,32 @@
+---
+description: Recall C-drive backup workflow, script path, and Claude Code prompts doc for this repo
+alwaysApply: true
+---
+
+# C-drive backup — session context (Elior)
+
+When this comes up again, assume the user is on **Windows** and may use **Claude Code** in an external terminal (often starting in `C:\Windows\System32`) while **Cursor is closed** for the real copy.
+
+## Goal (hard constraints)
+
+- **No mirrors, no junctions, no `cleanup-cursor-from-c.ps1`.** The plan is to move continuity to **Cursor on Ubuntu**, not redirect Windows profile paths.
+- **Do not delete anything on Windows** (including Cursor installs or profile trees) until the user has **verified** on Ubuntu that archives/projects are present and **functioning**. Deletion is **out of scope** for routine assistant suggestions; the user will say when and what to remove after their own verification.
+- **`scripts/cleanup-cursor-from-c.ps1`** is **not** part of this migration path for Elior — do not recommend running it unless the user explicitly asks for junctions (they have said they do not want them).
+
+## Scripts
+
+- **`scripts/backup-c-to-d-and-ubuntu.ps1`** — Cursor profile on **C:** → **`D:\backup c\`**, zips in **`archives\`**, optional **`scp`**. **`-DeleteSourcesAfterCopy`** deletes **only** those Cursor profile paths on C:, not **`D:\Projects\...`**.
+- **`scripts/backup-projects-to-d.ps1`** — **`carbon-gen`** + **`carbon-warehouse-management`** from **`D:\Projects\My project\...`** → **`D:\backup c\project-repos\`**, zips in **`project-repos\archives\`**, optional **`scp`** to **`~/backup-from-windows-c/archives/projects/`**. Does **not** delete sources.
+
+## Runbook
+
+- **`docs/claude-code-backup-c-drive-prompts.md`** — prompts through **verify report** only; **no** junction step; **no** automated delete unless user explicitly orders it after verification.
+
+## Related docs
+
+- **`C_DRIVE_MIGRATION_REPORT.md`**, **`docs/c-drive-migration-report.html`**.
+
+## Safety
+
+- Do **not** run a real backup while Cursor holds profile locks; user must fully quit Cursor first (or `-StopCursorProcesses` from an external terminal).
+- Do **not** suggest **`-DeleteSourcesAfterCopy`** or uninstalling Cursor until the user confirms Ubuntu-side verification.

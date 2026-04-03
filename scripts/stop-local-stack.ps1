@@ -51,4 +51,4 @@ if (Test-Path $pidFile) {
 # Stop all tunnel processes.
 cmd /c "taskkill /IM cloudflared.exe /F >nul 2>&1" | Out-Null
 
-Write-Host "Stopped local stack (configured app port $appPort + cloudflared)."
+Write-Host "Stopped local stack (app port $appPort + tunnel process if matched)."

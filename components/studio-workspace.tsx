@@ -1451,7 +1451,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       throw new Error(
         `Server returned HTML instead of JSON${where} (status ${resp.status}). ` +
           `This usually means a tunnel/proxy/origin issue. ` +
-          `Try directly on http://localhost:3000 and restart cloudflared + dev server. ` +
+          `Try directly on http://localhost:3000 and restart your HTTPS tunnel + dev server. ` +
           `Snippet: ${snippet || "<empty>"}`
       );
     }

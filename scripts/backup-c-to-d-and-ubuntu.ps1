@@ -6,7 +6,7 @@
 
 .DESCRIPTION
   Matches C_DRIVE / c-drive-migration-report scope: Roaming\Cursor, .cursor, Local\Cursor.
-  MUST close Cursor completely before run (or use -StopCursorProcesses — do not run from Cursor's terminal).
+  MUST close Cursor completely before run (or use -StopCursorProcesses - do not run from Cursor's terminal).
 
   OpenSSH: use port 22 with bridged VM IP, or -SshPort 2222 if VirtualBox NAT forwards host 2222 -> guest 22.
 
@@ -135,11 +135,11 @@ foreach ($label in $sources.Keys) {
     New-Item -ItemType Directory -Path $dest -Force | Out-Null
     # /MIR would delete extra files in dest; use /E copy subdirs including empty
     $robolog = Join-Path $env:TEMP "robocopy-$label-$ts.log"
-    $args = @($src, $dest, "/E", "/COPY:DAT", "/DCOPY:DAT", "/R:2", "/W:5", "/MT:8", "/NFL", "/NDL", "/NP", "/LOG:$robolog")
+    $args = @("`"$src`"", "`"$dest`"", "/E", "/COPY:DAT", "/DCOPY:DAT", "/R:2", "/W:5", "/MT:8", "/NFL", "/NDL", "/NP", "/LOG:`"$robolog`"")
     $rc = Start-Process -FilePath "robocopy.exe" -ArgumentList $args -Wait -PassThru -NoNewWindow
     # robocopy exit 0-7 = success with different meanings
     if ($rc.ExitCode -ge 8) {
-        Add-ReportLine "ROBOCOPY exit $($rc.ExitCode) — see $robolog"
+        Add-ReportLine "ROBOCOPY exit $($rc.ExitCode) - see $robolog"
         throw "Robocopy failed for $label (exit $($rc.ExitCode))"
     }
 
@@ -153,7 +153,7 @@ foreach ($label in $sources.Keys) {
     # Windows tar creates zip (requires Windows 10 1803+)
     $tar = Join-Path $env:SystemRoot "System32\tar.exe"
     if (-not (Test-Path $tar)) {
-        Add-ReportLine "WARN: tar.exe missing — skipping zip for $label"
+        Add-ReportLine "WARN: tar.exe missing - skipping zip for $label"
         $results += [pscustomobject]@{ Label = $label; Source = $src; Status = "copied-no-zip"; Bytes = $destBytes }
         continue
     }
@@ -194,7 +194,7 @@ Add-ReportLine ""
 Add-ReportLine "C: free AFTER:  $(Format-Gb $cAfter) ($cAfter bytes)"
 if ($cBefore -ge 0 -and $cAfter -ge 0) {
     $delta = $cAfter - $cBefore
-    Add-ReportLine "C: free DELTA:  $(Format-Gb $delta) ($delta bytes) — positive = more free on C:"
+    Add-ReportLine "C: free DELTA:  $(Format-Gb $delta) ($delta bytes) - positive = more free on C:"
 }
 
 # SCP archives + optional full folders
@@ -215,7 +215,7 @@ if (-not $SkipScp -and -not $WhatIf -and $SshHost -and $SshUser) {
             Add-ReportLine "scp $($z.FullName) -> $remoteSpec/archives/"
             & scp -P $SshPort -o BatchMode=yes -o StrictHostKeyChecking=accept-new $z.FullName "${SshUser}@${SshHost}:${RemotePath}/archives/" 2>&1 | ForEach-Object { Add-ReportLine $_ }
             if ($LASTEXITCODE -ne 0) {
-                Add-ReportLine "scp exit $LASTEXITCODE for $($z.Name) — fix SSH keys or use password session manually"
+                Add-ReportLine "scp exit $LASTEXITCODE for $($z.Name) - fix SSH keys or use password session manually"
             }
         }
     }

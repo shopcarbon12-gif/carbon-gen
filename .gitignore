@@ -45,9 +45,6 @@ next-env.d.ts
 
 .vercel
 
-# OpenNext
-.open-next
-
 # local backups
 backups/
 
@@ -75,3 +72,6 @@ tmp-theme-liquid.txt
 tmp-build-sitemap.mjs
 tmp-404-report/
 tmp-sitemap-clean/
+
+# local scratch folder (never commit)
+/tmp/

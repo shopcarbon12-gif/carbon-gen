@@ -1,6 +1,0 @@
-[     145ms] [ERROR] Failed to load resource: net::ERR_CACHE_READ_FAILURE @ https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css:0
-[     145ms] [ERROR] Failed to load resource: net::ERR_CACHE_READ_FAILURE @ https://app.shopcarbon.com/_next/static/media/4cf2300e9c8272f7-s.p.woff2:0
-[     146ms] [ERROR] Failed to load resource: net::ERR_CACHE_READ_FAILURE @ https://app.shopcarbon.com/_next/static/media/93f479601ee12b01-s.p.woff2:0
-[     169ms] [ERROR] Failed to load resource: net::ERR_CACHE_READ_FAILURE @ https://app.shopcarbon.com/_next/static/chunks/4bd1b696-e5d7c65570c947b7.js:0
-[     170ms] [ERROR] Failed to load resource: net::ERR_CACHE_READ_FAILURE @ https://app.shopcarbon.com/_next/static/chunks/3794-337d1ca25ad99a89.js:0
-[     178ms] [ERROR] Failed to load resource: net::ERR_CACHE_READ_FAILURE @ https://app.shopcarbon.com/_next/static/chunks/2237-4fc523d5ef9fdac1.js:0

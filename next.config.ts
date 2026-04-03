@@ -1,10 +1,5 @@
 import type { NextConfig } from "next";
 
-function isTruthy(value: string | undefined): boolean {
-  const normalized = String(value || "").trim().toLowerCase();
-  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
-}
-
 const nextConfig: NextConfig = {
   output: "standalone",
   serverExternalPackages: ["pg"],
@@ -18,7 +13,6 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: [
     "carbon-gen.shopcarbon.com",
     "carbon-gen.shopcarbon.co",
-    "carbon-gen.shopcarbon12.workers.dev",
     "app.shopcarbon.com",
   ],
   async headers() {
@@ -30,10 +24,10 @@ const nextConfig: NextConfig = {
       isProd
         ? "script-src 'self' 'unsafe-inline'"
         : "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net",
       // Allow local-network printer endpoints (http://<LAN-IP>/pstprnt) from HTTPS app pages.
       isProd ? "connect-src 'self' http: https:" : "connect-src 'self' ws: http: https:",
-      "font-src 'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com",
+      "font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net",
       "object-src 'none'",
       "base-uri 'self'",
       "frame-ancestors 'none'",
@@ -64,12 +58,3 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
-
-const enableOpenNextCloudflareDev =
-  process.env.NODE_ENV === "development" &&
-  !process.env.VERCEL &&
-  isTruthy(process.env.OPENNEXT_CLOUDFLARE_DEV);
-
-if (enableOpenNextCloudflareDev) {
-  import("@opennextjs/cloudflare").then((m) => m.initOpenNextCloudflareForDev());
-}

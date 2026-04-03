@@ -20,9 +20,9 @@ export const maxDuration = 120;
 
 const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
 const SHOPIFY_PRODUCTS_PER_PAGE = 100;
-// Vercel has no subrequest/CPU limits; Cloudflare Free: 50 subrequests, 10ms CPU
-const IS_VERCEL = Boolean(process.env.VERCEL);
-const MAX_SHOPIFY_SCAN_PAGES = IS_VERCEL ? 25 : 5;
+// Coolify/Node: no Workers subrequest cap. Optional override via env.
+const MAX_SHOPIFY_SCAN_PAGES =
+  Number.parseInt((process.env.SHOPIFY_INVENTORY_MATRIX_MAX_PAGES || "").trim(), 10) || 25;
 const SHOPIFY_VARIANTS_CACHE_MS = 8 * 60 * 1000;
 const ALLOWED_PAGE_SIZES = [20, 50, 100, 200, 300, 500] as const;
 
@@ -584,16 +584,6 @@ let _catalogCache: CacheAdapter | null | undefined = undefined;
 function getCatalogCache(): CacheAdapter | null {
   if (_catalogCache !== undefined) return _catalogCache;
   try {
-    const { getCloudflareContext } = require("@opennextjs/cloudflare");
-    const env = getCloudflareContext()?.env as { INVENTORY_CATALOG_CACHE?: CacheAdapter } | undefined;
-    if (env?.INVENTORY_CATALOG_CACHE) {
-      _catalogCache = env.INVENTORY_CATALOG_CACHE;
-      return _catalogCache;
-    }
-  } catch {
-    /* Cloudflare KV not available (e.g. Vercel) */
-  }
-  try {
     const url = process.env.UPSTASH_REDIS_REST_URL;
     const token = process.env.UPSTASH_REDIS_REST_TOKEN;
     if (url && token) {
@@ -613,7 +603,7 @@ function getCatalogCache(): CacheAdapter | null {
   return null;
 }
 
-/** Fetch Lightspeed catalog - single request per call. Use catalogCursor + cache (KV or Redis) to accumulate. */
+/** Fetch Lightspeed catalog - single request per call. Use catalogCursor + Upstash Redis (optional) to accumulate. */
 async function fetchLightspeedSnapshot(
   req: NextRequest,
   refresh: boolean,

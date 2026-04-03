@@ -1,3 +1,0 @@
-[    4190ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:3000/api/shopify/collection-mapping?page=1&pageSize=20&q=&sortField=title&sortDir=asc:0
-[    8850ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:3000/api/shopify/collection-mapping?page=1&pageSize=20&q=&sortField=title&sortDir=asc:0
-[   27050ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:3000/api/shopify/collection-mapping?page=1&pageSize=20&q=&sortField=title&sortDir=asc:0

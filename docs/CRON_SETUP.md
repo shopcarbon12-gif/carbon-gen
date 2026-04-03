@@ -1,6 +1,6 @@
-# Cron Jobs for 24/7 Sync (Cloudflare)
+# Cron jobs for 24/7 sync (Coolify / public URL)
 
-The app runs on Cloudflare. For automatic sync to work 24/7 without visiting the site, use an external cron service to hit the API endpoints.
+Production runs on **Coolify** (containerized Next). For automatic sync without keeping a browser open, use an external cron service or your host’s scheduler to hit these HTTPS endpoints.
 
 ## Endpoints
 
@@ -43,10 +43,6 @@ Monthly reminder env vars (used by `/api/cron/accessibility-monthly-report`):
 - From the UI: "Push to Shopify" runs immediately (you must stay on the page).
 - From anywhere: Call `GET /api/cron/cart-sync` with `Authorization: Bearer CRON_SECRET` when logged in, or use the secret.
 - For true "fire and forget" (close tab, sync continues), the cron above must run. Manual push runs in the request; closing the tab cancels it.
-
-## Cloudflare native cron (optional)
-
-Cloudflare Workers support cron triggers, but the OpenNext worker does not expose a `scheduled` handler by default. To use native cron, you would need a small separate Worker with a `scheduled()` handler that fetches your app’s `/api/cron/cart-sync` URL.
 
 ## LS sync (sales, quantity updates)
 

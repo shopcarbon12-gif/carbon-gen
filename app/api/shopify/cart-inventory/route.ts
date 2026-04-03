@@ -1567,7 +1567,8 @@ export async function POST(req: NextRequest) {
 
       if (body?.background === true) {
         const startedAt = new Date().toISOString();
-        const origin = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : `http://127.0.0.1:${process.env.PORT || 3000}`;
+        // Same-container fetch (Coolify/Docker); avoids public hairpin NAT.
+        const selfOrigin = resolveInternalApiSelfOrigin();
         const bgPublicationIds = Array.isArray(body?.publicationIds)
           ? (body.publicationIds as string[]).filter((id) => typeof id === "string" && id.trim())
           : [];
@@ -1591,35 +1592,8 @@ export async function POST(req: NextRequest) {
         if (cronSecret) headers["x-cron-secret"] = cronSecret;
         if (cookie) headers.Cookie = cookie;
 
-        try {
-          const { getCloudflareContext } = await import("@opennextjs/cloudflare");
-          const { ctx } = getCloudflareContext();
-          if (ctx?.waitUntil) {
-            console.log("[cart-inventory] Background push started:", { shop, parentCount: parentIds.length });
-            ctx.waitUntil(
-              fetch(`${origin}/api/shopify/cart-inventory`, {
-                method: "POST",
-                headers,
-                body: JSON.stringify(pushPayload),
-              })
-            );
-            return NextResponse.json(
-              {
-                ok: true,
-                action,
-                shop,
-                message: "Sync started in background. You can close this page.",
-                startedAt,
-              },
-              { status: 202 }
-            );
-          }
-        } catch {
-          /* fallback below */
-        }
-        // Fallback for runtimes without waitUntil (e.g. Vercel):
-        // fire-and-forget self request and return immediately.
-        void fetch(`${origin}/api/shopify/cart-inventory`, {
+        console.log("[cart-inventory] Background push started:", { shop, parentCount: parentIds.length });
+        void fetch(`${selfOrigin}/api/shopify/cart-inventory`, {
           method: "POST",
           headers,
           body: JSON.stringify(pushPayload),

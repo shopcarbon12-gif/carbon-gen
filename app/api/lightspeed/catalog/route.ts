@@ -13,15 +13,12 @@ const LS_ITEM_PAGE_LIMIT = 1000;
 const LS_ITEM_PAGE_LIMIT_FALLBACK = 500;
 const LS_ITEM_PAGE_LIMIT_LAST_RESORT = 100;
 const LS_V3_PAGE_LIMIT = 100;
-// Cap to stay under Cloudflare Workers free-plan subrequest limit (50/request).
-// Set LS_MAX_CATALOG_PAGES in Cloudflare env (e.g. 100) + limits.subrequests in wrangler when on Paid for full catalog.
-const IS_VERCEL = Boolean(process.env.VERCEL);
-// Coolify standalone runs as normal Node server, not subject to Workers limits.
+// Coolify/Node: tune via LS_MAX_CATALOG_PAGES (default 80, cap 250).
 const LS_V3_MAX_PAGES = Math.min(
   Number(process.env.LS_MAX_CATALOG_PAGES) || 80,
   250
 );
-const LS_MIN_REQUEST_INTERVAL_MS = IS_VERCEL ? 180 : 250;
+const LS_MIN_REQUEST_INTERVAL_MS = 180;
 const LS_RATE_LIMIT_RETRY_ATTEMPTS = 3;
 const ALLOWED_PAGE_SIZES = [100, 500] as const;
 const ALLOWED_SORT_FIELDS = [

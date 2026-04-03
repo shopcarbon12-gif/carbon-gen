@@ -69,8 +69,8 @@ Optional: pin the local stack port in `.env.local` (recommended):
 LOCAL_APP_PORT=3000
 ```
 
-## Cloudflared + Upstash (Run Both)
-Use two terminals.
+## Optional HTTPS tunnel + Upstash (local dev)
+Use two terminals if you need a public URL for webhooks (tunnel implementation is up to you; repo scripts look for a tunnel CLI on PATH).
 
 Terminal 1 (app):
 ```bash
@@ -82,12 +82,11 @@ Terminal 2 (public tunnel):
 npm run start:tunnel
 ```
 
-One-command launcher (opens two terminals automatically):
+One-command launcher (opens both in the background):
 ```bash
 npm run start:local
 ```
-It now runs both processes in the background (no terminal clutter).
-`start:local` always syncs cloudflared ingress to `LOCAL_APP_PORT` (default `3000`).
+`start:local` forwards the tunnel to `LOCAL_APP_PORT` (default `3000`).
 Local guard: if a full project copy is detected inside `backups/`, startup moves it to
 `D:\Projects\carbon-gen-backups-outside` automatically to prevent Next.js startup hangs.
 

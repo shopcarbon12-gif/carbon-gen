@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Migration master plan — Windows → Ubuntu (carbon-gen + CarbonWMS)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #14161c;
+      --bg-elevated: #1e222b;
+      --card: #252a35;
+      --text: #e8eaef;
+      --text-heading: #f2f4f8;
+      --muted: #9aa3b2;
+      --border: #3d4554;
+      --border-strong: #556070;
+      --accent: #7eb8ff;
+      --accent-hover: #a8d0ff;
+      --warn: #f0c14b;
+      --warn-bg: #2a2418;
+      --warn-text: #f5e6c8;
+      --ok: #6ee7a8;
+      --ok-bg: #18261f;
+      --ok-text: #c8f5dc;
+      --code-bg: #0f1117;
+      --table-head: #323846;
+    }
+    * { box-sizing: border-box; }
+    html { font-size: 18px; }
+    body {
+      font-family: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+      font-size: 1rem;
+      line-height: 1.65;
+      max-width: 48rem;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 3.5rem;
+      color: var(--text);
+      background: var(--bg);
+      -webkit-font-smoothing: antialiased;
+    }
+    h1, h2, h3 {
+      font-weight: 700;
+      color: var(--text-heading);
+      line-height: 1.3;
+      letter-spacing: -0.02em;
+    }
+    h1 { font-size: 1.85rem; margin-top: 0; }
+    h2 {
+      font-size: 1.35rem;
+      margin-top: 2.25rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 2px solid var(--border-strong);
+    }
+    h3 { font-size: 1.12rem; margin-top: 1.5rem; }
+    .meta { color: var(--muted); margin-bottom: 1.5rem; line-height: 1.6; }
+    a { color: var(--accent); }
+    a:hover { color: var(--accent-hover); }
+    ul { padding-left: 1.4rem; }
+    ul li { margin: 0.4rem 0; }
+    .note {
+      border-left: 4px solid var(--accent);
+      padding: 0.75rem 1rem;
+      background: var(--bg-elevated);
+      margin: 1.15rem 0;
+      border-radius: 0 8px 8px 0;
+    }
+    .warn {
+      border-left: 4px solid var(--warn);
+      padding: 0.75rem 1rem;
+      background: var(--warn-bg);
+      margin: 1.15rem 0;
+      border-radius: 0 8px 8px 0;
+      color: var(--warn-text);
+    }
+    .ok {
+      border-left: 4px solid var(--ok);
+      padding: 0.75rem 1rem;
+      background: var(--ok-bg);
+      margin: 1.15rem 0;
+      border-radius: 0 8px 8px 0;
+      color: var(--ok-text);
+    }
+    code, .path {
+      font-family: "JetBrains Mono", ui-monospace, Consolas, monospace;
+      font-size: 0.9em;
+      background: var(--code-bg);
+      color: #d8dce6;
+      padding: 0.12em 0.4em;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.98rem;
+      margin: 1rem 0;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 0.6rem 0.7rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: var(--table-head);
+      color: var(--text-heading);
+      font-weight: 700;
+    }
+    td { background: var(--bg-elevated); }
+    tr:nth-child(even) td { background: var(--card); }
+    footer {
+      margin-top: 3rem;
+      font-size: 0.95rem;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+      padding-top: 1.25rem;
+    }
+    .toc {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem 1.4rem;
+      margin: 1.5rem 0;
+    }
+    .toc ul { list-style: none; padding-left: 0; }
+    .toc li { margin: 0.45rem 0; }
+    pre.agent-prompt {
+      font-family: "JetBrains Mono", ui-monospace, Consolas, monospace;
+      font-size: 0.85rem;
+      line-height: 1.55;
+      background: var(--code-bg);
+      color: #dce2ec;
+      padding: 1rem 1.15rem;
+      border-radius: 8px;
+      overflow: auto;
+      border: 1px solid var(--border);
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <h1>Migration master plan: Windows → Ubuntu</h1>
+  <p class="meta"><strong>Review only.</strong> Do not run backups, sync, uninstall, or mass deletes until <strong>you</strong> approve each phase. Markdown twin: <a href="migration-ubuntu-master-plan.md">migration-ubuntu-master-plan.md</a></p>
+
+  <div class="warn">
+    <strong>Your correction:</strong> <code>localhost:3000</code> = <strong>carbon-gen</strong> at <code>D:\Projects\My project\carbon-gen</code>. <code>localhost:3040</code> = <strong>carbon-warehouse-management</strong>. Ubuntu dev dirs: <code>/home/eliorp1/dev/carbon-gen</code> and <code>/home/eliorp1/dev/carbon-warehouse-management</code>.
+  </div>
+
+  <nav class="toc" aria-label="On this page">
+    <strong>Contents</strong>
+    <ul>
+      <li><a href="#paths">Canonical paths &amp; ports</a></li>
+      <li><a href="#cursor">Cursor backups &amp; transcripts</a></li>
+      <li><a href="#agents">Prompt for AI agents (after Ubuntu sync)</a></li>
+      <li><a href="#phase0">Phase 0 — Pre-flight</a></li>
+      <li><a href="#phase1">Phase 1 — Backups on D:</a></li>
+      <li><a href="#phase2">Phase 2 — Sync full <code>D:\backup c</code></a></li>
+      <li><a href="#phase3">Phase 3 — C: vs D:</a></li>
+      <li><a href="#phase4">Phase 4 — localhost 3000 / 3040</a></li>
+      <li><a href="#phase5">Phase 5 — One Cursor on Ubuntu</a></li>
+      <li><a href="#personal">Personal: clean Windows PC</a></li>
+      <li><a href="#paths-irrelevant">Are Windows paths irrelevant?</a></li>
+      <li><a href="#tooling">Tooling &amp; checklist</a></li>
+    </ul>
+  </nav>
+
+  <h2 id="paths">Canonical paths and ports</h2>
+  <table>
+    <thead>
+      <tr><th>Role</th><th>Windows (source)</th><th>Ubuntu (dev)</th><th>Localhost</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>carbon-gen</strong></td>
+        <td><code>D:\Projects\My project\carbon-gen</code></td>
+        <td><code>/home/eliorp1/dev/carbon-gen</code></td>
+        <td><strong>http://localhost:3000</strong></td>
+      </tr>
+      <tr>
+        <td><strong>CarbonWMS</strong></td>
+        <td><code>D:\Projects\My project\carbon-warehouse-management</code></td>
+        <td><code>/home/eliorp1/dev/carbon-warehouse-management</code></td>
+        <td><strong>http://localhost:3040</strong></td>
+      </tr>
+      <tr>
+        <td><strong>Backup mirror</strong></td>
+        <td><code>D:\backup c\</code> (entire tree)</td>
+        <td><code>/home/eliorp1/backup-from-windows-c/</code></td>
+        <td>—</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 id="cursor">Cursor backups = transcripts + profile</h2>
+  <ul>
+    <li><code>%APPDATA%\Cursor</code> and <code>%USERPROFILE%\.cursor</code> hold settings, extensions, workspace storage, AI/chat-style history, and related data.</li>
+    <li><strong>Goal:</strong> Preserve what you need so transcripts are not lost. Each fresh backup run copies/zips the <strong>current</strong> profile from disk.</li>
+    <li><strong>Git</strong> remains source of truth for code; project backups are separate.</li>
+    <li><strong>Separate zips</strong> for the two <strong>repos</strong> vs the two <strong>Cursor profile</strong> zips. Files that Cursor/other tools write <em>inside</em> the profile trees stay inside the Cursor backup — no need to split manually.</li>
+  </ul>
+
+  <h2 id="agents">After Ubuntu has backups: prompt for AI agents</h2>
+  <p>Once <code>D:\backup c</code> is mirrored to <code>/home/eliorp1/backup-from-windows-c/</code>, paste this into Cursor on Ubuntu, Claude Code, or other agents:</p>
+  <pre class="agent-prompt">Windows backups are mirrored on this machine at:
+  /home/eliorp1/backup-from-windows-c/
+
+Use it as the canonical offline reference for:
+  - Cursor profile / transcript archives: backup-from-windows-c/archives/ (e.g. AppData-Roaming-Cursor.zip, UserProfile-dot-cursor.zip)
+  - Project zip/trees if present: backup-from-windows-c/project-repos/ (and archives under it) or any project zips under archives/projects/
+
+Do not delete or rewrite files there unless I explicitly ask. For day-to-day work, prefer /home/eliorp1/dev/carbon-gen and /home/eliorp1/dev/carbon-warehouse-management after restore/clone.</pre>
+  <p>Adjust subpaths if your sync layout differs.</p>
+
+  <h2 id="phase0">Phase 0 — Pre-flight (before backup)</h2>
+  <p>In both repos: <code>git status</code>, unpushed commits vs <code>origin</code>. When you request it: <strong>commit</strong>, <strong>push</strong>, and <code>npm run deploy:coolify</code> (or warehouse equivalent) so web/apps match <code>origin</code> and production is current. Flutter/other roots if applicable. Secrets (<code>.env.local</code>) never committed.</p>
+
+  <h2 id="phase1">Phase 1 — Fresh backups on Windows</h2>
+  <h3>1A — Cursor profile</h3>
+  <p><code>scripts/backup-c-to-d-and-ubuntu.ps1</code> — Cursor fully quit. Refreshes <code>D:\backup c\</code> folders and zips under <code>D:\backup c\archives\</code>.</p>
+  <h3>1B — Projects (separate zips)</h3>
+  <p><code>scripts/backup-projects-to-d.ps1</code> — defaults to the two Windows paths. Default output root <code>D:\backup c\project-repos\</code> (override with <code>-BackupRoot</code>). Excludes <code>node_modules</code>, <code>.next</code>, etc. unless <code>-FullTree</code>.</p>
+
+  <h2 id="phase2">Phase 2 — Ubuntu: full <code>D:\backup c</code> mirror</h2>
+  <p>Replace or archive old <code>~/backup-from-windows-c</code>, then copy the <strong>entire</strong> <code>D:\backup c</code> tree to <code>/home/eliorp1/backup-from-windows-c/</code> (<code>rsync</code>, <code>scp -r</code>, or shared folder). Quote paths for the space in <code>backup c</code>.</p>
+
+  <h2 id="phase3">Phase 3 — C: vs D:</h2>
+  <p>Projects on <strong>D:</strong> are not required to be deleted for migration. Optional: <code>-DeleteSourcesAfterCopy</code> on the <strong>Cursor</strong> backup script removes only Cursor profile paths on <strong>C:</strong>, not <code>D:\Projects\...</code>.</p>
+
+  <h2 id="phase4">Phase 4 — <code>localhost:3000</code> and <code>:3040</code></h2>
+  <p>Working trees under <code>/home/eliorp1/dev/...</code>, <code>npm install</code>, env files, Docker per README. Resolve Postgres <code>5432</code> clash if both stacks use it. Bind <code>0.0.0.0</code> if you hit dev servers from the Windows host via port forwarding. Verify real app behavior, not only that ports listen.</p>
+
+  <h2 id="phase5">Phase 5 — One Cursor on Ubuntu</h2>
+  <p>After stable verification: uninstall Cursor on Windows. No junctions, no mirrors. Single Cursor on Ubuntu for dev/build/design.</p>
+
+  <h2 id="personal">Personal end state (your statement)</h2>
+  <div class="ok">
+    After Ubuntu is 100% trusted, you may <strong>permanently remove</strong> essentially <strong>all</strong> dev-related files/software from the <strong>entire Windows PC</strong>, keeping only what you explicitly preserve. This document does <strong>not</strong> execute that wipe. Ensure git, Coolify, and off-host backups are satisfied first.
+  </div>
+
+  <h2 id="paths-irrelevant">Are <code>D:\</code> / <code>C:\</code> irrelevant after?</h2>
+  <p><strong>For daily dev: yes</strong> — you work under <code>/home/eliorp1/dev/...</code>. <strong>Still relevant sometimes:</strong> git remotes, Coolify/production, hardcoded paths in docs/scripts, webhooks/tunnels pointing at old Windows localhost.</p>
+
+  <h2 id="tooling">Tooling reference</h2>
+  <table>
+    <thead><tr><th>Goal</th><th>Artifact</th></tr></thead>
+    <tbody>
+      <tr><td>Cursor → <code>D:\backup c</code></td><td><code>scripts/backup-c-to-d-and-ubuntu.ps1</code></td></tr>
+      <tr><td>Projects → <code>D:\backup c\project-repos\</code></td><td><code>scripts/backup-projects-to-d.ps1</code></td></tr>
+      <tr><td>Claude prompts</td><td><code>docs/claude-code-backup-c-drive-prompts.md</code></td></tr>
+    </tbody>
+  </table>
+
+  <h3>Confirmation checklist</h3>
+  <ul>
+    <li>Phase 0 done for both repos (+ Flutter if applicable).</li>
+    <li>Phase 1A + 1B complete; understand <code>archives</code> vs <code>project-repos</code>.</li>
+    <li>Phase 2: full tree at <code>~/backup-from-windows-c/</code>.</li>
+    <li>Phase 4: 3000 = carbon-gen, 3040 = carbon-warehouse-management, behavior OK.</li>
+    <li>Phase 5: Windows Cursor retired.</li>
+    <li>Optional: Windows PC cleaned per your personal plan when ready.</li>
+  </ul>
+
+  <footer>
+    Elior — carbon-gen repo docs. Open this file in any browser (<kbd>file:///</kbd> or serve from a static server). Same content as <a href="migration-ubuntu-master-plan.md">migration-ubuntu-master-plan.md</a>.
+  </footer>
+</body>
+</html>
