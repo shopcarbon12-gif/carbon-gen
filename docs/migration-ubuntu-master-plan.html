@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Migration master plan — Windows → Ubuntu (carbon-gen + CarbonWMS)</title>
+  <title>Migration master plan — Windows → Ubuntu (all D:\Projects)</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -143,7 +143,7 @@
 </head>
 <body>
   <h1>Migration master plan: Windows → Ubuntu</h1>
-  <p class="meta"><strong>Review only.</strong> Do not run backups, sync, uninstall, or mass deletes until <strong>you</strong> approve each phase. Markdown twin: <a href="migration-ubuntu-master-plan.md">migration-ubuntu-master-plan.md</a></p>
+  <p class="meta"><strong>Review only.</strong> Do not run backups, sync, uninstall, or mass deletes until <strong>you</strong> approve each phase. Markdown twin: <a href="migration-ubuntu-master-plan.md">migration-ubuntu-master-plan.md</a>. Covers <strong>all</strong> trees under <code>D:\Projects</code>, not only carbon-gen and CarbonWMS.</p>
 
   <div class="warn">
     <strong>Your correction:</strong> <code>localhost:3000</code> = <strong>carbon-gen</strong> at <code>D:\Projects\My project\carbon-gen</code>. <code>localhost:3040</code> = <strong>carbon-warehouse-management</strong>. Ubuntu dev dirs: <code>/home/eliorp1/dev/carbon-gen</code> and <code>/home/eliorp1/dev/carbon-warehouse-management</code>.
@@ -152,7 +152,10 @@
   <nav class="toc" aria-label="On this page">
     <strong>Contents</strong>
     <ul>
+      <li><a href="#projects-root">Where <code>D:\Projects</code> is</a></li>
       <li><a href="#paths">Canonical paths &amp; ports</a></li>
+      <li><a href="#inventory">Inventory: <code>My project</code></a></li>
+      <li><a href="#cursor-org">Cursor: global vs project settings</a></li>
       <li><a href="#cursor">Cursor backups &amp; transcripts</a></li>
       <li><a href="#agents">Prompt for AI agents (after Ubuntu sync)</a></li>
       <li><a href="#phase0">Phase 0 — Pre-flight</a></li>
@@ -166,6 +169,9 @@
       <li><a href="#tooling">Tooling &amp; checklist</a></li>
     </ul>
   </nav>
+
+  <h2 id="projects-root">Where <code>D:\Projects</code> is</h2>
+  <p>Top level today: <code>D:\Projects\My project\</code> (all dev folders below) and <code>D:\Projects\carbon-gen-backups-outside\</code> (e.g. dated snapshots, may have no <code>.git</code>). Non-git trees still move via robocopy / zip / rsync like any backup.</p>
 
   <h2 id="paths">Canonical paths and ports</h2>
   <table>
@@ -193,17 +199,46 @@
       </tr>
     </tbody>
   </table>
+  <p class="meta">Other folders under <code>My project</code> can use <code>/home/eliorp1/dev/&lt;folder-name&gt;</code> on Ubuntu when you need them.</p>
 
   <div class="note">
     <strong>Mirror (this plan):</strong> means <strong>file copy or sync</strong> (<code>rsync</code>, <code>scp -r</code>, shared folder + copy) so Ubuntu holds a <strong>duplicate</strong> of the backup tree as of the last sync. It is <strong>not</strong> a Windows <strong>junction</strong>, <strong>symlink</strong>, or “one path points at another” trick — those are unrelated.
   </div>
+
+  <h2 id="inventory">Inventory: <code>D:\Projects\My project\</code></h2>
+  <p class="meta">Checklist for backups and Phase 0. Re-run <code>git status</code> / <code>git remote -v</code> before cutover. Side carbon-gen copies share the same GitHub remote on different branches; <strong>shop-carbon-app</strong> and <strong>shopify-ai-backend</strong> had <strong>no remote</strong> when scanned — backup folders or add <code>origin</code> when ready. Scrub untracked secrets before any cloud upload.</p>
+  <table>
+    <thead>
+      <tr><th>Folder</th><th>Git</th><th>Remote / branch</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>carbon-gen</strong></td><td>Yes</td><td><code>shopcarbon12-gif/carbon-gen</code>, <strong>main</strong></td><td>Deploy: <code>npm run deploy:coolify</code> (env gate per repo).</td></tr>
+      <tr><td><strong>carbon-warehouse-management</strong></td><td>Yes</td><td>same org, <strong>main</strong></td><td>CarbonWMS; deploy per that repo.</td></tr>
+      <tr><td><strong>carbon-gen-side-accessibility</strong></td><td>Yes</td><td>same remote, <code>side-accessibility-widget</code></td><td>WIP vs last commit — commit/push branch if you want GitHub to hold it.</td></tr>
+      <tr><td><strong>carbon-gen-side-accessibility-2</strong></td><td>Yes</td><td>same remote, <code>side-accessibility-widget-2</code></td><td>Larger WIP (many modified + untracked).</td></tr>
+      <tr><td><strong>shop-carbon-app</strong></td><td>Yes</td><td><strong>No remote</strong>, <code>master</code></td><td>Add GitHub or rely on zip backup only.</td></tr>
+      <tr><td><strong>shopify-ai-backend</strong></td><td>Yes</td><td><strong>No remote</strong>, <code>master</code></td><td>Many changes; watch logs/secrets in untracked files.</td></tr>
+      <tr><td><strong>carbon-gen1</strong>, <strong>carbon-stu</strong>, <strong>cursor-safe-archive</strong>, <strong>gemini old studio</strong>, <strong>Gemini Studio</strong>, <strong>User</strong></td><td>No</td><td>—</td><td>Folder backup / rsync.</td></tr>
+      <tr><td><strong>.tmp_empty_delete</strong></td><td>No</td><td>—</td><td>Likely disposable — confirm before backup.</td></tr>
+      <tr><td><code>carbon-gen-backups-outside\…</code></td><td>Often no</td><td>—</td><td>Copy with other backups.</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="cursor-org">Cursor: global vs project settings</h2>
+  <ul>
+    <li><strong>Global:</strong> <code>%APPDATA%\Cursor\User\settings.json</code> — machine-wide (e.g. font size, theme). Yours is currently minimal.</li>
+    <li><strong>Per repo:</strong> <code>.vscode/settings.json</code> for workspace excludes, terminal profile, ESLint roots, extension workspace config. Present today: <code>carbon-gen</code>, <code>carbon-warehouse-management</code>, <code>carbon-gen-side-accessibility</code>, <code>carbon-gen-side-accessibility-2</code>.</li>
+    <li><strong>Cursor rules:</strong> <code>.cursor/rules/*.mdc</code> — richest in carbon-gen and carbon-warehouse-management; side repos have partial copies.</li>
+  </ul>
+  <p class="meta"><strong>Rule of thumb:</strong> stack-specific → repo <code>.vscode</code> / <code>.cursor</code>; personal preference everywhere → global <code>settings.json</code>.</p>
 
   <h2 id="cursor">Cursor backups = transcripts + profile</h2>
   <ul>
     <li><code>%APPDATA%\Cursor</code> and <code>%USERPROFILE%\.cursor</code> hold settings, extensions, workspace storage, AI/chat-style history, and related data.</li>
     <li><strong>Goal:</strong> Preserve what you need so transcripts are not lost. Each fresh backup run copies/zips the <strong>current</strong> profile from disk.</li>
     <li><strong>Git</strong> remains source of truth for code; project backups are separate.</li>
-    <li><strong>Separate zips</strong> for the two <strong>repos</strong> vs the two <strong>Cursor profile</strong> zips. Files that Cursor/other tools write <em>inside</em> the profile trees stay inside the Cursor backup — no need to split manually.</li>
+    <li><strong>Separate zips</strong> for <strong>project trees</strong> vs <strong>Cursor profile</strong> zips. <code>backup-projects-to-d.ps1</code> defaults to only carbon-gen + CarbonWMS — extend it or copy the whole <code>My project</code> folder for a full <code>D:\Projects</code> archive.</li>
+    <li>Files that Cursor/other tools write <em>inside</em> the profile trees stay inside the Cursor backup — no need to split manually.</li>
   </ul>
 
   <h2 id="agents">After Ubuntu has backups: prompt for AI agents</h2>
@@ -214,18 +249,19 @@
 Use it as the canonical offline reference for:
   - Cursor profile / transcript archives: backup-from-windows-c/archives/ (e.g. AppData-Roaming-Cursor.zip, UserProfile-dot-cursor.zip)
   - Project zip/trees if present: backup-from-windows-c/project-repos/ (and archives under it) or any project zips under archives/projects/
+  - Any full-folder copies of D:\Projects\My project (if mirrored under backup-from-windows-c or elsewhere)
 
-Do not delete or rewrite files there unless I explicitly ask. For day-to-day work, prefer /home/eliorp1/dev/carbon-gen and /home/eliorp1/dev/carbon-warehouse-management after restore/clone.</pre>
+Do not delete or rewrite files there unless I explicitly ask. For day-to-day work, prefer /home/eliorp1/dev/... for active repos (e.g. carbon-gen, carbon-warehouse-management) after restore/clone.</pre>
   <p>Adjust subpaths if your sync layout differs.</p>
 
   <h2 id="phase0">Phase 0 — Pre-flight (before backup)</h2>
-  <p>In both repos: <code>git status</code>, unpushed commits vs <code>origin</code>. When you request it: <strong>commit</strong>, <strong>push</strong>, and <code>npm run deploy:coolify</code> (or warehouse equivalent) so web/apps match <code>origin</code> and production is current. Flutter/other roots if applicable. Secrets (<code>.env.local</code>) never committed.</p>
+  <p>For <strong>every</strong> git repo in the inventory: <code>git status</code>, unpushed vs <code>origin</code> (repos with <strong>no remote</strong> cannot push until you add one). When you request it: <strong>commit</strong>, <strong>push</strong>, and production deploy (<code>npm run deploy:coolify</code> for carbon-gen, warehouse equivalent for CarbonWMS). Side branches / local-only repos may have no deploy. List non-git folders for manual copy. Secrets never committed; scan untracked files before zipping.</p>
 
   <h2 id="phase1">Phase 1 — Fresh backups on Windows</h2>
   <h3>1A — Cursor profile</h3>
   <p><code>scripts/backup-c-to-d-and-ubuntu.ps1</code> — Cursor fully quit. Refreshes <code>D:\backup c\</code> folders and zips under <code>D:\backup c\archives\</code>.</p>
   <h3>1B — Projects (separate zips)</h3>
-  <p><code>scripts/backup-projects-to-d.ps1</code> — defaults to the two Windows paths. Default output root <code>D:\backup c\project-repos\</code> (override with <code>-BackupRoot</code>). Excludes <code>node_modules</code>, <code>.next</code>, etc. unless <code>-FullTree</code>.</p>
+  <p><code>scripts/backup-projects-to-d.ps1</code> — defaults to carbon-gen + carbon-warehouse-management. Default output <code>D:\backup c\project-repos\</code> (<code>-BackupRoot</code> to override). Excludes <code>node_modules</code>, <code>.next</code>, etc. unless <code>-FullTree</code>. To archive <strong>all</strong> of <code>D:\Projects\My project</code> (and <code>carbon-gen-backups-outside</code>), extend the script or run an additional full-folder copy into <code>D:\backup c\</code> or straight to Ubuntu.</p>
 
   <h2 id="phase2">Phase 2 — Ubuntu: full <code>D:\backup c</code> mirror</h2>
   <p>Replace or archive old <code>~/backup-from-windows-c</code>, then copy the <strong>entire</strong> <code>D:\backup c</code> tree to <code>/home/eliorp1/backup-from-windows-c/</code> (<code>rsync</code>, <code>scp -r</code>, or shared folder). Quote paths for the space in <code>backup c</code>.</p>
@@ -235,7 +271,7 @@ Do not delete or rewrite files there unless I explicitly ask. For day-to-day wor
   <p>Projects on <strong>D:</strong> are not required to be deleted for migration. Optional: <code>-DeleteSourcesAfterCopy</code> on the <strong>Cursor</strong> backup script removes only Cursor profile paths on <strong>C:</strong>, not <code>D:\Projects\...</code>.</p>
 
   <h2 id="phase4">Phase 4 — <code>localhost:3000</code> and <code>:3040</code></h2>
-  <p>Working trees under <code>/home/eliorp1/dev/...</code>, <code>npm install</code>, env files, Docker per README. Resolve Postgres <code>5432</code> clash if both stacks use it. Bind <code>0.0.0.0</code> if you hit dev servers from the Windows host via port forwarding. Verify real app behavior, not only that ports listen.</p>
+  <p>Working trees under <code>/home/eliorp1/dev/carbon-gen</code> and <code>.../carbon-warehouse-management</code> (plus other inventory dirs as <code>/home/eliorp1/dev/&lt;name&gt;</code> when needed), <code>npm install</code>, env files, Docker per README. Resolve Postgres <code>5432</code> clash if both stacks use it. Bind <code>0.0.0.0</code> if you hit dev servers from the Windows host via port forwarding. Verify real app behavior, not only that ports listen.</p>
 
   <h2 id="phase5">Phase 5 — One Cursor on Ubuntu</h2>
   <p>After stable verification: uninstall Cursor on Windows. No junctions, no mirrors. Single Cursor on Ubuntu for dev/build/design.</p>
@@ -253,15 +289,15 @@ Do not delete or rewrite files there unless I explicitly ask. For day-to-day wor
     <thead><tr><th>Goal</th><th>Artifact</th></tr></thead>
     <tbody>
       <tr><td>Cursor → <code>D:\backup c</code></td><td><code>scripts/backup-c-to-d-and-ubuntu.ps1</code></td></tr>
-      <tr><td>Projects → <code>D:\backup c\project-repos\</code></td><td><code>scripts/backup-projects-to-d.ps1</code></td></tr>
+      <tr><td>Default two repos → <code>D:\backup c\project-repos\</code></td><td><code>scripts/backup-projects-to-d.ps1</code> (extend paths for full <code>My project</code>)</td></tr>
       <tr><td>Claude prompts</td><td><code>docs/claude-code-backup-c-drive-prompts.md</code></td></tr>
     </tbody>
   </table>
 
   <h3>Confirmation checklist</h3>
   <ul>
-    <li>Phase 0 done for both repos (+ Flutter if applicable).</li>
-    <li>Phase 1A + 1B complete; understand <code>archives</code> vs <code>project-repos</code>.</li>
+    <li>Phase 0 done for <strong>all</strong> git repos you rely on + non-git folder list.</li>
+    <li>Phase 1A + 1B complete; understand <code>archives</code> vs <code>project-repos</code> vs any full <code>Projects</code> copy.</li>
     <li>Phase 2: full tree at <code>~/backup-from-windows-c/</code>.</li>
     <li>Phase 4: 3000 = carbon-gen, 3040 = carbon-warehouse-management, behavior OK.</li>
     <li>Phase 5: Windows Cursor retired.</li>
