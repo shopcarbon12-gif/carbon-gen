@@ -241,6 +241,7 @@ You stated that **after** Ubuntu is fully working and synced, you intend to **re
 | carbon-gen + carbon-warehouse-management → `D:\backup c\project-repos\` | `scripts/backup-projects-to-d.ps1` (optional: extend paths for zips / `carbon-gen-backups-outside`) |
 | Claude Code prompts | `docs/claude-code-backup-c-drive-prompts.md` |
 | This plan (HTML twin) | `docs/migration-ubuntu-master-plan.html` |
+| Tasks not in master HTML (goals, risks, runbooks) | `docs/migration-ubuntu-master-plan-supplement-tasks.html` |
 | Agents: avoid unnecessary `C:\` writes on Windows | `.cursor/rules/windows-minimize-c-drive-writes.mdc` |
 
 ---
