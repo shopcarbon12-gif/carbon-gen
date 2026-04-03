@@ -25,6 +25,7 @@ When this comes up again, assume the user is on **Windows** and may use **Claude
 ## Related docs
 
 - **`C_DRIVE_MIGRATION_REPORT.md`**, **`docs/c-drive-migration-report.html`**.
+- **Transcripts / Ubuntu mirror hard lock:** **`.cursor/rules/ubuntu-transcripts-backup-canonical.mdc`**, **`docs/migration-ubuntu-master-plan.md`** (agent prompt section).
 
 ## Safety
 

@@ -103,21 +103,34 @@ Use this as the **checklist** for backups, Ubuntu layout, and **Phase 0** git hy
 
 ## After Ubuntu has backups: prompt for AI agents
 
-Once **`D:\backup c`** has been mirrored to **`/home/eliorp1/backup-from-windows-c/`** (Cursor zips, project artifacts, reports), **paste the following** into **Cursor on Ubuntu**, **Claude Code**, or any coding agent so they use the same reference tree:
+Once **`D:\backup c`** has been mirrored to **`/home/eliorp1/backup-from-windows-c/`** (Cursor zips, project artifacts, reports), **paste the following** into **Cursor on Ubuntu**, **Claude Code**, **global agent instructions**, or any new coding agent. **This repo also ships the same rule** in **`.cursor/rules/ubuntu-transcripts-backup-canonical.mdc`** (`alwaysApply: true`) so Cursor picks it up without re-pasting.
 
 ```
+=== HARD LOCK — transcripts & past session context (non-negotiable) ===
+
 Windows backups are mirrored on this machine at:
   /home/eliorp1/backup-from-windows-c/
 
-Use it as the canonical offline reference for:
-  - Cursor profile / transcript archives: backup-from-windows-c/archives/ (e.g. AppData-Roaming-Cursor.zip, UserProfile-dot-cursor.zip)
-  - Project zip/trees if present: backup-from-windows-c/project-repos/ (and archives under it) or any project zips under archives/projects/
-  - Optional: full-folder copy of D:\Projects\My project (e.g. if you zipped the folder for zips/extras beyond the two repos)
+This tree is the CANONICAL offline reference for Cursor chat / transcript–style continuity and related profile data. Exact zip names may vary; search archives/ if filenames differ slightly.
 
-Do not delete or rewrite files there unless I explicitly ask. For day-to-day work, prefer /home/eliorp1/dev/... for repos you actively develop (e.g. carbon-gen, carbon-warehouse-management) after restore/clone.
+You MUST know upfront:
+  - Cursor profile + transcript-style data (zipped):  backup-from-windows-c/archives/
+      Examples: AppData-Roaming-Cursor.zip, UserProfile-dot-cursor.zip
+      (Conversation/workspace history often lives inside these zips or in extracted profile trees — use unzip -l, ag/ripgrep on extracted copies, or read tools as appropriate.)
+  - Project zip/trees if present: backup-from-windows-c/project-repos/
+      and archives under it, or any project zips under archives/projects/
+  - Optional: full-folder copy of D:\Projects\My project if mirrored here as extras beyond the two repos
+
+When the user asks about a PAST question, decision, agreement, or session ("what did we say", "last time", earlier chat):
+  - Do NOT refuse with "I don't have access to previous conversations" until you have TRIED this mirror path (list dirs, inspect zips, search inside extracted or mounted read-only copies).
+  - Treat this location as the first place to look for continuity — not an optional footnote.
+
+Do NOT delete, move, or rewrite files under backup-from-windows-c/ unless the user explicitly orders it.
+
+For day-to-day editing, prefer live clones under /home/eliorp1/dev/ (e.g. carbon-gen, carbon-warehouse-management). The mirror is for reference, recovery, and answering questions about the past — not the primary working tree.
 ```
 
-Adjust subpaths if your sync layout differs.
+Adjust the root path if your sync layout differs (e.g. different username); keep the **hard lock** behavior the same.
 
 ---
 

@@ -268,17 +268,30 @@
   </ul>
 
   <h2 id="agents">After Ubuntu has backups: prompt for AI agents</h2>
-  <p>Once <code>D:\backup c</code> is mirrored to <code>/home/eliorp1/backup-from-windows-c/</code>, paste this into Cursor on Ubuntu, Claude Code, or other agents:</p>
-  <pre class="agent-prompt">Windows backups are mirrored on this machine at:
+  <p>Once <code>D:\backup c</code> is mirrored to <code>/home/eliorp1/backup-from-windows-c/</code>, paste the block below into Cursor on Ubuntu, Claude Code, global agent instructions, or any new agent. This repo also enforces the same behavior via <code>.cursor/rules/ubuntu-transcripts-backup-canonical.mdc</code> (<code>alwaysApply: true</code>).</p>
+  <pre class="agent-prompt">=== HARD LOCK — transcripts &amp; past session context (non-negotiable) ===
+
+Windows backups are mirrored on this machine at:
   /home/eliorp1/backup-from-windows-c/
 
-Use it as the canonical offline reference for:
-  - Cursor profile / transcript archives: backup-from-windows-c/archives/ (e.g. AppData-Roaming-Cursor.zip, UserProfile-dot-cursor.zip)
-  - Project zip/trees if present: backup-from-windows-c/project-repos/ (and archives under it) or any project zips under archives/projects/
-  - Optional: full-folder copy of D:\Projects\My project (e.g. if you zipped the folder for extras beyond the two repos)
+This tree is the CANONICAL offline reference for Cursor chat / transcript–style continuity and related profile data. Exact zip names may vary; search archives/ if filenames differ slightly.
 
-Do not delete or rewrite files there unless I explicitly ask. For day-to-day work, prefer /home/eliorp1/dev/carbon-gen and /home/eliorp1/dev/carbon-warehouse-management after restore/clone.</pre>
-  <p>Adjust subpaths if your sync layout differs.</p>
+You MUST know upfront:
+  - Cursor profile + transcript-style data (zipped):  backup-from-windows-c/archives/
+      Examples: AppData-Roaming-Cursor.zip, UserProfile-dot-cursor.zip
+      (Conversation/workspace history often lives inside these zips or in extracted profile trees — use unzip -l, ag/ripgrep on extracted copies, or read tools as appropriate.)
+  - Project zip/trees if present: backup-from-windows-c/project-repos/
+      and archives under it, or any project zips under archives/projects/
+  - Optional: full-folder copy of D:\Projects\My project if mirrored here as extras beyond the two repos
+
+When the user asks about a PAST question, decision, agreement, or session ("what did we say", "last time", earlier chat):
+  - Do NOT refuse with "I don't have access to previous conversations" until you have TRIED this mirror path (list dirs, inspect zips, search inside extracted or mounted read-only copies).
+  - Treat this location as the first place to look for continuity — not an optional footnote.
+
+Do NOT delete, move, or rewrite files under backup-from-windows-c/ unless the user explicitly orders it.
+
+For day-to-day editing, prefer live clones under /home/eliorp1/dev/ (e.g. carbon-gen, carbon-warehouse-management). The mirror is for reference, recovery, and answering questions about the past — not the primary working tree.</pre>
+  <p class="meta">Adjust the root path if your sync layout differs; keep the <strong>hard lock</strong> behavior the same.</p>
 
   <h2 id="phase0">Phase 0 — Pre-flight (before backup)</h2>
   <p>For <strong>both</strong> repos: <code>git status</code>, unpushed vs <code>origin</code>. When you request it: <strong>commit</strong>, <strong>push</strong>, production deploy (<code>npm run deploy:coolify</code> / warehouse equivalent). Note non-git trees to mirror (<code>carbon-gen-backups-outside</code>, optional zips). Secrets never committed.</p>
