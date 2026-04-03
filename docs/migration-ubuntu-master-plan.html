@@ -270,8 +270,8 @@
   </ul>
 
   <h2 id="agents">After Ubuntu has backups: prompt for AI agents</h2>
-  <p>Once <code>D:\backup c</code> is mirrored to <code>/home/eliorp1/backup-from-windows-c/</code>, paste the block below into Cursor on Ubuntu, Claude Code, global agent instructions, or any new agent. This repo also enforces the same behavior via <code>.cursor/rules/ubuntu-transcripts-backup-canonical.mdc</code> (<code>alwaysApply: true</code>).</p>
-  <pre class="agent-prompt">=== HARD LOCK — transcripts &amp; past session context (non-negotiable) ===
+  <p>Once <code>D:\backup c</code> is mirrored to <code>/home/eliorp1/backup-from-windows-c/</code>, paste the <strong>entire</strong> block below into Cursor (any machine), Claude Code, global agent instructions, or any new agent — <strong>one paste = both hard locks.</strong> Cursor also loads <code>.cursor/rules/ubuntu-transcripts-backup-canonical.mdc</code> and <code>.cursor/rules/windows-minimize-c-drive-writes.mdc</code> (<code>alwaysApply: true</code>).</p>
+  <pre class="agent-prompt">=== HARD LOCK 1 — transcripts &amp; past session context (non-negotiable) ===
 
 Windows backups are mirrored on this machine at:
   /home/eliorp1/backup-from-windows-c/
@@ -292,8 +292,25 @@ When the user asks about a PAST question, decision, agreement, or session ("what
 
 Do NOT delete, move, or rewrite files under backup-from-windows-c/ unless the user explicitly orders it.
 
-For day-to-day editing, prefer live clones under /home/eliorp1/dev/ (e.g. carbon-gen, carbon-warehouse-management). The mirror is for reference, recovery, and answering questions about the past — not the primary working tree.</pre>
-  <p class="meta">Adjust the root path if your sync layout differs; keep the <strong>hard lock</strong> behavior the same.</p>
+For day-to-day editing, prefer live clones under /home/eliorp1/dev/ (e.g. carbon-gen, carbon-warehouse-management). The mirror is for reference, recovery, and answering questions about the past — not the primary working tree.
+
+=== HARD LOCK 2 — C:\ drive: do NOT use it unless mandatory (Windows; non-negotiable) ===
+
+The user's C: drive has VERY LIMITED free space. Writing unnecessary files to C:\ is unacceptable — for the user and for any agent, extension, Flutter, Gradle, Android tooling, npm, Docker-on-Windows paths, PowerShell, or subprocess.
+
+Whenever work runs on WINDOWS:
+  - Do NOT create, update, copy, or leave NEW or OLD files on C:\ unless the OS or a tool ABSOLUTELY REQUIRES that exact path AND there is NO practical alternative on D:\, the workspace (under D:\Projects\...), repo tmp/, or project-documented paths (e.g. D:\CarbonWmsTooling, D:\flutter, .tools — see carbon-warehouse-management docs).
+
+  - This includes caches, build outputs, pub-cache, Gradle user home, temp extracts, logs, dumps, downloads, test artifacts, default -OutFile targets, %TEMP% on C:, bulk %LOCALAPPDATA% — route ALL of that to D:\ or workspace paths unless truly impossible.
+
+  - Flutter / Gradle / Node / Android: set env vars and paths so caches and outputs land on D:\; never recommend "just use defaults" when defaults fill C:\.
+
+  - Applies to every chat, every suggestion, every extension — not a one-time reminder.
+
+On Linux/Ubuntu-only work there is no C:\; still avoid stuffing a small root partition when /home or project dirs can hold large artifacts.
+
+Canonical Cursor copy: .cursor/rules/windows-minimize-c-drive-writes.mdc</pre>
+  <p class="meta">Adjust the <strong>mirror</strong> root path if your sync layout differs; keep <strong>both</strong> hard locks as written.</p>
 
   <h2 id="phase0">Phase 0 — Pre-flight (before backup)</h2>
   <p>For <strong>both</strong> repos: <code>git status</code>, unpushed vs <code>origin</code>. When you request it: <strong>commit</strong>, <strong>push</strong>, production deploy (<code>npm run deploy:coolify</code> / warehouse equivalent). Note non-git trees to mirror (<code>carbon-gen-backups-outside</code>, optional zips). Secrets never committed.</p>
@@ -326,7 +343,7 @@ For day-to-day editing, prefer live clones under /home/eliorp1/dev/ (e.g. carbon
   <p><strong>For daily development on Ubuntu: mostly yes</strong> — you work under <code>/home/eliorp1/dev/...</code>.</p>
   <p><strong>Windows paths often still matter:</strong> git remotes, Coolify/production, hardcoded <code>D:\</code> in docs/scripts, webhooks/tunnels aimed at old Windows localhost, and <strong>any time you or an agent runs work on Windows</strong>.</p>
   <div class="warn">
-    <strong>Hard lock (agents):</strong> On Windows, <strong>do not</strong> use <code>C:\</code> for unnecessary files. Use <code>C:\</code> <strong>only when required</strong> (OS or tool with no practical alternative). Put generated/temp/large/“clean later” outputs on <strong><code>D:\</code></strong>, the <strong>workspace</strong>, or project <code>tmp/</code>. Always-on rule: <code>.cursor/rules/windows-minimize-c-drive-writes.mdc</code> — copy into other repos (e.g. carbon-warehouse-management) if you want the same.
+    <strong>Hard lock (<code>C:\</code>):</strong> User has <strong>critically little space on C:</strong>. Full text is <strong>HARD LOCK 2</strong> inside the <a href="#agents">paste block</a> above and in <code>.cursor/rules/windows-minimize-c-drive-writes.mdc</code> — binds every agent, chat, Flutter/Gradle/extension on Windows. Copy that <code>.mdc</code> into other repos (e.g. carbon-warehouse-management) for the same enforcement.
   </div>
 
   <h2 id="tooling">Tooling reference</h2>

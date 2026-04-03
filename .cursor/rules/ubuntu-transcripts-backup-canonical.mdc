@@ -26,3 +26,7 @@ Full paste-ready block and rationale: **`docs/migration-ubuntu-master-plan.md`**
 2. If the user references **earlier** conversation or **what was agreed**, **do not** default to “I can’t access previous chats” **until** you have **tried** the canonical path above (list directories, inspect zip contents, search extracted or copied profile data read-only).
 3. **Do not** argue that transcripts are unavailable if the path exists; **use** it (zip listing, extract to temp read-only, ripgrep, etc.).
 4. **Never** delete, move, or rewrite under the backup mirror unless the user **explicitly** asks.
+
+## When work runs on Windows
+
+Follow **`windows-minimize-c-drive-writes.mdc`** — **`C:\`** is for mandatory paths only; caches and outputs go to **`D:\`** or the workspace.

@@ -103,10 +103,10 @@ Use this as the **checklist** for backups, Ubuntu layout, and **Phase 0** git hy
 
 ## After Ubuntu has backups: prompt for AI agents
 
-Once **`D:\backup c`** has been mirrored to **`/home/eliorp1/backup-from-windows-c/`** (Cursor zips, project artifacts, reports), **paste the following** into **Cursor on Ubuntu**, **Claude Code**, **global agent instructions**, or any new coding agent. **This repo also ships the same rule** in **`.cursor/rules/ubuntu-transcripts-backup-canonical.mdc`** (`alwaysApply: true`) so Cursor picks it up without re-pasting.
+Once **`D:\backup c`** has been mirrored to **`/home/eliorp1/backup-from-windows-c/`** (Cursor zips, project artifacts, reports), **paste the entire block below** into **Cursor** (any machine), **Claude Code**, **global agent instructions**, or any new tool — **one paste = both hard locks.** Cursor also loads the same policies from **`.cursor/rules/ubuntu-transcripts-backup-canonical.mdc`** and **`.cursor/rules/windows-minimize-c-drive-writes.mdc`** (`alwaysApply: true`).
 
 ```
-=== HARD LOCK — transcripts & past session context (non-negotiable) ===
+=== HARD LOCK 1 — transcripts & past session context (non-negotiable) ===
 
 Windows backups are mirrored on this machine at:
   /home/eliorp1/backup-from-windows-c/
@@ -128,9 +128,26 @@ When the user asks about a PAST question, decision, agreement, or session ("what
 Do NOT delete, move, or rewrite files under backup-from-windows-c/ unless the user explicitly orders it.
 
 For day-to-day editing, prefer live clones under /home/eliorp1/dev/ (e.g. carbon-gen, carbon-warehouse-management). The mirror is for reference, recovery, and answering questions about the past — not the primary working tree.
+
+=== HARD LOCK 2 — C:\ drive: do NOT use it unless mandatory (Windows; non-negotiable) ===
+
+The user's C: drive has VERY LIMITED free space. Writing unnecessary files to C:\ is unacceptable — for the user and for any agent, extension, Flutter, Gradle, Android tooling, npm, Docker-on-Windows paths, PowerShell, or subprocess.
+
+Whenever work runs on WINDOWS:
+  - Do NOT create, update, copy, or leave NEW or OLD files on C:\ unless the OS or a tool ABSOLUTELY REQUIRES that exact path AND there is NO practical alternative on D:\, the workspace (under D:\Projects\...), repo tmp/, or project-documented paths (e.g. D:\CarbonWmsTooling, D:\flutter, .tools — see carbon-warehouse-management docs).
+
+  - This includes caches, build outputs, pub-cache, Gradle user home, temp extracts, logs, dumps, downloads, test artifacts, default -OutFile targets, %TEMP% on C:, bulk %LOCALAPPDATA% — route ALL of that to D:\ or workspace paths unless truly impossible.
+
+  - Flutter / Gradle / Node / Android: set env vars and paths so caches and outputs land on D:\; never recommend "just use defaults" when defaults fill C:\.
+
+  - Applies to every chat, every suggestion, every extension — not a one-time reminder.
+
+On Linux/Ubuntu-only work there is no C:\; still avoid stuffing a small root partition when /home or project dirs can hold large artifacts.
+
+Canonical Cursor copy: .cursor/rules/windows-minimize-c-drive-writes.mdc
 ```
 
-Adjust the root path if your sync layout differs (e.g. different username); keep the **hard lock** behavior the same.
+Adjust the **mirror** root path if your sync layout differs (e.g. different username); keep **both** hard locks as written.
 
 ---
 
@@ -210,11 +227,9 @@ You stated that **after** Ubuntu is fully working and synced, you intend to **re
 
 **Windows paths often still matter:** git remote URLs, Coolify/production env, docs or scripts with hardcoded `D:\`, webhooks/tunnels aimed at old Windows localhost, and **any time you or an agent still runs commands on Windows**.
 
-### Hard lock for agents (Windows + occasional Windows use)
+### Hard lock for agents (`C:\`) — summary
 
-**All agents** (Cursor and others) must **minimize unnecessary writes to `C:\`**. Use **`C:\` only when required** (OS, or a tool with no practical alternative). Put generated files, temp work, large outputs, and “clean up later” artifacts on **`D:\`**, the **workspace**, or project **`tmp/`** (gitignored) — **plenty of room there**; **do not** treat **`C:\`** as a scratch disk.
-
-This repo encodes that as an always-on Cursor rule: **`.cursor/rules/windows-minimize-c-drive-writes.mdc`**. Copy that file into other repos (e.g. **carbon-warehouse-management**) if you want the same behavior there.
+**Full wording** is inside the **combined “paste into agents” block** above (**HARD LOCK 2**) and in **`.cursor/rules/windows-minimize-c-drive-writes.mdc`** (`alwaysApply: true`). **All** agents, **all** Cursor pages/chats, **all** dev tools and extensions that touch Windows must treat **`C:\`** as **emergency-only**: **`D:\`**, workspace, or documented tooling paths for everything else. Copy that **`.mdc`** into **carbon-warehouse-management** (and any other repo) for the same enforcement.
 
 ---
 
