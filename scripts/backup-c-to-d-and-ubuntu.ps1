@@ -6,6 +6,7 @@
 
 .DESCRIPTION
   Matches C_DRIVE / c-drive-migration-report scope: Roaming\Cursor, .cursor, Local\Cursor.
+  Local\Cursor is included automatically when that folder exists (otherwise the script logs SKIP).
   MUST close Cursor completely before run (or use -StopCursorProcesses - do not run from Cursor's terminal).
 
   OpenSSH: use port 22 with bridged VM IP, or -SshPort 2222 if VirtualBox NAT forwards host 2222 -> guest 22.

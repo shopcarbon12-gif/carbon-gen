@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>D: drive — Cursor vs dev/temp inventory (2026-04-03)</title>
+  <style>
+    body { font-family: system-ui, sans-serif; line-height: 1.55; max-width: 46rem; margin: 0 auto; padding: 1.5rem; background: #11151c; color: #e8eaef; }
+    h1 { font-size: 1.35rem; }
+    h2 { font-size: 1.1rem; margin-top: 1.5rem; border-bottom: 1px solid #334; padding-bottom: 0.25rem; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.88rem; margin: 0.75rem 0; }
+    th, td { border: 1px solid #334; padding: 0.45rem 0.5rem; text-align: left; vertical-align: top; }
+    th { background: #1e2430; }
+    .cursor-yes { color: #6ee7a8; font-weight: 600; }
+    .cursor-no { color: #9aa3b2; }
+    .cursor-maybe { color: #f0c14b; }
+    code { font-size: 0.9em; background: #0c0f14; padding: 0.12em 0.35em; border-radius: 4px; }
+    .note { background: #1a2030; border-left: 4px solid #5b9fd4; padding: 0.75rem 1rem; margin: 1rem 0; font-size: 0.92rem; }
+    .warn { border-left-color: #f0c14b; }
+    ul.compact li { margin: 0.35rem 0; }
+    footer { margin-top: 2rem; font-size: 0.85rem; color: #8b95a8; }
+    a { color: #7eb8ff; }
+  </style>
+</head>
+<body>
+  <h1>D: drive scan — Cursor vs dev / temp</h1>
+  <p>Generated from a Windows-side inventory on <strong>2026-04-03</strong>. Purpose: clarify what on <code>D:\</code> is Cursor-related (for a future <strong>single-folder zip</strong> to Ubuntu / hard lock), versus general development caches.</p>
+
+  <div class="note warn">
+    <strong>Junction (C → D) recollection:</strong> On this machine, <code>C:\Users\Elior\AppData\Local\Cursor</code> is currently <strong>missing</strong> (not present as a folder or link). <code>C:\Users\Elior\AppData\Roaming\Cursor</code> and <code>C:\Users\Elior\.cursor</code> are normal directories (not reparse points in the check we ran). A large tree <code>D:\CursorData</code> matches Electron “user data dir” layout (Cache, logs, <code>blob_storage</code>, etc.) — typical when Cursor (or a Chromium app) was pointed at <code>D:\CursorData</code> via <code>--user-data-dir</code> or an older redirect. That is <strong>separate</strong> from Roaming settings under <code>%APPDATA%\Cursor</code>.
+  </div>
+
+  <h2>Summary table</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Path on D:</th>
+        <th>Cursor-related?</th>
+        <th>Role</th>
+        <th>Approx. size</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>D:\cursor\</code></td>
+        <td class="cursor-yes">Yes</td>
+        <td>Cursor <strong>application</strong> install (<code>Cursor.exe</code>, Electron payloads). Referenced by <code>D:\CarbonWmsTooling\Cursor\Launch-Cursor.ps1</code>.</td>
+        <td>~0.8 GB</td>
+      </tr>
+      <tr>
+        <td><code>D:\CursorData\</code></td>
+        <td class="cursor-yes">Yes (local app data)</td>
+        <td>User-data-dir style tree: caches, GPU cache, logs, <code>blob_storage</code>, <code>Cursor-Roaming</code> subfolder name, backups, etc. Treat as <strong>second</strong> Cursor data location alongside C: Roaming / <code>.cursor</code>.</td>
+        <td>~33 GB (32 566 files)</td>
+      </tr>
+      <tr>
+        <td><code>D:\CarbonWmsTooling\Cursor\</code></td>
+        <td class="cursor-yes">Yes (tooling)</td>
+        <td>Scripts: <code>Launch-Cursor.ps1</code>, <code>Cursor-DriveD.cmd</code>, <code>migrate-cursor-data-to-d.ps1</code>, <code>README.txt</code>. Design: <strong>no junctions</strong>; would use <code>editor-user-data</code> + <code>profile\.cursor</code> under this folder after migration — those subfolders were <strong>not present</strong> at scan time (migration not applied there, or removed).</td>
+        <td>&lt; 1 MB</td>
+      </tr>
+      <tr>
+        <td><code>D:\CarbonWmsTooling\tmp\</code></td>
+        <td class="cursor-maybe">Indirect</td>
+        <td>When you start Cursor via <code>Launch-Cursor.ps1</code>, <code>TEMP</code>/<code>TMP</code> are set to this folder — temp files from that launch mode land here. Also used by other tooling.</td>
+        <td>~2.7 GB</td>
+      </tr>
+      <tr>
+        <td><code>D:\Dev\</code>, <code>D:\DevTemp\</code></td>
+        <td class="cursor-no">No</td>
+        <td>JDK, Gradle, Flutter tooling, <code>pubcache</code>, etc. Not Cursor IDE identity data.</td>
+        <td>(not fully tallied)</td>
+      </tr>
+      <tr>
+        <td><code>D:\tmp\</code> (drive root)</td>
+        <td class="cursor-no">Unlikely</td>
+        <td>Small JSON artifacts at scan; no Cursor-specific layout.</td>
+        <td>Trivial</td>
+      </tr>
+      <tr>
+        <td><code>D:\.tools\</code>, <code>D:\.codex\</code></td>
+        <td class="cursor-no">No</td>
+        <td>General tooling / other products; not Cursor core.</td>
+        <td>(varies)</td>
+      </tr>
+      <tr>
+        <td>Gradle paths containing “cursor” in folder name</td>
+        <td class="cursor-no">No</td>
+        <td>False positive: Android <code>androidx.cursoradapter</code> library paths under <code>D:\CarbonWmsTooling\gradle-user-home\...</code>.</td>
+        <td>—</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Where “real” chat / settings live today</h2>
+  <ul class="compact">
+    <li><strong>Already in your backup script scope (C: → <code>D:\backup c\</code>):</strong> <code>%APPDATA%\Cursor</code> (Roaming) and <code>%USERPROFILE%\.cursor</code> — these are what <code>backup-c-to-d-and-ubuntu.ps1</code> zips.</li>
+    <li><strong>Not in that script today:</strong> <code>D:\CursorData</code> (large) and <code>D:\cursor</code> (installer tree). <code>D:\CarbonWmsTooling\Cursor\</code> scripts are tiny; optional to include for Ubuntu to reproduce launch pattern.</li>
+  </ul>
+
+  <h2>Proposed “one folder → zip → Ubuntu” (for hard lock)</h2>
+  <div class="note">
+    <strong>Suggested staging folder</strong> (example): <code>D:\backup c\cursor-windows-snapshot\</code>
+    <ul class="compact">
+      <li><code>01-profile-zips\</code> — copy or symlink to existing <code>D:\backup c\archives\AppData-Roaming-Cursor.zip</code> and <code>UserProfile-dot-cursor.zip</code> (already produced).</li>
+      <li><code>02-CursorData\</code> — robocopy mirror or single <code>CursorData.zip</code> of <code>D:\CursorData</code> (~33 GB; long run).</li>
+      <li><code>03-cursor-install\</code> — optional robocopy of <code>D:\cursor\</code> (~0.8 GB) if you want the exact Windows binary tree on the mirror (Ubuntu will normally install Cursor for Linux separately).</li>
+      <li><code>04-Launch-scripts\</code> — copy <code>D:\CarbonWmsTooling\Cursor\*</code> (reference for <code>--user-data-dir</code> / env pattern).</li>
+      <li><code>README.txt</code> — one paragraph: what each subfolder is, date, and “do not merge blindly with Linux Cursor paths.”</li>
+    </ul>
+    <strong>Exclude from “Cursor identity” bundle:</strong> <code>D:\Dev\</code>, <code>D:\DevTemp\gradle</code>, full Flutter caches unless you explicitly want them — they bloat the archive and are not Cursor transcripts.
+  </div>
+
+  <footer>
+    Companion: <a href="migration-unified-handoff-report.html">migration-unified-handoff-report.html</a> ·
+    Canonical Ubuntu mirror path remains <code>/home/eliorp1/backup-from-windows-c/</code> per <code>ubuntu-transcripts-backup-canonical.mdc</code>.
+  </footer>
+</body>
+</html>

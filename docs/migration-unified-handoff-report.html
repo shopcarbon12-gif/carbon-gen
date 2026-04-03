@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Migration — one handoff checklist (Windows · You · Ubuntu)</title>
+  <style>
+    :root {
+      --bg: #0f1218;
+      --text: #e8eaef;
+      --muted: #8b95a8;
+      --win: #5b9fd4;
+      --win-bg: rgba(91, 159, 212, 0.12);
+      --win-border: #3d7ab0;
+      --you: #e8b84a;
+      --you-bg: rgba(232, 184, 74, 0.1);
+      --you-border: #c9a035;
+      --ubu: #5fd4a4;
+      --ubu-bg: rgba(95, 212, 164, 0.1);
+      --ubu-border: #3aac7a;
+      --card: #1a1f28;
+      --border: #2f3644;
+      --code: #c9d1dc;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      line-height: 1.55;
+      max-width: 48rem;
+      margin: 0 auto;
+      padding: 1.75rem 1.15rem 3rem;
+      color: var(--text);
+      background: var(--bg);
+    }
+    h1 { font-size: 1.45rem; margin-top: 0; }
+    h2 { font-size: 1.12rem; margin: 1.75rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 2px solid var(--border); }
+    h3 { font-size: 1rem; margin: 1.25rem 0 0.5rem; color: var(--muted); font-weight: 600; }
+    .meta { color: var(--muted); font-size: 0.92rem; margin-bottom: 1.25rem; }
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.65rem 1.25rem;
+      padding: 0.85rem 1rem;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin: 1rem 0 1.5rem;
+      font-size: 0.9rem;
+    }
+    .legend span { display: inline-flex; align-items: center; gap: 0.4rem; }
+    .dot { width: 0.65rem; height: 0.65rem; border-radius: 50%; flex-shrink: 0; }
+    .dot-win { background: var(--win); box-shadow: 0 0 0 2px var(--win-border); }
+    .dot-you { background: var(--you); box-shadow: 0 0 0 2px var(--you-border); }
+    .dot-ubu { background: var(--ubu); box-shadow: 0 0 0 2px var(--ubu-border); }
+
+    .panel {
+      border-radius: 12px;
+      padding: 1rem 1.1rem 1.25rem;
+      margin: 1.25rem 0;
+      border: 2px solid;
+    }
+    .panel-win { background: var(--win-bg); border-color: var(--win-border); }
+    .panel-you { background: var(--you-bg); border-color: var(--you-border); }
+    .panel-ubu { background: var(--ubu-bg); border-color: var(--ubu-border); }
+    .panel > .panel-title {
+      font-weight: 800;
+      font-size: 1.05rem;
+      margin: 0 0 0.35rem;
+      letter-spacing: 0.02em;
+    }
+    .panel-win > .panel-title { color: var(--win); }
+    .panel-you > .panel-title { color: var(--you); }
+    .panel-ubu > .panel-title { color: var(--ubu); }
+    .panel-sub { color: var(--muted); font-size: 0.88rem; margin: 0 0 1rem; }
+
+    .simple-map {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem 1.15rem;
+      margin: 1rem 0 1.5rem;
+      font-size: 0.92rem;
+    }
+    .simple-map strong { color: var(--code); }
+    .simple-map ul { margin: 0.5rem 0 0; padding-left: 1.2rem; }
+    .simple-map li { margin: 0.35rem 0; }
+
+    table.tasks {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.86rem;
+      margin: 0.6rem 0 1rem;
+    }
+    table.tasks th, table.tasks td {
+      border: 1px solid var(--border);
+      padding: 0.45rem 0.5rem;
+      vertical-align: top;
+      text-align: left;
+    }
+    table.tasks th {
+      background: rgba(255,255,255,0.04);
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .chk { width: 1.35rem; text-align: center; font-size: 1.1rem; user-select: none; }
+    .done-mark { color: var(--ubu); font-weight: 700; }
+    .pending-mark { color: var(--muted); }
+    .note { font-size: 0.82rem; color: var(--muted); margin-top: 0.35rem; }
+    code {
+      font-family: ui-monospace, "Cascadia Code", monospace;
+      font-size: 0.84em;
+      background: #12151c;
+      padding: 0.08em 0.32em;
+      border-radius: 4px;
+      color: var(--code);
+    }
+
+    .howto {
+      border-left: 4px solid var(--you);
+      padding: 0.65rem 1rem;
+      margin: 1rem 0;
+      background: var(--you-bg);
+      font-size: 0.9rem;
+      border-radius: 0 8px 8px 0;
+    }
+    footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.85rem; }
+    a { color: var(--win); }
+  </style>
+</head>
+<body>
+
+  <h1>Migration — one handoff checklist</h1>
+  <p class="meta">
+    <strong>Single file for all three roles:</strong> Windows Cursor agent · You · Ubuntu Cursor agent.
+    Each role has its own color block. Checkboxes show what is already finished; Ubuntu fills in their column when you send them this same file after sync.
+    Last updated on the Windows side: <strong>2026-04-03</strong>.
+  </p>
+
+  <div class="legend" aria-label="Role colors">
+    <span><span class="dot dot-win" aria-hidden="true"></span> <strong>Windows agent</strong> — Cursor in <code>carbon-gen</code> on your PC</span>
+    <span><span class="dot dot-you" aria-hidden="true"></span> <strong>You</strong> — human; approvals, copy/paste, disks, passwords</span>
+    <span><span class="dot dot-ubu" aria-hidden="true"></span> <strong>Ubuntu agent</strong> — Cursor on Linux (or SSH)</span>
+  </div>
+
+  <div class="howto">
+    <strong>How to use this file (simple):</strong>
+    <ol style="margin: 0.5rem 0 0; padding-left: 1.2rem;">
+      <li>Read <strong>“Two kinds of backup”</strong> below once — that replaces the old “which is C which is D” confusion.</li>
+      <li>Windows agent only touches the <span class="dot dot-win" style="display:inline-block;vertical-align:middle;"></span> <strong>blue</strong> section.</li>
+      <li>You work through the <span class="dot dot-you" style="display:inline-block;vertical-align:middle;"></span> <strong>gold</strong> section (copy files, decide approvals).</li>
+      <li>After backups sit on Ubuntu, give <strong>this same HTML file</strong> to the Ubuntu agent. They mark the <span class="dot dot-ubu" style="display:inline-block;vertical-align:middle;"></span> <strong>green</strong> section and add dates / proof in the Evidence column (or a short reply + updated file).</li>
+    </ol>
+  </div>
+
+  <h2>Two kinds of backup (read this once)</h2>
+  <div class="simple-map">
+    <p style="margin-top:0"><strong>Think of two separate pipelines</strong> — they are <em>not</em> the same thing:</p>
+    <ul>
+      <li><strong>Pipeline A — “Cursor / chat / profile”</strong> (usually lives on <code>C:\</code> while you use Windows Cursor)<br />
+        Scripts copy it to <strong>one place on D:</strong> <code>D:\backup c\</code> (folders like <code>AppData-Roaming-Cursor</code>, <code>UserProfile-dot-cursor</code>) and also make <strong>zips</strong> under <code>D:\backup c\archives\</code>.<br />
+        <span class="note">This is <em>not</em> your git source code; it is settings, extensions, workspace storage, transcript-style data.</span></li>
+      <li><strong>Pipeline B — “Project repos”</strong> (your real code under <code>D:\Projects\...</code>)<br />
+        Scripts copy the two main repos into <code>D:\backup c\project-repos\</code> and zip them under <code>D:\backup c\project-repos\archives\</code>.<br />
+        <span class="note">Heavy folders like <code>node_modules</code> are usually skipped to save space — you run <code>npm install</code> again on Ubuntu.</span></li>
+    </ul>
+    <p style="margin-bottom:0"><strong>Ubuntu mirror (one folder):</strong> Everything you want off Windows eventually lands as <strong>one tree</strong> on Linux, e.g. <code>/home/eliorp1/backup-from-windows-c/</code>, which should mirror the <strong>whole</strong> <code>D:\backup c\</code> layout (archives + project-repos + any reports).</p>
+  </div>
+
+  <!-- ========== WINDOWS AGENT ========== -->
+  <div class="panel panel-win" id="windows-agent">
+    <p class="panel-title">Windows agent — tasks (blue)</p>
+    <p class="panel-sub">Only the Windows Cursor agent runs or edits these. ☑ = done in the 2026-04-03 batches + end-to-end pass (same day).</p>
+
+    <h3>Phase 0 — Git &amp; hygiene</h3>
+    <table class="tasks">
+      <thead><tr><th class="chk">☐/☑</th><th>Task</th><th>Evidence / notes (Windows fills)</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="chk done-mark">☑</td>
+          <td><code>git status</code> + unpushed check in <code>carbon-gen</code> and <code>carbon-warehouse-management</code></td>
+          <td>Both on <code>main</code>, clean vs <code>origin</code> (2026-04-03).</td>
+        </tr>
+        <tr>
+          <td class="chk done-mark">☑</td>
+          <td>Secrets inventory template (names only, no values in repo)</td>
+          <td><code>docs/migration-secrets-inventory-template.html</code></td>
+        </tr>
+        <tr>
+          <td class="chk pending-mark">☐</td>
+          <td>Deploy / Coolify alignment — <strong>only if You explicitly ask</strong> (repo rule)</td>
+          <td></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Phase 1A — Cursor profile → <code>D:\backup c\</code></h3>
+    <table class="tasks">
+      <thead><tr><th class="chk">☐/☑</th><th>Task</th><th>Evidence / notes</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="chk done-mark">☑</td>
+          <td>Run <code>scripts\backup-c-to-d-and-ubuntu.ps1</code> (with <code>-SkipScp</code> unless You supply SSH)</td>
+          <td>Report: <code>D:\backup c\BACKUP_REPORT_20260403-045644.txt</code>. Zips: <code>AppData-Roaming-Cursor.zip</code>, <code>UserProfile-dot-cursor.zip</code>.</td>
+        </tr>
+        <tr>
+          <td class="chk done-mark">☑</td>
+          <td>If <code>AppData\Local\Cursor</code> exists on this PC, re-run or extend script so Local profile is included</td>
+          <td class="note"><code>backup-c-to-d-and-ubuntu.ps1</code> already lists <code>AppData-Local-Cursor</code>; it copies when the path exists. Re-checked 2026-04-03: <code>Local\Cursor</code> still missing — nothing to add.</td>
+        </tr>
+        <tr>
+          <td class="chk pending-mark">☐</td>
+          <td>Optional: <code>scp</code> profile zips to Ubuntu <em>when You provide</em> <code>-SshHost</code> / user / port</td>
+          <td class="note">Not run: no <code>-SshHost</code> / user supplied this batch.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Phase 1B — Projects → <code>D:\backup c\project-repos\</code></h3>
+    <table class="tasks">
+      <thead><tr><th class="chk">☐/☑</th><th>Task</th><th>Evidence / notes</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="chk done-mark">☑</td>
+          <td>Run <code>scripts\backup-projects-to-d.ps1</code> (<code>-SkipScp</code> unless SSH provided)</td>
+          <td>Report: <code>D:\backup c\project-repos\PROJECTS_BACKUP_REPORT_20260403-035514.txt</code>; zips under <code>project-repos\archives\</code>.</td>
+        </tr>
+        <tr>
+          <td class="chk done-mark">☑</td>
+          <td>Copy extra trees (e.g. <code>D:\Projects\carbon-gen-backups-outside</code>) into backup tree if You confirm path exists</td>
+          <td class="note">Path exists. Robocopy → <code>D:\backup c\carbon-gen-backups-outside\</code> (2026-04-03). Large trees may take many minutes; if incomplete, re-run the same robocopy.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Phase 3 / policy (Windows-side)</h3>
+    <table class="tasks">
+      <thead><tr><th class="chk">☐/☑</th><th>Task</th><th>Evidence / notes</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="chk done-mark">☑</td>
+          <td><strong>Never</strong> delete <code>D:\Projects\...</code> for migration — copy only</td>
+          <td class="note">Acknowledged for this migration; no delete scripts run. Only copies (backup + robocopy outside tree).</td>
+        </tr>
+        <tr>
+          <td class="chk pending-mark">☐</td>
+          <td><code>-DeleteSourcesAfterCopy</code> on C: Cursor profiles <strong>only after</strong> You + Ubuntu confirm mirror is good</td>
+          <td class="note">Not run.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Rules / repos</h3>
+    <table class="tasks">
+      <thead><tr><th class="chk">☐/☑</th><th>Task</th><th>Evidence / notes</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="chk done-mark">☑</td>
+          <td>Copy migration-related <code>.cursor/rules</code> into <code>carbon-warehouse-management</code> (transcripts path + C: write lock)</td>
+          <td>Files added 2026-04-03 (commit when You want).</td>
+        </tr>
+        <tr>
+          <td class="chk done-mark">☑</td>
+          <td>Commit <code>migration-unified-handoff-report.html</code> + verification files to git when You ask</td>
+          <td class="note">Committed in <code>carbon-gen</code> with migration docs + junction script + secrets template (see git log).</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ========== HUMAN ========== -->
+  <div class="panel panel-you" id="you">
+    <p class="panel-title">You — tasks (gold)</p>
+    <p class="panel-sub">You check these. Each row says who is waiting on you.</p>
+
+    <table class="tasks">
+      <thead><tr><th class="chk">☐/☑</th><th>Your task</th><th>Phase</th><th>Relates to</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="chk pending-mark">☐</td>
+          <td>Approve each batch before Windows or Ubuntu agents run destructive or large jobs</td>
+          <td>All</td>
+          <td>WIN · UBU</td>
+        </tr>
+        <tr>
+          <td class="chk pending-mark">☐</td>
+          <td>Free enough space on <code>D:\</code> before big backups; close apps that lock repo files if a script fails</td>
+          <td>1</td>
+          <td>WIN</td>
+        </tr>
+        <tr>
+          <td class="chk pending-mark">☐</td>
+          <td><strong>Copy the whole folder</strong> <code>D:\backup c\</code> to Ubuntu mirror <code>~/backup-from-windows-c/</code> (USB, shared folder, rsync, scp — your choice)</td>
+          <td>2</td>
+          <td>You → <strong>UBU</strong> (Ubuntu verifies after this)</td>
+        </tr>
+        <tr>
+          <td class="chk pending-mark">☐</td>
+          <td>Tell Ubuntu agent: “Sync is done — run Phase 2 verification on this checklist file.”</td>
+          <td>2</td>
+          <td>UBU</td>
+        </tr>
+        <tr>
+          <td class="chk pending-mark">☐</td>
+          <td>Place <code>.env</code> / secrets on Linux for dev (never commit values)</td>
+          <td>4</td>
+          <td>You → UBU</td>
+        </tr>
+        <tr>
+          <td class="chk pending-mark">☐</td>
+          <td>Explicit OK before anyone deletes Cursor data from <code>C:\</code> (after backups verified)</td>
+          <td>3</td>
+          <td>You · WIN · UBU</td>
+        </tr>
+        <tr>
+          <td class="chk pending-mark">☐</td>
+          <td>Optional: paste the “hard lock” agent block from <code>migration-ubuntu-master-plan.md</code> into Ubuntu Cursor global instructions</td>
+          <td>Any</td>
+          <td>You · UBU</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ========== UBUNTU AGENT ========== -->
+  <div class="panel panel-ubu" id="ubuntu-agent">
+    <p class="panel-title">Ubuntu agent — tasks (green)</p>
+    <p class="panel-sub">
+      Ubuntu agent: after You copied <code>D:\backup c\</code> to <code>/home/eliorp1/backup-from-windows-c/</code> (or the path You chose), work here.
+      Change each <span class="pending-mark">☐</span> to <span class="done-mark">☑</span> in your copy of this file (or reply with the same table filled). Add command output summaries in Evidence — redact secrets.
+    </p>
+
+    <h3>Phase 2 — Verify mirror (do this first after sync)</h3>
+    <table class="tasks">
+      <thead><tr><th class="chk">☐/☑</th><th>Task</th><th>Evidence (Ubuntu fills)</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="chk pending-mark">☐</td>
+          <td>Confirm mirror root exists; list top-level (expect <code>archives/</code>, <code>project-repos/</code>, etc.)</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td class="chk pending-mark">☐</td>
+          <td><code>du -sh</code> mirror root and <code>archives/</code> (and <code>project-repos/</code> if present)</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td class="chk pending-mark">☐</td>
+          <td>Spot-check: at least one Cursor zip present; note filename + mtime</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td class="chk pending-mark">☐</td>
+          <td>Spot-check: project zips or trees under <code>project-repos/</code></td>
+          <td></td>
+        </tr>
+        <tr>
+          <td class="chk pending-mark">☐</td>
+          <td>If layout wrong or sizes absurdly small vs Windows report — <strong>STOP</strong> and document (no deletes)</td>
+          <td></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Phase 3 — Safety (read-only)</h3>
+    <table class="tasks">
+      <thead><tr><th class="chk">☐/☑</th><th>Task</th><th>Evidence</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="chk pending-mark">☐</td>
+          <td>Confirm in writing (this table) that mirror is readable before You approve any Windows deletion of C: profiles</td>
+          <td></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Phase 4 — Dev stack (only when You order this batch)</h3>
+    <table class="tasks">
+      <thead><tr><th class="chk">☐/☑</th><th>Task</th><th>Evidence</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="chk pending-mark">☐</td>
+          <td>Working dirs: <code>~/dev/carbon-gen</code> and <code>~/dev/carbon-warehouse-management</code> (confirm path with You if different)</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td class="chk pending-mark">☐</td>
+          <td><code>git clone</code> or <code>git pull</code>; <code>npm install</code>; Docker/compose per README</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td class="chk pending-mark">☐</td>
+          <td>Resolve Postgres port clash (<code>5432</code>); bind dev servers <code>0.0.0.0</code> for <strong>:3000</strong> (carbon-gen) and <strong>:3040</strong> (CarbonWMS)</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td class="chk pending-mark">☐</td>
+          <td>Smoke: <code>curl</code> health e.g. <code>http://127.0.0.1:3000/api/health</code> (and warehouse if applicable)</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td class="chk pending-mark">☐</td>
+          <td>Keep large caches under <code>/home/eliorp1/...</code> — do not fill small root disk</td>
+          <td></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Transcripts / continuity rule</h3>
+    <table class="tasks">
+      <thead><tr><th class="chk">☐/☑</th><th>Task</th><th>Evidence</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="chk pending-mark">☐</td>
+          <td>Treat <code>~/backup-from-windows-c/</code> as canonical read-only reference for past Cursor context unless You say otherwise</td>
+          <td class="note">Policy from <code>ubuntu-transcripts-backup-canonical.mdc</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <footer>
+    <strong>Canonical checklist:</strong> this file — <code>docs/migration-unified-handoff-report.html</code><br />
+    Detail &amp; matrix: <a href="migration-execution-matrix-and-verification.html">migration-execution-matrix-and-verification.html</a> ·
+    <a href="migration-ubuntu-master-plan.html">migration-ubuntu-master-plan.html</a><br />
+    Older batch-only report (2026-04-03 win-01) is superseded for day-to-day tracking; use this file for handoff.
+  </footer>
+</body>
+</html>
