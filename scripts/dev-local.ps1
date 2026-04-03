@@ -81,7 +81,7 @@ Move-RecursiveBackupSnapshots -RepoPath $repo
 
 $listenerPid = Get-ListenerPid -Port $port
 if ($listenerPid) {
-  if (Is-RepoNextProcess -Pid $listenerPid) {
+  if (Is-RepoNextProcess -ProcessId $listenerPid) {
     Write-Host "Project dev server already owns port $port (PID $listenerPid)."
     Write-Host "Open: http://localhost:$port"
     exit 0
@@ -94,12 +94,15 @@ if ($listenerPid) {
 
 Push-Location $repo
 try {
+  Write-Host ""
+  Write-Host "carbon-gen dev - open http://localhost:$port/ (same app at http://127.0.0.1:$port/ )" -ForegroundColor Cyan
+  Write-Host ""
   # Match production/Docker display timezone (US Eastern); Node on Windows may still vary for some APIs.
   $env:TZ = "America/New_York"
   # Prevent OpenNext Cloudflare dev runtime from hijacking normal local Next dev.
   $env:VERCEL = "1"
   if (Test-Path $node20Dir) {
-    $env:Path = "$node20Dir;$env:Path"
+    $env:Path = "${node20Dir};${env:Path}"
   }
   if ((Test-Path $node20Exe) -and (Test-Path $node20NpmCli)) {
     & $node20Exe $node20NpmCli run dev:raw -- -p $port

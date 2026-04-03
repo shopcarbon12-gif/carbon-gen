@@ -11,6 +11,9 @@ const nextConfig: NextConfig = {
     return config;
   },
   allowedDevOrigins: [
+    // Loopback hostnames (browser Origin uses these; not covered by Next’s built-in "localhost" alone)
+    "127.0.0.1",
+    "::1",
     "carbon-gen.shopcarbon.com",
     "carbon-gen.shopcarbon.co",
     "app.shopcarbon.com",

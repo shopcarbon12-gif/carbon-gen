@@ -194,6 +194,10 @@
     </tbody>
   </table>
 
+  <div class="note">
+    <strong>Mirror (this plan):</strong> means <strong>file copy or sync</strong> (<code>rsync</code>, <code>scp -r</code>, shared folder + copy) so Ubuntu holds a <strong>duplicate</strong> of the backup tree as of the last sync. It is <strong>not</strong> a Windows <strong>junction</strong>, <strong>symlink</strong>, or “one path points at another” trick — those are unrelated.
+  </div>
+
   <h2 id="cursor">Cursor backups = transcripts + profile</h2>
   <ul>
     <li><code>%APPDATA%\Cursor</code> and <code>%USERPROFILE%\.cursor</code> hold settings, extensions, workspace storage, AI/chat-style history, and related data.</li>
@@ -225,6 +229,7 @@ Do not delete or rewrite files there unless I explicitly ask. For day-to-day wor
 
   <h2 id="phase2">Phase 2 — Ubuntu: full <code>D:\backup c</code> mirror</h2>
   <p>Replace or archive old <code>~/backup-from-windows-c</code>, then copy the <strong>entire</strong> <code>D:\backup c</code> tree to <code>/home/eliorp1/backup-from-windows-c/</code> (<code>rsync</code>, <code>scp -r</code>, or shared folder). Quote paths for the space in <code>backup c</code>.</p>
+  <p class="meta" style="margin-top:0.75rem;"><strong>Again:</strong> mirror = duplicate files by copying/syncing — not a junction or symlink.</p>
 
   <h2 id="phase3">Phase 3 — C: vs D:</h2>
   <p>Projects on <strong>D:</strong> are not required to be deleted for migration. Optional: <code>-DeleteSourcesAfterCopy</code> on the <strong>Cursor</strong> backup script removes only Cursor profile paths on <strong>C:</strong>, not <code>D:\Projects\...</code>.</p>

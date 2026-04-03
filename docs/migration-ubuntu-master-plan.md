@@ -14,6 +14,8 @@
 | **CarbonWMS** | `D:\Projects\My project\carbon-warehouse-management` | `/home/eliorp1/dev/carbon-warehouse-management` | **http://localhost:3040** |
 | **Full backup mirror** | `D:\backup c\` (entire tree) | `/home/eliorp1/backup-from-windows-c/` | (not a web app) |
 
+**Mirror (this plan):** means **file copy or sync** (e.g. `rsync`, `scp -r`, shared folder + copy) so Ubuntu holds a **duplicate** of the backup tree as of the last sync. It is **not** a Windows **junction**, **symlink**, or other “one path points at another” trick — those are unrelated.
+
 ---
 
 ## Cursor backups = transcripts + profile (not a substitute for git)
@@ -80,6 +82,8 @@ Run in **`carbon-gen`** and **`carbon-warehouse-management`**:
 
 1. On Ubuntu, move or delete **`~/backup-from-windows-c`** contents only when you accept losing the previous mirror.
 2. Copy **the whole** **`D:\backup c`** tree to **`/home/eliorp1/backup-from-windows-c/`** (`rsync`, `scp -r`, or shared folder + `cp -a`). Mind the **space** in **`D:\backup c`** when quoting paths on Windows.
+
+Again: **mirror = duplicate files by copying/syncing**, not a junction or symlink.
 
 ---
 
