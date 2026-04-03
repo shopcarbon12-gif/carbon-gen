@@ -242,6 +242,7 @@ You stated that **after** Ubuntu is fully working and synced, you intend to **re
 | Claude Code prompts | `docs/claude-code-backup-c-drive-prompts.md` |
 | This plan (HTML twin) | `docs/migration-ubuntu-master-plan.html` |
 | Tasks not in master HTML (goals, risks, runbooks) | `docs/migration-ubuntu-master-plan-supplement-tasks.html` |
+| Who executes what + Ubuntu agent prompt + verification HTML | `docs/migration-execution-matrix-and-verification.html` |
 | Agents: avoid unnecessary `C:\` writes on Windows | `.cursor/rules/windows-minimize-c-drive-writes.mdc` |
 
 ---

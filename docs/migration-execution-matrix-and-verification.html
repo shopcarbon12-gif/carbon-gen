@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Migration execution matrix — who does what + Ubuntu prompt + verification reports</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #14161c;
+      --bg-elevated: #1e222b;
+      --card: #252a35;
+      --text: #e8eaef;
+      --text-heading: #f2f4f8;
+      --muted: #9aa3b2;
+      --border: #3d4554;
+      --border-strong: #556070;
+      --accent: #7eb8ff;
+      --accent-hover: #a8d0ff;
+      --warn: #f0c14b;
+      --warn-bg: #2a2418;
+      --warn-text: #f5e6c8;
+      --ok: #6ee7a8;
+      --ok-bg: #18261f;
+      --ok-text: #c8f5dc;
+      --bad: #f87171;
+      --bad-bg: #2c1818;
+      --code-bg: #0f1117;
+      --table-head: #323846;
+    }
+    * { box-sizing: border-box; }
+    html { font-size: 17px; }
+    body {
+      font-family: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+      line-height: 1.65;
+      max-width: 52rem;
+      margin: 0 auto;
+      padding: 2rem 1.25rem 3rem;
+      color: var(--text);
+      background: var(--bg);
+      -webkit-font-smoothing: antialiased;
+    }
+    h1 { font-size: 1.75rem; margin-top: 0; color: var(--text-heading); }
+    h2 {
+      font-size: 1.25rem;
+      margin-top: 2rem;
+      padding-bottom: 0.4rem;
+      border-bottom: 2px solid var(--border-strong);
+      color: var(--text-heading);
+    }
+    h3 { font-size: 1.05rem; margin-top: 1.35rem; color: var(--text-heading); }
+    .meta { color: var(--muted); margin-bottom: 1.25rem; }
+    a { color: var(--accent); }
+    a:hover { color: var(--accent-hover); }
+    code {
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 0.88em;
+      background: var(--code-bg);
+      padding: 0.1em 0.35em;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+    table.matrix {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+      margin: 1rem 0;
+    }
+    table.matrix th, table.matrix td {
+      border: 1px solid var(--border);
+      padding: 0.5rem 0.55rem;
+      vertical-align: top;
+      text-align: left;
+    }
+    table.matrix th { background: var(--table-head); color: var(--text-heading); }
+    table.matrix td { background: var(--bg-elevated); }
+    tr:nth-child(even) td { background: var(--card); }
+    .win { color: var(--ok-text); font-weight: 700; }
+    .user { color: var(--warn-text); font-weight: 700; }
+    .ubu { color: var(--accent); font-weight: 700; }
+    .na { color: var(--muted); }
+    pre.prompt {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.78rem;
+      line-height: 1.5;
+      background: var(--code-bg);
+      color: #dce2ec;
+      padding: 1rem 1.1rem;
+      border-radius: 8px;
+      overflow: auto;
+      border: 1px solid var(--border);
+      white-space: pre-wrap;
+    }
+    .note {
+      border-left: 4px solid var(--accent);
+      padding: 0.75rem 1rem;
+      background: var(--bg-elevated);
+      margin: 1rem 0;
+      border-radius: 0 8px 8px 0;
+    }
+    .okbox {
+      border-left: 4px solid var(--ok);
+      padding: 0.75rem 1rem;
+      background: var(--ok-bg);
+      margin: 1rem 0;
+      border-radius: 0 8px 8px 0;
+      color: var(--ok-text);
+    }
+    .warnbox {
+      border-left: 4px solid var(--warn);
+      padding: 0.75rem 1rem;
+      background: var(--warn-bg);
+      margin: 1rem 0;
+      border-radius: 0 8px 8px 0;
+      color: var(--warn-text);
+    }
+    ul.compact li { margin: 0.35rem 0; }
+    footer {
+      margin-top: 2.5rem;
+      padding-top: 1.25rem;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+    .toc { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.2rem; margin: 1.25rem 0; }
+    .toc ul { list-style: none; padding-left: 0; margin: 0; }
+    .toc li { margin: 0.4rem 0; }
+  </style>
+</head>
+<body>
+  <h1>Migration execution matrix + verification (binding on all agents)</h1>
+  <p class="meta">Companion to <a href="migration-ubuntu-master-plan.html">migration-ubuntu-master-plan.html</a> and <a href="migration-ubuntu-master-plan-supplement-tasks.html">migration-ubuntu-master-plan-supplement-tasks.html</a>. <strong>Status:</strong> review only — nothing below runs until you order a batch. This document defines <strong>who</strong> can do <strong>what</strong>, a <strong>strict Ubuntu-agent prompt</strong>, and <strong>mandatory HTML verification reports</strong> after work. <strong>The same reporting rule applies to the Windows-side Cursor agent</strong> when it executes migration tasks for you.</p>
+
+  <nav class="toc" aria-label="Contents">
+    <strong>Contents</strong>
+    <ul>
+      <li><a href="#legend">Legend &amp; global rule</a></li>
+      <li><a href="#matrix">Phase / task matrix</a></li>
+      <li><a href="#supplement">Supplement tasks matrix</a></li>
+      <li><a href="#ubuntu-prompt">Strict prompt — Ubuntu agent</a></li>
+      <li><a href="#report-template">Verification HTML report — required structure</a></li>
+      <li><a href="#windows-agent">Same rule — Windows Cursor agent (this workspace)</a></li>
+    </ul>
+  </nav>
+
+  <h2 id="legend">Legend &amp; global rule</h2>
+  <table class="matrix" aria-label="Legend">
+    <thead><tr><th>Mark</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td class="win">WIN-AGENT</td><td>Cursor/agent on <strong>Windows</strong> with access to <code>D:\Projects\...\carbon-gen</code> (and sibling paths) can run or prepare this <strong>after you explicitly say to execute</strong> that batch.</td></tr>
+      <tr><td class="user">YOU</td><td>Human only: judgment, credentials, quitting apps, hardware, production UI, legal approval to delete data.</td></tr>
+      <tr><td class="ubu">UBU-AGENT</td><td>Agent on <strong>Ubuntu</strong> (or SSH session on the Linux host) — no substitute from Windows agent if the step requires Linux paths or daemons there.</td></tr>
+      <tr><td class="na">SHARED</td><td>Both you and an agent coordinate (e.g. you provide SSH host; agent runs <code>rsync</code> recipe).</td></tr>
+    </tbody>
+  </table>
+
+  <div class="okbox">
+    <strong>Hard lock — verification report (all agents):</strong> After completing any <strong>ordered</strong> migration batch (Windows or Ubuntu), the agent must produce one <strong>new HTML file</strong> following <a href="#report-template">§ Verification HTML report</a>. Filename pattern: <code>docs/migration-verification-report-&lt;YYYY-MM-DD&gt;-batch-&lt;short-id&gt;.html</code> (commit to git if you want history). The report must state <strong>each requested item</strong>, <strong>done / not done / blocked</strong>, <strong>evidence</strong> (commands output summary, paths, file sizes — redact secrets), and <strong>mis-match vs ask</strong> if any.
+  </div>
+
+  <h2 id="matrix">Phase / task matrix (master plan)</h2>
+  <p class="meta">“Immediate” = can start as soon as you say execute; still subject to your approval and deploy rules.</p>
+  <table class="matrix">
+    <thead>
+      <tr>
+        <th>Phase / task</th>
+        <th>WIN-AGENT</th>
+        <th>YOU</th>
+        <th>UBU-AGENT</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Phase 0</strong> — <code>git status</code>, unpushed vs <code>origin</code>, notes on non-git trees</td>
+        <td class="win">YES — run in both repos; summarize in verification HTML.</td>
+        <td class="user">Approve batch; resolve any WIP you want pushed before Ubuntu relies on remote.</td>
+        <td class="na">—</td>
+      </tr>
+      <tr>
+        <td><strong>Phase 0</strong> — Coolify / production aligned with <code>origin</code></td>
+        <td class="win">YES — only if you <strong>explicitly</strong> ask to deploy (repo rules); document in report.</td>
+        <td class="user">Confirm production OK; Coolify UI / env secrets.</td>
+        <td class="na">—</td>
+      </tr>
+      <tr>
+        <td><strong>Phase 0</strong> — Secrets inventory list (no values in report)</td>
+        <td class="win">YES — template checklist; redact in HTML.</td>
+        <td class="user">Fill real secrets; secure transfer to Ubuntu.</td>
+        <td class="na">—</td>
+      </tr>
+      <tr>
+        <td><strong>Phase 1A</strong> — <code>backup-c-to-d-and-ubuntu.ps1</code> (Cursor profile → <code>D:\backup c</code> + zips)</td>
+        <td class="win">YES — from <strong>external</strong> PowerShell if Cursor must be quit; or guide you. Minimize <code>C:\</code> per rules.</td>
+        <td class="user"><strong>Quit Cursor</strong> (or approve <code>-StopCursorProcesses</code>); free disk on D:.</td>
+        <td class="na">Optional <code>scp</code> if script + SSH configured — often YOU run or approve network.</td>
+      </tr>
+      <tr>
+        <td><strong>Phase 1B</strong> — <code>backup-projects-to-d.ps1</code></td>
+        <td class="win">YES — <code>-WhatIf</code> first on request; then real run with approval. Can propose <code>/XD</code> for <code>.tools</code>.</td>
+        <td class="user">Close locks on repos if needed; disk space.</td>
+        <td class="na">Optional <code>scp</code> same as 1A.</td>
+      </tr>
+      <tr>
+        <td><strong>Phase 1</strong> — Copy <code>carbon-gen-backups-outside</code> / extra zips into backup tree</td>
+        <td class="win">YES — robocopy/recipe + report paths/sizes.</td>
+        <td class="user">Confirm what to include.</td>
+        <td class="na">—</td>
+      </tr>
+      <tr>
+        <td><strong>Phase 2</strong> — Replace <code>~/backup-from-windows-c/</code> + full <code>D:\backup c</code> mirror on Ubuntu</td>
+        <td class="na">Can prepare Windows-side folder integrity checklist / <code>tar</code> hints.</td>
+        <td class="user">Often initiate copy (USB, shared folder, <code>rsync</code> from Windows to Linux, or pull from NAS).</td>
+        <td class="ubu">YES — verify destination layout, <code>du -sh</code>, list <code>archives/</code>, compare file counts; verification HTML.</td>
+      </tr>
+      <tr>
+        <td><strong>Phase 3</strong> — Policy: never delete <code>D:\Projects</code></td>
+        <td class="win">YES — doc-only / reminders; never script deletes there without explicit YOU order.</td>
+        <td class="user">Enforcement owner.</td>
+        <td class="na">—</td>
+      </tr>
+      <tr>
+        <td><strong>Phase 3</strong> — Optional <code>-DeleteSourcesAfterCopy</code> (Cursor on C: only)</td>
+        <td class="win">YES — only after YOU confirm Ubuntu verified backups; script already scoped to C: profiles.</td>
+        <td class="user"><strong>Explicit approval</strong>; understand data removed from C: profiles.</td>
+        <td class="ubu">Should confirm mirror readable first (report).</td>
+      </tr>
+      <tr>
+        <td><strong>Phase 4</strong> — <code>~/dev/carbon-gen</code>, <code>~/dev/carbon-warehouse-management</code>, <code>npm install</code>, Docker, ports 3000/3040, Postgres clash</td>
+        <td class="na">—</td>
+        <td class="user">Provide <code>.env</code> files on Linux; approve port changes.</td>
+        <td class="ubu">YES — clone/pull, compose, fix 5432, bind <code>0.0.0.0</code>, smoke HTTP; full verification HTML with curl/logs.</td>
+      </tr>
+      <tr>
+        <td><strong>Phase 4</strong> — “Verify behavior” (pages, auth, API)</td>
+        <td class="na">Browser MCP from Windows → Ubuntu tunnel only if you expose ports and ask.</td>
+        <td class="user">Final sign-off in browser often YOU.</td>
+        <td class="ubu">YES — curl, logs, optional headless checks; document limits in report.</td>
+      </tr>
+      <tr>
+        <td><strong>§8</strong> — Personal Windows wipe</td>
+        <td class="na">—</td>
+        <td class="user">YOU only.</td>
+        <td class="na">—</td>
+      </tr>
+      <tr>
+        <td>Agent paste block + <code>.mdc</code> rules in repo</td>
+        <td class="win">Already in repo; can copy to WMS repo on request + report paths.</td>
+        <td class="user">Paste into Claude Code / Ubuntu Cursor global instructions.</td>
+        <td class="ubu">Ensure Ubuntu Cursor loads same rules if you clone dotfiles.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 id="supplement">Supplement tasks matrix</h2>
+  <table class="matrix">
+    <thead><tr><th>Task</th><th>WIN-AGENT</th><th>YOU</th><th>UBU-AGENT</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>claude-code-backup-c-drive-prompts.md</code> flow</td>
+        <td class="win">Can follow steps with YOU in external terminal; report.</td>
+        <td class="user">Run Claude Code; confirm each destructive step.</td>
+        <td class="na">—</td>
+      </tr>
+      <tr>
+        <td><code>coolify-runbook.md</code> / worker / env</td>
+        <td class="win">Read-only + deploy scripts if you explicitly ask deploy.</td>
+        <td class="user">Coolify UI, tokens, server SSH.</td>
+        <td class="ubu">If Coolify targets Linux workers on same host — diagnose there.</td>
+      </tr>
+      <tr>
+        <td>VirtualBox / VM setup (<code>AGENT_HANDOFF_VIRTUALBOX_LINUX.md</code>)</td>
+        <td class="na">Limited: no BIOS/USB from agent.</td>
+        <td class="user">Install Hypervisor, allocate disk, Ubuntu install.</td>
+        <td class="ubu">Post-install: guest tools, sshd, disk, user — agent can assist on guest.</td>
+      </tr>
+      <tr>
+        <td>CarbonWMS Flutter APK / <code>D:\CarbonWmsTooling</code></td>
+        <td class="win">YES in WMS workspace when opened; not default from carbon-gen only.</td>
+        <td class="user">JDK/Android licenses; device USB.</td>
+        <td class="ubu">YES if building on Linux instead.</td>
+      </tr>
+      <tr>
+        <td><code>npm run dev</code> / <code>kill:3000</code> diagnostics</td>
+        <td class="win">YES anytime you ask.</td>
+        <td class="na">—</td>
+        <td class="na">—</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 id="ubuntu-prompt">Strict prompt — paste to Ubuntu agent (Cursor / Claude on Linux)</h2>
+  <div class="warnbox">
+    After pasting, add one line: <strong>“Execute batch ID: ___”</strong> and <strong>“Produce verification HTML at docs/migration-verification-report-&lt;date&gt;-batch-&lt;id&gt;.html in the repo you use for docs (or ~/reports if no repo).”</strong>
+  </div>
+  <pre class="prompt">=== HARD LOCK — Ubuntu migration agent ===
+
+You are working on Ubuntu (native or VM) for user eliorp1. You MUST comply with the migration master plan and supplement docs they provide (paths may be under /home/eliorp1/...).
+
+A) TRANSCRIPTS / BACKUPS (read-only unless user orders)
+- Canonical mirror: /home/eliorp1/backup-from-windows-c/
+- Before claiming you cannot answer a past question: search archives/, list zips, inspect workspace storage inside profile exports as needed.
+- Do NOT delete or modify backup-from-windows-c/ unless the user explicitly orders it.
+
+B) PHASE 2 VERIFICATION (when user says backup sync is done)
+- Confirm tree exists and list top-level: backup-from-windows-c/archives/, project-repos/, etc.
+- Run du -sh on mirror root and on archives/; record in report.
+- Spot-check: at least one Cursor zip present (name may vary); note mtime.
+- If mismatch vs expected layout, STOP and document in report (do not guess-delete).
+
+C) PHASE 4 DEV STACK (when user orders)
+- Working dirs: /home/eliorp1/dev/carbon-gen and /home/eliorp1/dev/carbon-warehouse-management (or user-adjusted paths — confirm first).
+- git clone OR git pull; npm install; Docker/compose per README; resolve Postgres host port clash (5432); bind dev servers 0.0.0.0 for :3000 and :3040 as per plan.
+- Do NOT put huge caches on a full root filesystem; use /home/eliorp1/... for tool caches when possible.
+- Smoke: curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/api/health (and warehouse equivalent if exists). Paste exit codes and last 20 lines of logs if failing.
+
+D) VERIFICATION HTML REPORT (MANDATORY after EVERY batch you execute)
+- Create a NEW file following the structure in the user’s doc: migration-execution-matrix-and-verification.html → section “Verification HTML report”.
+- For EACH sub-task the user asked: status DONE | NOT DONE | BLOCKED, evidence (commands, paths, sizes), and explicit line “Matches user ask: YES/NO — reason”.
+- Redact all secrets (tokens, passwords, full .env). Never commit secrets.
+
+E) If blocked
+- State blocker (permissions, missing .env, network, Coolify down, etc.); list exact next step for human.
+
+This rule is non-negotiable. Partial completion without a report is considered incomplete work.</pre>
+
+  <h2 id="report-template">Verification HTML report — required structure</h2>
+  <p class="meta">Use this outline for <strong>every</strong> batch (Ubuntu agent <strong>or</strong> Windows agent). Save as a <strong>new</strong> dated file each time.</p>
+  <ul class="compact">
+    <li><strong>&lt;h1&gt;</strong> Title: <code>Migration verification — &lt;YYYY-MM-DD&gt; — batch &lt;id&gt;</code></li>
+    <li><strong>Meta block:</strong> Agent role (Windows carbon-gen / Ubuntu SSH / …), repo path, git commit hash if applicable, duration.</li>
+    <li><strong>User request (verbatim):</strong> quote what they ordered for this batch.</li>
+    <li><strong>Checklist table:</strong> columns: Task | Expected | Result (DONE/NOT DONE/BLOCKED) | Evidence | Matches ask (YES/NO)</li>
+    <li><strong>Commands run:</strong> bullet list; for long output, “summary + path to full log file” on disk (no secrets).</li>
+    <li><strong>Filesystem evidence:</strong> important paths, <code>du -sh</code> or Windows equivalent, file counts where relevant.</li>
+    <li><strong>URLs / HTTP:</strong> status codes from curl or browser test; note if skipped and why.</li>
+    <li><strong>Deviations:</strong> anything done differently from the ask; user impact.</li>
+    <li><strong>Follow-ups for user:</strong> only concrete items you cannot do without them.</li>
+    <li><strong>Sign-off line:</strong> “Report complete: YES” or “Partial: reason …”</li>
+  </ul>
+  <div class="note">
+    <strong>Styling:</strong> You may reuse the same CSS as <code>migration-ubuntu-master-plan.html</code> for readability; content matters more than theme.
+  </div>
+
+  <h2 id="windows-agent">Same rule — Windows Cursor agent (carbon-gen workspace)</h2>
+  <div class="okbox">
+    When <strong>you</strong> order this agent to execute a Windows-side batch (Phase 0 checks, Phase 1 backups, script edits, copying rules to WMS, etc.), this agent must:
+    <ul class="compact">
+      <li>Produce the <strong>same structure</strong> verification HTML under <code>docs/migration-verification-report-&lt;date&gt;-batch-&lt;id&gt;.html</code>.</li>
+      <li>Never claim “done” without filling the checklist against <strong>your</strong> stated ask for that batch.</li>
+      <li>Honor <code>windows-minimize-c-drive-writes.mdc</code> and deploy-only-when-asked rules.</li>
+      <li>If Playwright/browser proof is required by workspace rules, state in report whether it ran or was skipped and why.</li>
+    </ul>
+  </div>
+
+  <footer>
+    <a href="migration-ubuntu-master-plan.html">Master plan (HTML)</a> ·
+    <a href="migration-ubuntu-master-plan-supplement-tasks.html">Supplement tasks</a> ·
+    <a href="migration-ubuntu-master-plan.md">Master plan (Markdown)</a>
+    <br /><br />
+    Generated as execution control doc — update matrix if your infrastructure changes.
+  </footer>
+</body>
+</html>
