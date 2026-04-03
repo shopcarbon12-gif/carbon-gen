@@ -12,7 +12,7 @@ On your machine, **`D:\Projects`** currently has **two** top-level entries:
 
 | Top-level folder | Typical role |
 |------------------|--------------|
-| **`D:\Projects\My project\`** | All active and side copies of apps (see inventory below). |
+| **`D:\Projects\My project\`** | Active repos only (see inventory); duplicate full-copy sandboxes were removed after you consolidated work into **carbon-gen**. |
 | **`D:\Projects\carbon-gen-backups-outside\`** | e.g. dated snapshot folder(s) without `.git` — still **copy** into `D:\backup c\...` or mirror to Ubuntu as part of “everything on D: that matters.” |
 
 There is **no** requirement that every folder be a git repo. Non-git trees still move via **robocopy / zip / rsync** like any other project backup.
@@ -39,19 +39,12 @@ Use this as the **checklist** for backups, Ubuntu layout, and **Phase 0** git hy
 
 | Folder | Git | Remote / branch (when present) | Notes |
 |--------|-----|--------------------------------|--------|
-| **carbon-gen** | Yes | `origin` → `shopcarbon12-gif/carbon-gen`, **main** | Primary Next.js app; **deploy:** `npm run deploy:coolify` (with env gate per repo docs). |
+| **carbon-gen** | Yes | `origin` → `shopcarbon12-gif/carbon-gen`, **main** | Primary Next.js app; **deploy:** `npm run deploy:coolify` (with env gate per repo docs). Accessibility / widget / collection-mapping work lives here (e.g. `app/accessibility`); no separate sibling clone required. |
 | **carbon-warehouse-management** | Yes | `origin` → `shopcarbon12-gif/carbon-warehouse-management`, **main** | CarbonWMS; deploy per that repo (Coolify/README). |
-| **carbon-gen-side-accessibility** | Yes | Same `origin` as carbon-gen, branch **`side-accessibility-widget`** | Working copy; **modified** tracked files vs last commit — review, then commit/push **branch** if you want GitHub to hold it. |
-| **carbon-gen-side-accessibility-2** | Yes | Same `origin` as carbon-gen, branch **`side-accessibility-widget-2`** | Larger WIP (many modified + untracked files). Same remote as main repo — treat as **feature exploration** until you commit/push. |
-| **shop-carbon-app** | Yes | **No `git remote`** | Local **master** only; **modified** files. To “push”: add a GitHub remote (or rely on **zip/backup** only). |
-| **shopify-ai-backend** | Yes | **No `git remote`** | Local **master**; many changes + **untracked** items (including files that may be **logs or secrets** — scrub before any commit or cloud upload). |
-| **carbon-gen1** | No | — | Not a git repo; include in **folder backup** / rsync. |
-| **carbon-stu** | No | — | Same. |
-| **cursor-safe-archive** | No | — | Same. |
-| **gemini old studio** | No | — | Same. |
-| **Gemini Studio** | No | — | Same. |
-| **User** | No | — | Same (confirm it is intentional project data, not OS “User”). |
-| **.tmp_empty_delete** | No | — | Likely disposable; confirm before backing up. |
+
+**Removed from disk (your choice, 2026-04):** full-copy sandboxes used so alternate UIs would not affect the main theme — **`carbon-gen-side-accessibility`**, **`carbon-gen-side-accessibility-2`**, plus **`shop-carbon-app`**, **`shopify-ai-backend`**, **`carbon-gen1`**, **`carbon-stu`**, **`cursor-safe-archive`**, **`gemini old studio`**, **`Gemini Studio`**, **`User`**, **`.tmp_empty_delete`**, and the **`carbon-gen-side-accessibility*.zip`** archives. If anything was never pushed to GitHub, it existed only in those trees (now gone).
+
+You may still have **other** files under `My project` (e.g. dated **`carbon-gen-backup-*.zip`**, loose scripts); include or exclude from backups as you prefer.
 
 **`D:\Projects\carbon-gen-backups-outside\`:** e.g. **`carbon-gen-src-20260213-125031`** — **no `.git`** in scan; **copy** with other backups.
 
@@ -65,8 +58,8 @@ Use this as the **checklist** for backups, Ubuntu layout, and **Phase 0** git hy
 
 | Location | Purpose |
 |----------|---------|
-| **`<repo>/.vscode/settings.json`** | Workspace settings: terminal default shell, `files.exclude` / `search.exclude` (e.g. `.next`), ESLint working directories, extension IDs that are workspace-scoped. **Repos that currently have it:** `carbon-gen`, `carbon-warehouse-management`, `carbon-gen-side-accessibility`, `carbon-gen-side-accessibility-2`. |
-| **`<repo>/.cursor/rules/*.mdc`** | Cursor **project rules** (agents). **carbon-gen** and **carbon-warehouse-management** have the richest sets; side carbon-gen copies have partial copies. |
+| **`<repo>/.vscode/settings.json`** | Workspace settings: terminal default shell, `files.exclude` / `search.exclude` (e.g. `.next`), ESLint working directories, extension IDs that are workspace-scoped. **Repos that currently have it:** `carbon-gen`, `carbon-warehouse-management`. |
+| **`<repo>/.cursor/rules/*.mdc`** | Cursor **project rules** (agents). **carbon-gen** and **carbon-warehouse-management** hold the active rule sets. |
 
 **Principle:** If it is **only** for one stack (Next.js paths, Flutter, Coolify hints), keep it in **that repo’s** `.vscode` / `.cursor`. If it is **personal preference everywhere**, keep it in **global** `settings.json`. After Ubuntu install, **re-copy** or **sync** global Cursor settings once, then open each repo so workspace settings apply.
 
@@ -76,9 +69,9 @@ Use this as the **checklist** for backups, Ubuntu layout, and **Phase 0** git hy
 
 - **`%APPDATA%\Cursor`** (Roaming) and **`%USERPROFILE%\.cursor`** hold **settings, extensions, workspace storage, AI/chat history–style data**, and other metadata.
 - **Goal:** Preserve **everything** you need so transcripts and workspace context are not lost. Each fresh run of the Cursor backup script **refreshes** the copies and zips from the **current** profile (you are not “losing” old transcripts in the zip unless the live profile on disk no longer contains them).
-- **Project source code** still lives in **git** (where configured) and in **`D:\Projects\...`**; you still run **project** backups separately for **all** folders you care about, not only the two flagship repos.
+- **Project source code** still lives in **git** and in **`D:\Projects\...`**; run **project** backups for **`My project`** (now mostly the two repos plus any loose zips/scripts you keep).
 
-**Project zips vs Cursor zips:** **Always separate archives** for **Cursor profile** vs **project trees**. The automation in **`scripts/backup-projects-to-d.ps1`** today defaults to **carbon-gen** + **carbon-warehouse-management** only — for a **full** `D:\Projects\My project` archive, either **extend that script** (extra paths), run **additional robocopy/rsync** passes, or zip **`My project`** as a whole (mind size). **Cursor** zips stay the **profile** archives (or whatever names the script emits). If **Cursor** or other tools write files **inside** the profile trees, those files ride along inside the **Cursor** backup — that is normal; you are not asked to split those by hand.
+**Project zips vs Cursor zips:** **Always separate archives** for **Cursor profile** vs **project trees**. **`scripts/backup-projects-to-d.ps1`** defaults to **carbon-gen** + **carbon-warehouse-management**; add paths if you store extra artifacts under `My project`. **Cursor** zips stay the **profile** archives (or whatever names the script emits). If **Cursor** or other tools write files **inside** the profile trees, those files ride along inside the **Cursor** backup — that is normal; you are not asked to split those by hand.
 
 ---
 
@@ -198,7 +191,7 @@ You stated that **after** Ubuntu is fully working and synced, you intend to **re
 | Risk | Mitigation |
 |------|------------|
 | Unpushed work lost | Push before treating remote as truth; project backup keeps `.git` by default. |
-| Local-only repos | No `origin` — backup **folder** is the safety net; add remote when ready. |
+| Local-only repos | (Historical) No `origin` — backup **folder** was the safety net. |
 | Huge sync | Exclude heavy dirs or use `rsync`; plan disk/time. |
 | Missing `.env` on Ubuntu | Checklist + secure copy. |
 | Postgres port clash | Change one compose host port. |

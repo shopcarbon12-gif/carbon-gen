@@ -171,7 +171,7 @@
   </nav>
 
   <h2 id="projects-root">Where <code>D:\Projects</code> is</h2>
-  <p>Top level today: <code>D:\Projects\My project\</code> (all dev folders below) and <code>D:\Projects\carbon-gen-backups-outside\</code> (e.g. dated snapshots, may have no <code>.git</code>). Non-git trees still move via robocopy / zip / rsync like any backup.</p>
+  <p>Top level today: <code>D:\Projects\My project\</code> (active repos below; old full-copy sandboxes removed) and <code>D:\Projects\carbon-gen-backups-outside\</code> (e.g. dated snapshots, may have no <code>.git</code>). Non-git trees still move via robocopy / zip / rsync like any backup.</p>
 
   <h2 id="paths">Canonical paths and ports</h2>
   <table>
@@ -206,7 +206,7 @@
   </div>
 
   <h2 id="inventory">Inventory: <code>D:\Projects\My project\</code></h2>
-  <p class="meta">Checklist for backups and Phase 0. Re-run <code>git status</code> / <code>git remote -v</code> before cutover. Side carbon-gen copies share the same GitHub remote on different branches; <strong>shop-carbon-app</strong> and <strong>shopify-ai-backend</strong> had <strong>no remote</strong> when scanned — backup folders or add <code>origin</code> when ready. Scrub untracked secrets before any cloud upload.</p>
+  <p class="meta">Checklist for backups and Phase 0. Re-run <code>git status</code> before cutover. Accessibility / widget / collection-mapping work lives in <strong>carbon-gen</strong> (e.g. <code>app/accessibility</code>); duplicate full-copy sandboxes were removed from disk (2026-04).</p>
   <table>
     <thead>
       <tr><th>Folder</th><th>Git</th><th>Remote / branch</th><th>Notes</th></tr>
@@ -214,12 +214,7 @@
     <tbody>
       <tr><td><strong>carbon-gen</strong></td><td>Yes</td><td><code>shopcarbon12-gif/carbon-gen</code>, <strong>main</strong></td><td>Deploy: <code>npm run deploy:coolify</code> (env gate per repo).</td></tr>
       <tr><td><strong>carbon-warehouse-management</strong></td><td>Yes</td><td>same org, <strong>main</strong></td><td>CarbonWMS; deploy per that repo.</td></tr>
-      <tr><td><strong>carbon-gen-side-accessibility</strong></td><td>Yes</td><td>same remote, <code>side-accessibility-widget</code></td><td>WIP vs last commit — commit/push branch if you want GitHub to hold it.</td></tr>
-      <tr><td><strong>carbon-gen-side-accessibility-2</strong></td><td>Yes</td><td>same remote, <code>side-accessibility-widget-2</code></td><td>Larger WIP (many modified + untracked).</td></tr>
-      <tr><td><strong>shop-carbon-app</strong></td><td>Yes</td><td><strong>No remote</strong>, <code>master</code></td><td>Add GitHub or rely on zip backup only.</td></tr>
-      <tr><td><strong>shopify-ai-backend</strong></td><td>Yes</td><td><strong>No remote</strong>, <code>master</code></td><td>Many changes; watch logs/secrets in untracked files.</td></tr>
-      <tr><td><strong>carbon-gen1</strong>, <strong>carbon-stu</strong>, <strong>cursor-safe-archive</strong>, <strong>gemini old studio</strong>, <strong>Gemini Studio</strong>, <strong>User</strong></td><td>No</td><td>—</td><td>Folder backup / rsync.</td></tr>
-      <tr><td><strong>.tmp_empty_delete</strong></td><td>No</td><td>—</td><td>Likely disposable — confirm before backup.</td></tr>
+      <tr><td colspan="4" class="meta"><strong>Removed (your choice):</strong> <code>carbon-gen-side-accessibility*</code> trees/zips, <code>shop-carbon-app</code>, <code>shopify-ai-backend</code>, <code>carbon-gen1</code>, <code>carbon-stu</code>, <code>cursor-safe-archive</code>, Gemini studio folders, <code>User</code>, <code>.tmp_empty_delete</code>. Unpushed work in those trees is gone unless you have another copy.</td></tr>
       <tr><td><code>carbon-gen-backups-outside\…</code></td><td>Often no</td><td>—</td><td>Copy with other backups.</td></tr>
     </tbody>
   </table>
@@ -227,8 +222,8 @@
   <h2 id="cursor-org">Cursor: global vs project settings</h2>
   <ul>
     <li><strong>Global:</strong> <code>%APPDATA%\Cursor\User\settings.json</code> — machine-wide (e.g. font size, theme). Yours is currently minimal.</li>
-    <li><strong>Per repo:</strong> <code>.vscode/settings.json</code> for workspace excludes, terminal profile, ESLint roots, extension workspace config. Present today: <code>carbon-gen</code>, <code>carbon-warehouse-management</code>, <code>carbon-gen-side-accessibility</code>, <code>carbon-gen-side-accessibility-2</code>.</li>
-    <li><strong>Cursor rules:</strong> <code>.cursor/rules/*.mdc</code> — richest in carbon-gen and carbon-warehouse-management; side repos have partial copies.</li>
+    <li><strong>Per repo:</strong> <code>.vscode/settings.json</code> for workspace excludes, terminal profile, ESLint roots, extension workspace config. Present today: <code>carbon-gen</code>, <code>carbon-warehouse-management</code>.</li>
+    <li><strong>Cursor rules:</strong> <code>.cursor/rules/*.mdc</code> — active sets in carbon-gen and carbon-warehouse-management.</li>
   </ul>
   <p class="meta"><strong>Rule of thumb:</strong> stack-specific → repo <code>.vscode</code> / <code>.cursor</code>; personal preference everywhere → global <code>settings.json</code>.</p>
 
@@ -237,7 +232,7 @@
     <li><code>%APPDATA%\Cursor</code> and <code>%USERPROFILE%\.cursor</code> hold settings, extensions, workspace storage, AI/chat-style history, and related data.</li>
     <li><strong>Goal:</strong> Preserve what you need so transcripts are not lost. Each fresh backup run copies/zips the <strong>current</strong> profile from disk.</li>
     <li><strong>Git</strong> remains source of truth for code; project backups are separate.</li>
-    <li><strong>Separate zips</strong> for <strong>project trees</strong> vs <strong>Cursor profile</strong> zips. <code>backup-projects-to-d.ps1</code> defaults to only carbon-gen + CarbonWMS — extend it or copy the whole <code>My project</code> folder for a full <code>D:\Projects</code> archive.</li>
+    <li><strong>Separate zips</strong> for <strong>project trees</strong> vs <strong>Cursor profile</strong> zips. <code>backup-projects-to-d.ps1</code> defaults to carbon-gen + CarbonWMS; add paths for any extra artifacts you keep under <code>My project</code>.</li>
     <li>Files that Cursor/other tools write <em>inside</em> the profile trees stay inside the Cursor backup — no need to split manually.</li>
   </ul>
 
