@@ -3,6 +3,12 @@
     "github.copilot-chat",
     "google.geminicodeassist",
     "openai.chatgpt",
-    "beilunyang.cursor-rules"
+    "beilunyang.cursor-rules",
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "bradlc.vscode-tailwindcss",
+    "ms-vscode.vscode-typescript-next",
+    "ckolkman.vscode-postgres",
+    "ms-azuretools.vscode-docker"
   ]
 }
