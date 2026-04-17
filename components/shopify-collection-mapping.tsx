@@ -7084,6 +7084,8 @@ export default function ShopifyCollectionMapping() {
           transform: none;
           padding-left: 13px !important;
           padding-right: 13px !important;
+          height: 100% !important;
+          max-height: 100% !important;
         }
         .treePaneHost :global(.treeSearchBar),
         .treePaneHost :global(.treeContent),
@@ -7142,7 +7144,7 @@ export default function ShopifyCollectionMapping() {
           opacity: 1;
           transform: none;
           overflow-x: hidden;
-          overflow-y: visible !important;
+          overflow-y: auto !important;
           max-height: none !important;
           padding-left: 0 !important;
           padding-right: 0 !important;
@@ -7200,9 +7202,9 @@ export default function ShopifyCollectionMapping() {
           outline: 1px solid #2a3a56;
           outline-offset: -1px;
           box-sizing: border-box;
-          height: auto;
-          max-height: none;
-          overflow: visible;
+          height: calc(100dvh - var(--shell-content-top-offset) - 24px);
+          max-height: calc(100dvh - var(--shell-content-top-offset) - 24px);
+          overflow: hidden;
           position: sticky;
           top: var(--workspace-sticky-top);
           z-index: 40;
