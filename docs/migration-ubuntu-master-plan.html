@@ -311,6 +311,7 @@ On Linux/Ubuntu-only work there is no C:\; still avoid stuffing a small root par
 
 Canonical Cursor copy: .cursor/rules/windows-minimize-c-drive-writes.mdc</pre>
   <p class="meta">Adjust the <strong>mirror</strong> root path if your sync layout differs; keep <strong>both</strong> hard locks as written.</p>
+  <p><strong>Ubuntu agent:</strong> append <strong>section F</strong> (inventory verification) from <a href="migration-execution-matrix-and-verification.html#ubuntu-prompt">migration-execution-matrix-and-verification.html</a> after the Ubuntu migration prompt (A–E). Also in <a href="migration-ubuntu-master-plan.md">migration-ubuntu-master-plan.md</a> (short form).</p>
 
   <h2 id="phase0">Phase 0 — Pre-flight (before backup)</h2>
   <p>For <strong>both</strong> repos: <code>git status</code>, unpushed vs <code>origin</code>. When you request it: <strong>commit</strong>, <strong>push</strong>, production deploy (<code>npm run deploy:coolify</code> / warehouse equivalent). Note non-git trees to mirror (<code>carbon-gen-backups-outside</code>, optional zips). Secrets never committed.</p>
@@ -320,9 +321,11 @@ Canonical Cursor copy: .cursor/rules/windows-minimize-c-drive-writes.mdc</pre>
   <p><code>scripts/backup-c-to-d-and-ubuntu.ps1</code> — Cursor fully quit. Refreshes <code>D:\backup c\</code> folders and zips under <code>D:\backup c\archives\</code>.</p>
   <h3>1B — Projects (separate zips)</h3>
   <p><code>scripts/backup-projects-to-d.ps1</code> — defaults to carbon-gen + carbon-warehouse-management. Default output <code>D:\backup c\project-repos\</code> (<code>-BackupRoot</code> to override). Excludes <code>node_modules</code>, <code>.next</code>, etc. unless <code>-FullTree</code>. <strong>Optional:</strong> copy <code>carbon-gen-backups-outside</code> and any <code>carbon-gen-backup-*.zip</code> into <code>D:\backup c\</code> or Ubuntu alongside scripted zips.</p>
+  <h3>1C — Dev disk inventory</h3>
+  <p><code>scripts/dev-disk-inventory.ps1</code> → <code>D:\backup c\inventory\</code> (CSVs + <code>extra-scan-roots.txt</code>). <strong>L4 mandatory:</strong> WinDirStat/WizTree on <strong>C:</strong> and <strong>D:</strong> — <a href="dev-inventory-wiztree-windirstat.md">dev-inventory-wiztree-windirstat.md</a>. Triage: <a href="dev-inventory-triage-dedupe.md">dev-inventory-triage-dedupe.md</a>.</p>
 
   <h2 id="phase2">Phase 2 — Ubuntu: full <code>D:\backup c</code> mirror</h2>
-  <p>On Ubuntu, <strong>remove or empty</strong> existing <code>~/backup-from-windows-c/</code> when you want to <strong>replace</strong> it with a <strong>fresh</strong> sync (you accept losing the previous Ubuntu-side mirror). Then copy the <strong>whole</strong> current <code>D:\backup c</code> tree to <code>/home/eliorp1/backup-from-windows-c/</code> (<code>rsync</code>, <code>scp -r</code>, or shared folder). Quote paths for the space in <code>backup c</code>.</p>
+  <p>On Ubuntu, <strong>remove or empty</strong> existing <code>~/backup-from-windows-c/</code> when you want to <strong>replace</strong> it with a <strong>fresh</strong> sync (you accept losing the previous Ubuntu-side mirror). Then copy the <strong>whole</strong> current <code>D:\backup c</code> tree to <code>/home/eliorp1/backup-from-windows-c/</code> (<code>rsync</code>, <code>scp -r</code>, or shared folder). Quote paths for the space in <code>backup c</code>. Include <code>backup-from-windows-c/inventory/</code> (CSVs + L4 exports) when present.</p>
   <p class="meta"><strong>Windows <code>D:\Projects\...</code> is not deleted</strong> here — only the Ubuntu backup destination is replaced/updated.</p>
   <p class="meta" style="margin-top:0.75rem;"><strong>Again:</strong> mirror = duplicate files by copying/syncing — not a junction or symlink.</p>
 
@@ -352,6 +355,10 @@ Canonical Cursor copy: .cursor/rules/windows-minimize-c-drive-writes.mdc</pre>
     <tbody>
       <tr><td>Cursor → <code>D:\backup c</code></td><td><code>scripts/backup-c-to-d-and-ubuntu.ps1</code></td></tr>
       <tr><td>Two repos → <code>D:\backup c\project-repos\</code></td><td><code>scripts/backup-projects-to-d.ps1</code> (optional: add paths for zips / <code>carbon-gen-backups-outside</code>)</td></tr>
+      <tr><td>Dev inventory → <code>D:\backup c\inventory\</code></td><td><code>scripts/dev-disk-inventory.ps1</code></td></tr>
+      <tr><td>L4 WinDirStat/WizTree</td><td><code>docs/dev-inventory-wiztree-windirstat.md</code></td></tr>
+      <tr><td>Triage / dedupe</td><td><code>docs/dev-inventory-triage-dedupe.md</code></td></tr>
+      <tr><td>Three Windows agents + Ubuntu prompts</td><td><code>docs/cursor-three-agent-prompts.md</code></td></tr>
       <tr><td>Claude prompts</td><td><code>docs/claude-code-backup-c-drive-prompts.md</code></td></tr>
       <tr><td>Agents: avoid unnecessary <code>C:\</code> writes</td><td><code>.cursor/rules/windows-minimize-c-drive-writes.mdc</code></td></tr>
     </tbody>

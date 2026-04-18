@@ -122,6 +122,26 @@ powershell -ExecutionPolicy Bypass -File ".\scripts\backup-projects-to-d.ps1" -S
 
 ---
 
+## Dev disk inventory → `D:\backup c\inventory\` (include in full mirror to Ubuntu)
+
+Outputs must live **under** `D:\backup c\` so they copy with **Phase 2** (`rsync` / `scp -r` of the **whole** `D:\backup c` tree) — do **not** leave reports only on `C:\` or outside the backup root.
+
+1. **PowerShell (L1–L3+L5):** from `d:\Projects\My project\carbon-gen`:
+
+   ```
+   powershell -ExecutionPolicy Bypass -File ".\scripts\dev-disk-inventory.ps1"
+   ```
+
+   Optional: `-SkipGitTriage` for a faster pass; add more roots in `D:\backup c\inventory\extra-scan-roots.txt`.
+
+2. **L4 (mandatory):** WinDirStat or WizTree on **C:** and **D:**; save exports into **`D:\backup c\inventory\`** — see **`docs/dev-inventory-wiztree-windirstat.md`**.
+
+3. **Triage:** **`docs/dev-inventory-triage-dedupe.md`**.
+
+4. **Ubuntu sync:** mirroring **`D:\backup c`** to **`~/backup-from-windows-c/`** must include **`inventory/`** (CSVs + L4 files). The Ubuntu agent checks this in **section F** of **`docs/migration-execution-matrix-and-verification.html`**.
+
+---
+
 ## Remove **only** Cursor profile data from C: (after fresh backup + your verification)
 
 **`-DeleteSourcesAfterCopy` on `backup-c-to-d-and-ubuntu.ps1` removes only:** `%APPDATA%\Cursor`, `%USERPROFILE%\.cursor`, `%LOCALAPPDATA%\Cursor` (if present). It does **not** remove **`D:\Projects\...`**.
@@ -142,6 +162,7 @@ Then optionally re-upload Cursor zips with SSH if you use `-SshHost` / `-SshUser
 |------|------|
 | `scripts/backup-c-to-d-and-ubuntu.ps1` | Cursor profile → `D:\backup c\…`, zips, optional `scp` |
 | `scripts/backup-projects-to-d.ps1` | carbon-gen + carbon-warehouse-management → `D:\backup c\project-repos\…` |
+| `scripts/dev-disk-inventory.ps1` | Dev inventory CSVs → `D:\backup c\inventory\` (mirror with full backup tree) |
 | `docs/c-drive-migration-report.html` | Human checklist + script section |
 | `C_DRIVE_MIGRATION_REPORT.md` | Markdown twin + links |
 

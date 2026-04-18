@@ -4262,6 +4262,7 @@ export default function ShopifyCollectionMapping() {
     let failedRows = 0;
     const warningMessages: string[] = [];
     const rowIdsToClearDrafts: string[] = [];
+    const successfulFinalRefsByRowId = new Map<string, string[]>();
     try {
       for (const row of queuedRows) {
         const rowId = String(row.rowId || "").trim();
@@ -4310,6 +4311,7 @@ export default function ShopifyCollectionMapping() {
         if (rowSucceeded) {
           completedRows += 1;
           rowIdsToClearDrafts.push(rowId);
+          successfulFinalRefsByRowId.set(rowId, Array.isArray(row.finalCollections) ? row.finalCollections : []);
         } else {
           failedRows += 1;
         }
@@ -4363,6 +4365,46 @@ export default function ShopifyCollectionMapping() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(withShopContext({ action: "clear-row-drafts", rowIds: rowIdsToClearDrafts })),
         }).catch(() => {});
+        setRows((prev) =>
+          prev.map((row) => {
+            if (!clearedIds.has(row.id)) return row;
+            const finalRefs = successfulFinalRefsByRowId.get(row.id) || [];
+            const nextNodeKeys = new Set<string>();
+            const nextDirectHandles = new Set<string>();
+            for (const ref of finalRefs) {
+              const raw = String(ref || "").trim();
+              if (!raw) continue;
+              if (raw.startsWith("PATH:")) {
+                const normalizedPath = normalizeMenuPath(raw.slice(5));
+                const nodeKey = nodeKeyByPath.get(normalizedPath);
+                if (nodeKey) nextNodeKeys.add(nodeKey);
+                continue;
+              }
+              if (raw.startsWith("DIRECT:")) {
+                const handle = String(raw.slice(7) || "").trim().toLowerCase();
+                if (handle) nextDirectHandles.add(handle);
+              }
+            }
+            /** Match staging rule: final merges autoMappedPaths into menu final; keep identical to live paths from checked keys only. */
+            const alignedAutoPaths = dedupeNormalizedPaths(
+              Array.from(nextNodeKeys)
+                .map((key) => normalizeMenuPath(nodePathByKey.get(key) || ""))
+                .filter(Boolean)
+            );
+            return {
+              ...row,
+              checkedNodeKeys: Array.from(nextNodeKeys),
+              currentDirectCollections: Array.from(nextDirectHandles),
+              /** Staging merges autoMappedPaths + directCollectionsToAssign into "final"; clear/align so live matches final after commit. */
+              autoMappedPaths: alignedAutoPaths,
+              directCollectionsToAssign: [],
+              actionStatus: "PROCESSED",
+              /** Commit is explicit confirmation; satisfies workflow gate for MANUAL_REVIEW rows once live matches final. */
+              isReviewed: true,
+              draft: null,
+            };
+          })
+        );
       }
 
       setQueueJobs((prev) =>

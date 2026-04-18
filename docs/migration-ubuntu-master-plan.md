@@ -149,6 +149,18 @@ Canonical Cursor copy: .cursor/rules/windows-minimize-c-drive-writes.mdc
 
 Adjust the **mirror** root path if your sync layout differs (e.g. different username); keep **both** hard locks as written.
 
+### Ubuntu agent add-on — paste **section F** after the strict Ubuntu prompt
+
+When pasting the **Ubuntu migration agent** block from [migration-execution-matrix-and-verification.html](docs/migration-execution-matrix-and-verification.html) (sections A–E), append **section F** from that same page (inventory verification). Short form:
+
+```
+F) INVENTORY REPORTS (when user says Windows dev inventory + mirror sync are done)
+- Expect under backup-from-windows-c/: inventory/ with master CSV (L1–L3+L5 from dev-disk-inventory.ps1), git-triage sidecar if separate, and WinDirStat/WizTree exports for BOTH C: and D: (mandatory L4 companions).
+- List that folder; record file names, sizes, mtimes in the verification HTML report.
+- Do NOT treat absence of a file as "nothing to back up" — if missing, BLOCK and document.
+- Still read-only on backup-from-windows-c/ unless user orders changes.
+```
+
 ---
 
 ## Phase 0 — Pre-flight (before any backup)
@@ -181,12 +193,18 @@ Run for **both** repos (**carbon-gen**, **carbon-warehouse-management**) and not
 - By default **excludes** `node_modules`, `.next`, etc. (use **`-FullTree`** if you insist on everything).
 - **Optional:** copy **`D:\Projects\carbon-gen-backups-outside`** and any **`carbon-gen-backup-*.zip`** (or all of **`My project`**) into `D:\backup c\` or straight to Ubuntu if you want them beside the scripted repo zips.
 
+### 1C — Dev disk inventory (before Phase 2 sync)
+
+- Script: **`scripts/dev-disk-inventory.ps1`** — writes **`D:\backup c\inventory\`** (`dev-inventory-*.csv`, `git-triage-*.csv`, template **`extra-scan-roots.txt`**).
+- **L4 (mandatory):** full **C:** and **D:** maps via WinDirStat or WizTree — see **`docs/dev-inventory-wiztree-windirstat.md`**. Save exports into the same **`inventory\`** folder so they mirror to Ubuntu with the rest of **`D:\backup c`**.
+- Triage workflow: **`docs/dev-inventory-triage-dedupe.md`**.
+
 ---
 
 ## Phase 2 — Ubuntu: replace old mirror, sync **entire** `D:\backup c`
 
 1. On Ubuntu, **remove or empty** the existing **`~/backup-from-windows-c/`** tree when you are ready to replace it with a **fresh** sync (you accept dropping the **previous** Ubuntu-side mirror).
-2. Copy **the whole** current **`D:\backup c`** tree from Windows to **`/home/eliorp1/backup-from-windows-c/`** (`rsync`, `scp -r`, or shared folder + `cp -a`) so Ubuntu reflects **this** backup, not an older copy. Mind the **space** in **`D:\backup c`** when quoting paths on Windows.
+2. Copy **the whole** current **`D:\backup c`** tree from Windows to **`/home/eliorp1/backup-from-windows-c/`** (`rsync`, `scp -r`, or shared folder + `cp -a`) so Ubuntu reflects **this** backup, not an older copy. Mind the **space** in **`D:\backup c`** when quoting paths on Windows. This **includes** **`backup-from-windows-c/inventory/`** (CSV + L4 exports) if present — do not omit it when verifying completeness.
 
 **Windows `D:\Projects\...` is not deleted** in this step — only the **Ubuntu destination** for the backup mirror is replaced/updated.
 
@@ -239,6 +257,10 @@ You stated that **after** Ubuntu is fully working and synced, you intend to **re
 |------|--------------|
 | Cursor profile → `D:\backup c` + profile zips | `scripts/backup-c-to-d-and-ubuntu.ps1` |
 | carbon-gen + carbon-warehouse-management → `D:\backup c\project-repos\` | `scripts/backup-projects-to-d.ps1` (optional: extend paths for zips / `carbon-gen-backups-outside`) |
+| Dev disk inventory → `D:\backup c\inventory\` | `scripts/dev-disk-inventory.ps1` |
+| L4 WinDirStat/WizTree (mandatory) | `docs/dev-inventory-wiztree-windirstat.md` |
+| Triage / dedupe | `docs/dev-inventory-triage-dedupe.md` |
+| Three Windows agents + Ubuntu prompts | `docs/cursor-three-agent-prompts.md` |
 | Claude Code prompts | `docs/claude-code-backup-c-drive-prompts.md` |
 | This plan (HTML twin) | `docs/migration-ubuntu-master-plan.html` |
 | Tasks not in master HTML (goals, risks, runbooks) | `docs/migration-ubuntu-master-plan-supplement-tasks.html` |

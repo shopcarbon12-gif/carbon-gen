@@ -83,5 +83,14 @@ if ($info -match 'Additions run level:\s+(\d+)') {
   Write-Host "Additions run level: $($Matches[1])"
 }
 
+if ($info -match 'Clipboard Mode:\s+(\S+)') {
+  $cm = $Matches[1].Trim()
+  Write-Host "Clipboard Mode (VM setting): $cm"
+  if ($cm -notmatch '^Bidirectional$') {
+    Write-Host '  Fix: Shut down VM -> Settings -> General -> Advanced -> Shared Clipboard: Bidirectional' -ForegroundColor Yellow
+    Write-Host '  In Ubuntu: run scripts/guest/fix-vbox-ubuntu-clipboard.sh (see guide Phase E.6c)' -ForegroundColor Yellow
+  }
+}
+
 Write-Host ''
 Write-Host 'Done.' -ForegroundColor Gray

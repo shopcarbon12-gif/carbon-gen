@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dev disk inventory — full guide (L1–L5)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #14161c;
+      --bg-elevated: #1e222b;
+      --card: #252a35;
+      --text: #e8eaef;
+      --text-heading: #f2f4f8;
+      --muted: #9aa3b2;
+      --border: #3d4554;
+      --border-strong: #556070;
+      --accent: #7eb8ff;
+      --accent-hover: #a8d0ff;
+      --warn: #f0c14b;
+      --warn-bg: #2a2418;
+      --warn-text: #f5e6c8;
+      --ok: #6ee7a8;
+      --ok-bg: #18261f;
+      --ok-text: #c8f5dc;
+      --code-bg: #0f1117;
+      --table-head: #323846;
+    }
+    * { box-sizing: border-box; }
+    html { font-size: 18px; }
+    body {
+      font-family: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+      font-size: 1rem;
+      line-height: 1.65;
+      max-width: 48rem;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 3.5rem;
+      color: var(--text);
+      background: var(--bg);
+      -webkit-font-smoothing: antialiased;
+    }
+    h1, h2, h3 {
+      font-weight: 700;
+      color: var(--text-heading);
+      line-height: 1.3;
+      letter-spacing: -0.02em;
+    }
+    h1 { font-size: 1.85rem; margin-top: 0; }
+    h2 {
+      font-size: 1.35rem;
+      margin-top: 2.25rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 2px solid var(--border-strong);
+    }
+    h3 { font-size: 1.12rem; margin-top: 1.5rem; }
+    .meta { color: var(--muted); margin-bottom: 1.5rem; line-height: 1.6; }
+    a { color: var(--accent); }
+    a:hover { color: var(--accent-hover); }
+    ul { padding-left: 1.4rem; }
+    ul li { margin: 0.4rem 0; }
+    .note {
+      border-left: 4px solid var(--accent);
+      padding: 0.75rem 1rem;
+      background: var(--bg-elevated);
+      margin: 1.15rem 0;
+      border-radius: 0 8px 8px 0;
+    }
+    .warn {
+      border-left: 4px solid var(--warn);
+      padding: 0.75rem 1rem;
+      background: var(--warn-bg);
+      margin: 1.15rem 0;
+      border-radius: 0 8px 8px 0;
+      color: var(--warn-text);
+    }
+    .ok {
+      border-left: 4px solid var(--ok);
+      padding: 0.75rem 1rem;
+      background: var(--ok-bg);
+      margin: 1.15rem 0;
+      border-radius: 0 8px 8px 0;
+      color: var(--ok-text);
+    }
+    code, .path {
+      font-family: "JetBrains Mono", ui-monospace, Consolas, monospace;
+      font-size: 0.9em;
+      background: var(--code-bg);
+      color: #d8dce6;
+      padding: 0.12em 0.4em;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+    }
+    pre.cmd {
+      font-family: "JetBrains Mono", ui-monospace, Consolas, monospace;
+      font-size: 0.82rem;
+      line-height: 1.55;
+      background: var(--code-bg);
+      color: #dce2ec;
+      padding: 1rem 1.15rem;
+      border-radius: 8px;
+      overflow: auto;
+      border: 1px solid var(--border);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.98rem;
+      margin: 1rem 0;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 0.6rem 0.7rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: var(--table-head);
+      color: var(--text-heading);
+      font-weight: 700;
+    }
+    td { background: var(--bg-elevated); }
+    tr:nth-child(even) td { background: var(--card); }
+    footer {
+      margin-top: 3rem;
+      font-size: 0.95rem;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+      padding-top: 1.25rem;
+    }
+    .toc {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem 1.4rem;
+      margin: 1.5rem 0;
+    }
+    .toc ul { list-style: none; padding-left: 0; }
+    .toc li { margin: 0.45rem 0; }
+    .flow {
+      font-family: "JetBrains Mono", ui-monospace, Consolas, monospace;
+      font-size: 0.85rem;
+      background: var(--code-bg);
+      padding: 1rem 1.15rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      color: #c5cdd9;
+      overflow: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>Dev disk inventory — full guide</h1>
+  <p class="meta">
+    End-to-end workflow for <strong>L1–L5</strong> dev-related disk inventory on Windows, outputs under <code>D:\backup c\inventory\</code>,
+    aligned with the migration plan. Markdown references:
+    <a href="dev-inventory-wiztree-windirstat.md">L4 (WizTree / WinDirStat)</a>,
+    <a href="dev-inventory-triage-dedupe.md">triage &amp; dedupe</a>,
+    <a href="migration-ubuntu-master-plan.md">Ubuntu migration</a>.
+  </p>
+
+  <nav class="toc" aria-label="On this page">
+    <strong>Contents</strong>
+    <ul>
+      <li><a href="#overview">Overview &amp; layer map</a></li>
+      <li><a href="#flow">Order of operations</a></li>
+      <li><a href="#script">PowerShell script: run &amp; parameters</a></li>
+      <li><a href="#outputs">Outputs &amp; extra roots</a></li>
+      <li><a href="#monitor">Monitoring a long run</a></li>
+      <li><a href="#l4">L4 — WinDirStat / WizTree (manual)</a></li>
+      <li><a href="#triage">Triage, dedupe, actions</a></li>
+      <li><a href="#agents">Which agent owns what</a></li>
+      <li><a href="#next">After inventory — backups &amp; Ubuntu</a></li>
+      <li><a href="#related">Related files</a></li>
+    </ul>
+  </nav>
+
+  <h2 id="overview">Overview</h2>
+  <p>
+    The goal is a <strong>repeatable picture</strong> of where dev tools, repos, caches, and backups live, plus a <strong>git triage</strong> sheet,
+    before you move or mirror data to Ubuntu. Scripted layers <strong>L1, L2, L3, L5</strong> live in
+    <code>scripts/dev-disk-inventory.ps1</code>. <strong>L4</strong> is a separate <strong>manual</strong> full-drive pass so nothing large is missed by heuristics.
+  </p>
+
+  <table>
+    <thead>
+      <tr><th>Layer</th><th>What it is</th><th>How</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>L1</strong></td>
+        <td>Canonical dev paths (Cursor, VS Code, npm/gradle/Android, Flutter, live repos, backup roots, gitconfig, <code>.ssh</code> meta, WSL <code>ext4.vhdx</code> list).</td>
+        <td>Script</td>
+      </tr>
+      <tr>
+        <td><strong>L2</strong></td>
+        <td>Every top-level folder on <code>D:\</code> with recursive size; dev heuristics; optional git discovery and shallow zip listing under large/likely-dev trees.</td>
+        <td>Script</td>
+      </tr>
+      <tr>
+        <td><strong>L3</strong></td>
+        <td>User profile subdirs (except <code>AppData</code> whole-tree duplicate) and targeted ProgramData dev-related subtrees.</td>
+        <td>Script</td>
+      </tr>
+      <tr>
+        <td><strong>L4</strong></td>
+        <td>Full visualization of <strong>everything large</strong> on <strong>C:</strong> and <strong>D:</strong> (treemap / export).</td>
+        <td><strong>Manual</strong> (WinDirStat or WizTree)</td>
+      </tr>
+      <tr>
+        <td><strong>L5</strong></td>
+        <td>Per <code>.git</code> work tree: remote, branch, dirty state, untracked bucket, unpushed hints.</td>
+        <td>Script (unless <code>-SkipGitTriage</code>)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="warn">
+    <strong>Large backup trees:</strong> By default, <code>backup_mirror</code> (<code>D:\backup c</code>) and <code>backup_tree</code>
+    (<code>D:\Projects\carbon-gen-backups-outside</code>) skip <strong>full recursive byte counting</strong> in L1/L2 so runs finish in reasonable time.
+    CSV rows show <code>SizeGB</code> 0 with a note; use <strong>L4</strong> or run with <code>-FullSizeBackupRoots</code> for a slow, full deep size.
+  </div>
+
+  <h2 id="flow">Order of operations</h2>
+  <div class="flow" aria-label="Flow">
+L1 (script) → L2 (script) → L3 (script) → extra-scan-roots.txt (script)
+  → write dev-inventory-*.csv → L5 git triage (script) → git-triage-*.csv → Done
+  → <strong>then</strong> L4 manual (C: + D:) → save exports to inventory\
+  → triage spreadsheets → backups / mirror D:\backup c to Ubuntu
+  </div>
+
+  <h2 id="script">PowerShell script: run and parameters</h2>
+  <p><strong>Script path (repo):</strong> <code>scripts\dev-disk-inventory.ps1</code></p>
+
+  <p><strong>Typical run</strong> (from repo root or with full path):</p>
+  <pre class="cmd">powershell.exe -NoProfile -ExecutionPolicy Bypass -File "d:\Projects\My project\carbon-gen\scripts\dev-disk-inventory.ps1"</pre>
+
+  <p><strong>Dry run</strong> (no writes, lists intent):</p>
+  <pre class="cmd">powershell.exe -NoProfile -ExecutionPolicy Bypass -File "scripts\dev-disk-inventory.ps1" -WhatIf</pre>
+
+  <p><strong>No Outlook phase mail</strong> (L1/L2/L3/L5/Complete):</p>
+  <pre class="cmd">powershell.exe -NoProfile -ExecutionPolicy Bypass -File "scripts\dev-disk-inventory.ps1" -SkipOutlookPhaseNotify</pre>
+
+  <p><strong>Skip git triage</strong> (faster if you only want the master CSV):</p>
+  <pre class="cmd">powershell.exe -NoProfile -ExecutionPolicy Bypass -File "scripts\dev-disk-inventory.ps1" -SkipGitTriage</pre>
+
+  <p><strong>Full recursive sizing</strong> for huge backup roots in L1/L2 (can take many hours):</p>
+  <pre class="cmd">powershell.exe -NoProfile -ExecutionPolicy Bypass -File "scripts\dev-disk-inventory.ps1" -FullSizeBackupRoots</pre>
+
+  <h3>Parameters (reference)</h3>
+  <table>
+    <thead><tr><th>Parameter</th><th>Role</th></tr></thead>
+    <tbody>
+      <tr><td><code>-BackupRoot</code></td><td>Default <code>D:\backup c</code>. Inventory CSVs go under <code>&lt;BackupRoot&gt;\inventory\</code>.</td></tr>
+      <tr><td><code>-WhatIf</code></td><td>Preview only; exits before creating rows or CSVs.</td></tr>
+      <tr><td><code>-SkipGitTriage</code></td><td>No <code>git-triage-*.csv</code>.</td></tr>
+      <tr><td><code>-SkipOutlookPhaseNotify</code></td><td>Disable phase emails via Outlook.</td></tr>
+      <tr><td><code>-OutlookNotifyTo</code> / <code>-OutlookSendAsSmtp</code></td><td>Recipient and send-as account (SMTP address) for Outlook.</td></tr>
+      <tr><td><code>-FullSizeBackupRoots</code></td><td>Full recurse for backup mirror/tree in L1 and matching <code>D:\</code> folders in L2.</td></tr>
+      <tr><td><code>-GitTriageMaxRepos</code></td><td>Cap repos triaged (default 200).</td></tr>
+      <tr><td><code>-DDeepScanMinSizeGb</code></td><td>L2 threshold for deep zip/git crawl (default 2 GB).</td></tr>
+      <tr><td><code>-DeepScanMaxZipDepth</code></td><td>Max depth for zip discovery under L2 (default 8).</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <strong>L1/L2 console progress:</strong> The script logs each path scanned and elapsed time so a long run does not look “stuck.”
+  </div>
+
+  <h2 id="outputs">Outputs and extra roots</h2>
+  <table>
+    <thead><tr><th>Artifact</th><th>Location</th></tr></thead>
+    <tbody>
+      <tr><td>Master inventory CSV</td><td><code>D:\backup c\inventory\dev-inventory-&lt;timestamp&gt;.csv</code></td></tr>
+      <tr><td>Git triage CSV</td><td><code>D:\backup c\inventory\git-triage-&lt;timestamp&gt;.csv</code></td></tr>
+      <tr><td>Extra roots list</td><td><code>D:\backup c\inventory\extra-scan-roots.txt</code> (one absolute path per line; <code>#</code> comments ok)</td></tr>
+      <tr><td>L4 exports</td><td>Same <code>inventory\</code> folder — see L4 section</td></tr>
+    </tbody>
+  </table>
+  <p>
+    After L4, if WizTree shows large folders not in the master CSV, add their paths to <code>extra-scan-roots.txt</code> and re-run the script.
+  </p>
+
+  <h2 id="monitor">Monitoring a long run</h2>
+  <ul>
+    <li><strong>Log file (optional wrapper):</strong> If you use <code>tmp\dev-inventory-child.ps1</code>, output is appended to <code>tmp\dev-inventory-run.log</code> under the repo.</li>
+    <li><strong>Done marker:</strong> The child wrapper writes <code>tmp\dev-inventory-done.flag</code> when the script exits.</li>
+    <li><strong>Status helper:</strong> <code>tmp\check-inventory-run.ps1</code> reports running PIDs, done flag, log tail, and recent CSVs under <code>D:\backup c\inventory\</code>.</li>
+    <li><strong>Outlook:</strong> With phase notify on, you get an email after L1, L2, L3, extra roots, L5, and Complete.</li>
+  </ul>
+
+  <h2 id="l4">L4 — WinDirStat / WizTree (mandatory full-drive maps)</h2>
+  <p>
+    L4 is <strong>not</strong> automated by the PowerShell script. Use a disk visualization tool on <strong>C:</strong> and <strong>D:</strong> so odd paths
+    (renamed folders, games, Dropbox, spillover from <code>C:\</code>) are visible.
+  </p>
+
+  <div class="ok">
+    <strong>Save everything under:</strong> <code>D:\backup c\inventory\</code><br />
+    Include these when you mirror <code>D:\backup c</code> to Ubuntu (<code>~/backup-from-windows-c/</code>) so an agent can confirm L4 exists.
+  </div>
+
+  <p><strong>Suggested filenames</strong></p>
+  <ul>
+    <li><code>windirstat-C-drive.png</code> / <code>windirstat-D-drive.png</code> (or saved report if the tool supports it)</li>
+    <li><code>wiztree-C-drive.csv</code> / <code>wiztree-D-drive.csv</code></li>
+  </ul>
+
+  <h3>WinDirStat</h3>
+  <ol>
+    <li>Install from <a href="https://windirstat.net/">windirstat.net</a> if needed.</li>
+    <li>Optional: run <strong>as Administrator</strong> for fewer “access denied” gaps.</li>
+    <li>Select drive <strong>C:</strong> → OK → wait until the scan finishes.</li>
+    <li><strong>File → Save report</strong> and/or screenshot the treemap and top directories → save into <code>D:\backup c\inventory\</code>.</li>
+    <li>Repeat for <strong>D:</strong>.</li>
+  </ol>
+
+  <h3>WizTree</h3>
+  <ol>
+    <li>Install from <a href="https://antibody-software.com/wiztree/">antibody-software.com/wiztree</a> (or Microsoft Store).</li>
+    <li>Select <strong>C:</strong> → <strong>Scan</strong> → <strong>File → Export CSV</strong> (or screenshot top folders).</li>
+    <li>Save into <code>D:\backup c\inventory\</code> (e.g. <code>wiztree-C-drive.csv</code>).</li>
+    <li>Repeat for <strong>D:</strong>.</li>
+  </ol>
+
+  <div class="note">
+    <strong>Why both drives:</strong> <code>C:</code> catches profile and Program Files spillover; <code>D:</code> catches large trees the L2 heuristics might not label as “dev.”
+  </div>
+
+  <h2 id="triage">Triage, dedupe, and actions</h2>
+  <p>After the script and L4, use a spreadsheet (Excel / LibreOffice) to merge CSVs and decide what to keep, archive, or push.</p>
+
+  <h3>Inputs</h3>
+  <table>
+    <thead><tr><th>File</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>dev-inventory-&lt;ts&gt;.csv</code></td><td>Master rows (L1–L3, zip rows, profile-related rows).</td></tr>
+      <tr><td><code>git-triage-&lt;ts&gt;.csv</code></td><td>Per repo: remote, branch, dirty, <code>UntrackedBucket</code>, unpushed hints; <code>SuggestedAction</code> left empty for you.</td></tr>
+      <tr><td><code>extra-scan-roots.txt</code></td><td>Your custom paths for the next script run.</td></tr>
+      <tr><td>L4 exports</td><td>Evidence for “what is huge” on C: and D:.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Columns to add or fill manually</h3>
+  <table>
+    <thead><tr><th>Column</th><th>You fill</th></tr></thead>
+    <tbody>
+      <tr><td><code>SuggestedProject</code></td><td>e.g. <code>carbon-gen</code>, <code>carbon-wms</code>, <code>general</code>, <code>unknown</code>.</td></tr>
+      <tr><td><code>DuplicateOf</code></td><td>Canonical path if this row is a duplicate backup.</td></tr>
+      <tr><td><code>Action</code></td><td>e.g. <code>KEEP_CANONICAL</code>, <code>ARCHIVE_THEN_DELETE</code>, <code>PUSH_FIRST</code>, <code>COMMIT_THEN_PUSH</code>, <code>INSPECT</code>, <code>CACHE_OK_DELETE_AFTER_BACKUP</code>.</td></tr>
+      <tr><td><code>Reviewed</code></td><td><code>Y</code> when decided.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Dedupe rules (short)</h3>
+  <ol>
+    <li>Same <code>Remote</code> in git triage and similar folder names → likely duplicate repo; keep one live tree (often under <code>D:\Projects\My project\...</code>), mark others <code>DuplicateOf</code> that path.</li>
+    <li>Same-date zips with same project → keep newest or smallest complete copy after a quick content check.</li>
+    <li>Caches (<code>npm-cache</code>, <code>.gradle</code>, disposable <code>node_modules</code>) → <code>CACHE_OK_DELETE_AFTER_BACKUP</code> only after git is clean/pushed or redundant.</li>
+  </ol>
+
+  <h3>Commit decision matrix</h3>
+  <table>
+    <thead><tr><th>Situation</th><th>Typical <code>Action</code></th></tr></thead>
+    <tbody>
+      <tr><td>Git clean and pushed</td><td><code>KEEP</code> or <code>ARCHIVE_THEN_DELETE</code> if duplicate.</td></tr>
+      <tr><td>Git dirty or unpushed</td><td><code>COMMIT_THEN_PUSH</code> or <code>PUSH_FIRST</code> before any delete.</td></tr>
+      <tr><td>Not git (zip / copy)</td><td><code>INSPECT</code> or <code>ARCHIVE_THEN_DELETE</code> when redundant.</td></tr>
+      <tr><td>Cursor profile on C:</td><td>Back up with <code>scripts\backup-c-to-d-and-ubuntu.ps1</code> first; do not delete before Ubuntu verify.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Consolidating under <code>D:\backup c\</code></h3>
+  <p>
+    When moving (not copy-delete) duplicates into the backup tree, use a consistent pattern, for example
+    <code>project-repos\archives\carbon-gen-&lt;date&gt;-from-&lt;short-path&gt;.zip</code>. Keep Cursor archives under <code>archives\</code> per your backup scripts.
+    Do <strong>not</strong> delete canonical <code>D:\Projects\My project\...</code> repos for migration; remove extras only after backups and your explicit approval.
+  </p>
+
+  <h2 id="agents">Which agent owns what</h2>
+  <ul>
+    <li><strong>CarbonGen</strong> — confirm remotes and paths for Next.js / <code>carbon-gen</code> trees when <code>SuggestedProject</code> is ambiguous.</li>
+    <li><strong>Carbon Warehouse</strong> — confirm Flutter / WMS trees when ambiguous.</li>
+    <li><strong>General Windows</strong> — inventory scripts, <code>D:\backup c\inventory\</code> layout, CSV regeneration.</li>
+  </ul>
+  <p>See <a href="cursor-three-agent-prompts.md">cursor-three-agent-prompts.md</a> for copy-paste prompts.</p>
+
+  <h2 id="next">After inventory — backups and Ubuntu</h2>
+  <p>
+    When triage is good enough, run your backup scripts (e.g. <code>scripts\backup-c-to-d-and-ubuntu.ps1</code>, <code>scripts\backup-projects-to-d.ps1</code>) per
+    <a href="migration-ubuntu-master-plan.md">migration-ubuntu-master-plan.md</a>, then mirror the full <code>D:\backup c</code> tree (including <code>inventory\</code> and L4 files) to Ubuntu.
+  </p>
+
+  <h2 id="related">Related files</h2>
+  <ul>
+    <li><code>scripts\dev-disk-inventory.ps1</code> — main inventory script</li>
+    <li><code>docs\dev-inventory-wiztree-windirstat.md</code> — L4 (markdown twin)</li>
+    <li><code>docs\dev-inventory-triage-dedupe.md</code> — triage (markdown twin)</li>
+    <li><code>docs\cursor-three-agent-prompts.md</code> — agent prompts</li>
+    <li><code>docs\migration-ubuntu-master-plan.md</code> — full migration context</li>
+    <li><code>tmp\check-inventory-run.ps1</code> — quick status (optional)</li>
+  </ul>
+
+  <footer>
+    <p>Carbon-gen docs. Open this file in a browser (double-click or drag into a tab) for readable formatting.</p>
+  </footer>
+</body>
+</html>

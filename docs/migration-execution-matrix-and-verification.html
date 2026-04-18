@@ -323,6 +323,12 @@ D) VERIFICATION HTML REPORT (MANDATORY after EVERY batch you execute)
 E) If blocked
 - State blocker (permissions, missing .env, network, Coolify down, etc.); list exact next step for human.
 
+F) INVENTORY REPORTS (when user says Windows dev inventory + mirror sync are done)
+- Expect under backup-from-windows-c/: inventory/ with master CSV (L1–L3+L5 from dev-disk-inventory.ps1), git-triage sidecar if separate, and WinDirStat/WizTree exports for BOTH C: and D: (mandatory L4 companions).
+- List that folder; record file names, sizes, mtimes in the verification HTML report.
+- Do NOT treat absence of a file as "nothing to back up" — if missing, BLOCK and document.
+- Still read-only on backup-from-windows-c/ unless user orders changes.
+
 This rule is non-negotiable. Partial completion without a report is considered incomplete work.</pre>
 
   <h2 id="report-template">Verification HTML report — required structure</h2>

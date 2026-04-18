@@ -372,9 +372,20 @@ sudo ./VBoxLinuxAdditions.run</pre>
       <li><strong>Resize test:</strong> Drag the <strong>corner</strong> of the VirtualBox window on Windows. The Ubuntu desktop resolution should <strong>adjust</strong> without huge black borders (may take a second).</li>
       <li><strong>Mouse test:</strong> Move the pointer across the guest edge — it should feel integrated, not “trapped” inside the VM.</li>
       <li><strong>Optional terminal check:</strong> <pre class="code-block" style="margin:0.5rem 0;">lsmod | grep -E 'vboxguest|vboxsf'</pre> You should see modules such as <code>vboxguest</code> (and after shared folders are used, <code>vboxsf</code>).</li>
+      <li><strong>Clipboard test:</strong> On the <strong>host</strong>, select the VM → <strong>Settings → General → Advanced</strong> → <strong>Shared Clipboard:</strong> <strong>Bidirectional</strong>. Copy text on Windows, paste in Ubuntu (e.g. gedit or Terminal with middle-click or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd>), then reverse. If it fails, follow <strong>E.6c</strong> below.</li>
     </ul>
 
-    <div class="checkpoint"><strong>Checkpoint E:</strong> Guest Additions installed, guest rebooted, window resize works. On Windows you can run <code class="path">powershell -ExecutionPolicy Bypass -File scripts/verify-virtualbox-phases-a-through-e.ps1</code> (from the carbon-gen repo) while the VM is <strong>running</strong> — Phase E is OK only if reported Guest Additions match the host (e.g. <strong>7.2.x</strong> with VirtualBox 7.2.6). Proceed to <strong>Phase F</strong> (shared folders + <code>vboxsf</code> user group).</div>
+    <h4 id="clipboard-fix">E.6c — Shared clipboard still broken (common fixes)</h4>
+    <p><strong>Host (Windows):</strong> VM must be <strong>powered off</strong> or <strong>running</strong> with setting saved: <strong>Settings → General → Advanced → Shared Clipboard → Bidirectional</strong> (not Disabled or Host To Guest only). <strong>Drag and Drop</strong> is separate; you can leave it off.</p>
+    <p><strong>Guest (Ubuntu):</strong> Clipboard needs Oracle Guest Additions that <strong>match</strong> the host VirtualBox version (see E.6b if resize works but clipboard does not — wrong <code>virtualbox-guest-*</code> packages).</p>
+    <ol class="steps">
+      <li>Log into the graphical desktop (not SSH-only). In Terminal: <pre class="code-block" style="margin:0.5rem 0;">pgrep -af VBoxClient</pre> You should see a line with <code>VBoxClient --clipboard</code>. If it is missing, run the repo helper (from a shared folder or after copying the script into <code>~</code>): <pre class="code-block" style="margin:0.5rem 0;">chmod +x ~/fix-vbox-ubuntu-clipboard.sh   # if you copied it home
+bash "/media/$USER/sf_myprojects/carbon-gen/scripts/guest/fix-vbox-ubuntu-clipboard.sh"</pre> Adjust the path if your share name differs (see Phase F). The script starts <code>VBoxClient --clipboard</code> and adds a GNOME autostart entry.</li>
+      <li><strong>Wayland:</strong> On Ubuntu 24.04+ the default session may be Wayland; VirtualBox shared clipboard is more reliable on <strong>X11</strong>. At the login screen, click the <strong>gear</strong> → choose <strong>Ubuntu on Xorg</strong>, then log in again.</li>
+      <li><strong>After a kernel upgrade:</strong> Re-run <strong>Devices → Insert Guest Additions CD</strong> on the host, then <code>sudo ./VBoxLinuxAdditions.run</code> in the guest and reboot (headers must match — Phase E.2).</li>
+    </ol>
+
+    <div class="checkpoint"><strong>Checkpoint E:</strong> Guest Additions installed, guest rebooted, window resize works, shared clipboard bidirectional test OK (or Xorg + script above). On Windows you can run <code class="path">powershell -ExecutionPolicy Bypass -File scripts/verify-virtualbox-phases-a-through-e.ps1</code> (from the carbon-gen repo) while the VM is <strong>running</strong> — Phase E is OK only if reported Guest Additions match the host (e.g. <strong>7.2.x</strong> with VirtualBox 7.2.6). Proceed to <strong>Phase F</strong> (shared folders + <code>vboxsf</code> user group).</div>
 
     <h4>E.6b — Host reports wrong Guest Additions version (e.g. 6.0.x with VirtualBox 7.2.x)</h4>
     <p>If <strong>Windows</strong> reports <code>Additions version: 6.0.0</code> (or anything not matching your host’s <strong>7.2.x</strong>), Ubuntu is almost certainly using the <strong>wrong packages</strong> (<code>virtualbox-guest-*</code> from Ubuntu’s repos) instead of Oracle’s installer from the CD. That breaks resize/shared folders for your real host version.</p>
@@ -392,6 +403,7 @@ sudo ./VBoxLinuxAdditions.run</pre>
         <tr><td><code>sudo: ./VBoxLinuxAdditions.run: command not found</code></td><td>Wrong folder — run <code>ls /media/$USER/</code>, <code>cd</code> into the <code>VBox_GAs_*</code> directory, <code>ls</code> to confirm <code>VBoxLinuxAdditions.run</code> exists.</td></tr>
         <tr><td>Build errors about kernel / headers</td><td>Complete E.2; ensure kernel matches: <code>uname -r</code> and installed <code>linux-headers-$(uname -r)</code>; reboot and retry.</td></tr>
         <tr><td>Screen still doesn’t resize</td><td>View menu on host: try <strong>Auto-resize Guest Display</strong> (VirtualBox 7). Reboot guest again after GA install.</td></tr>
+        <tr><td>Copy/paste between Windows and Ubuntu does not work</td><td>Host: <strong>Settings → General → Advanced → Shared Clipboard → Bidirectional</strong>. Guest: confirm Oracle GA (E.6b), run <code class="path">scripts/guest/fix-vbox-ubuntu-clipboard.sh</code>, try <strong>Ubuntu on Xorg</strong> at login (E.6c).</td></tr>
       </tbody>
     </table>
 
@@ -672,7 +684,7 @@ Host RAM (snapshot): ~16 GB total — plan the VM memory carefully (see section 
 
   <h2 id="guest">9. Guest Additions (recommended)</h2>
   <p><strong>Full step-by-step (what to click, what to type, how to verify):</strong> use <a href="#phase-e-detail">Phase E — Guest Additions</a> in the START HERE runbook above. The summary below is a shortcut checklist only.</p>
-  <p><strong>Why install:</strong> Better mouse integration, <strong>auto-resize</strong> of the guest desktop when you resize the VirtualBox window, <strong>shared folders</strong> (<code>vboxsf</code>), and optional clipboard improvements.</p>
+  <p><strong>Why install:</strong> Better mouse integration, <strong>auto-resize</strong> of the guest desktop when you resize the VirtualBox window, <strong>shared folders</strong> (<code>vboxsf</code>), and <strong>shared clipboard</strong> (requires host <strong>Bidirectional</strong> setting — see <a href="#clipboard-fix">Phase E.6c</a> if paste fails).</p>
   <ol class="steps">
     <li><strong>Host menu:</strong> With the Ubuntu VM focused, <strong>Devices → Insert Guest Additions CD image</strong>.</li>
     <li><strong>Guest prep:</strong> <code>sudo apt update</code> then install <code>build-essential</code>, <code>dkms</code>, and <code>linux-headers-$(uname -r)</code> (exact block in Phase E).</li>

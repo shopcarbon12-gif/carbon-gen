@@ -46,12 +46,29 @@ function Test-CursorProcesses {
     return @($found)
 }
 
-function Ensure-NotAlreadyJunction {
-    param([string]$Path, [string]$Label)
-    if (-not (Test-Path -LiteralPath $Path)) { return }
+function Test-IsJunction {
+    param([string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) { return $false }
     $item = Get-Item -LiteralPath $Path -Force
-    if ($item.LinkType -eq "Junction" -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-        throw "$Label is already a reparse point (junction/symlink): $Path - aborting to avoid nesting. Remove or fix manually first."
+    return ($item.LinkType -eq "Junction") -or (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)
+}
+
+function Get-JunctionTargetString {
+    param([string]$Path)
+    $item = Get-Item -LiteralPath $Path -Force
+    $t = $item.Target
+    if ($null -eq $t) { return $null }
+    if ($t -is [string]) { return $t }
+    if ($t -is [System.Array] -and $t.Count -gt 0) { return [string]$t[0] }
+    return [string]$t
+}
+
+function Assert-JunctionPointsTo {
+    param([string]$Path, [string]$ExpectedDest, [string]$Label)
+    $tn = [IO.Path]::GetFullPath((Get-JunctionTargetString -Path $Path))
+    $en = [IO.Path]::GetFullPath($ExpectedDest)
+    if ($tn -ne $en) {
+        throw "$Label junction at $Path points to '$tn', expected '$en'. Fix manually before re-running."
     }
 }
 
@@ -78,11 +95,30 @@ if (-not (Test-Path -LiteralPath $dotCursorSrc)) {
     throw "Missing .cursor folder: $dotCursorSrc"
 }
 
-Ensure-NotAlreadyJunction -Path $roamingSrc -Label "Roaming Cursor"
-Ensure-NotAlreadyJunction -Path $dotCursorSrc -Label "User .cursor"
+$roamingIsJunction = Test-IsJunction -Path $roamingSrc
+$dotIsJunction = Test-IsJunction -Path $dotCursorSrc
+
+if ($roamingIsJunction) {
+    Assert-JunctionPointsTo -Path $roamingSrc -ExpectedDest $roamingDest -Label "Roaming Cursor"
+    Write-Host "Roaming already a junction -> $roamingDest (skip Roaming migration)." -ForegroundColor Green
+}
+if ($dotIsJunction) {
+    Assert-JunctionPointsTo -Path $dotCursorSrc -ExpectedDest $dotDest -Label "User .cursor"
+    Write-Host ".cursor already a junction -> $dotDest (skip .cursor migration)." -ForegroundColor Green
+}
+
+if ($roamingIsJunction -and $dotIsJunction) {
+    Write-Host "Both paths already junctioned to D: — nothing to do." -ForegroundColor Green
+    exit 0
+}
 
 if ($WhatIf) {
-    Write-Host "WHATIF: Would robocopy both trees to D:, rename C: folders to .bak-$ts, create junctions." -ForegroundColor Yellow
+    if (-not $roamingIsJunction) {
+        Write-Host "WHATIF: Would robocopy Roaming -> D:, rename C: folder, create Roaming junction." -ForegroundColor Yellow
+    }
+    if (-not $dotIsJunction) {
+        Write-Host "WHATIF: Would robocopy .cursor -> D:, rename C: folder, create .cursor junction." -ForegroundColor Yellow
+    }
     Write-Host "WHATIF: Real run requires Cursor fully closed (or -Force, not recommended)." -ForegroundColor Yellow
     exit 0
 }
@@ -96,8 +132,8 @@ if (-not $Force) {
 }
 
 New-Item -ItemType Directory -Path $DestRoot -Force | Out-Null
-New-Item -ItemType Directory -Path $roamingDest -Force | Out-Null
-New-Item -ItemType Directory -Path $dotDest -Force | Out-Null
+if (-not $roamingIsJunction) { New-Item -ItemType Directory -Path $roamingDest -Force | Out-Null }
+if (-not $dotIsJunction) { New-Item -ItemType Directory -Path $dotDest -Force | Out-Null }
 
 function Invoke-RobocopyMirror {
     param([string]$From, [string]$To)
