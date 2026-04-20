@@ -624,6 +624,8 @@ export default function ShopifyCollectionMapping() {
   const [dismissedUnmappedCollectionIds, setDismissedUnmappedCollectionIds] = useState<Record<string, boolean>>({});
   const [unmappedCollectionOrder, setUnmappedCollectionOrder] = useState<string[]>([]);
   const [selectedProducts, setSelectedProducts] = useState<Record<string, boolean>>({});
+  /** Mobile Idea 3 only: force queue to ready-to-push when thumb checkbox is checked. */
+  const [mobileThumbPromotedByRow, setMobileThumbPromotedByRow] = useState<Record<string, boolean>>({});
   const [treeSearch, setTreeSearch] = useState("");
   const [search, setSearch] = useState("");
   const [typeOptions, setTypeOptions] = useState<string[]>([]);
@@ -645,14 +647,23 @@ export default function ShopifyCollectionMapping() {
   /** Idea 3 · KPI inbox (mobile prototype): full-width search, pill queue filters, dense thumb + title + pills + chevron rows. */
   const isMobileIdea3Layout = useMatchMediaMaxWidth(900);
   const [mobileIdea3ExpandedRowId, setMobileIdea3ExpandedRowId] = useState<string | null>(null);
-  /** Mobile-only: hamburger nav drawer open */
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   /** Mobile-only: commit menu (bottom dock) open */
   const [mobileCommitOpen, setMobileCommitOpen] = useState(false);
   /** Mobile-only: lightbox row id */
   const [mobileLightboxRowId, setMobileLightboxRowId] = useState<string | null>(null);
+  /** Mobile-only: suggestions popup row id */
+  const [mobileSuggestionSheetRowId, setMobileSuggestionSheetRowId] = useState<string | null>(null);
   /** Mobile-only: menu bottom-sheet row id */
   const [mobileMenuSheetRowId, setMobileMenuSheetRowId] = useState<string | null>(null);
+  /** Mobile-only: unmapped section inside menu sheet */
+  const [mobileSheetUnmappedOpen, setMobileSheetUnmappedOpen] = useState(false);
+  /** Mobile-only: per-node expansion for sheet tree (collapsed by default). */
+  const [mobileSheetTreeExpandedByNode, setMobileSheetTreeExpandedByNode] = useState<Record<string, boolean>>({});
+  const toggleWorkspaceMenuFromMobileHeader = () => {
+    if (typeof document === "undefined") return;
+    const workspaceToggle = document.querySelector("button.menu-toggle") as HTMLButtonElement | null;
+    workspaceToggle?.click();
+  };
   // Reports are consolidated behind a single modal trigger to reduce canvas clutter.
   const [showReportsModal, setShowReportsModal] = useState(false);
   const [queueJobs, setQueueJobs] = useState<QueueJob[]>([]);
@@ -1356,22 +1367,33 @@ export default function ShopifyCollectionMapping() {
           (staging?.manualAddedPaths.length || 0) +
           (staging?.manualRemovedPaths.length || 0) >
         0;
-      out.set(
-        row.id,
-        classifyShopifyCollectionMappingRow({
-          mappingDecision: staging?.mappingDecision || row.mappingDecision || "MANUAL_REVIEW",
-          collectionSyncStatus: staging?.collectionSyncStatus || "REVIEW",
-          actionStatus: row.actionStatus || "",
-          suggestionReady: (staging?.suggestionOptions || []).length > 0,
-          conflictSignals: (row.collectionConflictFlags?.length ?? 0) > 0,
-          manualChanges,
-          isReviewed: Boolean(reviewedByRow[row.id] ?? row.isReviewed),
-          currentMatchesFinal: staging?.currentMatchesFinal,
-        })
-      );
+      const baseWorkflow = classifyShopifyCollectionMappingRow({
+        mappingDecision: staging?.mappingDecision || row.mappingDecision || "MANUAL_REVIEW",
+        collectionSyncStatus: staging?.collectionSyncStatus || "REVIEW",
+        actionStatus: row.actionStatus || "",
+        suggestionReady: (staging?.suggestionOptions || []).length > 0,
+        conflictSignals: (row.collectionConflictFlags?.length ?? 0) > 0,
+        manualChanges,
+        isReviewed: Boolean(reviewedByRow[row.id] ?? row.isReviewed),
+        currentMatchesFinal: staging?.currentMatchesFinal,
+      });
+      if (isMobileIdea3Layout && mobileThumbPromotedByRow[row.id] && !baseWorkflow.pushFailed) {
+        out.set(row.id, {
+          ...baseWorkflow,
+          needsReview: false,
+          pendingPush: true,
+          pushFailed: false,
+          synced: false,
+          primaryStatus: "ready-push",
+          statusLabel: "Ready to Push",
+          statusBadgeTone: "add-pending",
+        });
+      } else {
+        out.set(row.id, baseWorkflow);
+      }
     }
     return out;
-  }, [rows, rowStagingById, reviewedByRow]);
+  }, [rows, rowStagingById, reviewedByRow, isMobileIdea3Layout, mobileThumbPromotedByRow]);
 
   const moduleSummary = useMemo(
     () => summarizeShopifyCollectionMappingWorkflows(Array.from(rowWorkflowById.values())),
@@ -1868,6 +1890,45 @@ export default function ShopifyCollectionMapping() {
     return filteredRows.every((row) => Boolean(selectedProducts[row.id]));
   }, [filteredRows, selectedProducts]);
 
+  function applyRowSelectionFromThumb(rowId: string, checked: boolean) {
+    setSelectedProducts((prev) => ({ ...prev, [rowId]: checked }));
+    if (checked) setActiveRowId(rowId);
+    else if (activeRowId === rowId) setActiveRowId("");
+    if (!isMobileIdea3Layout) return;
+    setMobileThumbPromotedByRow((prev) => {
+      const next = { ...prev };
+      const currentWorkflow = rowWorkflowById.get(rowId);
+      if (checked) {
+        if ((currentWorkflow?.primaryStatus || "") !== "ready-push") next[rowId] = true;
+      } else {
+        delete next[rowId];
+      }
+      return next;
+    });
+  }
+
+  function applySelectAllOnPage(checked: boolean) {
+    setSelectedProducts((prev) => {
+      const next = { ...prev };
+      for (const row of filteredRows) next[row.id] = checked;
+      return next;
+    });
+    if (isMobileIdea3Layout) {
+      setMobileThumbPromotedByRow((prev) => {
+        const next = { ...prev };
+        for (const row of filteredRows) {
+          const workflow = rowWorkflowById.get(row.id);
+          if (checked) {
+            if ((workflow?.primaryStatus || "") !== "ready-push") next[row.id] = true;
+          } else {
+            delete next[row.id];
+          }
+        }
+        return next;
+      });
+    }
+  }
+
   function matchesMenuSearch(node: MenuNode, query: string) {
     const normalizedQuery = query.trim().toLowerCase();
     if (!normalizedQuery) return true;
@@ -1912,6 +1973,24 @@ export default function ShopifyCollectionMapping() {
     }
     return map;
   }, [nodes]);
+
+  const mobileSheetVisibleNodes = useMemo(() => {
+    const roots = nodes.filter((node) => !node.parentKey);
+    const result: MenuNode[] = [];
+    const walk = (parent: string | null) => {
+      const levelNodes = parent
+        ? (childrenByParent.get(parent) || [])
+            .map((key) => nodeByKey.get(key))
+            .filter((node): node is MenuNode => Boolean(node))
+        : roots;
+      for (const node of levelNodes) {
+        result.push(node);
+        if (mobileSheetTreeExpandedByNode[node.nodeKey] === true) walk(node.nodeKey);
+      }
+    };
+    walk(null);
+    return result;
+  }, [nodes, childrenByParent, nodeByKey, mobileSheetTreeExpandedByNode]);
 
   const collectionAudit = useMemo(() => {
     const titleById = new Map(collections.map((row) => [row.id, row.title]));
@@ -5225,8 +5304,7 @@ export default function ShopifyCollectionMapping() {
                       type="button"
                       className="m3-icon-btn"
                       aria-label="Open navigation menu"
-                      aria-expanded={mobileNavOpen}
-                      onClick={() => setMobileNavOpen((p) => !p)}
+                      onClick={toggleWorkspaceMenuFromMobileHeader}
                     >
                       <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                         <path d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h16v2H4v-2z" />
@@ -5250,30 +5328,15 @@ export default function ShopifyCollectionMapping() {
                   </button>
                 </header>
 
-                {/* ── Mobile nav overlay + drawer ── */}
-                {mobileNavOpen ? (
-                  <div className="m3-overlay" onClick={() => setMobileNavOpen(false)} aria-hidden="true" />
-                ) : null}
-                <nav className={`m3-drawer${mobileNavOpen ? " m3-drawer--open" : ""}`} aria-label="App navigation" aria-hidden={!mobileNavOpen}>
-                  <h2 className="m3-drawer-heading">Navigation</h2>
-                  <a href="/shopify-collection-mapping" className="m3-drawer-link" onClick={() => setMobileNavOpen(false)}>
-                    Collection Mapping<small>Current page</small>
-                  </a>
-                  <a href="/settings" className="m3-drawer-link" onClick={() => setMobileNavOpen(false)}>
-                    Settings<small>Users &amp; roles</small>
-                  </a>
-                </nav>
-
                 {/* ── KPI pill strip ── */}
                 <div className="m3-kpi-strip" aria-label="Queue filters">
                   <div className="m3-kpi-scroll">
                     {([
-                      { label: "All", tab: "all" as const, dot: "blue", count: moduleSummary.totalLoaded },
                       { label: "Loaded", tab: "all" as const, dot: "blue", count: moduleSummary.totalLoaded },
                       { label: "Needs Review", tab: KPI_NEEDS_REVIEW_UNION_FILTER, dot: "amber", count: moduleSummary.reviewNeeded },
                       { label: "Ready to Push", tab: "ready-push" as const, dot: "purple", count: moduleSummary.readyToPush },
                       { label: "Failed", tab: "push-failed" as const, dot: "red", count: moduleSummary.pushFailed },
-                      { label: "Synced", tab: "synced" as const, dot: "green", count: moduleSummary.synced, sub: `App: ${appCommittedSyncedCount}` },
+                      { label: "Synced", tab: "synced" as const, dot: "green", count: moduleSummary.synced, sub: `${appCommittedSyncedCount}` },
                     ] as Array<{ label: string; tab: ShopifyCollectionMappingQueueTab; dot: string; count: number; sub?: string }>).map(({ label, tab, dot, count, sub }) => (
                       <button
                         key={label}
@@ -5311,6 +5374,7 @@ export default function ShopifyCollectionMapping() {
                     className="m3-search-submit"
                     aria-label="Search"
                     onClick={() => resetPageForDataQuery()}
+                    style={{ width: 36, minWidth: 36, maxWidth: 36, height: 36, minHeight: 36, maxHeight: 36, borderRadius: 10 }}
                   >
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                       <path d="M10.5 3a7.5 7.5 0 104.8 13.3l4.7 4.7 1.4-1.4-4.7-4.7A7.5 7.5 0 0010.5 3zm0 2a5.5 5.5 0 110 11 5.5 5.5 0 010-11z" />
@@ -5318,11 +5382,12 @@ export default function ShopifyCollectionMapping() {
                   </button>
                   <button
                     type="button"
-                    className="m3-icon-btn"
+                    className="m3-search-filter-btn"
                     aria-label="Open more filters"
                     onClick={openFiltersDrawer}
+                    style={{ width: 36, minWidth: 36, maxWidth: 36, height: 36, minHeight: 36, maxHeight: 36, borderRadius: 10 }}
                   >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                       <path d="M4 6a1 1 0 011-1h14a1 1 0 01.8 1.6l-5.8 7.73V19a1 1 0 01-1.45.9l-2-1A1 1 0 0110 18v-3.67L4.2 6.6A1 1 0 014 6z" />
                     </svg>
                   </button>
@@ -5344,11 +5409,7 @@ export default function ShopifyCollectionMapping() {
                       disabled={loading || filteredRows.length < 1}
                       onChange={(event) => {
                         const checked = event.target.checked;
-                        setSelectedProducts((prev) => {
-                          const next = { ...prev };
-                          for (const row of filteredRows) next[row.id] = checked;
-                          return next;
-                        });
+                        applySelectAllOnPage(checked);
                       }}
                     />
                   </label>
@@ -5559,9 +5620,7 @@ export default function ShopifyCollectionMapping() {
                                 onChange={(event) => {
                                   event.stopPropagation();
                                   const checked = event.target.checked;
-                                  setSelectedProducts((prev) => ({ ...prev, [row.id]: checked }));
-                                  if (checked) setActiveRowId(row.id);
-                                  else if (activeRowId === row.id) setActiveRowId("");
+                                  applyRowSelectionFromThumb(row.id, checked);
                                 }}
                                 aria-label={`Select ${row.title} for commit`}
                               />
@@ -5606,7 +5665,7 @@ export default function ShopifyCollectionMapping() {
                                     aria-label={isExpanded ? "Collapse product details" : "Expand product details"}
                                     onClick={(ev) => { ev.stopPropagation(); setMobileIdea3ExpandedRowId((prev) => prev === row.id ? null : row.id); }}
                                   >
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                                       <path d="M7 10l5 5 5-5z" />
                                     </svg>
                                   </button>
@@ -5618,8 +5677,6 @@ export default function ShopifyCollectionMapping() {
                             <h3 className="m3-product-title">{row.title}</h3>
                             <div className="m3-meta-line">
                               UPC: {row.upc || "-"}
-                              {row.representativeSku ? ` · SKU: ${row.representativeSku}` : ""}
-                              {row.itemType ? ` · ${row.itemType}` : ""}
                             </div>
 
                             {/* Chips */}
@@ -5667,7 +5724,12 @@ export default function ShopifyCollectionMapping() {
                               type="button"
                               className="m3-path-row m3-path-row--btn"
                               aria-label="Open store menu and unmapped collections"
-                              onClick={(ev) => { ev.stopPropagation(); setMobileMenuSheetRowId(row.id); }}
+                              onClick={(ev) => {
+                                ev.stopPropagation();
+                                setMobileSheetUnmappedOpen(false);
+                                setMobileSheetTreeExpandedByNode({});
+                                setMobileMenuSheetRowId(row.id);
+                              }}
                             >
                               <strong>Final menu:</strong>
                               <span>{finalCollections || "—"}</span>
@@ -5682,7 +5744,10 @@ export default function ShopifyCollectionMapping() {
                                 type="button"
                                 className="m3-suggestion-applied"
                                 aria-label="Choose or change applied suggestion"
-                                onClick={(ev) => { ev.stopPropagation(); openMappingDecisionExplanation(row, staging); }}
+                                onClick={(ev) => {
+                                  ev.stopPropagation();
+                                  setMobileSuggestionSheetRowId(row.id);
+                                }}
                               >
                                 <span className="m3-suggestion-applied-label">Suggestion applied</span>
                                 {appliedSuggestion ? (
@@ -5728,11 +5793,7 @@ export default function ShopifyCollectionMapping() {
                         checked={allSelectedOnPage}
                         onChange={(event) => {
                           const checked = event.target.checked;
-                          setSelectedProducts((prev) => {
-                            const next = { ...prev };
-                            for (const row of filteredRows) next[row.id] = checked;
-                            return next;
-                          });
+                          applySelectAllOnPage(checked);
                         }}
                         aria-label="Select all products"
                       />
@@ -5860,12 +5921,7 @@ export default function ShopifyCollectionMapping() {
                               onChange={(event) => {
                                 event.stopPropagation();
                                 const checked = event.target.checked;
-                                setSelectedProducts((prev) => ({ ...prev, [row.id]: checked }));
-                                if (checked) {
-                                  setActiveRowId(row.id);
-                                } else if (activeRowId === row.id) {
-                                  setActiveRowId("");
-                                }
+                                applyRowSelectionFromThumb(row.id, checked);
                               }}
                             />
                           </td>
@@ -6234,7 +6290,7 @@ export default function ShopifyCollectionMapping() {
                   aria-label="Close image"
                   onClick={() => setMobileLightboxRowId(null)}
                 >
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                     <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                   </svg>
                 </button>
@@ -6247,6 +6303,76 @@ export default function ShopifyCollectionMapping() {
         );
       })() : null}
 
+      {/* ─── MOBILE-ONLY: suggestions-only popup ─── */}
+      {isMobileIdea3Layout && mobileSuggestionSheetRowId ? (() => {
+        const suggestionRow = rows.find((r) => r.id === mobileSuggestionSheetRowId);
+        const suggestionStaging = suggestionRow ? rowStagingById.get(suggestionRow.id) : undefined;
+        if (!suggestionRow || !suggestionStaging) return null;
+        return (
+          <>
+            <div
+              className="m3-sheet-scrim"
+              onClick={() => setMobileSuggestionSheetRowId(null)}
+              aria-hidden="true"
+            />
+            <div
+              className="m3-sheet"
+              role="dialog"
+              aria-label={`Suggestions for ${suggestionRow.title}`}
+            >
+              <div className="m3-sheet-handle" aria-hidden="true" />
+              <div className="m3-sheet-head">
+                <h3 className="m3-sheet-title">Suggestions</h3>
+                <button
+                  type="button"
+                  className="m3-sheet-close"
+                  aria-label="Close suggestions"
+                  onClick={() => setMobileSuggestionSheetRowId(null)}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                </button>
+              </div>
+              <div className="m3-sheet-body">
+                {(suggestionStaging.suggestionOptions || []).length > 0 ? (
+                  <ul className="m3-sheet-tree-list">
+                    {suggestionStaging.suggestionOptions.map((option) => {
+                      const label = option.kind === "collection" ? getCollectionDisplayName(option.value) : option.value;
+                      return (
+                        <li key={`${option.kind}-${option.value}`} className="m3-sheet-tree-item">
+                          <button
+                            type="button"
+                            className={`m3-sheet-suggestion-option${option.selected ? " m3-sheet-suggestion-option--selected" : ""}`}
+                            aria-pressed={option.selected}
+                            disabled={option.disabled}
+                            onClick={() => toggleSuggestionSelection(suggestionRow.id, option.kind, option.value, option.disabled)}
+                          >
+                            <span className="m3-sheet-suggestion-kind">{option.kind === "collection" ? "Collection" : "Menu path"}</span>
+                            <span className="m3-sheet-suggestion-value">{label}</span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <p className="m3-sheet-tree-empty">No suggestions available for this product.</p>
+                )}
+              </div>
+              <div className="m3-sheet-footer">
+                <button
+                  type="button"
+                  className="m3-sheet-save"
+                  onClick={() => setMobileSuggestionSheetRowId(null)}
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </>
+        );
+      })() : null}
+
       {/* ─── MOBILE-ONLY: menu bottom sheet ─── */}
       {isMobileIdea3Layout && mobileMenuSheetRowId ? (() => {
         const sheetRow = rows.find((r) => r.id === mobileMenuSheetRowId);
@@ -6256,7 +6382,11 @@ export default function ShopifyCollectionMapping() {
           <>
             <div
               className="m3-sheet-scrim"
-              onClick={() => setMobileMenuSheetRowId(null)}
+              onClick={() => {
+                setMobileSheetUnmappedOpen(false);
+                setMobileSheetTreeExpandedByNode({});
+                setMobileMenuSheetRowId(null);
+              }}
               aria-hidden="true"
             />
             <div
@@ -6271,7 +6401,11 @@ export default function ShopifyCollectionMapping() {
                   type="button"
                   className="m3-sheet-close"
                   aria-label="Close"
-                  onClick={() => setMobileMenuSheetRowId(null)}
+                  onClick={() => {
+                    setMobileSheetUnmappedOpen(false);
+                    setMobileSheetTreeExpandedByNode({});
+                    setMobileMenuSheetRowId(null);
+                  }}
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                     <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -6279,34 +6413,108 @@ export default function ShopifyCollectionMapping() {
                 </button>
               </div>
               <div className="m3-sheet-body">
-                {/* Navigation tree — shows current final menu paths */}
+                {/* Full expanded tree + unmapped list */}
                 <div className="m3-sheet-tree-wrap">
-                  <p className="m3-sheet-tree-hint">Current final menu paths for this product:</p>
-                  {(sheetStaging.finalMenuPaths || []).length > 0 ? (
+                  <p className="m3-sheet-tree-hint">Store menu tree (collapsed by default): tap a parent row to expand.</p>
+                  {mobileSheetVisibleNodes.length > 0 ? (
                     <ul className="m3-sheet-tree-list">
-                      {sheetStaging.finalMenuPaths!.map((p) => (
-                        <li key={p} className="m3-sheet-tree-item">
-                          <span>{p}</span>
+                      {mobileSheetVisibleNodes.map((node) => {
+                        const childCount = (childrenByParent.get(node.nodeKey) || []).length;
+                        const isOpen = mobileSheetTreeExpandedByNode[node.nodeKey] === true;
+                        return (
+                        <li key={node.nodeKey} className="m3-sheet-tree-item">
+                          <button
+                            type="button"
+                            className={`m3-sheet-tree-node-btn${childCount > 0 ? " m3-sheet-tree-node-btn--parent" : ""}`}
+                            style={{ ["--m3-tree-depth" as string]: String(Math.max(0, node.depth)) }}
+                            onClick={() => {
+                              if (childCount < 1) return;
+                              setMobileSheetTreeExpandedByNode((prev) => ({
+                                ...prev,
+                                [node.nodeKey]: !prev[node.nodeKey],
+                              }));
+                            }}
+                          >
+                            <span
+                              className="m3-sheet-tree-node-label"
+                            >
+                              {node.label}
+                              {node.linkedTargetLabel ? ` - ${node.linkedTargetLabel}` : ""}
+                            </span>
+                            {childCount > 0 ? (
+                              <svg
+                                className={`m3-sheet-tree-node-arrow${isOpen ? " m3-sheet-tree-node-arrow--open" : ""}`}
+                                width="16"
+                                height="16"
+                                viewBox="0 0 24 24"
+                                fill="currentColor"
+                                aria-hidden="true"
+                              >
+                                <path d="M7 10l5 5 5-5z" />
+                              </svg>
+                            ) : null}
+                          </button>
                         </li>
-                      ))}
+                      )})}
                     </ul>
                   ) : (
-                    <p className="m3-sheet-tree-empty">No menu paths assigned yet.</p>
+                    <p className="m3-sheet-tree-empty">No menu tree rows available.</p>
                   )}
+                </div>
+                <div className="m3-sheet-tree-wrap" style={{ marginTop: 14 }}>
+                  <button
+                    type="button"
+                    className="m3-sheet-unmapped-toggle"
+                    aria-expanded={mobileSheetUnmappedOpen}
+                    onClick={() => setMobileSheetUnmappedOpen((prev) => !prev)}
+                  >
+                    <span>Unmapped collections ({orderedUnmappedCollections.length})</span>
+                    <svg
+                      className={`m3-sheet-unmapped-arrow${mobileSheetUnmappedOpen ? " m3-sheet-unmapped-arrow--open" : ""}`}
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                      aria-hidden="true"
+                    >
+                      <path d="M7 10l5 5 5-5z" />
+                    </svg>
+                  </button>
+                  {mobileSheetUnmappedOpen ? (
+                    orderedUnmappedCollections.length > 0 ? (
+                      <ul className="m3-sheet-tree-list">
+                        {orderedUnmappedCollections.map((row) => (
+                          <li key={row.id} className="m3-sheet-tree-item">
+                            <span>{row.title}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="m3-sheet-tree-empty">No unmapped collections.</p>
+                    )
+                  ) : null}
                 </div>
               </div>
               <div className="m3-sheet-footer">
                 <button
                   type="button"
                   className="m3-sheet-save"
-                  onClick={() => setMobileMenuSheetRowId(null)}
+                  onClick={() => {
+                    setMobileSheetUnmappedOpen(false);
+                    setMobileSheetTreeExpandedByNode({});
+                    setMobileMenuSheetRowId(null);
+                  }}
                 >
                   Save
                 </button>
                 <button
                   type="button"
                   className="m3-sheet-cancel"
-                  onClick={() => setMobileMenuSheetRowId(null)}
+                  onClick={() => {
+                    setMobileSheetUnmappedOpen(false);
+                    setMobileSheetTreeExpandedByNode({});
+                    setMobileMenuSheetRowId(null);
+                  }}
                 >
                   Cancel
                 </button>
@@ -10098,6 +10306,11 @@ export default function ShopifyCollectionMapping() {
         /* ═══ MOBILE LAYOUT (≤900px) — matches 04-mobile-idea-v2.html prototype ═══ */
         /* Design tokens from prototype --surface:#081328 --surface-container:#151f35 --surface-container-high:#1f2a40 --surface-container-lowest:#030e22 --primary:#adc6ff --secondary:#4ae176 --tertiary:#ffb95f --error:#ffb4ab */
         @media (max-width: 900px) {
+          /* Standalone route uses a desktop negative margin in page wrapper.
+             Cancel it on mobile so content does not slide under fixed header. */
+          :global(.collection-mapping-standalone-route) {
+            margin-top: 0 !important;
+          }
           :global(html),
           :global(body) {
             height: auto !important;
@@ -10176,8 +10389,8 @@ export default function ShopifyCollectionMapping() {
             overflow-y: visible !important;
             padding-left: 0 !important;
             padding-right: 0 !important;
-            /* Account for fixed shell header (56px) + fixed KPI strip (~44px) + safe area */
-            padding-top: calc(env(safe-area-inset-top, 0px) + 100px) !important;
+            /* Mobile mapping panel manages its own top stack offset. */
+            padding-top: 0 !important;
           }
           .page.pageExpanded {
             display: flex !important;
@@ -10333,10 +10546,10 @@ export default function ShopifyCollectionMapping() {
           /* ════ m3-shell: fixed top bar ════ */
           .m3-shell {
             position: fixed !important;
-            top: env(safe-area-inset-top, 0px) !important;
+            top: 0 !important;
             left: 0 !important;
             right: 0 !important;
-            z-index: 200 !important;
+            z-index: 260 !important;
             display: flex !important;
             align-items: center !important;
             justify-content: space-between !important;
@@ -10464,19 +10677,34 @@ export default function ShopifyCollectionMapping() {
             top: calc(env(safe-area-inset-top, 0px) + 56px) !important;
             left: 0 !important;
             right: 0 !important;
-            z-index: 150 !important;
+            z-index: 250 !important;
             background: #151f35 !important;
-            padding: 4px 0 4px !important;
-            min-height: 44px !important;
+            padding: 0 !important;
+            height: 45px !important;
+            min-height: 45px !important;
+            max-height: 45px !important;
+            box-sizing: border-box !important;
+            display: flex !important;
+            align-items: center !important;
+            overflow: hidden !important;
+            touch-action: pan-x !important;
           }
           .m3-kpi-scroll {
             display: flex !important;
             gap: 8px !important;
             padding: 0 16px !important;
+            height: 45px !important;
+            min-height: 45px !important;
+            max-height: 45px !important;
+            align-items: center !important;
+            box-sizing: border-box !important;
             overflow-x: auto !important;
             overflow-y: hidden !important;
+            width: 100% !important;
             -webkit-overflow-scrolling: touch !important;
             scrollbar-width: none !important;
+            touch-action: pan-x !important;
+            overscroll-behavior-x: contain !important;
           }
           .m3-kpi-scroll::-webkit-scrollbar {
             display: none !important;
@@ -10499,6 +10727,9 @@ export default function ShopifyCollectionMapping() {
             cursor: pointer !important;
             white-space: nowrap !important;
             font-family: inherit !important;
+          }
+          .m3-kpi-pill:active {
+            transform: scale(0.98) !important;
           }
           .m3-kpi-pill em {
             font-style: normal !important;
@@ -10538,9 +10769,20 @@ export default function ShopifyCollectionMapping() {
           /* ── search row ── */
           .m3-search-row {
             display: flex !important;
-            align-items: stretch !important;
+            align-items: center !important;
             gap: 8px !important;
-            padding: 0 16px 6px !important;
+            margin-top: calc(env(safe-area-inset-top, 0px) + 54px) !important;
+            padding: 4px 16px 2px !important;
+          }
+          /* Single source of truth for "everything below fixed header + KPI". */
+          .productPanel.productPanelMobileIdea3 {
+            margin-top: calc(env(safe-area-inset-top, 0px) + 55px) !important;
+            padding-top: 0 !important;
+          }
+          /* Strong, panel-scoped push: first mobile content row starts below KPI strip,
+             which moves the entire following stack (section head + cards) down in flow. */
+          .productPanel.productPanelMobileIdea3 .m3-search-row {
+            margin-top: 0 !important;
           }
           .m3-search-wrap {
             flex: 1 1 0 !important;
@@ -10581,11 +10823,14 @@ export default function ShopifyCollectionMapping() {
             box-shadow: inset 0 0 0 2px rgba(173, 198, 255, 0.35) !important;
           }
           .m3-search-submit {
-            flex: 0 0 auto !important;
-            width: 48px !important;
-            min-width: 48px !important;
-            height: 48px !important;
-            border-radius: 14px !important;
+            flex: 0 0 36px !important;
+            width: 36px !important;
+            min-width: 36px !important;
+            max-width: 36px !important;
+            height: 36px !important;
+            min-height: 36px !important;
+            max-height: 36px !important;
+            border-radius: 12px !important;
             border: none !important;
             background: linear-gradient(180deg, rgba(173, 198, 255, 0.95) 0%, #4d8eff 100%) !important;
             color: #002e6a !important;
@@ -10594,7 +10839,53 @@ export default function ShopifyCollectionMapping() {
             align-items: center !important;
             justify-content: center !important;
             padding: 0 !important;
+            line-height: 0 !important;
             font-family: inherit !important;
+          }
+          .m3-search-submit svg {
+            display: block !important;
+            width: 20px !important;
+            height: 20px !important;
+            margin: 0 !important;
+          }
+          .m3-search-filter-btn {
+            flex: 0 0 36px !important;
+            width: 36px !important;
+            min-width: 36px !important;
+            max-width: 36px !important;
+            height: 36px !important;
+            min-height: 36px !important;
+            max-height: 36px !important;
+            border-radius: 12px !important;
+            border: none !important;
+            background: linear-gradient(180deg, rgba(173, 198, 255, 0.95) 0%, #4d8eff 100%) !important;
+            color: #002e6a !important;
+            box-shadow: none !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            padding: 0 !important;
+            line-height: 0 !important;
+          }
+          .m3-search-filter-btn svg {
+            display: block !important;
+            width: 20px !important;
+            height: 20px !important;
+            margin: 0 auto !important;
+          }
+          /* Hard override in active mobile row so generic button rules cannot force 44px. */
+          .productPanel.productPanelMobileIdea3 .m3-search-row > .m3-search-submit,
+          .productPanel.productPanelMobileIdea3 .m3-search-row > .m3-search-filter-btn {
+            flex: 0 0 36px !important;
+            width: 36px !important;
+            min-width: 36px !important;
+            max-width: 36px !important;
+            height: 36px !important;
+            min-height: 36px !important;
+            max-height: 36px !important;
+            padding: 0 !important;
+            line-height: 1 !important;
+            box-sizing: border-box !important;
           }
           .m3-search-submit:active { transform: scale(0.98) !important; }
 
@@ -10604,8 +10895,8 @@ export default function ShopifyCollectionMapping() {
             align-items: center !important;
             justify-content: space-between !important;
             gap: 6px !important;
-            padding: 0 4px 10px !important;
-            margin-top: 10px !important;
+            padding: 0 4px 6px !important;
+            margin-top: 4px !important;
           }
           .m3-section-label {
             font-size: 10px !important;
@@ -10643,7 +10934,8 @@ export default function ShopifyCollectionMapping() {
           .m3-cards-list {
             display: flex !important;
             flex-direction: column !important;
-            gap: 16px !important;
+            gap: 10px !important;
+            margin-top: 0 !important;
             padding: 0 16px calc(env(safe-area-inset-bottom, 0px) + 160px) !important;
           }
           .m3-empty {
@@ -10779,6 +11071,9 @@ export default function ShopifyCollectionMapping() {
           }
           .m3-ctrl-btn:active { transform: scale(0.97) !important; }
           .m3-chev-btn svg {
+            display: block !important;
+            width: 22px !important;
+            height: 22px !important;
             transition: transform 0.2s ease !important;
           }
           .m3-chev-btn--open svg {
@@ -10831,16 +11126,17 @@ export default function ShopifyCollectionMapping() {
           }
           .m3-meta-line {
             margin: 4px 0 0 !important;
-            font-size: 10px !important;
+            font-size: 12px !important;
             font-weight: 600 !important;
             color: #9aa3bc !important;
-            line-height: 1.4 !important;
+            line-height: 1.35 !important;
           }
 
           /* ── chips ── */
           .m3-chips {
             display: flex !important;
             flex-wrap: wrap !important;
+            align-items: center !important;
             gap: 6px !important;
             margin-top: 10px !important;
           }
@@ -10852,10 +11148,14 @@ export default function ShopifyCollectionMapping() {
             font-weight: 800 !important;
             letter-spacing: 0.06em !important;
             text-transform: uppercase !important;
-            padding: 5px 9px 6px !important;
+            height: 38px !important;
+            min-height: 38px !important;
+            padding: 0 12px !important;
             border-radius: 7px !important;
             border: 1.5px solid transparent !important;
-            line-height: 1.15 !important;
+            line-height: 1 !important;
+            white-space: nowrap !important;
+            box-sizing: border-box !important;
             cursor: default !important;
             background: rgba(30, 41, 59, 0.65) !important;
             border-color: #64748b !important;
@@ -11287,13 +11587,18 @@ export default function ShopifyCollectionMapping() {
             display: inline-flex !important;
             align-items: center !important;
             justify-content: center !important;
-            width: 34px !important;
-            height: 34px !important;
-            border-radius: 8px !important;
+            width: 46px !important;
+            height: 46px !important;
+            border-radius: 12px !important;
             border: none !important;
             background: transparent !important;
             color: #9aa3bc !important;
             cursor: pointer !important;
+          }
+          .m3-sheet-close svg {
+            display: block !important;
+            width: 34px !important;
+            height: 34px !important;
           }
           .m3-sheet-body {
             flex: 1 1 auto !important;
@@ -11319,7 +11624,7 @@ export default function ShopifyCollectionMapping() {
           .m3-sheet-tree-item {
             width: 100% !important;
             text-align: left !important;
-            padding: 12px 14px !important;
+            padding: 0 !important;
             border-radius: 12px !important;
             border: 1.5px solid #6478a8 !important;
             background: rgba(12, 28, 52, 0.45) !important;
@@ -11331,6 +11636,75 @@ export default function ShopifyCollectionMapping() {
             font-family: inherit !important;
             cursor: pointer !important;
           }
+          .m3-sheet-tree-node-btn {
+            width: 100% !important;
+            min-height: 44px !important;
+            border: none !important;
+            background: transparent !important;
+            color: inherit !important;
+            padding: 10px 12px 10px calc(12px + (var(--m3-tree-depth, 0) * 16px)) !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            gap: 8px !important;
+            text-align: left !important;
+            cursor: default !important;
+          }
+          .m3-sheet-tree-node-btn--parent {
+            cursor: pointer !important;
+          }
+          .m3-sheet-tree-node-label {
+            flex: 1 1 auto !important;
+            min-width: 0 !important;
+            word-break: break-word !important;
+            box-sizing: border-box !important;
+          }
+          .m3-sheet-suggestion-option {
+            width: 100% !important;
+            border: none !important;
+            background: transparent !important;
+            color: inherit !important;
+            text-align: left !important;
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 4px !important;
+            padding: 12px 14px !important;
+            cursor: pointer !important;
+            font-family: inherit !important;
+          }
+          .m3-sheet-suggestion-option:disabled {
+            opacity: 0.5 !important;
+            cursor: not-allowed !important;
+          }
+          .m3-sheet-suggestion-option--selected {
+            outline: 2px solid rgba(173, 198, 255, 0.6) !important;
+            outline-offset: -2px !important;
+            border-radius: 10px !important;
+            background: rgba(77, 142, 255, 0.16) !important;
+          }
+          .m3-sheet-suggestion-kind {
+            font-size: 10px !important;
+            font-weight: 800 !important;
+            letter-spacing: 0.06em !important;
+            text-transform: uppercase !important;
+            color: #adc6ff !important;
+          }
+          .m3-sheet-suggestion-value {
+            font-size: 12px !important;
+            font-weight: 700 !important;
+            color: #dbeafe !important;
+            line-height: 1.35 !important;
+            text-transform: none !important;
+            letter-spacing: 0 !important;
+            word-break: break-word !important;
+          }
+          .m3-sheet-tree-node-arrow {
+            flex: 0 0 auto !important;
+            transition: transform 0.2s ease !important;
+          }
+          .m3-sheet-tree-node-arrow--open {
+            transform: rotate(180deg) !important;
+          }
           .m3-sheet-tree-item:hover {
             border-color: #7c9fd4 !important;
             background: rgba(22, 45, 78, 0.85) !important;
@@ -11341,6 +11715,29 @@ export default function ShopifyCollectionMapping() {
             color: #9aa3bc !important;
             font-style: italic !important;
             margin: 0 !important;
+          }
+          .m3-sheet-unmapped-toggle {
+            width: 100% !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            gap: 10px !important;
+            border: 1px solid rgba(100, 120, 168, 0.7) !important;
+            background: rgba(12, 28, 52, 0.45) !important;
+            color: #dbeafe !important;
+            border-radius: 10px !important;
+            padding: 10px 12px !important;
+            font-size: 12px !important;
+            font-weight: 800 !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.04em !important;
+            cursor: pointer !important;
+          }
+          .m3-sheet-unmapped-arrow {
+            transition: transform 0.2s ease !important;
+          }
+          .m3-sheet-unmapped-arrow--open {
+            transform: rotate(180deg) !important;
           }
           .m3-sheet-footer {
             display: flex !important;

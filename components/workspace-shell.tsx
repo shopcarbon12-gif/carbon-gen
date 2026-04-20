@@ -476,7 +476,7 @@ export function WorkspaceShell({
     <div
       className={`shell ${chatExpanded && showChatPanel ? "chat-expanded" : ""} ${
         rightRailExtra ? "has-right-extra" : ""
-      } ${isInstagramWidgetRoute ? "instagram-widget-shell" : ""} ${
+      } ${isCollectionMappingRoute ? "collection-mapping-shell" : ""} ${isInstagramWidgetRoute ? "instagram-widget-shell" : ""} ${
         isInstagramWidgetRoute && instagramMobilePreview ? "instagram-widget-mobile-preview" : ""
       }`}
     >
@@ -2396,6 +2396,14 @@ export function WorkspaceShell({
             padding-top: calc(
               var(--shell-mobile-topbar-inner-height) + var(--shell-mobile-topbar-border)
             );
+          }
+          /* Collection mapping mobile uses its own in-module header; hide original shell topbar. */
+          .shell.collection-mapping-shell .topbar {
+            display: none;
+          }
+          .shell.collection-mapping-shell .content.collection-mapping-content,
+          .shell.collection-mapping-shell .content.collection-mapping-content.no-integration-panel {
+            padding-top: 0;
           }
           .topbar {
             padding: 0;
