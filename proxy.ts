@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { META_REVIEW_ROLE, parseRole } from "@/lib/authRoleConstants";
+import { META_REVIEW_ROLE, SUPER_ADMIN_ROLE, parseRole } from "@/lib/authRoleConstants";
+
+const AUTH_BYPASS_PAUSED_COOKIE = "carbon_gen_auth_bypass_paused";
 
 const META_REVIEW_STATIC_ASSET =
   /\.(?:ico|png|jpe?g|gif|webp|svg|css|js|map|txt|xml|json|woff2?|ttf|eot|wasm)$/i;
@@ -82,8 +84,9 @@ export function proxy(req: NextRequest) {
   const isProd = process.env.NODE_ENV === "production";
   const authBypass =
     !isProd && (process.env.AUTH_BYPASS || "false").trim().toLowerCase() === "true";
+  const bypassPaused = req.cookies.get(AUTH_BYPASS_PAUSED_COOKIE)?.value === "true";
 
-  if (authBypass) {
+  if (authBypass && !bypassPaused) {
     const res = NextResponse.next();
     res.cookies.set({
       name: "carbon_gen_auth_v1",
@@ -94,7 +97,7 @@ export function proxy(req: NextRequest) {
     });
     res.cookies.set({
       name: "carbon_gen_user_role",
-      value: req.cookies.get("carbon_gen_user_role")?.value || "admin",
+      value: SUPER_ADMIN_ROLE,
       httpOnly: true,
       sameSite: "lax",
       path: "/",

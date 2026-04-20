@@ -8,6 +8,7 @@ import {
 import { PublishChangesButton } from "@/components/instagram-widget/PublishChangesButton";
 import { usePathname, useRouter } from "next/navigation";
 import { META_REVIEW_ROLE } from "@/lib/authRoleConstants";
+import { WORKSPACE_PAGE_CATALOG } from "@/lib/workspacePageCatalog";
 import {
   Fragment,
   useCallback,
@@ -81,19 +82,12 @@ const picturesGenSubItems: NavItem[] = [
   { href: "/studio/gemini-generator", label: "Gemini Generator" },
 ];
 
-const navItems: NavItem[] = [
-  { href: "/studio/seo", label: "SEO Manager" },
-  { href: "/accessibility", label: "Accessibility" },
-  { href: "/studio/rfid-price-tag", label: "RFID Price Tag" },
-  { href: "/studio/lightspeed-catalog", label: "Lightspeed Catalog" },
-  { href: SHOPIFY_MAPPING_INVENTORY_ROOT, label: "Shopify Mapping Inventory" },
-  { href: "/shopify-collection-mapping", label: "Collection Mapping" },
-  { href: INSTAGRAM_WIDGET_ROOT, label: "Instagram Widget" },
-  { href: "/studio/video", label: "Create New Items" },
-  { href: "/studio/social", label: "Social Ads & Meta" },
-  { href: "/ops/inventory", label: "Ops Inventory" },
-  { href: "/dashboard", label: "Workspace Dashboard" },
-];
+const navItems: NavItem[] = WORKSPACE_PAGE_CATALOG.filter(
+  (page) => page.showInWorkspaceMenu && page.id !== "pictures_generator"
+).map((page) => ({
+  href: page.href,
+  label: page.menuLabel,
+}));
 
 const shopifyMappingSubmenuItems: NavItem[] = [
   { href: SHOPIFY_MAPPING_INVENTORY_ROOT, label: "Shopify Mapping Inventory" },

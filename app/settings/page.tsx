@@ -111,9 +111,10 @@ function isValidShop(value: string) {
 }
 
 function roleLabel(role: string) {
-  if (role === "admin") return "Admin";
-  if (role === "manager") return "Manager";
-  if (role === "user") return "User";
+  const r = String(role || "").trim().toLowerCase();
+  if (r === "admin" || r === "superadmin") return "Admin";
+  if (r === "manager") return "Manager";
+  if (r === "user") return "User";
   return role;
 }
 
@@ -845,12 +846,28 @@ export default function SettingsPage() {
           <div className="card-title">User management</div>
           <p className="muted">Create users, assign roles from the database, set passwords, disable or delete accounts.</p>
           <div className="actions">
-            {canManageRoles ? (
-              <Link className="btn ghost" href="/settings/roles">
-                Roles &amp; permissions
-              </Link>
-            ) : null}
+            <Link
+              className={`btn ghost ${canManageRoles ? "" : "disabled-link"}`.trim()}
+              href={canManageRoles ? "/settings/roles" : "#"}
+              aria-disabled={canManageRoles ? undefined : "true"}
+              onClick={(e) => {
+                if (!canManageRoles) e.preventDefault();
+              }}
+            >
+              Open Role Manager (Create / Edit Roles)
+            </Link>
           </div>
+          <div className="capability-hint">
+            <span>Current role: {sessionUser?.role || "unknown"}</span>
+            <span>manageRoles: {canManageRoles ? "true" : "false"}</span>
+          </div>
+          {!canManageRoles ? (
+            <p className="muted">
+              Custom roles and the permission matrix require the &quot;Manage roles &amp; permissions&quot; capability
+              (<code>admin.roles</code>). An account with that permission can open{" "}
+              <Link href="/settings/roles">/settings/roles</Link> to create roles.
+            </p>
+          ) : null}
 
           <div className="create-grid">
             <input
@@ -1044,6 +1061,18 @@ export default function SettingsPage() {
           display: flex;
           flex-wrap: wrap;
           gap: 10px;
+        }
+        .disabled-link {
+          opacity: 0.55;
+          pointer-events: none;
+        }
+        .capability-hint {
+          margin-top: 2px;
+          display: flex;
+          gap: 12px;
+          flex-wrap: wrap;
+          font-size: 0.78rem;
+          color: rgba(226, 232, 240, 0.8);
         }
         .btn {
           border: 1px solid #f3f4f6;

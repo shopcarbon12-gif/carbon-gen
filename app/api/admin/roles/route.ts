@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { insertRole, listRolePermissions, listRoles, upsertRolePermissions, upsertRoles } from "@/lib/authRepository";
+import { isSuperAdminRole } from "@/lib/authRoleConstants";
 import {
   defaultAllowedForRole,
   normalizeRoleName,
@@ -83,6 +84,9 @@ export async function POST(req: NextRequest) {
         { error: "Role name must be 2-31 chars using lowercase letters, numbers, underscore, or dash." },
         { status: 400 }
       );
+    }
+    if (isSuperAdminRole(name)) {
+      return NextResponse.json({ error: "superadmin role is reserved and cannot be created manually." }, { status: 400 });
     }
 
     await insertRole(name, false);

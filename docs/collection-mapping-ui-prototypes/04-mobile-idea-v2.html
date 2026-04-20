@@ -1,0 +1,2793 @@
+<!doctype html>
+<html class="dark" lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ShopCarbon — Collection mapping (mobile prototype)</title>
+  <!-- proto layout 2026-04-19: banner moved end-of-main (fixes KPI→search gap); ALL thumb check→ready-push, uncheck→restore queue + baseline fallback -->
+  <meta name="description" content="Interactive mobile-browser prototype. Edit CATALOG in-script or paste ?import= URL to JSON. Links to app.shopcarbon.com." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --surface: #081328;
+      --surface-container: #151f35;
+      --surface-container-high: #1f2a40;
+      --surface-container-lowest: #030e22;
+      --surface-bright: #2f3950;
+      --on-surface: #d8e2ff;
+      --on-surface-variant: #9aa3bc;
+      --primary: #adc6ff;
+      --primary-container: #4d8eff;
+      --on-primary: #002e6a;
+      --secondary: #4ae176;
+      --tertiary: #ffb95f;
+      --error: #ffb4ab;
+      --outline-variant: rgba(66, 71, 84, 0.35);
+      --shadow-float: 0 20px 40px rgba(0, 0, 0, 0.4);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100dvh;
+      font-family: Inter, system-ui, sans-serif;
+      background: var(--surface);
+      color: var(--on-surface);
+      letter-spacing: -0.02em;
+    }
+    body.noscroll { overflow: hidden; }
+    .proto-banner {
+      background: var(--surface-container-lowest);
+      color: var(--tertiary);
+      font-size: 11px;
+      font-weight: 600;
+      text-align: center;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--outline-variant);
+    }
+    .proto-banner-foot {
+      margin-top: 16px;
+      padding: 10px 8px 0;
+      border-bottom: none;
+      border-top: 1px solid var(--outline-variant);
+      font-size: 10px;
+    }
+    header.shell {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 50;
+      height: 56px;
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--surface);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+    }
+    header.shell h1 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+    }
+    header.shell h1 span.light { font-weight: 500; opacity: 0.55; }
+    .shell-brand-mark {
+      width: 36px;
+      height: 36px;
+      border-radius: 999px;
+      background: var(--surface-container-high);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      overflow: hidden;
+      outline: 1px solid var(--outline-variant);
+      pointer-events: none;
+    }
+    .shell-brand-mark img {
+      width: 22px;
+      height: 22px;
+      object-fit: contain;
+      display: block;
+    }
+    .icon-btn {
+      width: 44px;
+      height: 44px;
+      border: none;
+      border-radius: 12px;
+      background: var(--surface-container);
+      color: var(--primary);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    .icon-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .icon-btn:active:not(:disabled) { transform: scale(0.97); }
+    .kpi-strip {
+      position: fixed;
+      top: 56px;
+      left: 0;
+      right: 0;
+      z-index: 40;
+      background: var(--surface-container);
+      padding: 4px 0 2px;
+    }
+    .kpi-scroll {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 0 16px;
+      scrollbar-width: none;
+    }
+    .kpi-scroll::-webkit-scrollbar { display: none; }
+    /* Horizontal KPI pills (original look) + counts */
+    .kpi-pill {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      background: var(--surface-container-lowest);
+      color: var(--on-surface-variant);
+      outline: 1px solid var(--outline-variant);
+      border: none;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .kpi-pill .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: currentColor;
+      opacity: 0.85;
+      flex-shrink: 0;
+    }
+    .kpi-pill.on {
+      color: var(--on-surface);
+      outline-color: rgba(173, 198, 255, 0.35);
+      background: rgba(173, 198, 255, 0.08);
+    }
+    .kpi-pill.loaded .dot { color: var(--primary); }
+    .kpi-pill.review .dot { color: var(--tertiary); }
+    .kpi-pill.push .dot { color: #a5b4fc; }
+    .kpi-pill.fail .dot { color: var(--error); }
+    .kpi-pill.sync .dot { color: var(--secondary); }
+    .kpi-pill em {
+      font-style: normal;
+      color: var(--on-surface);
+      font-weight: 800;
+    }
+    .kpi-sub {
+      margin-left: 4px;
+      font-size: 9px;
+      font-weight: 700;
+      opacity: 0.85;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+    main.canvas {
+      /* Header 56px + KPI row (~38–40px) + small gap — main is first in-flow block; proto-banner lives at end of main. */
+      padding: 100px 16px 272px;
+      max-width: 520px;
+      margin: 0 auto;
+    }
+    .search-toolbar-row {
+      display: flex;
+      align-items: stretch;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .search-field-wrap {
+      position: relative;
+      flex: 1;
+      min-width: 0;
+    }
+    .search-field-wrap svg {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      opacity: 0.55;
+      pointer-events: none;
+    }
+    .search {
+      width: 100%;
+      height: 100%;
+      min-height: 48px;
+      border: none;
+      border-radius: 14px;
+      padding: 12px 12px 12px 40px;
+      font-size: 14px;
+      background: var(--surface-container-lowest);
+      color: var(--on-surface);
+      outline: none;
+      box-shadow: inset 0 0 0 1px rgba(173, 198, 255, 0.12);
+    }
+    .search::placeholder { color: rgba(154, 163, 188, 0.75); }
+    .search:focus { box-shadow: inset 0 0 0 2px rgba(173, 198, 255, 0.35); }
+    .btn-search-icon {
+      flex: 0 0 auto;
+      width: 48px;
+      min-width: 48px;
+      height: 48px;
+      border: none;
+      border-radius: 14px;
+      font-family: inherit;
+      color: var(--on-primary);
+      background: linear-gradient(180deg, rgba(173, 198, 255, 0.95) 0%, var(--primary-container) 100%);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .btn-search-icon:active { transform: scale(0.98); }
+    .btn-search-icon svg {
+      display: block;
+    }
+    .search-toolbar-row .icon-btn {
+      flex: 0 0 auto;
+      width: 48px;
+      min-width: 48px;
+      height: 48px;
+    }
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 4px 10px;
+      margin-top: 10px;
+    }
+    .section-head h2 {
+      margin: 0;
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--on-surface-variant);
+    }
+    .select-all {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 10px;
+      font-weight: 800;
+      color: var(--primary);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+    }
+    .empty-state {
+      text-align: center;
+      padding: 32px 16px;
+      color: var(--on-surface-variant);
+      font-size: 14px;
+    }
+    .cards { display: flex; flex-direction: column; gap: 16px; }
+    .card {
+      border-radius: 18px;
+      padding: 0;
+      background: var(--surface-container-high);
+      box-shadow: var(--shadow-float);
+      position: relative;
+    }
+    .card::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 16px;
+      bottom: 16px;
+      width: 4px;
+      border-radius: 4px;
+      background: var(--accent-bar, var(--outline-variant));
+    }
+    .card.accent-review { --accent-bar: var(--tertiary); }
+    .card.accent-push { --accent-bar: #a5b4fc; }
+    .card.accent-sync { --accent-bar: var(--secondary); }
+    .card.accent-fail { --accent-bar: var(--error); }
+    .card-head-btn {
+      padding: 16px 16px 8px;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      width: 100%;
+      border: none;
+      background: transparent;
+      color: inherit;
+      text-align: left;
+      cursor: pointer;
+      font: inherit;
+    }
+    .thumb {
+      position: relative;
+      width: 76px;
+      height: 92px;
+      border-radius: 12px;
+      overflow: hidden;
+      flex-shrink: 0;
+      background: var(--surface-container-lowest);
+    }
+    .thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      cursor: zoom-in;
+    }
+    .thumb .chk {
+      position: absolute;
+      top: 6px;
+      left: 6px;
+      width: 18px;
+      height: 18px;
+      accent-color: var(--primary-container);
+      z-index: 2;
+      cursor: pointer;
+    }
+    .card-body { min-width: 0; flex: 1; }
+    .row-status {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    /* Workflow pill — mirrors web `syncBadge` in shopify-collection-mapping.tsx */
+    .badge-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 24px;
+      padding: 0 8px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .sync-synced {
+      background: #123522;
+      border-color: #22c55e;
+      color: #bbf7d0;
+    }
+    .sync-add-pending {
+      background: #3f2368;
+      border-color: #7c3aed;
+      color: #f5f3ff;
+    }
+    .sync-review {
+      background: #452d12;
+      border-color: #f59e0b;
+      color: #fdcc88;
+    }
+    .sync-failed {
+      background: #4b1f24;
+      border-color: #ef4444;
+      color: #fecaca;
+    }
+    .product-title { margin: 0; font-size: 15px; font-weight: 700; line-height: 1.25; }
+    .product-title a {
+      color: inherit;
+      text-decoration: none;
+      border-bottom: 1px solid rgba(173, 198, 255, 0.35);
+    }
+    .product-title a:hover { border-bottom-color: var(--primary); }
+    .meta-line {
+      margin: 4px 0 0;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--on-surface-variant);
+    }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    /* Row chips — colors aligned with web `decisionBadge` / `suggestionChip--state-suggested` / sync pills */
+    .chip-web {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 5px 9px 6px;
+      border-radius: 7px;
+      border: 1.5px solid transparent;
+      line-height: 1.15;
+      cursor: default;
+    }
+    .chip-web.chip-suggestion {
+      background: rgba(12, 28, 52, 0.35);
+      border-color: #6478a8;
+      color: #dbeafe;
+      cursor: pointer;
+    }
+    .chip-web.chip-suggestion:active { transform: scale(0.98); }
+    .chip-web.chip-mapped {
+      background: #123522;
+      border-color: #22c55e;
+      color: #bbf7d0;
+    }
+    .chip-web.chip-synced {
+      background: #123522;
+      border-color: #22c55e;
+      color: #bbf7d0;
+    }
+    .chip-web.chip-ready {
+      background: #3f2368;
+      border-color: #7c3aed;
+      color: #f5f3ff;
+    }
+    .chip-web.chip-review {
+      background: #452d12;
+      border-color: #f59e0b;
+      color: #fdcc88;
+    }
+    .chip-web.chip-failed {
+      background: #4b1f24;
+      border-color: #ef4444;
+      color: #fecaca;
+    }
+    .chip-web.chip-appcommitted {
+      background: linear-gradient(180deg, #134e4a 0%, #0a2f2e 100%);
+      border: 2px solid #2dd4bf;
+      color: #ecfdf5;
+      box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.35);
+    }
+    .chip-web.chip-neutral {
+      background: rgba(30, 41, 59, 0.65);
+      border-color: #64748b;
+      color: #cbd5e1;
+    }
+    .suggestion-applied-block {
+      width: 100%;
+      border: none;
+      cursor: pointer;
+      text-align: left;
+      font: inherit;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: #1e2330;
+      outline: 1px solid rgba(100, 120, 168, 0.4);
+      color: #94a3b8;
+      box-sizing: border-box;
+    }
+    .suggestion-applied-block:focus-visible {
+      outline: 2px solid #3b82f6;
+      outline-offset: 2px;
+    }
+    .suggestion-applied-block .suggestion-applied-label {
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #94a3b8;
+    }
+    .suggestion-applied-block .suggestion-applied-path {
+      display: block;
+      margin-top: 8px;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #f1f5f9;
+      line-height: 1.3;
+    }
+    .suggestion-applied-block .suggestion-applied-placeholder {
+      display: block;
+      margin-top: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #64748b;
+    }
+    .suggestions-modal-hint {
+      margin: 0 0 12px;
+      font-size: 12px;
+      color: var(--on-surface-variant);
+      line-height: 1.4;
+    }
+    .suggestions-modal-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 52vh;
+      overflow-y: auto;
+    }
+    .suggestion-pick-btn {
+      width: 100%;
+      text-align: left;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1.5px solid #6478a8;
+      background: rgba(12, 28, 52, 0.45);
+      color: #dbeafe;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .suggestion-pick-btn:hover {
+      border-color: #7c9fd4;
+      background: rgba(22, 45, 78, 0.85);
+      color: #f0f7ff;
+    }
+    .card-details {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.35s ease;
+      padding: 0 16px;
+    }
+    .card.expanded .card-details {
+      max-height: 720px;
+      padding: 0 16px 16px;
+    }
+    .chev-wrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .chev-squircle {
+      width: 36px;
+      height: 36px;
+      border-radius: 12px;
+      background: var(--surface-container);
+      color: var(--primary);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      line-height: 1;
+    }
+    .chev {
+      transition: transform 0.2s ease;
+      font-size: 11px;
+    }
+    .card.expanded .chev { transform: rotate(180deg); }
+    .stack { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
+    .path-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: var(--surface-container-lowest);
+      font-size: 11px;
+      color: var(--on-surface-variant);
+      line-height: 1.35;
+    }
+    .path-row strong { color: var(--on-surface); font-weight: 700; }
+    button.path-row {
+      width: 100%;
+      border: none;
+      cursor: pointer;
+      font: inherit;
+      text-align: left;
+      color: inherit;
+      outline: 1px solid rgba(173, 198, 255, 0.2);
+      box-shadow: inset 0 0 0 1px rgba(173, 198, 255, 0.06);
+    }
+    button.path-row:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: 2px;
+    }
+    .path-row__hint {
+      display: block;
+      margin-top: 6px;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--primary);
+      opacity: 0.9;
+    }
+    .path-row.suggest {
+      background: rgba(173, 198, 255, 0.06);
+      outline: 1px solid rgba(173, 198, 255, 0.12);
+    }
+    .path-row.suggest .label {
+      font-size: 9px;
+      font-weight: 900;
+      letter-spacing: 0.12em;
+      color: var(--primary);
+    }
+    .delta { font-size: 11px; font-weight: 700; color: #fed7aa; }
+    .row-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .row-links a {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--primary);
+      text-decoration: none;
+    }
+    .row-links a:hover { text-decoration: underline; }
+    .pager {
+      margin: 0 0 12px;
+      padding: 12px 10px;
+      border-radius: 14px;
+      background: var(--surface-container);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+    }
+    .pager--dock {
+      margin: 0;
+      padding: 6px 4px 6px 6px;
+      flex: 1 1 0;
+      min-width: 0;
+      width: auto;
+      justify-content: flex-start;
+      overflow-x: auto;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+    }
+    .pager--dock::-webkit-scrollbar { display: none; }
+    .pager--dock .pager-nav {
+      flex-wrap: nowrap;
+      gap: 4px;
+    }
+    .pager--dock .pager-nav button {
+      min-width: 34px;
+      height: 34px;
+      padding: 0;
+      font-size: 12px;
+    }
+    .pager--dock .pager-nav span.muted {
+      font-size: 11px;
+      padding: 0 4px;
+      white-space: nowrap;
+    }
+    .pager-nav { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .pager-nav button {
+      min-width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      border: none;
+      background: var(--surface-container-lowest);
+      color: var(--on-surface);
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .pager-nav button:disabled { opacity: 0.4; cursor: not-allowed; }
+    .pager-nav span.muted {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--on-surface-variant);
+      padding: 0 6px;
+    }
+    .per-page {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--on-surface-variant);
+    }
+    .per-page select {
+      border-radius: 10px;
+      border: none;
+      padding: 8px 10px;
+      background: var(--surface-container-lowest);
+      color: var(--on-surface);
+      font-weight: 600;
+    }
+    .dock-per-page {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      flex-direction: row;
+      flex-wrap: nowrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .dock-per-page .per-page {
+      flex: 0 0 auto;
+      gap: 6px;
+      white-space: nowrap;
+    }
+    .dock-per-page .per-page select {
+      padding: 6px 8px;
+      font-size: 12px;
+    }
+    .dock {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 60;
+      padding: 12px 16px 20px;
+      background: rgba(8, 19, 40, 0.88);
+      backdrop-filter: blur(16px);
+    }
+    .dock-inner { max-width: 520px; margin: 0 auto; }
+    .commit-main {
+      width: 100%;
+      min-height: 52px;
+      border: none;
+      border-radius: 16px;
+      font-size: 13px;
+      font-weight: 900;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--on-primary);
+      background: linear-gradient(90deg, var(--primary) 0%, var(--primary-container) 100%);
+      box-shadow: 0 12px 32px rgba(77, 142, 255, 0.28);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .commit-main:disabled { opacity: 0.5; cursor: not-allowed; }
+    .commit-menu {
+      display: none;
+      margin-top: 12px;
+      padding: 12px;
+      border-radius: 14px;
+      background: var(--surface-container);
+      font-size: 12px;
+    }
+    .commit-menu.open { display: block; }
+    .commit-menu h3 {
+      margin: 0 0 8px;
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: 0.12em;
+      color: var(--on-surface-variant);
+    }
+    .commit-item {
+      width: 100%;
+      text-align: left;
+      padding: 12px;
+      margin-bottom: 8px;
+      border-radius: 12px;
+      border: none;
+      background: var(--surface-container-lowest);
+      color: var(--on-surface);
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .commit-item:disabled { opacity: 0.45; cursor: not-allowed; }
+    .commit-item .t { font-weight: 700; display: block; margin-bottom: 4px; }
+    .commit-item .s { font-size: 11px; color: var(--on-surface-variant); font-weight: 500; }
+    .commit-item.danger { background: rgba(255, 180, 171, 0.08); outline: 1px solid rgba(255, 180, 171, 0.2); }
+    .commit-divider { height: 1px; margin: 10px 0; background: rgba(255, 255, 255, 0.06); }
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.55);
+      z-index: 70;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+    .overlay.open { opacity: 1; pointer-events: auto; }
+    .drawer {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: min(320px, 92vw);
+      height: 100%;
+      background: var(--surface-container);
+      z-index: 80;
+      transform: translateX(-105%);
+      transition: transform 0.25s ease;
+      padding: 20px 16px;
+      box-shadow: var(--shadow-float);
+      overflow-y: auto;
+    }
+    .drawer.open { transform: translateX(0); }
+    .drawer h2 { margin: 0 0 16px; font-size: 12px; letter-spacing: 0.12em; color: var(--on-surface-variant); }
+    .drawer a {
+      display: block;
+      padding: 14px 12px;
+      border-radius: 12px;
+      color: var(--on-surface);
+      text-decoration: none;
+      font-weight: 600;
+      margin-bottom: 6px;
+      background: var(--surface-container-lowest);
+    }
+    .drawer a:hover { background: var(--surface-bright); }
+    .drawer a small { display: block; font-size: 11px; font-weight: 500; color: var(--on-surface-variant); margin-top: 4px; }
+    .modal {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -48%) scale(0.96);
+      width: min(400px, 94vw);
+      max-height: 85vh;
+      overflow-y: auto;
+      background: var(--surface-container-high);
+      border-radius: 18px;
+      z-index: 85;
+      padding: 20px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      box-shadow: var(--shadow-float);
+    }
+    .modal.open { opacity: 1; pointer-events: auto; transform: translate(-50%, -50%) scale(1); }
+    .modal h2 { margin: 0 0 12px; font-size: 18px; }
+    .modal .close-row { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+    .modal label.row { display: flex; align-items: center; gap: 10px; margin: 12px 0; font-size: 14px; }
+    .toast {
+      position: fixed;
+      bottom: 150px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--surface-container);
+      color: var(--on-surface);
+      padding: 12px 18px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 600;
+      z-index: 90;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      max-width: 90vw;
+      text-align: center;
+      outline: 1px solid var(--outline-variant);
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .kbd { font-size: 10px; color: var(--on-surface-variant); margin-top: 12px; line-height: 1.4; }
+
+    /* Bottom sheet: store menu tree + unmapped collections */
+    .menu-sheet {
+      position: fixed;
+      inset: 0;
+      z-index: 88;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.22s ease;
+    }
+    .menu-sheet.open {
+      pointer-events: auto;
+      opacity: 1;
+    }
+    .menu-sheet-scrim {
+      position: absolute;
+      inset: 0;
+      border: none;
+      padding: 0;
+      margin: 0;
+      background: rgba(0, 0, 0, 0.52);
+      cursor: pointer;
+    }
+    .menu-sheet-panel {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 1;
+      max-height: 92dvh;
+      display: flex;
+      flex-direction: column;
+      background: var(--surface-container-high);
+      border-radius: 20px 20px 0 0;
+      box-shadow: 0 -16px 48px rgba(0, 0, 0, 0.5);
+      transform: translateY(105%);
+      transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+      outline: 1px solid rgba(173, 198, 255, 0.18);
+    }
+    .menu-sheet.open .menu-sheet-panel {
+      transform: translateY(0);
+    }
+    .menu-sheet-head {
+      flex-shrink: 0;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 16px 16px 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .menu-sheet-title {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      line-height: 1.25;
+      padding-top: 2px;
+    }
+    .menu-sheet-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .btn-sheet {
+      border: none;
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .btn-sheet-cancel {
+      background: var(--surface-container-lowest);
+      color: var(--on-surface-variant);
+      outline: 1px solid var(--outline-variant);
+    }
+    .btn-sheet-save {
+      background: linear-gradient(180deg, #6ee7b7 0%, var(--secondary) 100%);
+      color: #042f1a;
+      box-shadow: 0 4px 16px rgba(74, 225, 118, 0.25);
+    }
+    .btn-sheet-save:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+    .menu-sheet-body {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 12px 16px 28px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .menu-sheet-product {
+      margin: 0 0 12px;
+      font-size: 12px;
+      color: var(--on-surface-variant);
+      font-weight: 600;
+    }
+    .menu-sheet-product strong {
+      color: var(--on-surface);
+      font-weight: 700;
+    }
+    .menu-sheet-tree-title {
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: 0.14em;
+      color: var(--on-surface-variant);
+      margin-bottom: 8px;
+    }
+    .menu-sheet-tree-title small {
+      font-weight: 600;
+      letter-spacing: 0;
+      text-transform: none;
+    }
+    .nav-tree-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      width: 100%;
+      padding: 10px 10px;
+      margin-bottom: 8px;
+      border-radius: 14px;
+      background: var(--surface-container-lowest);
+      outline: 1px solid rgba(173, 198, 255, 0.15);
+      text-align: left;
+      cursor: pointer;
+      box-sizing: border-box;
+    }
+    .nav-tree-row:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: 1px;
+    }
+    .nav-tree-row.is-selected {
+      outline-color: rgba(74, 225, 118, 0.55);
+      background: rgba(74, 225, 118, 0.08);
+    }
+    .nav-tree-row.is-hidden-target {
+      outline-color: rgba(255, 180, 171, 0.35);
+    }
+    .nav-tree-row__grip {
+      flex-shrink: 0;
+      width: 18px;
+      opacity: 0.45;
+      margin-top: 2px;
+    }
+    .nav-tree-row__main {
+      flex: 1;
+      min-width: 0;
+    }
+    .nav-tree-row__caret {
+      flex-shrink: 0;
+      width: 28px;
+      height: 28px;
+      border: none;
+      border-radius: 8px;
+      background: var(--surface-container);
+      color: var(--primary);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      padding: 0;
+    }
+    .nav-tree-row__caret:disabled {
+      visibility: hidden;
+    }
+    .nav-tree-row__label {
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .nav-tree-row__sub {
+      display: block;
+      margin-top: 3px;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--on-surface-variant);
+      word-break: break-all;
+    }
+    .nav-tree-row__icons {
+      display: flex;
+      gap: 4px;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .nav-tree-row__icons span {
+      font-size: 14px;
+      opacity: 0.55;
+    }
+    .nav-tree-children {
+      margin-left: 0;
+      padding-left: 12px;
+      border-left: 2px solid rgba(173, 198, 255, 0.12);
+    }
+    .nav-tree-children[hidden] {
+      display: none;
+    }
+    .unmapped-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      width: 100%;
+      margin: 20px 0 0;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: none;
+      background: var(--surface-container-lowest);
+      outline: 1px solid rgba(173, 198, 255, 0.15);
+      color: inherit;
+      font: inherit;
+      cursor: pointer;
+      text-align: left;
+    }
+    .unmapped-toggle:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: 2px;
+    }
+    .unmapped-toggle__left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+    .unmapped-toggle__label {
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--on-surface);
+    }
+    .unmapped-toggle__chev {
+      flex-shrink: 0;
+      font-size: 12px;
+      color: var(--primary);
+      font-weight: 800;
+    }
+    .unmapped-collapsible {
+      margin-top: 10px;
+    }
+    .unmapped-collapsible[hidden] {
+      display: none;
+    }
+    .unmapped-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 24px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+      background: var(--surface-container);
+      color: var(--on-surface-variant);
+      outline: 1px solid var(--outline-variant);
+    }
+    .unmapped-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 10px 10px;
+      margin-bottom: 8px;
+      border-radius: 14px;
+      background: var(--surface-container-lowest);
+      outline: 1px solid rgba(173, 198, 255, 0.12);
+      border: none;
+      color: inherit;
+      font: inherit;
+      cursor: pointer;
+      text-align: left;
+    }
+    .unmapped-row.is-selected {
+      outline-color: rgba(173, 198, 255, 0.45);
+      background: rgba(173, 198, 255, 0.08);
+    }
+    .unmapped-row__grip {
+      flex-shrink: 0;
+      width: 18px;
+      opacity: 0.45;
+    }
+    .unmapped-row__label {
+      flex: 1;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .unmapped-row__icons {
+      display: flex;
+      gap: 4px;
+      opacity: 0.55;
+      font-size: 14px;
+    }
+
+    .image-lightbox {
+      position: fixed;
+      inset: 0;
+      z-index: 84;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+    .image-lightbox.open {
+      pointer-events: auto;
+      opacity: 1;
+    }
+    .image-lightbox-scrim {
+      position: absolute;
+      inset: 0;
+      border: none;
+      padding: 0;
+      margin: 0;
+      background: rgba(0, 0, 0, 0.65);
+      cursor: pointer;
+    }
+    .image-lightbox-panel {
+      position: absolute;
+      left: 3vw;
+      right: 3vw;
+      top: 5vh;
+      bottom: 5vh;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      background: var(--surface-container-high);
+      border-radius: 18px;
+      overflow: hidden;
+      z-index: 1;
+      box-shadow: var(--shadow-float);
+      outline: 1px solid rgba(173, 198, 255, 0.2);
+    }
+    .image-lightbox-head {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 12px 12px 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      background: var(--surface-container);
+    }
+    .image-lightbox-title {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1.25;
+      min-width: 0;
+    }
+    .image-lightbox-body {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px;
+      background: #020617;
+    }
+    .image-lightbox-body img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <header class="shell" aria-label="Top bar">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <button type="button" class="icon-btn" id="btnNav" aria-label="Open navigation menu" aria-expanded="false" aria-controls="navDrawer">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h16v2H4v-2z"/></svg>
+      </button>
+      <span class="shell-brand-mark" aria-hidden="true">
+        <img src="../../public/accessibility-assets/carbon-honeycomb-mark.png" alt="" width="22" height="22" />
+      </span>
+      <h1>CARBON <span class="light">/ COLLECTION MAPPING</span></h1>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <button type="button" class="icon-btn" id="btnRefresh" aria-label="Refresh products" title="Simulates reload of current page slice">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4a8 8 0 017.65 5.5h-2.1a6 6 0 00-11.3 3h3l-2.5 4L4 12.5h3.1A8 8 0 0112 4zm0 16a8 8 0 01-7.65-5.5h2.1a6 6 0 0011.3-3H15l2.5-4L20 11.5h-3.1A8 8 0 0112 20z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="overlay" id="overlay" aria-hidden="true"></div>
+  <nav class="drawer" id="navDrawer" aria-label="App navigation" aria-hidden="true">
+    <h2>GO TO (LIVE APP)</h2>
+    <a href="https://app.shopcarbon.com/" target="_blank" rel="noopener noreferrer">Home / dashboard<small>app.shopcarbon.com</small></a>
+    <a href="https://app.shopcarbon.com/shopify-collection-mapping" target="_blank" rel="noopener noreferrer">Collection mapping<small>Same module as this prototype</small></a>
+    <a href="https://app.shopcarbon.com/settings" target="_blank" rel="noopener noreferrer">Settings<small>Users &amp; roles</small></a>
+    <p class="kbd">This drawer is prototype-only; the live app uses your signed-in session.</p>
+  </nav>
+
+  <section class="kpi-strip" aria-label="Queue filters">
+    <div class="kpi-scroll" id="kpiStrip"></div>
+  </section>
+
+  <main class="canvas">
+    <section aria-label="Search and tools">
+      <div class="search-toolbar-row">
+        <div class="search-field-wrap">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M10.5 3a7.5 7.5 0 104.8 13.3l4.7 4.7 1.4-1.4-4.7-4.7A7.5 7.5 0 0010.5 3zm0 2a5.5 5.5 0 110 11 5.5 5.5 0 010-11z"/></svg>
+          <input class="search" id="searchInput" type="search" placeholder="Search products (title / sku / upc / type)…" aria-label="Search products" autocomplete="off" enterkeyhint="search" />
+        </div>
+        <button type="button" class="btn-search-icon" id="btnSearch" aria-label="Search products" title="Search">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10.5 3a7.5 7.5 0 104.8 13.3l4.7 4.7 1.4-1.4-4.7-4.7A7.5 7.5 0 0010.5 3zm0 2a5.5 5.5 0 110 11 5.5 5.5 0 010-11z"/></svg>
+        </button>
+        <button type="button" class="icon-btn" id="btnFilters" aria-label="Open more filters" title="More filters">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 .8 1.6l-5.8 7.73V19a1 1 0 0 1-1.45.9l-2-1A1 1 0 0 1 10 18v-3.67L4.2 6.6A1 1 0 0 1 4 6z"/></svg>
+        </button>
+      </div>
+    </section>
+
+    <div class="section-head">
+      <h2>Products <span id="visibleCount" style="opacity:.7"></span></h2>
+      <label class="select-all">
+        Select all on page
+        <input type="checkbox" id="selectAll" aria-label="Select all products on this page" />
+      </label>
+    </div>
+
+    <div class="cards" id="cardList" aria-live="polite"></div>
+    <div class="empty-state" id="emptyState" hidden>No products match the current filter.</div>
+    <div class="proto-banner proto-banner-foot" id="protoBanner" role="note">
+      Interactive prototype — demo data in <code>CATALOG</code>. Set each row’s <code>image</code> to your Shopify <code>featured_image</code> URL from the API; until then, deterministic demo photos use your UPC as the seed.
+    </div>
+  </main>
+
+  <div class="dock" aria-label="Pagination and commit">
+    <div class="dock-inner">
+      <button type="button" class="commit-main" id="btnCommit" aria-expanded="false" aria-controls="commitMenu">
+        COMMIT CHANGES
+        <span id="commitChev" aria-hidden="true">▼</span>
+      </button>
+      <div class="commit-menu" id="commitMenu" role="menu" aria-label="Commit menu">
+        <h3>SAFE ACTIONS</h3>
+        <button type="button" class="commit-item" id="miPushSel" role="menuitem">
+          <span class="t" id="miPushSelTitle">Push selected (0)</span>
+          <span class="s">Push only ready-to-push items</span>
+        </button>
+        <button type="button" class="commit-item" id="miPushAll" role="menuitem">
+          <span class="t" id="miPushAllTitle">Push all final changes</span>
+          <span class="s" id="miPushAllSub">All products will be updated</span>
+        </button>
+        <div class="commit-divider"></div>
+        <h3>DESTRUCTIVE</h3>
+        <button type="button" class="commit-item danger" id="miRemove" role="menuitem">
+          <span class="t" id="miRemoveTitle">⚠ Remove all from selected products (0)</span>
+          <span class="s">Clears assignments only for selected products</span>
+        </button>
+      </div>
+      <div class="dock-per-page">
+        <nav class="pager pager--dock" aria-label="Pagination">
+          <div class="pager-nav">
+            <button type="button" id="pgFirst" aria-label="First page">&lt;&lt;</button>
+            <button type="button" id="pgPrev" aria-label="Previous page">&lt;</button>
+            <span class="muted pagerPageLabel" id="pgLabel">Page 1 of 1</span>
+            <button type="button" id="pgNext" aria-label="Next page">&gt;</button>
+            <button type="button" id="pgLast" aria-label="Last page">&gt;&gt;</button>
+          </div>
+        </nav>
+        <label class="per-page">
+          <span class="muted">Per page</span>
+          <select id="pageSize" aria-label="Products per page">
+            <option value="6">6</option>
+            <option value="20" selected>20</option>
+            <option value="50">50</option>
+          </select>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="modalFilters" role="dialog" aria-modal="true" aria-labelledby="mfTitle" aria-hidden="true">
+    <div class="close-row"><button type="button" class="icon-btn" id="mfClose" aria-label="Close filters" style="width:40px;height:40px;">✕</button></div>
+    <h2 id="mfTitle">More filters</h2>
+    <p style="color:var(--on-surface-variant);font-size:13px;margin:0 0 8px;">Mirrors key toggles from the live mapping page (prototype behaviour only).</p>
+    <label class="row"><input type="checkbox" id="fltIncludeSynced" /> Include synced on workflow tabs</label>
+    <label class="row"><input type="checkbox" id="fltSuggestionsOnly" /> Only rows with suggestions</label>
+    <p class="kbd">Closing applies filters to the list below.</p>
+  </div>
+
+  <div class="modal" id="modalExplain" role="dialog" aria-modal="true" aria-labelledby="exTitle" aria-hidden="true">
+    <div class="close-row"><button type="button" class="icon-btn" id="exClose" aria-label="Close details" style="width:40px;height:40px;">✕</button></div>
+    <h2 id="exTitle">Row details</h2>
+    <pre id="exBody" style="white-space:pre-wrap;font-size:12px;color:var(--on-surface-variant);margin:0;max-height:50vh;overflow:auto;"></pre>
+  </div>
+
+  <div class="modal" id="modalSuggestions" role="dialog" aria-modal="true" aria-labelledby="sugTitle" aria-hidden="true">
+    <div class="close-row"><button type="button" class="icon-btn" id="sugClose" aria-label="Close suggestions" style="width:40px;height:40px;">✕</button></div>
+    <h2 id="sugTitle">Suggestions</h2>
+    <p class="suggestions-modal-hint">Pick a menu path. The choice appears under <strong>Suggestion applied</strong> on the product card.</p>
+    <div class="suggestions-modal-list" id="suggestionsModalList"></div>
+  </div>
+
+  <div class="image-lightbox" id="imageLightbox" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="imageLightboxTitle">
+    <button type="button" class="image-lightbox-scrim" id="imageLightboxScrim" aria-label="Close image"></button>
+    <div class="image-lightbox-panel">
+      <div class="image-lightbox-head">
+        <h2 id="imageLightboxTitle" class="image-lightbox-title"></h2>
+        <button type="button" class="icon-btn" id="imageLightboxClose" aria-label="Close" style="width:44px;height:44px;flex-shrink:0;">✕</button>
+      </div>
+      <div class="image-lightbox-body">
+        <img id="imageLightboxImg" src="" alt="" />
+      </div>
+    </div>
+  </div>
+
+  <div class="menu-sheet" id="menuSheet" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="menuSheetTitle">
+    <button type="button" class="menu-sheet-scrim" id="menuSheetScrim" aria-label="Close without saving"></button>
+    <div class="menu-sheet-panel" id="menuSheetPanel">
+      <div class="menu-sheet-head">
+        <h2 id="menuSheetTitle" class="menu-sheet-title">Menu &amp; unmapped</h2>
+        <div class="menu-sheet-actions">
+          <button type="button" class="btn-sheet btn-sheet-save" id="menuSheetSave" disabled>Save</button>
+          <button type="button" class="btn-sheet btn-sheet-cancel" id="menuSheetCancel">Cancel</button>
+        </div>
+      </div>
+      <div class="menu-sheet-body">
+        <p class="menu-sheet-product" id="menuSheetProductLabel"></p>
+        <div class="menu-sheet-tree-title">Store menu <small class="muted">(prototype)</small></div>
+        <div class="menu-tree" id="menuTreeMount"></div>
+        <button type="button" class="unmapped-toggle" id="btnUnmappedToggle" aria-expanded="false" aria-controls="unmappedCollapsible">
+          <span class="unmapped-toggle__left">
+            <span class="unmapped-toggle__label">Unmapped collections</span>
+            <span class="unmapped-badge" id="unmappedCount">0</span>
+          </span>
+          <span class="unmapped-toggle__chev" id="unmappedChev" aria-hidden="true">▸</span>
+        </button>
+        <div class="unmapped-collapsible" id="unmappedCollapsible" hidden>
+          <div class="unmapped-list" id="unmappedMount"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status"></div>
+
+  <script>
+(function () {
+  "use strict";
+
+  /**
+   * Replace `image` with your real featured_image URLs from the collection-mapping API (same as app rows).
+   * `storeProductUrl` optional — absolute link for "View on storefront".
+   */
+  /** Fallback when a row has no `image` and demos are off */
+  const SHOPCARBON_SAMPLE_IMG =
+    "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/DZ__3128.jpg?v=1733764412&width=240";
+  /** If true and row.image is empty, uses picsum.photos seeded by UPC (swap for real URLs). */
+  const USE_UPC_SEEDED_DEMO_IMAGES = true;
+
+  const CATALOG = [
+    {
+      id: "p1",
+      title: "2 PIECES RORRI DRESS",
+      upc: "2122114",
+      sku: "2122114",
+      type: "Dress",
+      image: SHOPCARBON_SAMPLE_IMG,
+      queue: "synced",
+      mappingDecision: "SUGGESTED",
+      statusLabel: "Synced",
+      chips: ["Suggestions", "Synced", "App committed"],
+      currentMenu: "WOMEN > NEW & NOW, WOMEN > CLOTHING > DRESSES",
+      finalMenu: "WOMEN > NEW & NOW, WOMEN > CLOTHING > DRESSES",
+      finalCollections: "maxi-dresses",
+      deltaAdd: 0,
+      deltaRemove: 0,
+      suggestionLine: "",
+      suggestionOptions: ["WOMEN > CLOTHING > DRESSES", "WOMEN > NEW & NOW"],
+      storeProductUrl: "https://shopcarbon.com/search?q=2122114",
+    },
+    {
+      id: "p2",
+      title: "ADRIAN CARGO PANTS",
+      upc: "1223802",
+      sku: "1223802",
+      type: "Pants",
+      image: "",
+      queue: "ready-push",
+      mappingDecision: "AUTO_MAPPED",
+      statusLabel: "Ready to Push",
+      chips: ["Mapped", "Suggestions", "Ready to Push"],
+      currentMenu: "MEN > CLOTHING > PANTS",
+      finalMenu: "MEN > CLOTHING > PANTS",
+      finalCollections: "cargo-pants",
+      deltaAdd: 1,
+      deltaRemove: 0,
+      suggestionLine: "MEN > CLOTHING > SWEATPANTS",
+      appliedSuggestion: "MEN > CLOTHING > SWEATPANTS",
+      storeProductUrl: "https://shopcarbon.com/search?q=1223802",
+    },
+    {
+      id: "p3",
+      title: "ACE JEANS",
+      upc: "1171080",
+      sku: "1171080",
+      type: "Jeans",
+      image: "",
+      queue: "ready-push",
+      mappingDecision: "SUGGESTED",
+      statusLabel: "Ready to Push",
+      chips: ["Suggestions", "Ready to Push"],
+      currentMenu: "MEN > CLOTHING > JEANS",
+      finalMenu: "MEN > CLOTHING > JEANS",
+      finalCollections: "slim-fit-jeans",
+      deltaAdd: 2,
+      deltaRemove: 0,
+      suggestionLine: "",
+      suggestionOptions: ["MEN > CLOTHING > SLIM FIT", "MEN > CLOTHING > JEANS", "MEN > NEW & NOW"],
+      storeProductUrl: "https://shopcarbon.com/search?q=1171080",
+    },
+    {
+      id: "p4",
+      title: "AARON JEANS",
+      upc: "1123014",
+      sku: "1123014",
+      type: "Jeans",
+      image: "",
+      queue: "ready-push",
+      mappingDecision: "SUGGESTED",
+      statusLabel: "Ready to Push",
+      chips: ["Suggestions", "Ready to Push"],
+      currentMenu: "MEN > CLOTHING > JEANS",
+      finalMenu: "MEN > CLOTHING > JEANS",
+      finalCollections: "straight-jeans",
+      deltaAdd: 1,
+      deltaRemove: 0,
+      suggestionLine: "",
+      suggestionOptions: ["MEN > CLOTHING > STRAIGHT", "MEN > CLOTHING > JEANS", "MEN > NEW & NOW"],
+      storeProductUrl: "https://shopcarbon.com/search?q=1123014",
+    },
+    {
+      id: "p5",
+      title: "LINA LINEN BLAZER",
+      upc: "2230455",
+      sku: "2230455-WHT",
+      type: "Blazer",
+      image: "",
+      queue: "needs-review",
+      mappingDecision: "MANUAL_REVIEW",
+      statusLabel: "Needs Review",
+      chips: ["Needs Review", "Suggestions"],
+      currentMenu: "WOMEN > CLOTHING > OUTERWEAR",
+      finalMenu: "WOMEN > CLOTHING > BLAZERS",
+      finalCollections: "—",
+      deltaAdd: 2,
+      deltaRemove: 1,
+      suggestionLine: "WOMEN > CLOTHING > BLAZERS",
+      storeProductUrl: "https://shopcarbon.com/search?q=2230455",
+    },
+    {
+      id: "p6",
+      title: "NOVA SNEAKER",
+      upc: "1189901",
+      sku: "NV-SN-41",
+      type: "Shoes",
+      image: "",
+      queue: "push-failed",
+      mappingDecision: "MANUAL_REVIEW",
+      statusLabel: "Push Failed",
+      chips: ["Push Failed", "Ready to Push"],
+      currentMenu: "MEN > SHOES > SNEAKERS",
+      finalMenu: "MEN > SHOES > SNEAKERS",
+      finalCollections: "limited-sneakers",
+      deltaAdd: 1,
+      deltaRemove: 0,
+      suggestionLine: "",
+      storeProductUrl: "https://shopcarbon.com/search?q=1189901",
+    },
+    {
+      id: "p7",
+      title: "MIA MIDI SKIRT",
+      upc: "2156788",
+      sku: "2156788-BLK",
+      type: "Skirt",
+      image: "",
+      queue: "synced",
+      mappingDecision: "AUTO_MAPPED",
+      statusLabel: "Synced",
+      chips: ["Mapped", "Synced"],
+      currentMenu: "WOMEN > CLOTHING > SKIRTS",
+      finalMenu: "WOMEN > CLOTHING > SKIRTS",
+      finalCollections: "midi-skirts",
+      deltaAdd: 0,
+      deltaRemove: 0,
+      suggestionLine: "",
+      storeProductUrl: "https://shopcarbon.com/search?q=2156788",
+    },
+    {
+      id: "p8",
+      title: "ELI CASHMERE SCARF",
+      upc: "3344110",
+      sku: "ELI-SCF",
+      type: "Accessory",
+      image: "",
+      queue: "synced",
+      mappingDecision: "AUTO_MAPPED",
+      statusLabel: "Synced",
+      chips: ["Mapped", "Synced", "App committed"],
+      currentMenu: "WOMEN > ACCESSORIES > SCARVES",
+      finalMenu: "WOMEN > ACCESSORIES > SCARVES",
+      finalCollections: "winter-scarves",
+      deltaAdd: 0,
+      deltaRemove: 0,
+      suggestionLine: "",
+      storeProductUrl: "https://shopcarbon.com/search?q=3344110",
+    },
+    {
+      id: "p9",
+      title: "RIVER TRENCH COAT",
+      upc: "2211009",
+      sku: "RIV-TR-S",
+      type: "Coat",
+      image: "",
+      queue: "needs-review",
+      mappingDecision: "MANUAL_REVIEW",
+      statusLabel: "Needs Review",
+      chips: ["Needs Review"],
+      currentMenu: "WOMEN > CLOTHING > COATS",
+      finalMenu: "WOMEN > CLOTHING > COATS",
+      finalCollections: "—",
+      deltaAdd: 0,
+      deltaRemove: 0,
+      suggestionLine: "WOMEN > NEW & NOW",
+      storeProductUrl: "https://shopcarbon.com/search?q=2211009",
+    },
+    {
+      id: "p10",
+      title: "ORION POLO SHIRT",
+      upc: "1133221",
+      sku: "OR-PL-NVY",
+      type: "Shirt",
+      image: "",
+      queue: "synced",
+      mappingDecision: "AUTO_MAPPED",
+      statusLabel: "Synced",
+      chips: ["Mapped", "Synced"],
+      currentMenu: "MEN > CLOTHING > SHIRTS",
+      finalMenu: "MEN > CLOTHING > SHIRTS",
+      finalCollections: "polo-shirts",
+      deltaAdd: 0,
+      deltaRemove: 0,
+      suggestionLine: "",
+      storeProductUrl: "https://shopcarbon.com/search?q=1133221",
+    },
+    {
+      id: "p11",
+      title: "ZARA KNIT TOP",
+      upc: "2244556",
+      sku: "ZKTP-CRM",
+      type: "Top",
+      image: "",
+      queue: "ready-push",
+      mappingDecision: "SUGGESTED",
+      statusLabel: "Ready to Push",
+      chips: ["Suggestions", "Ready to Push"],
+      currentMenu: "WOMEN > CLOTHING > TOPS",
+      finalMenu: "WOMEN > CLOTHING > KNITWEAR",
+      finalCollections: "knit-tops",
+      deltaAdd: 1,
+      deltaRemove: 0,
+      suggestionLine: "WOMEN > CLOTHING > KNITWEAR",
+      appliedSuggestion: "WOMEN > CLOTHING > KNITWEAR",
+      storeProductUrl: "https://shopcarbon.com/search?q=2244556",
+    },
+    {
+      id: "p12",
+      title: "JAX BOMBER JACKET",
+      upc: "1198877",
+      sku: "JX-BMB-L",
+      type: "Jacket",
+      image: "",
+      queue: "synced",
+      mappingDecision: "AUTO_MAPPED",
+      statusLabel: "Synced",
+      chips: ["Mapped", "Synced"],
+      currentMenu: "MEN > CLOTHING > JACKETS",
+      finalMenu: "MEN > CLOTHING > JACKETS",
+      finalCollections: "bombers",
+      deltaAdd: 0,
+      deltaRemove: 0,
+      suggestionLine: "",
+      storeProductUrl: "https://shopcarbon.com/search?q=1198877",
+    },
+  ];
+
+  /** Demo navigation tree for the menu sheet (expand/collapse + pick path). */
+  const DEMO_NAV_TREE = [
+    {
+      id: "n-men",
+      label: "MEN",
+      sub: "main-menu / men",
+      children: [
+        { id: "n-men-new", label: "NEW & NOW", sub: "collection / men-new" },
+        {
+          id: "n-men-clothing",
+          label: "CLOTHING",
+          sub: "men / clothing",
+          children: [
+            { id: "n-men-pants", label: "PANTS", sub: "collection / pants" },
+            { id: "n-men-jeans", label: "JEANS", sub: "collection / jeans" },
+            { id: "n-men-shirts", label: "SHIRTS", sub: "collection / shirts" },
+            { id: "n-men-jackets", label: "JACKETS", sub: "collection / jackets" },
+          ],
+        },
+        { id: "n-men-shoes", label: "SHOES", sub: "men / shoes" },
+      ],
+    },
+    {
+      id: "n-women",
+      label: "WOMEN",
+      sub: "main-menu / women",
+      children: [
+        { id: "n-women-new", label: "NEW & NOW", sub: "collection / women-new" },
+        {
+          id: "n-women-clothing",
+          label: "CLOTHING",
+          sub: "women / clothing",
+          children: [
+            { id: "n-women-dresses", label: "DRESSES", sub: "collection / dresses" },
+            { id: "n-women-tops", label: "TOPS", sub: "collection / tops" },
+            { id: "n-women-skirts", label: "SKIRTS", sub: "collection / skirts" },
+            { id: "n-women-blazers", label: "BLAZERS", sub: "collection / blazers" },
+          ],
+        },
+        { id: "n-women-outerwear", label: "OUTERWEAR", sub: "collection / outerwear" },
+      ],
+    },
+    { id: "n-jeans", label: "JEANS", sub: "collection / all-jeans" },
+    { id: "n-rewards", label: "REWARDS", sub: "page / rewards" },
+    { id: "n-affiliate", label: "BECOME AFFILIATE", sub: "page / affiliate", hidden: true },
+  ];
+
+  const DEMO_UNMAPPED = [
+    { handle: "all-chatgpt-ai", label: "All Products (ChatGPT-AI)" },
+    { handle: "graphic-tees-winter", label: "GRAPHIC T-SHIRTS (WINTER men)" },
+    { handle: "leggings-women", label: "LEGGINGS (women)" },
+    { handle: "outerwear-clearance", label: "OUTERWEAR CLEARANCE" },
+    { handle: "accessory-bundles", label: "ACCESSORY BUNDLES" },
+    { handle: "gift-cards", label: "GIFT CARDS (unpublished)" },
+    { handle: "archive-sale", label: "ARCHIVE SALE" },
+    { handle: "lookbook-2024", label: "LOOKBOOK 2024" },
+    { handle: "staff-picks", label: "STAFF PICKS" },
+  ];
+
+  const state = {
+    tab: "all",
+    search: "",
+    page: 1,
+    pageSize: 20,
+    selected: Object.create(null),
+    expanded: Object.create(null),
+    includeSyncedOnTabs: true,
+    suggestionsOnly: false,
+    commitOpen: false,
+    navOpen: false,
+    rows: CATALOG.slice(),
+    menuSheet: {
+      open: false,
+      rowId: null,
+      expandedNav: Object.create(null),
+      baseline: { finalMenu: "", finalCollections: "" },
+      draft: { finalMenu: "", finalCollections: "" },
+      lastPick: null,
+      unmappedExpanded: false,
+    },
+  };
+
+  /** Per-row queue/chips as loaded (or last import). Used to restore after thumb uncheck on ALL when snapshot is missing. */
+  var thumbQueueBaseline = Object.create(null);
+  function refreshThumbBaselinesFromRows() {
+    thumbQueueBaseline = Object.create(null);
+    for (const r of state.rows) {
+      thumbQueueBaseline[r.id] = {
+        queue: r.queue,
+        statusLabel: r.statusLabel,
+        chips: (r.chips || []).slice(),
+      };
+    }
+  }
+  refreshThumbBaselinesFromRows();
+
+  function imageForRow(r) {
+    const u = String(r.image || "").trim();
+    if (u.startsWith("http")) return u;
+    if (USE_UPC_SEEDED_DEMO_IMAGES && r.upc) {
+      return "https://picsum.photos/seed/shopcarbon-" + encodeURIComponent(String(r.upc)) + "/200/240";
+    }
+    return SHOPCARBON_SAMPLE_IMG;
+  }
+
+  function matchesSearch(r) {
+    const q = state.search.trim().toLowerCase();
+    if (!q) return true;
+    const hay = `${r.title} ${r.upc} ${r.sku || ""} ${r.type || ""}`.toLowerCase();
+    return hay.includes(q);
+  }
+
+  function hasSuggestionsSignal(r) {
+    return (
+      (r.chips || []).some((c) => c === "Suggestions") ||
+      String(r.suggestionLine || "").trim().length > 0 ||
+      (Array.isArray(r.suggestionOptions) && r.suggestionOptions.length > 0)
+    );
+  }
+
+  var suggestionsModalRowId = null;
+
+  function getSuggestionPaths(r) {
+    if (Array.isArray(r.suggestionOptions) && r.suggestionOptions.length) {
+      return r.suggestionOptions.map((x) => String(x || "").trim()).filter(Boolean);
+    }
+    const line = String(r.suggestionLine || "").trim();
+    if (line) {
+      const parts = line.split(/\s*,\s*/).map((s) => s.trim()).filter(Boolean);
+      if (parts.length) return parts;
+    }
+    if (hasSuggestionsSignal(r)) {
+      const fm = String(r.finalMenu || "").trim();
+      const cm = String(r.currentMenu || "").split(",")[0].trim();
+      const out = [];
+      if (fm && fm !== "—") out.push(fm);
+      if (cm && cm !== "—" && cm !== fm) out.push(cm);
+      if (out.length < 2) {
+        out.push("MEN > CLOTHING > SWEATPANTS", "WOMEN > NEW & NOW");
+      }
+      return Array.from(new Set(out)).slice(0, 4);
+    }
+    return [];
+  }
+
+  function productHasSuggestionPicker(r) {
+    return getSuggestionPaths(r).length > 0;
+  }
+
+  function openSuggestionsModal(r) {
+    if (!productHasSuggestionPicker(r)) return;
+    setCommitOpen(false);
+    suggestionsModalRowId = r.id;
+    const host = document.getElementById("suggestionsModalList");
+    host.innerHTML = "";
+    for (const p of getSuggestionPaths(r)) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "suggestion-pick-btn";
+      b.textContent = p;
+      b.addEventListener("click", () => pickSuggestion(p));
+      host.appendChild(b);
+    }
+    document.getElementById("sugTitle").textContent = "Suggestions · " + r.title;
+    setModal(document.getElementById("modalSuggestions"), true);
+  }
+
+  function closeSuggestionsModal() {
+    suggestionsModalRowId = null;
+    setModal(document.getElementById("modalSuggestions"), false);
+  }
+
+  function pickSuggestion(path) {
+    const id = suggestionsModalRowId;
+    const r = state.rows.find((x) => x.id === id);
+    if (r) r.appliedSuggestion = String(path || "").trim();
+    closeSuggestionsModal();
+    renderAll();
+    toast("Suggestion applied.");
+  }
+
+  function matchesSuggestionsFilter(r) {
+    if (!state.suggestionsOnly) return true;
+    return hasSuggestionsSignal(r);
+  }
+
+  /** Rows that share text / suggestion filters with the list (KPI denominators like the web). */
+  function rowsInFilterPool() {
+    return state.rows.filter((r) => matchesSearch(r) && matchesSuggestionsFilter(r));
+  }
+
+  function appCommittedCount() {
+    return rowsInFilterPool().filter((r) => (r.chips || []).includes("App committed")).length;
+  }
+
+  function counts() {
+    const pool = rowsInFilterPool();
+    const c = { all: pool.length, loaded: state.rows.length, review: 0, push: 0, fail: 0, sync: 0 };
+    for (const r of pool) {
+      if (r.queue === "needs-review") c.review++;
+      else if (r.queue === "ready-push") c.push++;
+      else if (r.queue === "push-failed") c.fail++;
+      else if (r.queue === "synced") c.sync++;
+    }
+    return c;
+  }
+
+  function rowMatchesTab(r) {
+    if (state.tab === "all") return true;
+    if (state.tab === "needs-review") return r.queue === "needs-review";
+    if (state.tab === "ready-push") return r.queue === "ready-push";
+    if (state.tab === "push-failed") return r.queue === "push-failed";
+    if (state.tab === "synced") return r.queue === "synced";
+    return true;
+  }
+
+  function filteredRows() {
+    return state.rows.filter((r) => {
+      if (!matchesSearch(r) || !matchesSuggestionsFilter(r)) return false;
+      if (state.tab !== "synced" && state.tab !== "all" && !state.includeSyncedOnTabs && r.queue === "synced") {
+        return false;
+      }
+      return rowMatchesTab(r);
+    });
+  }
+
+  function totalPages() {
+    const n = filteredRows().length;
+    return Math.max(1, Math.ceil(n / state.pageSize));
+  }
+
+  function pageSlice() {
+    const list = filteredRows();
+    const start = (state.page - 1) * state.pageSize;
+    return list.slice(start, start + state.pageSize);
+  }
+
+  function promoteRowToReadyPushFromThumb(r) {
+    if (r.queue === "ready-push") return;
+    if (r._queueBeforeThumbPromote === undefined) {
+      r._queueBeforeThumbPromote = r.queue;
+      r._statusBeforeThumbPromote = r.statusLabel;
+      r._chipsBeforeThumbPromote = (r.chips || []).slice();
+    }
+    r.queue = "ready-push";
+    r.statusLabel = "Ready to Push";
+    const chips = (r.chips || []).slice();
+    if (!chips.includes("Ready to Push")) chips.push("Ready to Push");
+    r.chips = chips;
+  }
+
+  function defaultStatusLabelForQueue(queue) {
+    if (queue === "needs-review") return "Needs Review";
+    if (queue === "ready-push") return "Ready to Push";
+    if (queue === "push-failed") return "Push Failed";
+    if (queue === "synced") return "Synced";
+    return String(queue || "Synced");
+  }
+
+  function demoteRowFromThumbPromote(r) {
+    if (r._queueBeforeThumbPromote !== undefined) {
+      r.queue = r._queueBeforeThumbPromote;
+      const sl = r._statusBeforeThumbPromote;
+      r.statusLabel =
+        sl != null && String(sl).trim() ? sl : defaultStatusLabelForQueue(r.queue);
+      r.chips = r._chipsBeforeThumbPromote ? r._chipsBeforeThumbPromote.slice() : (r.chips || []).slice();
+      delete r._queueBeforeThumbPromote;
+      delete r._statusBeforeThumbPromote;
+      delete r._chipsBeforeThumbPromote;
+      return;
+    }
+    const base = thumbQueueBaseline[r.id];
+    if (base && r.queue === "ready-push" && base.queue !== "ready-push") {
+      r.queue = base.queue;
+      const bsl = base.statusLabel;
+      r.statusLabel =
+        bsl != null && String(bsl).trim() ? bsl : defaultStatusLabelForQueue(r.queue);
+      r.chips = base.chips.slice();
+    }
+  }
+
+  /** Thumbnail checkbox: on ALL (and any tab), check → ready-to-push; uncheck → prior queue (needs-review, synced, …) so row appears under the right filter again. */
+  function applyThumbCheckboxChange(r, checked) {
+    state.selected[r.id] = checked;
+    if (checked) promoteRowToReadyPushFromThumb(r);
+    else demoteRowFromThumbPromote(r);
+    renderAll();
+  }
+
+  function openImageLightbox(r) {
+    closeImageLightbox(true);
+    setCommitOpen(false);
+    const lb = document.getElementById("imageLightbox");
+    const imgEl = document.getElementById("imageLightboxImg");
+    imgEl.src = imageForRow(r);
+    imgEl.alt = r.title;
+    imgEl.onerror = function () {
+      this.onerror = null;
+      this.src =
+        "data:image/svg+xml," +
+        encodeURIComponent(
+          '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400"><rect fill="#1a2744" width="400" height="400"/><text x="200" y="210" text-anchor="middle" fill="#8da0cc" font-size="14" font-family="sans-serif">No image</text></svg>'
+        );
+    };
+    document.getElementById("imageLightboxTitle").textContent = r.title;
+    lb.classList.add("open");
+    lb.setAttribute("aria-hidden", "false");
+    syncOverlay();
+  }
+
+  function closeImageLightbox(silent) {
+    const lb = document.getElementById("imageLightbox");
+    lb.classList.remove("open");
+    lb.setAttribute("aria-hidden", "true");
+    const imgEl = document.getElementById("imageLightboxImg");
+    imgEl.removeAttribute("src");
+    imgEl.alt = "";
+    if (!silent) syncOverlay();
+  }
+
+  function esc(s) {
+    return String(s || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function menuPathKey(pathArr) {
+    return pathArr.join(" > ");
+  }
+
+  function resetMenuSheetExpanded() {
+    const o = Object.create(null);
+    (function walk(nodes) {
+      for (const n of nodes) {
+        if (n.children && n.children.length) o[n.id] = false;
+        if (n.children) walk(n.children);
+      }
+    })(DEMO_NAV_TREE);
+    state.menuSheet.expandedNav = o;
+  }
+
+  function syncUnmappedSection() {
+    const open = state.menuSheet.unmappedExpanded;
+    const btn = document.getElementById("btnUnmappedToggle");
+    const col = document.getElementById("unmappedCollapsible");
+    const chev = document.getElementById("unmappedChev");
+    if (btn) btn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (col) col.hidden = !open;
+    if (chev) chev.textContent = open ? "▾" : "▸";
+  }
+
+  function menuSheetDirty() {
+    const ms = state.menuSheet;
+    return (
+      ms.draft.finalMenu !== ms.baseline.finalMenu ||
+      ms.draft.finalCollections !== ms.baseline.finalCollections
+    );
+  }
+
+  function updateMenuSheetSaveButton() {
+    document.getElementById("menuSheetSave").disabled = !state.menuSheet.open || !menuSheetDirty();
+  }
+
+  function mountNavNodes(host, nodes, pathPrefixArr) {
+    for (const n of nodes) {
+      const pathArr = pathPrefixArr.concat(n.label);
+      const pathStr = menuPathKey(pathArr);
+      const hasKids = Boolean(n.children && n.children.length);
+      const wrap = document.createElement("div");
+      wrap.className = "nav-tree-node";
+
+      const row = document.createElement("div");
+      row.className = "nav-tree-row" + (n.hidden ? " is-hidden-target" : "");
+      row.setAttribute("role", "button");
+      row.tabIndex = 0;
+      if (state.menuSheet.draft.finalMenu === pathStr) row.classList.add("is-selected");
+
+      const pickMenu = () => {
+        state.menuSheet.draft.finalMenu = pathStr;
+        updateMenuSheetSaveButton();
+        mountMenuTree();
+        mountUnmapped();
+      };
+      row.addEventListener("click", (e) => {
+        if (e.target.closest && e.target.closest(".nav-tree-row__caret")) return;
+        pickMenu();
+      });
+      row.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          pickMenu();
+        }
+      });
+
+      const grip = document.createElement("span");
+      grip.className = "nav-tree-row__grip";
+      grip.setAttribute("aria-hidden", "true");
+      grip.textContent = "⋮⋮";
+
+      const caretBtn = document.createElement("button");
+      caretBtn.type = "button";
+      caretBtn.className = "nav-tree-row__caret";
+      caretBtn.setAttribute("aria-label", hasKids ? "Expand or collapse" : "");
+      if (!hasKids) caretBtn.disabled = true;
+      caretBtn.textContent = hasKids ? (state.menuSheet.expandedNav[n.id] ? "▾" : "▸") : "";
+      caretBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (!hasKids) return;
+        state.menuSheet.expandedNav[n.id] = !state.menuSheet.expandedNav[n.id];
+        mountMenuTree();
+      });
+
+      const main = document.createElement("div");
+      main.className = "nav-tree-row__main";
+      const lab = document.createElement("div");
+      lab.className = "nav-tree-row__label";
+      lab.textContent = n.label;
+      const sub = document.createElement("span");
+      sub.className = "nav-tree-row__sub";
+      sub.textContent = n.sub || "";
+      main.appendChild(lab);
+      main.appendChild(sub);
+
+      const icons = document.createElement("div");
+      icons.className = "nav-tree-row__icons";
+      icons.setAttribute("aria-hidden", "true");
+      if (n.hidden) {
+        icons.innerHTML = "<span>👁̸</span>";
+      } else {
+        icons.innerHTML = "<span>👁</span><span>✎</span><span>🗑</span>";
+      }
+
+      row.appendChild(grip);
+      row.appendChild(caretBtn);
+      row.appendChild(main);
+      row.appendChild(icons);
+      wrap.appendChild(row);
+
+      if (hasKids) {
+        const kids = document.createElement("div");
+        kids.className = "nav-tree-children";
+        if (!state.menuSheet.expandedNav[n.id]) kids.hidden = true;
+        mountNavNodes(kids, n.children, pathArr);
+        wrap.appendChild(kids);
+      }
+      host.appendChild(wrap);
+    }
+  }
+
+  function mountMenuTree() {
+    const host = document.getElementById("menuTreeMount");
+    host.innerHTML = "";
+    mountNavNodes(host, DEMO_NAV_TREE, []);
+  }
+
+  function mountUnmapped() {
+    const countEl = document.getElementById("unmappedCount");
+    if (countEl) countEl.textContent = String(DEMO_UNMAPPED.length);
+    const host = document.getElementById("unmappedMount");
+    if (!state.menuSheet.unmappedExpanded) {
+      host.innerHTML = "";
+      syncUnmappedSection();
+      return;
+    }
+    host.innerHTML = "";
+    for (const u of DEMO_UNMAPPED) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "unmapped-row";
+      if (state.menuSheet.draft.finalCollections === u.handle) b.classList.add("is-selected");
+      const g = document.createElement("span");
+      g.className = "unmapped-row__grip";
+      g.setAttribute("aria-hidden", "true");
+      g.textContent = "⋮⋮";
+      const lab = document.createElement("span");
+      lab.className = "unmapped-row__label";
+      lab.textContent = u.label;
+      const icons = document.createElement("span");
+      icons.className = "unmapped-row__icons";
+      icons.setAttribute("aria-hidden", "true");
+      icons.innerHTML = "<span>✎</span><span>🗑</span>";
+      b.appendChild(g);
+      b.appendChild(lab);
+      b.appendChild(icons);
+      b.addEventListener("click", () => {
+        state.menuSheet.draft.finalCollections = u.handle;
+        updateMenuSheetSaveButton();
+        mountMenuTree();
+        mountUnmapped();
+      });
+      host.appendChild(b);
+    }
+    syncUnmappedSection();
+  }
+
+  function openMenuSheet(r) {
+    setModal(document.getElementById("modalFilters"), false);
+    setModal(document.getElementById("modalExplain"), false);
+    if (state.navOpen) setNav(false);
+    setCommitOpen(false);
+    const ms = state.menuSheet;
+    ms.open = true;
+    ms.rowId = r.id;
+    ms.baseline = {
+      finalMenu: String(r.finalMenu || ""),
+      finalCollections: String(r.finalCollections || ""),
+    };
+    ms.draft = { finalMenu: ms.baseline.finalMenu, finalCollections: ms.baseline.finalCollections };
+    ms.unmappedExpanded = false;
+    resetMenuSheetExpanded();
+    document.getElementById("menuSheetProductLabel").innerHTML =
+      "Product: <strong>" + esc(r.title) + "</strong> · UPC " + esc(r.upc);
+    mountMenuTree();
+    mountUnmapped();
+    updateMenuSheetSaveButton();
+    const el = document.getElementById("menuSheet");
+    el.classList.add("open");
+    el.setAttribute("aria-hidden", "false");
+    syncOverlay();
+  }
+
+  function closeMenuSheetDiscard() {
+    const ms = state.menuSheet;
+    ms.open = false;
+    ms.rowId = null;
+    document.getElementById("menuSheet").classList.remove("open");
+    document.getElementById("menuSheet").setAttribute("aria-hidden", "true");
+    document.getElementById("menuSheetSave").disabled = true;
+    syncOverlay();
+  }
+
+  function saveMenuSheet() {
+    const ms = state.menuSheet;
+    if (!ms.rowId || !menuSheetDirty()) return;
+    const r = state.rows.find((x) => x.id === ms.rowId);
+    if (!r) {
+      closeMenuSheetDiscard();
+      return;
+    }
+    r.finalMenu = ms.draft.finalMenu;
+    r.finalCollections = ms.draft.finalCollections;
+    closeMenuSheetDiscard();
+    renderAll();
+    toast("Saved menu assignment (prototype — local only).");
+  }
+
+  /** Top status pill — matches web sync/workflow badge colors (shopify-collection-mapping.tsx). */
+  function syncWorkflowBadgeClassFromQueue(r) {
+    if (r.queue === "synced") return "badge-pill sync-synced";
+    if (r.queue === "ready-push") return "badge-pill sync-add-pending";
+    if (r.queue === "needs-review") return "badge-pill sync-review";
+    if (r.queue === "push-failed") return "badge-pill sync-failed";
+    return "badge-pill sync-synced";
+  }
+
+  function chipClassWeb(name) {
+    if (name === "Suggestions") return "chip-web chip-suggestion";
+    if (name === "Mapped") return "chip-web chip-mapped";
+    if (name === "Synced") return "chip-web chip-synced";
+    if (name === "Ready to Push") return "chip-web chip-ready";
+    if (name === "Needs Review") return "chip-web chip-review";
+    if (name === "Push Failed") return "chip-web chip-failed";
+    if (name === "App committed") return "chip-web chip-appcommitted";
+    return "chip-web chip-neutral";
+  }
+
+  function cardAccent(r) {
+    if (r.queue === "needs-review") return "accent-review";
+    if (r.queue === "ready-push") return "accent-push";
+    if (r.queue === "push-failed") return "accent-fail";
+    return "accent-sync";
+  }
+
+  function renderKpis() {
+    const c = counts();
+    const appN = appCommittedCount();
+    const strip = document.getElementById("kpiStrip");
+    strip.innerHTML = "";
+    function addPill(label, tabKey, extraClass, count, appSub) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "kpi-pill " + (extraClass || "");
+      const on = state.tab === tabKey;
+      if (on) btn.classList.add("on");
+      const dot = document.createElement("span");
+      dot.className = "dot";
+      btn.appendChild(dot);
+      const em = document.createElement("em");
+      em.textContent = String(count);
+      btn.appendChild(em);
+      btn.appendChild(document.createTextNode(" " + label));
+      if (appSub != null) {
+        const sub = document.createElement("span");
+        sub.className = "kpi-sub";
+        sub.textContent = "App: " + appSub;
+        btn.appendChild(sub);
+      }
+      btn.addEventListener("click", () => {
+        state.tab = tabKey;
+        state.page = 1;
+        renderAll();
+      });
+      strip.appendChild(btn);
+    }
+    addPill("All", "all", "loaded", c.all, null);
+    addPill("Loaded", "all", "loaded", c.loaded, null);
+    addPill("Needs review", "needs-review", "review", c.review, null);
+    addPill("Ready to push", "ready-push", "push", c.push, null);
+    addPill("Push failed", "push-failed", "fail", c.fail, null);
+    addPill("Synced", "synced", "sync", c.sync, appN);
+  }
+
+  function renderCards() {
+    const list = pageSlice();
+    const host = document.getElementById("cardList");
+    const empty = document.getElementById("emptyState");
+    host.innerHTML = "";
+    document.getElementById("visibleCount").textContent =
+      list.length > 0 ? "(" + filteredRows().length + " match · page " + state.page + ")" : "";
+    if (list.length < 1) {
+      empty.hidden = false;
+      return;
+    }
+    empty.hidden = true;
+    for (const r of list) {
+      const expanded = Boolean(state.expanded[r.id]);
+      const selected = Boolean(state.selected[r.id]);
+      const article = document.createElement("article");
+      article.className = "card " + cardAccent(r) + (expanded ? " expanded" : "");
+      article.dataset.id = r.id;
+
+      const head = document.createElement("div");
+      head.className = "card-head-btn";
+      head.type = "button";
+      head.setAttribute("role", "button");
+      head.tabIndex = 0;
+      head.setAttribute("aria-expanded", expanded ? "true" : "false");
+
+      const thumb = document.createElement("div");
+      thumb.className = "thumb";
+      thumb.addEventListener("click", (ev) => ev.stopPropagation());
+      const chk = document.createElement("input");
+      chk.type = "checkbox";
+      chk.className = "chk";
+      chk.checked = selected;
+      chk.title = "Select for commit · marks row ready to push";
+      chk.addEventListener("change", () => {
+        applyThumbCheckboxChange(r, chk.checked);
+      });
+      const img = document.createElement("img");
+      img.src = imageForRow(r);
+      img.alt = r.title;
+      img.loading = "lazy";
+      img.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        openImageLightbox(r);
+      });
+      img.addEventListener("error", function () {
+        this.onerror = null;
+        this.src =
+          "data:image/svg+xml," +
+          encodeURIComponent(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="160"><rect fill="#1a2744" width="120" height="160"/><text x="60" y="85" text-anchor="middle" fill="#8da0cc" font-size="11" font-family="sans-serif">No image</text></svg>'
+          );
+      });
+      thumb.appendChild(chk);
+      thumb.appendChild(img);
+
+      const body = document.createElement("div");
+      body.className = "card-body";
+      const rowStatus = document.createElement("div");
+      rowStatus.className = "row-status";
+      const badge = document.createElement("span");
+      badge.className = syncWorkflowBadgeClassFromQueue(r);
+      badge.textContent = r.statusLabel || r.queue;
+      const actions = document.createElement("div");
+      actions.style.display = "flex";
+      actions.style.gap = "6px";
+      const btnEye = document.createElement("button");
+      btnEye.type = "button";
+      btnEye.className = "icon-btn";
+      btnEye.style.width = "36px";
+      btnEye.style.height = "36px";
+      btnEye.setAttribute("aria-label", "Open row details");
+      btnEye.innerHTML =
+        '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2 12c2.8-4 6.4-6 10-6s7.2 2 10 6c-2.8 4-6.4 6-10 6s-7.2-2-10-6zm10-3a3 3 0 100 6 3 3 0 000-6z"/></svg>';
+      btnEye.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        openExplain(r);
+      });
+      const chevWrap = document.createElement("div");
+      chevWrap.className = "chev-wrap";
+      const chevBox = document.createElement("span");
+      chevBox.className = "chev-squircle";
+      chevBox.setAttribute("aria-hidden", "true");
+      const chev = document.createElement("span");
+      chev.className = "chev";
+      chev.textContent = "▼";
+      chevBox.appendChild(chev);
+      chevWrap.appendChild(btnEye);
+      chevWrap.appendChild(chevBox);
+      rowStatus.appendChild(badge);
+      rowStatus.appendChild(chevWrap);
+
+      const h3 = document.createElement("h3");
+      h3.className = "product-title";
+      if (r.storeProductUrl) {
+        const a = document.createElement("a");
+        a.href = r.storeProductUrl;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.textContent = r.title;
+        h3.appendChild(a);
+      } else {
+        h3.textContent = r.title;
+      }
+      const meta = document.createElement("p");
+      meta.className = "meta-line";
+      meta.textContent = "UPC: " + r.upc + (r.sku ? " · SKU: " + r.sku : "") + (r.type ? " · Type: " + r.type : "");
+
+      const chips = document.createElement("div");
+      chips.className = "chips";
+      for (const ch of r.chips || []) {
+        const span = document.createElement("span");
+        span.className = chipClassWeb(ch);
+        span.textContent = ch;
+        if (ch === "Suggestions" && productHasSuggestionPicker(r)) {
+          span.setAttribute("role", "button");
+          span.tabIndex = 0;
+          span.title = "Open suggestions";
+          const openSug = (ev) => {
+            ev.stopPropagation();
+            openSuggestionsModal(r);
+          };
+          span.addEventListener("click", openSug);
+          span.addEventListener("keydown", (ev) => {
+            if (ev.key === "Enter" || ev.key === " ") {
+              ev.preventDefault();
+              openSuggestionsModal(r);
+            }
+          });
+        }
+        chips.appendChild(span);
+      }
+
+      body.appendChild(rowStatus);
+      body.appendChild(h3);
+      body.appendChild(meta);
+      body.appendChild(chips);
+
+      head.appendChild(thumb);
+      head.appendChild(body);
+
+      const details = document.createElement("div");
+      details.className = "card-details";
+      const stack = document.createElement("div");
+      stack.className = "stack";
+      const pathCurrent = document.createElement("div");
+      pathCurrent.className = "path-row";
+      pathCurrent.innerHTML = "<strong>Current menu:</strong><span>" + esc(r.currentMenu) + "</span>";
+      const pathFinalBtn = document.createElement("button");
+      pathFinalBtn.type = "button";
+      pathFinalBtn.className = "path-row";
+      pathFinalBtn.setAttribute("aria-label", "Open store menu and unmapped collections");
+      pathFinalBtn.innerHTML =
+        "<strong>Final menu:</strong><span>" +
+        esc(r.finalMenu) +
+        '</span><span class="path-row__hint">Tap to pick menu / unmapped collections</span>';
+      pathFinalBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openMenuSheet(r);
+      });
+      const pathColl = document.createElement("div");
+      pathColl.className = "path-row";
+      pathColl.innerHTML = "<strong>Final collections:</strong><span>" + esc(r.finalCollections) + "</span>";
+      stack.appendChild(pathCurrent);
+      stack.appendChild(pathFinalBtn);
+      stack.appendChild(pathColl);
+      if (productHasSuggestionPicker(r)) {
+        const sugBtn = document.createElement("button");
+        sugBtn.type = "button";
+        sugBtn.className = "suggestion-applied-block";
+        sugBtn.setAttribute("aria-label", "Choose or change applied suggestion");
+        const applied = r.appliedSuggestion && String(r.appliedSuggestion).trim();
+        sugBtn.innerHTML =
+          '<span class="suggestion-applied-label">Suggestion applied</span>' +
+          (applied
+            ? '<span class="suggestion-applied-path">' + esc(applied) + "</span>"
+            : '<span class="suggestion-applied-placeholder">Tap to choose a suggestion</span>');
+        sugBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          openSuggestionsModal(r);
+        });
+        stack.appendChild(sugBtn);
+      }
+      const delta = document.createElement("div");
+      delta.className = "delta";
+      delta.textContent = "Changed: +" + r.deltaAdd + " / −" + r.deltaRemove;
+      stack.appendChild(delta);
+      const links = document.createElement("div");
+      links.className = "row-links";
+      if (r.storeProductUrl) {
+        const a1 = document.createElement("a");
+        a1.href = r.storeProductUrl;
+        a1.target = "_blank";
+        a1.rel = "noopener noreferrer";
+        a1.textContent = "View on storefront";
+        links.appendChild(a1);
+      }
+      if (links.childNodes.length > 0) stack.appendChild(links);
+      details.appendChild(stack);
+
+      const toggle = () => {
+        state.expanded[r.id] = !state.expanded[r.id];
+        renderCards();
+      };
+      head.addEventListener("click", (ev) => {
+        if (ev.target === chk || ev.target === btnEye) return;
+        toggle();
+      });
+      head.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter" || ev.key === " ") {
+          ev.preventDefault();
+          toggle();
+        }
+      });
+
+      article.appendChild(head);
+      article.appendChild(details);
+      host.appendChild(article);
+    }
+    syncSelectAll();
+  }
+
+  function syncSelectAll() {
+    const list = pageSlice();
+    const sel = document.getElementById("selectAll");
+    if (list.length < 1) {
+      sel.checked = false;
+      sel.indeterminate = false;
+      return;
+    }
+    const n = list.filter((r) => state.selected[r.id]).length;
+    sel.checked = n === list.length;
+    sel.indeterminate = n > 0 && n < list.length;
+  }
+
+  function renderPager() {
+    const tp = totalPages();
+    if (state.page > tp) state.page = tp;
+    document.getElementById("pgLabel").textContent = "Page " + state.page + " of " + tp;
+    document.getElementById("pgFirst").disabled = state.page <= 1;
+    document.getElementById("pgPrev").disabled = state.page <= 1;
+    document.getElementById("pgNext").disabled = state.page >= tp;
+    document.getElementById("pgLast").disabled = state.page >= tp;
+  }
+
+  function selectedCount() {
+    return Object.keys(state.selected).filter((k) => state.selected[k]).length;
+  }
+
+  function renderCommitMenuTexts() {
+    const sc = selectedCount();
+    document.getElementById("miPushSelTitle").textContent = "Push selected (" + sc + ")";
+    document.getElementById("miPushSel").disabled = sc < 1;
+    document.getElementById("miPushAllSub").textContent =
+      "All " +
+      rowsInFilterPool().filter((r) => r.queue === "ready-push").length +
+      " ready-to-push products (demo)";
+    document.getElementById("miRemoveTitle").textContent = "⚠ Remove all from selected products (" + sc + ")";
+    document.getElementById("miRemove").disabled = sc < 1;
+  }
+
+  function renderAll() {
+    renderKpis();
+    renderCards();
+    renderPager();
+    renderCommitMenuTexts();
+    writeUrl();
+  }
+
+  function writeUrl() {
+    const u = new URL(window.location.href);
+    u.searchParams.set("tab", state.tab);
+    u.searchParams.set("page", String(state.page));
+    u.searchParams.set("pageSize", String(state.pageSize));
+    u.searchParams.set("q", state.search);
+    window.history.replaceState({}, "", u.toString());
+  }
+
+  function readUrl() {
+    const u = new URL(window.location.href);
+    const t = u.searchParams.get("tab");
+    if (["all", "needs-review", "ready-push", "push-failed", "synced"].includes(t)) state.tab = t;
+    const p = parseInt(u.searchParams.get("page") || "1", 10);
+    if (p > 0) state.page = p;
+    const ps = parseInt(u.searchParams.get("pageSize") || "20", 10);
+    if ([6, 20, 50].includes(ps)) state.pageSize = ps;
+    state.search = u.searchParams.get("q") || "";
+    document.getElementById("searchInput").value = state.search;
+    document.getElementById("pageSize").value = String(state.pageSize);
+  }
+
+  function toast(msg) {
+    const el = document.getElementById("toast");
+    el.textContent = msg;
+    el.classList.add("show");
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => el.classList.remove("show"), 2400);
+  }
+
+  function openOverlay(on) {
+    document.getElementById("overlay").classList.toggle("open", on);
+    document.body.classList.toggle("noscroll", on);
+  }
+
+  function anyModalOpen() {
+    return (
+      document.getElementById("modalFilters").classList.contains("open") ||
+      document.getElementById("modalExplain").classList.contains("open") ||
+      document.getElementById("modalSuggestions").classList.contains("open") ||
+      document.getElementById("menuSheet").classList.contains("open") ||
+      document.getElementById("imageLightbox").classList.contains("open")
+    );
+  }
+
+  function syncOverlay() {
+    openOverlay(state.navOpen || anyModalOpen());
+  }
+
+  function setCommitOpen(open) {
+    state.commitOpen = open;
+    document.getElementById("commitMenu").classList.toggle("open", open);
+    document.getElementById("btnCommit").setAttribute("aria-expanded", open ? "true" : "false");
+    document.getElementById("commitChev").textContent = open ? "▲" : "▼";
+  }
+
+  function setNav(open) {
+    state.navOpen = open;
+    document.getElementById("navDrawer").classList.toggle("open", open);
+    document.getElementById("navDrawer").setAttribute("aria-hidden", open ? "false" : "true");
+    document.getElementById("btnNav").setAttribute("aria-expanded", open ? "true" : "false");
+    syncOverlay();
+  }
+
+  function setModal(el, open) {
+    el.classList.toggle("open", open);
+    el.setAttribute("aria-hidden", open ? "false" : "true");
+    syncOverlay();
+  }
+
+  function closeAllModals() {
+    document.getElementById("modalFilters").classList.remove("open");
+    document.getElementById("modalFilters").setAttribute("aria-hidden", "true");
+    document.getElementById("modalExplain").classList.remove("open");
+    document.getElementById("modalExplain").setAttribute("aria-hidden", "true");
+    document.getElementById("modalSuggestions").classList.remove("open");
+    document.getElementById("modalSuggestions").setAttribute("aria-hidden", "true");
+    suggestionsModalRowId = null;
+    state.navOpen = false;
+    document.getElementById("navDrawer").classList.remove("open");
+    document.getElementById("navDrawer").setAttribute("aria-hidden", "true");
+    document.getElementById("btnNav").setAttribute("aria-expanded", "false");
+    closeImageLightbox(true);
+    closeMenuSheetDiscard();
+    syncOverlay();
+  }
+
+  function openExplain(r) {
+    const body = {
+      id: r.id,
+      title: r.title,
+      upc: r.upc,
+      queue: r.queue,
+      mappingDecision: r.mappingDecision,
+      chips: r.chips,
+      currentMenu: r.currentMenu,
+      finalMenu: r.finalMenu,
+      finalCollections: r.finalCollections,
+      delta: "+" + r.deltaAdd + " / -" + r.deltaRemove,
+    };
+    if (r.appliedSuggestion && String(r.appliedSuggestion).trim()) {
+      body.appliedSuggestion = r.appliedSuggestion;
+    }
+    document.getElementById("exTitle").textContent = r.title;
+    document.getElementById("exBody").textContent = JSON.stringify(body, null, 2);
+    setModal(document.getElementById("modalExplain"), true);
+  }
+
+  function wire() {
+    document.getElementById("btnNav").addEventListener("click", () => setNav(!state.navOpen));
+    document.getElementById("btnRefresh").addEventListener("click", () => {
+      readUrl();
+      renderAll();
+      toast("Products refreshed (demo — no network).");
+    });
+    document.getElementById("overlay").addEventListener("click", () => {
+      closeAllModals();
+      setCommitOpen(false);
+    });
+    const searchInput = document.getElementById("searchInput");
+    function applySearchFromInput() {
+      state.search = searchInput.value;
+      state.page = 1;
+      renderAll();
+    }
+    searchInput.addEventListener("input", applySearchFromInput);
+    document.getElementById("btnSearch").addEventListener("click", () => {
+      searchInput.blur();
+      applySearchFromInput();
+      toast("Search applied.");
+    });
+    searchInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        document.getElementById("btnSearch").click();
+      }
+    });
+    document.getElementById("selectAll").addEventListener("change", (e) => {
+      const on = e.target.checked;
+      for (const r of pageSlice()) {
+        state.selected[r.id] = on;
+        if (on) promoteRowToReadyPushFromThumb(r);
+        else demoteRowFromThumbPromote(r);
+      }
+      renderAll();
+    });
+    ["pgFirst", "pgPrev", "pgNext", "pgLast"].forEach((id, i) => {
+      document.getElementById(id).addEventListener("click", () => {
+        const tp = totalPages();
+        if (id === "pgFirst") state.page = 1;
+        if (id === "pgPrev") state.page = Math.max(1, state.page - 1);
+        if (id === "pgNext") state.page = Math.min(tp, state.page + 1);
+        if (id === "pgLast") state.page = tp;
+        renderAll();
+      });
+    });
+    document.getElementById("pageSize").addEventListener("change", (e) => {
+      state.pageSize = Number(e.target.value) || 20;
+      state.page = 1;
+      renderAll();
+    });
+    document.getElementById("btnFilters").addEventListener("click", () => {
+      document.getElementById("fltIncludeSynced").checked = state.includeSyncedOnTabs;
+      document.getElementById("fltSuggestionsOnly").checked = state.suggestionsOnly;
+      setModal(document.getElementById("modalFilters"), true);
+    });
+    document.getElementById("mfClose").addEventListener("click", () => {
+      state.includeSyncedOnTabs = document.getElementById("fltIncludeSynced").checked;
+      state.suggestionsOnly = document.getElementById("fltSuggestionsOnly").checked;
+      state.page = 1;
+      setModal(document.getElementById("modalFilters"), false);
+      renderAll();
+      toast("Filters applied.");
+    });
+    document.getElementById("exClose").addEventListener("click", () => {
+      setModal(document.getElementById("modalExplain"), false);
+    });
+
+    document.getElementById("sugClose").addEventListener("click", () => closeSuggestionsModal());
+
+    document.getElementById("menuSheetScrim").addEventListener("click", () => closeMenuSheetDiscard());
+    document.getElementById("menuSheetCancel").addEventListener("click", () => closeMenuSheetDiscard());
+    document.getElementById("menuSheetSave").addEventListener("click", () => saveMenuSheet());
+
+    document.getElementById("btnUnmappedToggle").addEventListener("click", () => {
+      state.menuSheet.unmappedExpanded = !state.menuSheet.unmappedExpanded;
+      mountUnmapped();
+    });
+
+    document.getElementById("imageLightboxScrim").addEventListener("click", () => closeImageLightbox());
+    document.getElementById("imageLightboxClose").addEventListener("click", () => closeImageLightbox());
+
+    document.getElementById("btnCommit").addEventListener("click", () => setCommitOpen(!state.commitOpen));
+    document.getElementById("miPushSel").addEventListener("click", () => {
+      setCommitOpen(false);
+      toast("Push selected — in production this opens the push preview modal.");
+    });
+    document.getElementById("miPushAll").addEventListener("click", () => {
+      setCommitOpen(false);
+      toast("Push all final — in production this opens the push preview modal.");
+    });
+    document.getElementById("miRemove").addEventListener("click", () => {
+      setCommitOpen(false);
+      toast('Destructive flow — production requires typing "REMOVE ALL".');
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        closeAllModals();
+        setCommitOpen(false);
+      }
+    });
+  }
+
+  function mergeImport(rows) {
+    if (!Array.isArray(rows)) return;
+    state.rows = rows.map((raw, i) => ({
+      id: String(raw.id || "imp-" + i),
+      title: String(raw.title || "Untitled"),
+      upc: String(raw.upc || ""),
+      sku: String(raw.representativeSku || raw.sku || ""),
+      type: String(raw.itemType || raw.type || ""),
+      image: String(raw.image || SHOPCARBON_SAMPLE_IMG),
+      queue: String(raw.queue || "synced"),
+      mappingDecision: String(raw.mappingDecision || "MANUAL_REVIEW"),
+      statusLabel: String(raw.statusLabel || raw.queue || ""),
+      chips: Array.isArray(raw.chips) ? raw.chips : ["Synced"],
+      currentMenu: String(raw.currentMenu || "—"),
+      finalMenu: String(raw.finalMenu || "—"),
+      finalCollections: String(raw.finalCollections || "—"),
+      deltaAdd: Number(raw.deltaAdd) || 0,
+      deltaRemove: Number(raw.deltaRemove) || 0,
+      suggestionLine: String(raw.suggestionLine || ""),
+      suggestionOptions: Array.isArray(raw.suggestionOptions) ? raw.suggestionOptions.map(String) : undefined,
+      appliedSuggestion: String(raw.appliedSuggestion || "").trim(),
+      storeProductUrl: raw.storeProductUrl ? String(raw.storeProductUrl) : "",
+    }));
+    state.page = 1;
+    refreshThumbBaselinesFromRows();
+    renderAll();
+    toast("Imported " + state.rows.length + " rows.");
+  }
+
+  async function tryImportFromQuery() {
+    const u = new URL(window.location.href);
+    const url = u.searchParams.get("import");
+    if (!url) return;
+    try {
+      const res = await fetch(url, { mode: "cors" });
+      const data = await res.json();
+      const rows = Array.isArray(data) ? data : data.rows || data.products;
+      mergeImport(rows);
+    } catch (e) {
+      toast("Import failed (CORS or URL). Edit CATALOG in the HTML file instead.");
+    }
+  }
+
+  readUrl();
+  wire();
+  renderAll();
+  tryImportFromQuery();
+})();
+  </script>
+</body>
+</html>

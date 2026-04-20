@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { countUsersWithRole, deleteRole, touchRoleUpdatedAt, upsertRolePermissions } from "@/lib/authRepository";
+import { isSuperAdminRole } from "@/lib/authRoleConstants";
 import { normalizeRoleName, PERMISSION_OPTIONS, SYSTEM_ROLES } from "@/lib/rolePermissions";
 import { sessionCanManageRoles } from "@/lib/roleAccess";
 
@@ -20,6 +21,9 @@ export async function PATCH(
     const roleName = normalizeRoleName(name);
     if (!roleName) {
       return NextResponse.json({ error: "Invalid role name." }, { status: 400 });
+    }
+    if (isSuperAdminRole(roleName)) {
+      return NextResponse.json({ error: "superadmin permissions are locked and cannot be changed." }, { status: 403 });
     }
 
     const body = await req.json().catch(() => ({}));
@@ -62,6 +66,9 @@ export async function DELETE(
     const roleName = normalizeRoleName(name);
     if (!roleName) {
       return NextResponse.json({ error: "Invalid role name." }, { status: 400 });
+    }
+    if (isSuperAdminRole(roleName)) {
+      return NextResponse.json({ error: "superadmin role is locked and cannot be deleted." }, { status: 403 });
     }
     if (SYSTEM_ROLES.includes(roleName as any)) {
       return NextResponse.json({ error: "System roles cannot be deleted." }, { status: 400 });

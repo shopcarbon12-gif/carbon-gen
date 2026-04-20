@@ -3,14 +3,17 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 import bcrypt from "bcryptjs";
 import {
+  isSuperAdminRole,
   isMetaReviewRole,
   META_REVIEW_LOGIN_USERNAME,
   normalizeUsername,
+  SUPER_ADMIN_ROLE,
 } from "@/lib/authRoleConstants";
 import { runMetaReviewSeedIfConfigured } from "@/lib/runMetaReviewSeedIfConfigured";
 import { authenticateUser, getUserByUsername } from "@/lib/userAuth";
 
 const DEFAULT_SESSION_USER_ID = "00000000-0000-0000-0000-000000000001";
+const AUTH_BYPASS_PAUSED_COOKIE = "carbon_gen_auth_bypass_paused";
 
 function normalizeText(value: unknown) {
   return String(value ?? "").trim();
@@ -90,6 +93,17 @@ function setSessionCookies(
     path: "/",
     maxAge: 60 * 60 * 24 * 7,
   });
+
+  // Resume normal bypass behavior after a real login.
+  res.cookies.set({
+    name: AUTH_BYPASS_PAUSED_COOKIE,
+    value: "",
+    httpOnly: true,
+    sameSite: "lax",
+    secure: isSecure,
+    path: "/",
+    maxAge: 0,
+  });
 }
 
 /** Browsers open URLs with GET; login uses POST from /login. Redirect so bookmarks don’t show 405. */
@@ -130,7 +144,7 @@ export async function POST(req: Request) {
 
     const adminUsername =
       normalizeUsername(String(process.env.APP_ADMIN_USERNAME || "admin")) || "admin";
-    const adminAliases = new Set([adminUsername, "admin", "eliorp1"]);
+    const adminAliases = new Set([adminUsername, "admin", "eliorp1", "superadmin", "super_admin", "super-admin"]);
 
     let appUser: Awaited<ReturnType<typeof authenticateUser>> = null;
     try {
@@ -150,6 +164,10 @@ export async function POST(req: Request) {
     }
 
     if (appUser) {
+      const effectiveRole =
+        isSuperAdminRole(appUser.role) || adminAliases.has(username)
+          ? SUPER_ADMIN_ROLE
+          : appUser.role;
       const payload = isMetaReviewRole(appUser.role)
         ? { success: true as const, next: "/studio/instagram-widget" as const }
         : { success: true as const };
@@ -157,7 +175,7 @@ export async function POST(req: Request) {
       setSessionCookies(req, res, {
         id: appUser.id,
         username: appUser.username,
-        role: appUser.role,
+        role: effectiveRole,
       });
       return res;
     }
@@ -215,8 +233,8 @@ export async function POST(req: Request) {
     const res = NextResponse.json({ success: true });
     setSessionCookies(req, res, {
       id: DEFAULT_SESSION_USER_ID,
-      username: adminUsername,
-      role: "admin",
+      username: username || adminUsername,
+      role: SUPER_ADMIN_ROLE,
     });
     return res;
   } catch (err) {

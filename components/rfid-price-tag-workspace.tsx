@@ -5,6 +5,7 @@ import type { CatalogItem, LabelMapping, RfidSettings } from "@/lib/rfid";
 import { DEFAULT_RFID_SETTINGS } from "@/lib/rfid";
 import StudioStatusBar from "@/components/studio-status-bar";
 import { formatAppDateTime } from "@/lib/formatAppDateTime";
+import { hasFullAppAccess } from "@/lib/authRoleConstants";
 
 type SessionMeResponse = {
   user?: {
@@ -435,7 +436,7 @@ export default function RfidPriceTagWorkspace() {
       const role = String(json?.user?.role || "")
         .trim()
         .toLowerCase();
-      setIsAdmin(resp.ok && role === "admin");
+      setIsAdmin(resp.ok && hasFullAppAccess(role));
     } catch {
       setIsAdmin(false);
     }

@@ -5270,6 +5270,24 @@ export default function ShopifyCollectionMapping() {
                     <span className="queueSubCount">App: {appCommittedSyncedCount}</span>
                   </button>
                 </div>
+                <div className="i3-page-select">
+                  <label className="i3-select-page">
+                    <input
+                      type="checkbox"
+                      checked={allSelectedOnPage}
+                      disabled={loading || filteredRows.length < 1}
+                      onChange={(event) => {
+                        const checked = event.target.checked;
+                        setSelectedProducts((prev) => {
+                          const next = { ...prev };
+                          for (const row of filteredRows) next[row.id] = checked;
+                          return next;
+                        });
+                      }}
+                    />
+                    <span>All on page</span>
+                  </label>
+                </div>
               </div>
             ) : null}
             <div className="productControls">
@@ -5589,7 +5607,43 @@ export default function ShopifyCollectionMapping() {
                             </button>
                           </td>
                           <td className="center imgCell stickyPictureCol">
-                            {row.image ? (
+                            {isMobileIdea3Layout ? (
+                              <div className="mobileIdea3ThumbWrap">
+                                <label className="mobileIdea3ThumbChkLbl" onClick={(event) => event.stopPropagation()}>
+                                  <input
+                                    type="checkbox"
+                                    className="mobileIdea3ThumbChk"
+                                    checked={selectedProductRow}
+                                    onChange={(event) => {
+                                      event.stopPropagation();
+                                      const checked = event.target.checked;
+                                      setSelectedProducts((prev) => ({ ...prev, [row.id]: checked }));
+                                      if (checked) {
+                                        setActiveRowId(row.id);
+                                      } else if (activeRowId === row.id) {
+                                        setActiveRowId("");
+                                      }
+                                    }}
+                                    aria-label={`Select ${row.title} for commit`}
+                                  />
+                                </label>
+                                {row.image ? (
+                                  <button
+                                    type="button"
+                                    className="thumbBtn mobileIdea3ThumbOpen"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      setPreviewImage(row.image);
+                                    }}
+                                    aria-label="Open product image preview"
+                                  >
+                                    <img className="thumb" src={row.image} alt={row.title} />
+                                  </button>
+                                ) : (
+                                  <span className="thumbPlaceholder mobileIdea3ThumbPlaceholder" aria-hidden="true" />
+                                )}
+                              </div>
+                            ) : row.image ? (
                               <button
                                 type="button"
                                 className="thumbBtn"
@@ -10032,17 +10086,101 @@ export default function ShopifyCollectionMapping() {
             width: 36px !important;
             min-width: 36px !important;
             height: 36px !important;
-            border-radius: 10px !important;
+            border-radius: 12px !important;
             border: 1px solid #3c4f70 !important;
             background: #122038 !important;
             color: #94a3b8 !important;
             font-size: 11px !important;
             cursor: pointer !important;
             padding: 0 !important;
-            transition: transform 0.2s ease !important;
+            box-sizing: border-box !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            transition: transform 0.2s ease, color 0.15s ease !important;
+          }
+          .mobileIdea3RowChevron:hover {
+            color: #c7d2fe !important;
           }
           .mobileIdea3RowExpanded .mobileIdea3RowChevron {
             transform: rotate(180deg) !important;
+          }
+          .i3-page-select {
+            margin-top: 8px !important;
+            padding: 0 2px 2px !important;
+          }
+          .i3-select-page {
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 8px !important;
+            font-size: 0.78rem !important;
+            font-weight: 600 !important;
+            color: #94a3b8 !important;
+            cursor: pointer !important;
+            user-select: none !important;
+            font-family: inherit !important;
+          }
+          .i3-select-page input {
+            width: 18px !important;
+            height: 18px !important;
+            accent-color: #818cf8 !important;
+            cursor: pointer !important;
+          }
+          .mobileIdea3ThumbWrap {
+            position: relative !important;
+            display: inline-block !important;
+            line-height: 0 !important;
+          }
+          .mobileIdea3ThumbChkLbl {
+            position: absolute !important;
+            top: 6px !important;
+            left: 6px !important;
+            z-index: 3 !important;
+            margin: 0 !important;
+            line-height: 0 !important;
+            cursor: pointer !important;
+          }
+          .mobileIdea3ThumbChk {
+            width: 22px !important;
+            height: 22px !important;
+            margin: 0 !important;
+            cursor: pointer !important;
+            accent-color: #818cf8 !important;
+          }
+          .mobileIdea3ThumbOpen {
+            position: relative !important;
+            z-index: 1 !important;
+          }
+          .mobileIdea3ThumbPlaceholder {
+            display: inline-block !important;
+            min-width: 56px !important;
+            min-height: 72px !important;
+          }
+          .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3Row .eyeActionBtn {
+            width: 36px !important;
+            height: 36px !important;
+            border-radius: 12px !important;
+            background: #122038 !important;
+            border: 1px solid #3c4f70 !important;
+            color: #94a3b8 !important;
+            box-sizing: border-box !important;
+          }
+          .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3Row .eyeActionBtn:hover {
+            color: #c7d2fe !important;
+          }
+          .productPanelMobileIdea3 .topbar.pagerBar {
+            flex-wrap: wrap !important;
+            justify-content: space-between !important;
+            gap: 8px !important;
+            align-items: center !important;
+          }
+          .productPanelMobileIdea3 .pagerNav {
+            flex: 1 1 auto !important;
+            min-width: 0 !important;
+            justify-content: center !important;
+          }
+          .productPanelMobileIdea3 .pagerPerPage {
+            flex-shrink: 0 !important;
           }
           .tableWrap table.tableMobileIdea3 {
             width: 100% !important;
@@ -10077,16 +10215,19 @@ export default function ShopifyCollectionMapping() {
             max-height: none !important;
           }
           .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3Row:not(.mobileIdea3RowExpanded) td.stickyCheckboxCol {
+            display: none !important;
+          }
+          .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3Row:not(.mobileIdea3RowExpanded) td.stickyEyeCol {
+            display: flex !important;
             grid-column: 1 !important;
-            grid-row: 1 / span 2 !important;
-            align-self: center !important;
+            grid-row: 1 !important;
+            align-items: center !important;
+            justify-content: center !important;
+            align-self: start !important;
             padding: 0 !important;
             position: static !important;
             left: auto !important;
             background: transparent !important;
-          }
-          .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3Row:not(.mobileIdea3RowExpanded) td.stickyEyeCol {
-            display: none !important;
           }
           .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3Row:not(.mobileIdea3RowExpanded) td.stickyPictureCol {
             grid-column: 2 !important;
@@ -10106,7 +10247,7 @@ export default function ShopifyCollectionMapping() {
             white-space: normal !important;
           }
           .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3Row:not(.mobileIdea3RowExpanded)
-            > td:not(.stickyCheckboxCol):not(.stickyPictureCol):not(.stickyProductNameCol) {
+            > td:not(.stickyEyeCol):not(.stickyPictureCol):not(.stickyProductNameCol) {
             display: none !important;
           }
           .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3RowExpanded {

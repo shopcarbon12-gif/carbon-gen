@@ -11,6 +11,7 @@ import { RefreshIcon } from "./RefreshIcon";
 import styles from "./page.module.css";
 import { formatAppDateTime } from "@/lib/formatAppDateTime";
 import { CARBON_A11Y_WIDGET_WREV } from "@/lib/carbon-a11y-widget-rev";
+import { hasFullAppAccess } from "@/lib/authRoleConstants";
 
 type WidgetPosition = "left" | "right";
 
@@ -649,7 +650,7 @@ export default function AccessibilityPage() {
     }
     return `${settings.responseSlaHours}h`;
   }, [settings.responseSlaHours]);
-  const canSaveSettings = currentUser?.role === "admin";
+  const canSaveSettings = hasFullAppAccess(currentUser?.role);
   const normalizedIntegrationState = (value: string): IntegrationState => {
     if (value === "online" || value === "offline") return value;
     return "checking";

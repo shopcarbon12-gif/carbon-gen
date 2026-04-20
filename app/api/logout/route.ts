@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
+const AUTH_BYPASS_PAUSED_COOKIE = "carbon_gen_auth_bypass_paused";
 
 function clearCookies(res: NextResponse) {
   res.cookies.set({
@@ -42,6 +43,18 @@ function clearCookies(res: NextResponse) {
     secure: process.env.NODE_ENV === "production",
     path: "/",
     maxAge: 0,
+  });
+
+  // In local dev with AUTH_BYPASS=true, middleware auto-restores auth cookies.
+  // This cookie pauses bypass so explicit logout actually stays logged out.
+  res.cookies.set({
+    name: AUTH_BYPASS_PAUSED_COOKIE,
+    value: "true",
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 60 * 8,
   });
 }
 

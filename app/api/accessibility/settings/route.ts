@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isRequestAuthed } from "@/lib/auth";
-import { readSession } from "@/lib/userAuth";
+import { hasFullAppAccess, readSession } from "@/lib/userAuth";
 import {
   loadAccessibilityWidgetConfig,
   upsertAccessibilityWidgetConfig,
@@ -38,9 +38,9 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   if (!isRequestAuthed(req)) return unauthorized();
   const session = readSession(req);
-  if (!session.isAuthed || session.role !== "admin") {
+  if (!session.isAuthed || !hasFullAppAccess(session.role)) {
     return NextResponse.json(
-      { ok: false, error: "Forbidden: admin role required to update accessibility settings" },
+      { ok: false, error: "Forbidden: full-access role required to update accessibility settings" },
       { status: 403 }
     );
   }

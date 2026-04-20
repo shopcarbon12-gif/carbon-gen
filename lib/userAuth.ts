@@ -4,6 +4,7 @@ export {
   normalizeUsername,
   parseRole,
   canManageInstagramSection,
+  hasFullAppAccess,
   isMetaReviewRole,
 } from "@/lib/authRoleConstants";
 export { readSession, isAdminSession } from "@/lib/authSession";

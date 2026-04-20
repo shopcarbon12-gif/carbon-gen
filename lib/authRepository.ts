@@ -127,7 +127,7 @@ async function ensurePgReady() {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_app_users_role ON app_users(role)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_app_users_active_role ON app_users(is_active, role)`);
-  const systemRoleNames = ["admin", "manager", "user", "meta_review"];
+  const systemRoleNames = ["superadmin", "admin", "manager", "user", "meta_review"];
   for (const name of systemRoleNames) {
     await pool.query(
       `INSERT INTO app_roles (name, is_system) VALUES ($1, true) ON CONFLICT (name) DO NOTHING`,
