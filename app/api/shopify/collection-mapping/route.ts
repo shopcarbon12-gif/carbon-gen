@@ -398,6 +398,7 @@ type ShopifyCollectionNode = {
   title?: string;
   handle?: string;
   productsCount?: number | { count?: number };
+  ruleSet?: { rules?: Array<{ column?: string }> } | null;
 };
 
 type GraphResult<T> = {
@@ -442,6 +443,11 @@ async function fetchAllCollections(
             productsCount {
               count
             }
+            ruleSet {
+              rules {
+                column
+              }
+            }
           }
         }
         pageInfo {
@@ -483,6 +489,7 @@ async function fetchAllCollections(
         title: normalizeText(node.title),
         handle: normalizeText(node.handle),
         productsCount: parseProductsCount(node.productsCount),
+        isAutomated: Boolean(node.ruleSet),
       });
     }
 
@@ -2520,9 +2527,12 @@ function mapUpcRowToResponse(
     suggestedDirectCollections: autoMap.suggestedDirectCollections,
     collectionConflictFlags: Array.isArray(autoMap.collectionConflictFlags) ? autoMap.collectionConflictFlags : [],
     isReviewed: Boolean(rowDraft?.isReviewed),
+    appCommitted: Boolean(rowDraft?.appCommitted),
     draft: rowDraft
       ? {
           isReviewed: Boolean(rowDraft.isReviewed),
+          appCommitted: Boolean(rowDraft.appCommitted),
+          appCommittedAt: rowDraft.appCommittedAt || null,
           holdFromSync: Boolean(rowDraft.holdFromSync),
           selectedSuggestionPaths: Array.isArray(rowDraft.selectedSuggestionPaths) ? rowDraft.selectedSuggestionPaths : [],
           selectedSuggestionCollections: Array.isArray(rowDraft.selectedSuggestionCollections)

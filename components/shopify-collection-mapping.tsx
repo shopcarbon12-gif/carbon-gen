@@ -75,8 +75,11 @@ type ProductRow = {
   /** High-confidence negative layer: likely-wrong assigned paths vs title/type signals */
   collectionConflictFlags?: Array<{ id: string; ruleId: string; path: string; message: string }>;
   isReviewed?: boolean;
+  appCommitted?: boolean;
   draft?: {
     isReviewed?: boolean;
+    appCommitted?: boolean;
+    appCommittedAt?: string | null;
     holdFromSync?: boolean;
     selectedSuggestionPaths?: string[];
     selectedSuggestionCollections?: string[];
@@ -653,7 +656,7 @@ export default function ShopifyCollectionMapping() {
   const [pageSize, setPageSize] = useState(20);
   const [totalPages, setTotalPages] = useState(1);
   const [collectionCount, setCollectionCount] = useState(0);
-  const [collections, setCollections] = useState<Array<{ id: string; title: string; handle: string }>>([]);
+  const [collections, setCollections] = useState<Array<{ id: string; title: string; handle: string; isAutomated?: boolean }>>([]);
   const [productCount, setProductCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -1051,6 +1054,16 @@ export default function ShopifyCollectionMapping() {
     }
     return map;
   }, [collections]);
+  const automatedCollectionHandles = useMemo(() => {
+    const out = new Set<string>();
+    for (const row of collections) {
+      if (!row.isAutomated) continue;
+      const handle = String(row.handle || "").trim().toLowerCase();
+      if (!handle) continue;
+      out.add(handle);
+    }
+    return out;
+  }, [collections]);
 
   const getCollectionDisplayName = (handle: string) => {
     const key = String(handle || "").trim().toLowerCase();
@@ -1174,19 +1187,34 @@ export default function ShopifyCollectionMapping() {
       const hasReview = String(row.mappingDecision || "") === "MANUAL_REVIEW";
       const livePathSet = closeMenuPathSetWithAncestors(new Set(currentAssigned));
       const finalRefs = new Set<string>();
+      const toPushablePathRef = (pathValue: string) => {
+        const normalizedPath = normalizeMenuPath(pathValue);
+        if (!normalizedPath) return "";
+        const nodeKey = nodeKeyByPath.get(normalizedPath);
+        if (!nodeKey) return "";
+        const node = nodeByKey.get(nodeKey);
+        if (!node?.collectionId) return "";
+        const handle = String(node.collectionHandle || "").trim().toLowerCase();
+        if (handle && automatedCollectionHandles.has(handle)) return "";
+        return `PATH:${normalizedPath}`;
+      };
       for (const path of closedFinalSet) {
-        const n = normalizeMenuPath(path);
-        if (n) finalRefs.add(`PATH:${n}`);
+        const ref = toPushablePathRef(path);
+        if (ref) finalRefs.add(ref);
       }
       for (const handle of finalDirectCollections) {
+        if (!collectionIdByHandle.has(handle)) continue;
+        if (automatedCollectionHandles.has(handle)) continue;
         finalRefs.add(`DIRECT:${handle}`);
       }
       const liveRefs = new Set<string>();
       for (const path of livePathSet) {
-        const n = normalizeMenuPath(path);
-        if (n) liveRefs.add(`PATH:${n}`);
+        const ref = toPushablePathRef(path);
+        if (ref) liveRefs.add(ref);
       }
       for (const handle of currentDirectCollections) {
+        if (!collectionIdByHandle.has(handle)) continue;
+        if (automatedCollectionHandles.has(handle)) continue;
         liveRefs.add(`DIRECT:${handle}`);
       }
       let hasAdds = false;
@@ -1266,9 +1294,12 @@ export default function ShopifyCollectionMapping() {
     manualRemovedPathsByRow,
     holdFromSyncByRow,
     nodeKeyByPath,
+    nodeByKey,
     nodePathByKey,
     parentMap,
     collectionTitleByHandle,
+    collectionIdByHandle,
+    automatedCollectionHandles,
   ]);
 
   const selectedNodeKeys = useMemo(() => {
@@ -1336,6 +1367,22 @@ export default function ShopifyCollectionMapping() {
     () => summarizeShopifyCollectionMappingWorkflows(Array.from(rowWorkflowById.values())),
     [rowWorkflowById]
   );
+  const appCommittedRowIds = useMemo(() => {
+    const out = new Set<string>();
+    for (const row of rows) {
+      if (row.appCommitted || row.draft?.appCommitted) out.add(row.id);
+    }
+    return out;
+  }, [rows]);
+  const appCommittedSyncedCount = useMemo(() => {
+    let count = 0;
+    for (const row of rows) {
+      if (!(row.appCommitted || row.draft?.appCommitted)) continue;
+      const workflow = rowWorkflowById.get(row.id);
+      if (workflow?.statusBadgeTone === "synced") count += 1;
+    }
+    return count;
+  }, [rows, rowWorkflowById]);
 
   // Apply the active queue tab directly to table rows.
   const filteredRows = useMemo(() => {
@@ -1707,8 +1754,31 @@ export default function ShopifyCollectionMapping() {
 
   const plannerRowsById = useMemo(() => {
     const out = new Map<string, PushPlannerRow>();
-    const toPathRefs = (paths: string[]) => paths.map((path) => `PATH:${normalizeMenuPath(path)}`);
-    const toDirectRefs = (handles: string[]) => handles.map((handle) => `DIRECT:${String(handle || "").trim().toLowerCase()}`);
+    const toPathRefs = (paths: string[]) => {
+      const refs: string[] = [];
+      for (const path of paths) {
+        const normalizedPath = normalizeMenuPath(path);
+        if (!normalizedPath) continue;
+        const nodeKey = nodeKeyByPath.get(normalizedPath);
+        if (!nodeKey) continue;
+        const node = nodeByKey.get(nodeKey);
+        if (!node?.collectionId) continue;
+        const handle = String(node.collectionHandle || "").trim().toLowerCase();
+        if (handle && automatedCollectionHandles.has(handle)) continue;
+        refs.push(`PATH:${normalizedPath}`);
+      }
+      return refs;
+    };
+    const toDirectRefs = (handles: string[]) =>
+      handles
+        .map((handle) => String(handle || "").trim().toLowerCase())
+        .filter(
+          (handle) =>
+            Boolean(handle) &&
+            collectionIdByHandle.has(handle) &&
+            !automatedCollectionHandles.has(handle)
+        )
+        .map((handle) => `DIRECT:${handle}`);
     for (const row of rows) {
       const staging = rowStagingById.get(row.id);
       if (!staging) {
@@ -1781,7 +1851,7 @@ export default function ShopifyCollectionMapping() {
       });
     }
     return out;
-  }, [rows, rowStagingById, rowWorkflowById, nodePathByKey]);
+  }, [rows, rowStagingById, rowWorkflowById, nodePathByKey, nodeKeyByPath, nodeByKey, collectionIdByHandle, automatedCollectionHandles]);
 
   const allSelectedOnPage = useMemo(() => {
     if (filteredRows.length < 1) return false;
@@ -2027,6 +2097,7 @@ export default function ShopifyCollectionMapping() {
         id: String(row.id || ""),
         title: String(row.title || "").trim() || String(row.id || ""),
         handle: String((row as { handle?: string }).handle || "").trim().toLowerCase(),
+        isAutomated: Boolean((row as { isAutomated?: boolean }).isAutomated),
       }));
       setCollections(nextCollections);
       setCollectionCount(nextCollections.length);
@@ -3985,7 +4056,7 @@ export default function ShopifyCollectionMapping() {
     return [];
   }
 
-  function plannerSummaryFromRows(rowsToPlan: PushPlannerRow[]): PushPlanSummary {
+  function plannerSummaryFromRows(rowsToPlan: PushPlannerRow[], actionKind: PushActionKind): PushPlanSummary {
     const statusCounts: Record<PlannerStatus, number> = {
       readyToPush: 0,
       noChange: 0,
@@ -3999,9 +4070,12 @@ export default function ShopifyCollectionMapping() {
     let removalRows = 0;
     let totalAdditions = 0;
     let totalRemovals = 0;
+    const allowNoChangeCommit = actionKind !== "remove-all-collections";
     for (const row of rowsToPlan) {
       statusCounts[row.plannerStatus] += 1;
-      if (row.plannerStatus === "readyToPush") {
+      const isEligible =
+        row.plannerStatus === "readyToPush" || (allowNoChangeCommit && row.plannerStatus === "noChange");
+      if (isEligible) {
         eligibleRows += 1;
         if (row.collectionsToAdd.length > 0) addRows += 1;
         if (row.collectionsToRemove.length > 0) removalRows += 1;
@@ -4046,7 +4120,7 @@ export default function ShopifyCollectionMapping() {
         };
       });
     }
-    const summary = plannerSummaryFromRows(rowsToPlan);
+    const summary = plannerSummaryFromRows(rowsToPlan, actionKind);
     setRemoveAllConfirmText("");
     setPushPreviewModal({
       open: true,
@@ -4199,8 +4273,13 @@ export default function ShopifyCollectionMapping() {
       return;
     }
     setExecutionBusy(true);
-    const queuedRows = pushPreviewModal.rows.filter((row) => row.plannerStatus === "readyToPush");
-    const skippedRows = pushPreviewModal.rows.filter((row) => row.plannerStatus !== "readyToPush");
+    const allowNoChangeCommit = pushPreviewModal.actionKind !== "remove-all-collections";
+    const queuedRows = pushPreviewModal.rows.filter(
+      (row) => row.plannerStatus === "readyToPush" || (allowNoChangeCommit && row.plannerStatus === "noChange")
+    );
+    const skippedRows = pushPreviewModal.rows.filter(
+      (row) => !(row.plannerStatus === "readyToPush" || (allowNoChangeCommit && row.plannerStatus === "noChange"))
+    );
     const startedAt = Date.now();
     const jobId = `job-${startedAt}`;
     const typeMap: Record<PushActionKind, QueueJobType> = {
@@ -4261,7 +4340,7 @@ export default function ShopifyCollectionMapping() {
     let completedRows = 0;
     let failedRows = 0;
     const warningMessages: string[] = [];
-    const rowIdsToClearDrafts: string[] = [];
+    const rowIdsToMarkCommitted: string[] = [];
     const successfulFinalRefsByRowId = new Map<string, string[]>();
     try {
       for (const row of queuedRows) {
@@ -4310,7 +4389,7 @@ export default function ShopifyCollectionMapping() {
         }
         if (rowSucceeded) {
           completedRows += 1;
-          rowIdsToClearDrafts.push(rowId);
+          rowIdsToMarkCommitted.push(rowId);
           successfulFinalRefsByRowId.set(rowId, Array.isArray(row.finalCollections) ? row.finalCollections : []);
         } else {
           failedRows += 1;
@@ -4328,46 +4407,64 @@ export default function ShopifyCollectionMapping() {
         );
       }
 
-      if (rowIdsToClearDrafts.length > 0) {
-        const clearedIds = new Set(rowIdsToClearDrafts);
+      if (rowIdsToMarkCommitted.length > 0) {
+        const committedIds = new Set(rowIdsToMarkCommitted);
         setSelectedSuggestionPathsByRow((prev) => {
           const next = { ...prev };
-          for (const id of clearedIds) delete next[id];
+          for (const id of committedIds) delete next[id];
           return next;
         });
         setSelectedSuggestionCollectionsByRow((prev) => {
           const next = { ...prev };
-          for (const id of clearedIds) delete next[id];
+          for (const id of committedIds) delete next[id];
           return next;
         });
         setManualAddedPathsByRow((prev) => {
           const next = { ...prev };
-          for (const id of clearedIds) delete next[id];
+          for (const id of committedIds) delete next[id];
           return next;
         });
         setManualRemovedPathsByRow((prev) => {
           const next = { ...prev };
-          for (const id of clearedIds) delete next[id];
+          for (const id of committedIds) delete next[id];
           return next;
         });
         setReviewedByRow((prev) => {
           const next = { ...prev };
-          for (const id of clearedIds) delete next[id];
+          for (const id of committedIds) next[id] = true;
           return next;
         });
         setHoldFromSyncByRow((prev) => {
           const next = { ...prev };
-          for (const id of clearedIds) delete next[id];
+          for (const id of committedIds) delete next[id];
           return next;
         });
         void fetch("/api/collection-mapping", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(withShopContext({ action: "clear-row-drafts", rowIds: rowIdsToClearDrafts })),
+          body: JSON.stringify(
+            withShopContext({
+              action: "set-row-draft-batch",
+              drafts: rowIdsToMarkCommitted.map((rowId) => ({
+                rowId,
+                draft: {
+                  isReviewed: true,
+                  appCommitted: true,
+                  appCommittedAt: new Date().toISOString(),
+                  holdFromSync: false,
+                  selectedSuggestionPaths: [],
+                  selectedSuggestionCollections: [],
+                  manualAddedPaths: [],
+                  manualRemovedPaths: [],
+                  currentMatchesFinal: true,
+                },
+              })),
+            })
+          ),
         }).catch(() => {});
         setRows((prev) =>
           prev.map((row) => {
-            if (!clearedIds.has(row.id)) return row;
+            if (!committedIds.has(row.id)) return row;
             const finalRefs = successfulFinalRefsByRowId.get(row.id) || [];
             const nextNodeKeys = new Set<string>();
             const nextDirectHandles = new Set<string>();
@@ -4399,9 +4496,20 @@ export default function ShopifyCollectionMapping() {
               autoMappedPaths: alignedAutoPaths,
               directCollectionsToAssign: [],
               actionStatus: "PROCESSED",
+              appCommitted: true,
               /** Commit is explicit confirmation; satisfies workflow gate for MANUAL_REVIEW rows once live matches final. */
               isReviewed: true,
-              draft: null,
+              draft: {
+                isReviewed: true,
+                appCommitted: true,
+                appCommittedAt: new Date().toISOString(),
+                holdFromSync: false,
+                selectedSuggestionPaths: [],
+                selectedSuggestionCollections: [],
+                manualAddedPaths: [],
+                manualRemovedPaths: [],
+                currentMatchesFinal: true,
+              },
             };
           })
         );
@@ -5157,6 +5265,7 @@ export default function ShopifyCollectionMapping() {
                     onClick={() => setActiveQueueTab("synced")}
                   >
                     <em>{moduleSummary.synced}</em> Synced
+                    <span className="queueSubCount">App: {appCommittedSyncedCount}</span>
                   </button>
                 </div>
               </div>
@@ -5404,6 +5513,7 @@ export default function ShopifyCollectionMapping() {
                       const selectedProductRow = Boolean(selectedProducts[row.id]);
                       const isActiveRow = row.id === activeRowId;
                       const isManualReviewRow = mappingDecision === "MANUAL_REVIEW";
+                      const isAppCommittedRow = appCommittedRowIds.has(row.id);
                       const plannerRow = plannerRowsById.get(row.id);
                       const changedAddCount = plannerRow?.collectionsToAdd.length ?? 0;
                       const changedRemoveCount = plannerRow?.collectionsToRemove.length ?? 0;
@@ -5438,7 +5548,7 @@ export default function ShopifyCollectionMapping() {
                       return (
                         <tr
                           key={row.id}
-                          className={`${selectedProductRow ? "selectedProductRow " : ""}${isActiveRow ? "activeProductRow " : ""}${isManualReviewRow ? "manualReviewRow " : ""}statusTone-${workflow.statusBadgeTone}${isMobileIdea3Layout ? " mobileIdea3Row" : ""}${isMobileIdea3Layout && mobileIdea3ExpandedRowId === row.id ? " mobileIdea3RowExpanded" : ""}`.trim()}
+                          className={`${selectedProductRow ? "selectedProductRow " : ""}${isActiveRow ? "activeProductRow " : ""}${isManualReviewRow ? "manualReviewRow " : ""}${isAppCommittedRow ? "appCommittedRow " : ""}statusTone-${workflow.statusBadgeTone}${isMobileIdea3Layout ? " mobileIdea3Row" : ""}${isMobileIdea3Layout && mobileIdea3ExpandedRowId === row.id ? " mobileIdea3RowExpanded" : ""}`.trim()}
                           onClick={isMobileIdea3Layout ? undefined : () => toggleRowSelectionFromRowClick(row.id)}
                         >
                           <td className="center stickyCheckboxCol">
@@ -5496,6 +5606,11 @@ export default function ShopifyCollectionMapping() {
                                 <div className="mobileIdea3NameText">
                                   <div className="mobileIdea3Title">{row.title}</div>
                                   <div className="muted tiny">UPC: {row.upc || "-"}</div>
+                                  {isAppCommittedRow ? (
+                                    <div className="appCommitMarker" title="This product was committed and pushed through this app workflow.">
+                                      App committed
+                                    </div>
+                                  ) : null}
                                   {(row.collectionConflictFlags?.length ?? 0) > 0 ? (
                                     <div
                                       className="muted tiny pathConflictBadge"
@@ -5532,6 +5647,11 @@ export default function ShopifyCollectionMapping() {
                               <>
                                 <div>{row.title}</div>
                                 <div className="muted tiny">UPC: {row.upc || "-"}</div>
+                                {isAppCommittedRow ? (
+                                  <div className="appCommitMarker" title="This product was committed and pushed through this app workflow.">
+                                    App committed
+                                  </div>
+                                ) : null}
                                 {(row.collectionConflictFlags?.length ?? 0) > 0 ? (
                                   <div
                                     className="muted tiny pathConflictBadge"
@@ -7937,6 +8057,32 @@ export default function ShopifyCollectionMapping() {
         }
         tbody tr.statusTone-review > td:first-child {
           box-shadow: inset 4px 0 0 #f59e0b;
+        }
+        tbody tr.appCommittedRow > td:first-child {
+          box-shadow: inset 4px 0 0 #eab308;
+        }
+        .appCommitMarker {
+          display: inline-flex;
+          margin-top: 4px;
+          padding: 2px 8px;
+          border-radius: 999px;
+          border: 1px solid #facc15;
+          background: rgba(250, 204, 21, 0.16);
+          color: #fde68a;
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.02em;
+          text-transform: uppercase;
+        }
+        .queueSubCount {
+          margin-left: 6px;
+          font-size: 10px;
+          color: #fde68a;
+          border: 1px solid rgba(250, 204, 21, 0.45);
+          border-radius: 999px;
+          padding: 1px 6px;
+          line-height: 1.5;
+          background: rgba(250, 204, 21, 0.12);
         }
         .productRefreshBtn,
         .productSearchBtn,

@@ -7,6 +7,8 @@ export type CollectionOption = {
   title: string;
   handle: string;
   productsCount: number | null;
+  /** Smart/automated collections are not reliably manually assignable. */
+  isAutomated?: boolean;
 };
 
 export type MenuNodeRecord = {
@@ -201,6 +203,8 @@ const trimRowDraftsLastRunByShop = new Map<string, number>();
 
 export type RowDraftState = {
   isReviewed: boolean;
+  appCommitted?: boolean;
+  appCommittedAt?: string;
   holdFromSync?: boolean;
   selectedSuggestionPaths: string[];
   selectedSuggestionCollections: string[];
@@ -373,6 +377,8 @@ function normalizeRowDraftState(value: unknown): RowDraftState {
       : undefined;
   return {
     isReviewed: Boolean(raw.isReviewed),
+    appCommitted: Boolean(raw.appCommitted),
+    appCommittedAt: normalizeText(raw.appCommittedAt) || undefined,
     holdFromSync: Boolean(raw.holdFromSync),
     selectedSuggestionPaths: normalizeTextArray(raw.selectedSuggestionPaths),
     selectedSuggestionCollections: normalizeTextArray(raw.selectedSuggestionCollections),
