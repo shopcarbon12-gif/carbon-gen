@@ -645,6 +645,14 @@ export default function ShopifyCollectionMapping() {
   /** Idea 3 · KPI inbox (mobile prototype): full-width search, pill queue filters, dense thumb + title + pills + chevron rows. */
   const isMobileIdea3Layout = useMatchMediaMaxWidth(900);
   const [mobileIdea3ExpandedRowId, setMobileIdea3ExpandedRowId] = useState<string | null>(null);
+  /** Mobile-only: hamburger nav drawer open */
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  /** Mobile-only: commit menu (bottom dock) open */
+  const [mobileCommitOpen, setMobileCommitOpen] = useState(false);
+  /** Mobile-only: lightbox row id */
+  const [mobileLightboxRowId, setMobileLightboxRowId] = useState<string | null>(null);
+  /** Mobile-only: menu bottom-sheet row id */
+  const [mobileMenuSheetRowId, setMobileMenuSheetRowId] = useState<string | null>(null);
   // Reports are consolidated behind a single modal trigger to reduce canvas clutter.
   const [showReportsModal, setShowReportsModal] = useState(false);
   const [queueJobs, setQueueJobs] = useState<QueueJob[]>([]);
@@ -5209,69 +5217,127 @@ export default function ShopifyCollectionMapping() {
             className={`card panel productPanel${treePaneCollapsed ? " treePaneCollapsed" : ""}${isMobileIdea3Layout ? " productPanelMobileIdea3" : ""}`}
           >
             {isMobileIdea3Layout ? (
-              <div className="i3-inbox-top" aria-label="Product inbox">
-                <div className="i3-inbox-brand">CARBON / COLLECTION MAPPING</div>
-                <input
-                  type="search"
-                  className="i3-search"
-                  id="collection-mapping-i3-search"
-                  value={search}
-                  onChange={(event) => {
-                    setSearch(event.target.value);
-                    resetPageForDataQuery();
-                  }}
-                  placeholder="Search products (title / sku / upc / type)…"
-                  aria-label="Search products"
-                  enterKeyHint="search"
-                />
-                <div className="i3-filters" role="toolbar" aria-label="Queue filters">
+              <>
+                {/* ── Mobile shell header ── */}
+                <header className="m3-shell" aria-label="Top bar">
+                  <div className="m3-shell-left">
+                    <button
+                      type="button"
+                      className="m3-icon-btn"
+                      aria-label="Open navigation menu"
+                      aria-expanded={mobileNavOpen}
+                      onClick={() => setMobileNavOpen((p) => !p)}
+                    >
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h16v2H4v-2z" />
+                      </svg>
+                    </button>
+                    <span className="m3-brand-mark" aria-hidden="true">
+                      <img src="/accessibility-assets/carbon-honeycomb-mark.png" alt="" width="22" height="22" />
+                    </span>
+                    <h1 className="m3-shell-title">CARBON <span className="m3-shell-title-light">/ COLLECTION MAPPING</span></h1>
+                  </div>
                   <button
                     type="button"
-                    className={activeQueueTab === "all" ? "on" : ""}
-                    aria-pressed={activeQueueTab === "all"}
-                    onClick={() => setActiveQueueTab("all")}
+                    className="m3-icon-btn"
+                    aria-label="Refresh products"
+                    disabled={loading || saving}
+                    onClick={() => void refreshProductsSection()}
                   >
-                    All
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                      <path d="M12 4a8 8 0 017.65 5.5h-2.1a6 6 0 00-11.3 3h3l-2.5 4L4 12.5h3.1A8 8 0 0112 4zm0 16a8 8 0 01-7.65-5.5h2.1a6 6 0 0011.3-3H15l2.5-4L20 11.5h-3.1A8 8 0 0112 20z" />
+                    </svg>
                   </button>
-                  <button type="button" onClick={() => setActiveQueueTab("all")}>
-                    <em>{moduleSummary.totalLoaded}</em> Loaded
+                </header>
+
+                {/* ── Mobile nav overlay + drawer ── */}
+                {mobileNavOpen ? (
+                  <div className="m3-overlay" onClick={() => setMobileNavOpen(false)} aria-hidden="true" />
+                ) : null}
+                <nav className={`m3-drawer${mobileNavOpen ? " m3-drawer--open" : ""}`} aria-label="App navigation" aria-hidden={!mobileNavOpen}>
+                  <h2 className="m3-drawer-heading">Navigation</h2>
+                  <a href="/shopify-collection-mapping" className="m3-drawer-link" onClick={() => setMobileNavOpen(false)}>
+                    Collection Mapping<small>Current page</small>
+                  </a>
+                  <a href="/settings" className="m3-drawer-link" onClick={() => setMobileNavOpen(false)}>
+                    Settings<small>Users &amp; roles</small>
+                  </a>
+                </nav>
+
+                {/* ── KPI pill strip ── */}
+                <div className="m3-kpi-strip" aria-label="Queue filters">
+                  <div className="m3-kpi-scroll">
+                    {([
+                      { label: "All", tab: "all" as const, dot: "blue", count: moduleSummary.totalLoaded },
+                      { label: "Loaded", tab: "all" as const, dot: "blue", count: moduleSummary.totalLoaded },
+                      { label: "Needs Review", tab: KPI_NEEDS_REVIEW_UNION_FILTER, dot: "amber", count: moduleSummary.reviewNeeded },
+                      { label: "Ready to Push", tab: "ready-push" as const, dot: "purple", count: moduleSummary.readyToPush },
+                      { label: "Failed", tab: "push-failed" as const, dot: "red", count: moduleSummary.pushFailed },
+                      { label: "Synced", tab: "synced" as const, dot: "green", count: moduleSummary.synced, sub: `App: ${appCommittedSyncedCount}` },
+                    ] as Array<{ label: string; tab: ShopifyCollectionMappingQueueTab; dot: string; count: number; sub?: string }>).map(({ label, tab, dot, count, sub }) => (
+                      <button
+                        key={label}
+                        type="button"
+                        className={`m3-kpi-pill m3-kpi-pill--${dot}${activeQueueTab === tab ? " m3-kpi-pill--on" : ""}`}
+                        aria-pressed={activeQueueTab === tab}
+                        onClick={() => setActiveQueueTab(tab)}
+                      >
+                        <span className="m3-kpi-dot" aria-hidden="true" />
+                        <em>{count}</em> {label}
+                        {sub ? <span className="m3-kpi-sub">{sub}</span> : null}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* ── Search toolbar ── */}
+                <div className="m3-search-row">
+                  <div className="m3-search-wrap">
+                    <svg className="m3-search-icon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                      <path d="M10.5 3a7.5 7.5 0 104.8 13.3l4.7 4.7 1.4-1.4-4.7-4.7A7.5 7.5 0 0010.5 3zm0 2a5.5 5.5 0 110 11 5.5 5.5 0 010-11z" />
+                    </svg>
+                    <input
+                      type="search"
+                      className="m3-search-input"
+                      value={search}
+                      onChange={(event) => { setSearch(event.target.value); resetPageForDataQuery(); }}
+                      placeholder="Search products (title / sku / upc / type)…"
+                      aria-label="Search products"
+                      enterKeyHint="search"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    className="m3-search-submit"
+                    aria-label="Search"
+                    onClick={() => resetPageForDataQuery()}
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                      <path d="M10.5 3a7.5 7.5 0 104.8 13.3l4.7 4.7 1.4-1.4-4.7-4.7A7.5 7.5 0 0010.5 3zm0 2a5.5 5.5 0 110 11 5.5 5.5 0 010-11z" />
+                    </svg>
                   </button>
                   <button
                     type="button"
-                    className={activeQueueTab === KPI_NEEDS_REVIEW_UNION_FILTER ? "on" : ""}
-                    aria-pressed={activeQueueTab === KPI_NEEDS_REVIEW_UNION_FILTER}
-                    onClick={() => setActiveQueueTab(KPI_NEEDS_REVIEW_UNION_FILTER)}
+                    className="m3-icon-btn"
+                    aria-label="Open more filters"
+                    onClick={openFiltersDrawer}
                   >
-                    <em>{moduleSummary.reviewNeeded}</em> Needs review
-                  </button>
-                  <button
-                    type="button"
-                    className={activeQueueTab === "ready-push" ? "on" : ""}
-                    aria-pressed={activeQueueTab === "ready-push"}
-                    onClick={() => setActiveQueueTab("ready-push")}
-                  >
-                    <em>{moduleSummary.readyToPush}</em> Ready to push
-                  </button>
-                  <button
-                    type="button"
-                    className={activeQueueTab === "push-failed" ? "on" : ""}
-                    aria-pressed={activeQueueTab === "push-failed"}
-                    onClick={() => setActiveQueueTab("push-failed")}
-                  >
-                    <em>{moduleSummary.pushFailed}</em> Failed
-                  </button>
-                  <button
-                    type="button"
-                    className={activeQueueTab === "synced" ? "on" : ""}
-                    aria-pressed={activeQueueTab === "synced"}
-                    onClick={() => setActiveQueueTab("synced")}
-                  >
-                    <em>{moduleSummary.synced}</em> Synced
-                    <span className="queueSubCount">App: {appCommittedSyncedCount}</span>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                      <path d="M4 6a1 1 0 011-1h14a1 1 0 01.8 1.6l-5.8 7.73V19a1 1 0 01-1.45.9l-2-1A1 1 0 0110 18v-3.67L4.2 6.6A1 1 0 014 6z" />
+                    </svg>
                   </button>
                 </div>
-                <div className="i3-page-select">
-                  <label className="i3-select-page">
+
+                {/* ── Products section header ── */}
+                <div className="m3-section-head">
+                  <h2 className="m3-section-label">
+                    Products{" "}
+                    <span className="m3-section-count">
+                      ({filteredRows.length} match · Page {page})
+                    </span>
+                  </h2>
+                  <label className="m3-select-all-lbl">
+                    Select all on page
                     <input
                       type="checkbox"
                       checked={allSelectedOnPage}
@@ -5285,10 +5351,9 @@ export default function ShopifyCollectionMapping() {
                         });
                       }}
                     />
-                    <span>All on page</span>
                   </label>
                 </div>
-              </div>
+              </>
             ) : null}
             <div className="productControls">
               {!isMobileIdea3Layout ? (
@@ -5437,8 +5502,224 @@ export default function ShopifyCollectionMapping() {
               </div>
             ) : null}
 
-            <div className={`tableWrap${isMobileIdea3Layout ? " tableWrap--i3" : ""}`} ref={tableWrapRef}>
-              <table className={isMobileIdea3Layout ? "tableMobileIdea3" : undefined}>
+            {isMobileIdea3Layout ? (
+              /* ── Mobile card list — replaces table on narrow viewports ── */
+              <div className="m3-cards-list" aria-live="polite">
+                {loading ? (
+                  <div className="m3-empty">Loading products…</div>
+                ) : filteredRows.length < 1 ? (
+                  <div className="m3-empty">No products match the current filter.</div>
+                ) : (
+                  filteredRows.map((row) => {
+                    const staging = rowStagingById.get(row.id);
+                    if (!staging) return null;
+                    const currentCollectionsRaw = dedupeNormalizedPaths(
+                      row.checkedNodeKeys.map((key) => nodePathByKey.get(key) || nodeLabelByKey.get(key) || key)
+                    );
+                    const currentCollections = formatCompactPathSummary(currentCollectionsRaw);
+                    const finalCollectionsRaw = dedupeNormalizedPaths(staging.finalMenuPaths || []);
+                    const finalCollections = formatCompactPathSummary(finalCollectionsRaw);
+                    const finalDirectCollections = (staging.finalDirectCollections || [])
+                      .map((handle) => getCollectionDisplayName(handle))
+                      .join(", ");
+                    const workflow = rowWorkflowById.get(row.id);
+                    if (!workflow) return null;
+                    const selectedProductRow = Boolean(selectedProducts[row.id]);
+                    const isAppCommittedRow = appCommittedRowIds.has(row.id);
+                    const plannerRow = plannerRowsById.get(row.id);
+                    const changedAddCount = plannerRow?.collectionsToAdd.length ?? 0;
+                    const changedRemoveCount = plannerRow?.collectionsToRemove.length ?? 0;
+                    const mappingDecision = staging.mappingDecision || row.mappingDecision || "MANUAL_REVIEW";
+                    const isExpanded = mobileIdea3ExpandedRowId === row.id;
+                    const hasSuggestions = (staging.suggestionOptions || []).length > 0;
+                    const appliedSuggestion = (staging.selectedSuggestionPaths[0] || staging.selectedSuggestionDirectCollections[0]) || "";
+                    return (
+                      <article
+                        key={row.id}
+                        className={`m3-card m3-card--${workflow.statusBadgeTone}${isExpanded ? " m3-card--expanded" : ""}${selectedProductRow ? " m3-card--selected" : ""}`}
+                      >
+                        {/* Left status accent rail */}
+                        <div className="m3-card-rail" aria-hidden="true" />
+                        {/* Card head: full-width tappable area toggles expand */}
+                        <div
+                          className="m3-card-head"
+                          role="button"
+                          tabIndex={0}
+                          aria-expanded={isExpanded}
+                          onClick={() => setMobileIdea3ExpandedRowId((prev) => prev === row.id ? null : row.id)}
+                          onKeyDown={(ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); setMobileIdea3ExpandedRowId((prev) => prev === row.id ? null : row.id); } }}
+                        >
+                          {/* Thumb with checkbox overlay */}
+                          <div className="m3-thumb-wrap" onClick={(ev) => ev.stopPropagation()}>
+                            <label className="m3-thumb-chk-lbl" title="Select for commit">
+                              <input
+                                type="checkbox"
+                                className="m3-thumb-chk"
+                                checked={selectedProductRow}
+                                onChange={(event) => {
+                                  event.stopPropagation();
+                                  const checked = event.target.checked;
+                                  setSelectedProducts((prev) => ({ ...prev, [row.id]: checked }));
+                                  if (checked) setActiveRowId(row.id);
+                                  else if (activeRowId === row.id) setActiveRowId("");
+                                }}
+                                aria-label={`Select ${row.title} for commit`}
+                              />
+                            </label>
+                            {row.image ? (
+                              <button
+                                type="button"
+                                className="m3-thumb-img-btn"
+                                aria-label="View product image"
+                                onClick={(ev) => { ev.stopPropagation(); setMobileLightboxRowId(row.id); }}
+                              >
+                                <img className="m3-thumb-img" src={row.image} alt={row.title} loading="lazy" />
+                              </button>
+                            ) : (
+                              <span className="m3-thumb-placeholder" aria-hidden="true" />
+                            )}
+                          </div>
+
+                          {/* Body */}
+                          <div className="m3-card-body">
+                            {/* Status badge + controls row */}
+                            <div className="m3-row-status">
+                              <span className={`m3-badge m3-badge--${workflow.statusBadgeTone}`}>{workflow.statusLabel}</span>
+                              <div className="m3-row-controls">
+                                <div className="m3-ctrl-wrap">
+                                  <button
+                                    type="button"
+                                    className="m3-ctrl-btn"
+                                    aria-label="Open row details"
+                                    onClick={(ev) => { ev.stopPropagation(); openMappingDecisionExplanation(row, staging); }}
+                                  >
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                      <path d="M2 12c2.8-4 6.4-6 10-6s7.2 2 10 6c-2.8 4-6.4 6-10 6s-7.2-2-10-6zm10-3a3 3 0 100 6 3 3 0 000-6z" />
+                                    </svg>
+                                  </button>
+                                </div>
+                                <div className="m3-ctrl-wrap">
+                                  <button
+                                    type="button"
+                                    className={`m3-ctrl-btn m3-chev-btn${isExpanded ? " m3-chev-btn--open" : ""}`}
+                                    aria-expanded={isExpanded}
+                                    aria-label={isExpanded ? "Collapse product details" : "Expand product details"}
+                                    onClick={(ev) => { ev.stopPropagation(); setMobileIdea3ExpandedRowId((prev) => prev === row.id ? null : row.id); }}
+                                  >
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                      <path d="M7 10l5 5 5-5z" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Title + meta */}
+                            <h3 className="m3-product-title">{row.title}</h3>
+                            <div className="m3-meta-line">
+                              UPC: {row.upc || "-"}
+                              {row.representativeSku ? ` · SKU: ${row.representativeSku}` : ""}
+                              {row.itemType ? ` · ${row.itemType}` : ""}
+                            </div>
+
+                            {/* Chips */}
+                            <div className="m3-chips">
+                              {mappingDecision === "AUTO_MAPPED" ? (
+                                <span className="m3-chip m3-chip--mapped">Mapped</span>
+                              ) : null}
+                              {hasSuggestions ? (
+                                <button
+                                  type="button"
+                                  className="m3-chip m3-chip--suggestion"
+                                  onClick={(ev) => { ev.stopPropagation(); openMappingDecisionExplanation(row, staging); }}
+                                  aria-label="Open suggestions"
+                                >
+                                  Suggestions
+                                </button>
+                              ) : null}
+                              {workflow.statusBadgeTone === "synced" ? (
+                                <span className="m3-chip m3-chip--synced">Synced</span>
+                              ) : null}
+                              {workflow.statusBadgeTone === "add-pending" ? (
+                                <span className="m3-chip m3-chip--ready">Ready to Push</span>
+                              ) : null}
+                              {workflow.statusBadgeTone === "review" ? (
+                                <span className="m3-chip m3-chip--review">Needs Review</span>
+                              ) : null}
+                              {workflow.statusBadgeTone === "failed" ? (
+                                <span className="m3-chip m3-chip--failed">Push Failed</span>
+                              ) : null}
+                              {isAppCommittedRow ? (
+                                <span className="m3-chip m3-chip--appcommit">App committed</span>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Expanded details — hidden/shown via CSS max-height transition */}
+                        <div className={`m3-card-details${isExpanded ? "" : ""}`}>
+                          <div className="m3-detail-stack">
+                            <div className="m3-path-row">
+                              <strong>Current menu:</strong>
+                              <span>{currentCollections || "—"}</span>
+                            </div>
+                            <button
+                              type="button"
+                              className="m3-path-row m3-path-row--btn"
+                              aria-label="Open store menu and unmapped collections"
+                              onClick={(ev) => { ev.stopPropagation(); setMobileMenuSheetRowId(row.id); }}
+                            >
+                              <strong>Final menu:</strong>
+                              <span>{finalCollections || "—"}</span>
+                              <span className="m3-path-row-hint">Tap to pick menu path</span>
+                            </button>
+                            <div className="m3-path-row">
+                              <strong>Final collections:</strong>
+                              <span>{finalDirectCollections || "—"}</span>
+                            </div>
+                            {hasSuggestions ? (
+                              <button
+                                type="button"
+                                className="m3-suggestion-applied"
+                                aria-label="Choose or change applied suggestion"
+                                onClick={(ev) => { ev.stopPropagation(); openMappingDecisionExplanation(row, staging); }}
+                              >
+                                <span className="m3-suggestion-applied-label">Suggestion applied</span>
+                                {appliedSuggestion ? (
+                                  <span className="m3-suggestion-applied-path">{appliedSuggestion}</span>
+                                ) : (
+                                  <span className="m3-suggestion-applied-empty">Tap to choose a suggestion</span>
+                                )}
+                              </button>
+                            ) : null}
+                            <div className="m3-delta">
+                              Changed:{" "}
+                              <span className={changedAddCount > 0 ? "m3-delta-pos" : "m3-delta-neutral"}>+{changedAddCount}</span>
+                              {" / "}
+                              <span className={changedRemoveCount > 0 ? "m3-delta-neg" : "m3-delta-neutral"}>-{changedRemoveCount}</span>
+                            </div>
+                            {row.handle ? (
+                              <div className="m3-row-links">
+                                <a
+                                  href={`https://${activeShop}/products/${row.handle}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="m3-row-link"
+                                >
+                                  View on storefront
+                                </a>
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })
+                )}
+              </div>
+            ) : null}
+            <div className={`tableWrap${isMobileIdea3Layout ? " tableWrap--i3" : ""}`} ref={tableWrapRef} style={isMobileIdea3Layout ? { display: "none" } : undefined}>
+              <table>
                 <thead>
                   <tr>
                     <th className="center stickyCheckboxCol">
@@ -5568,8 +5849,8 @@ export default function ShopifyCollectionMapping() {
                       return (
                         <tr
                           key={row.id}
-                          className={`${selectedProductRow ? "selectedProductRow " : ""}${isActiveRow ? "activeProductRow " : ""}${isManualReviewRow ? "manualReviewRow " : ""}${isAppCommittedRow ? "appCommittedRow " : ""}statusTone-${workflow.statusBadgeTone}${isMobileIdea3Layout ? " mobileIdea3Row" : ""}${isMobileIdea3Layout && mobileIdea3ExpandedRowId === row.id ? " mobileIdea3RowExpanded" : ""}`.trim()}
-                          onClick={isMobileIdea3Layout ? undefined : () => toggleRowSelectionFromRowClick(row.id)}
+                          className={`${selectedProductRow ? "selectedProductRow " : ""}${isActiveRow ? "activeProductRow " : ""}${isManualReviewRow ? "manualReviewRow " : ""}${isAppCommittedRow ? "appCommittedRow " : ""}statusTone-${workflow.statusBadgeTone}`.trim()}
+                          onClick={() => toggleRowSelectionFromRowClick(row.id)}
                         >
                           <td className="center stickyCheckboxCol">
                             <input
@@ -5607,43 +5888,7 @@ export default function ShopifyCollectionMapping() {
                             </button>
                           </td>
                           <td className="center imgCell stickyPictureCol">
-                            {isMobileIdea3Layout ? (
-                              <div className="mobileIdea3ThumbWrap">
-                                <label className="mobileIdea3ThumbChkLbl" onClick={(event) => event.stopPropagation()}>
-                                  <input
-                                    type="checkbox"
-                                    className="mobileIdea3ThumbChk"
-                                    checked={selectedProductRow}
-                                    onChange={(event) => {
-                                      event.stopPropagation();
-                                      const checked = event.target.checked;
-                                      setSelectedProducts((prev) => ({ ...prev, [row.id]: checked }));
-                                      if (checked) {
-                                        setActiveRowId(row.id);
-                                      } else if (activeRowId === row.id) {
-                                        setActiveRowId("");
-                                      }
-                                    }}
-                                    aria-label={`Select ${row.title} for commit`}
-                                  />
-                                </label>
-                                {row.image ? (
-                                  <button
-                                    type="button"
-                                    className="thumbBtn mobileIdea3ThumbOpen"
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      setPreviewImage(row.image);
-                                    }}
-                                    aria-label="Open product image preview"
-                                  >
-                                    <img className="thumb" src={row.image} alt={row.title} />
-                                  </button>
-                                ) : (
-                                  <span className="thumbPlaceholder mobileIdea3ThumbPlaceholder" aria-hidden="true" />
-                                )}
-                              </div>
-                            ) : row.image ? (
+                            {row.image ? (
                               <button
                                 type="button"
                                 className="thumbBtn"
@@ -5657,67 +5902,23 @@ export default function ShopifyCollectionMapping() {
                             )}
                           </td>
                           <td className="productNameCol stickyProductNameCol">
-                            {isMobileIdea3Layout ? (
-                              <div className="mobileIdea3NameHead">
-                                <div className="mobileIdea3NameText">
-                                  <div className="mobileIdea3Title">{row.title}</div>
-                                  <div className="muted tiny">UPC: {row.upc || "-"}</div>
-                                  {isAppCommittedRow ? (
-                                    <div className="appCommitMarker" title="This product was committed and pushed through this app workflow.">
-                                      App committed
-                                    </div>
-                                  ) : null}
-                                  {(row.collectionConflictFlags?.length ?? 0) > 0 ? (
-                                    <div
-                                      className="muted tiny pathConflictBadge"
-                                      title="Title/type may contradict an assigned category — open details"
-                                    >
-                                      Category conflict
-                                    </div>
-                                  ) : null}
-                                  <div className="mobileIdea3Pills">
-                                    <span className={`mobileIdea3MiniPill decision-${mappingDecision.toLowerCase()}`}>
-                                      {getUiStatusLabel(mappingDecision)}
-                                    </span>
-                                    <span className={`mobileIdea3MiniPill sync-${workflow.statusBadgeTone}`}>
-                                      {workflow.statusLabel}
-                                    </span>
-                                  </div>
+                            <>
+                              <div>{row.title}</div>
+                              <div className="muted tiny">UPC: {row.upc || "-"}</div>
+                              {isAppCommittedRow ? (
+                                <div className="appCommitMarker" title="This product was committed and pushed through this app workflow.">
+                                  App committed
                                 </div>
-                                <button
-                                  type="button"
-                                  className="mobileIdea3RowChevron"
-                                  aria-expanded={mobileIdea3ExpandedRowId === row.id}
-                                  aria-label={
-                                    mobileIdea3ExpandedRowId === row.id ? "Collapse product details" : "Expand product details"
-                                  }
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    setMobileIdea3ExpandedRowId((prev) => (prev === row.id ? null : row.id));
-                                  }}
+                              ) : null}
+                              {(row.collectionConflictFlags?.length ?? 0) > 0 ? (
+                                <div
+                                  className="muted tiny pathConflictBadge"
+                                  title="Title/type may contradict an assigned category — open details"
                                 >
-                                  ▼
-                                </button>
-                              </div>
-                            ) : (
-                              <>
-                                <div>{row.title}</div>
-                                <div className="muted tiny">UPC: {row.upc || "-"}</div>
-                                {isAppCommittedRow ? (
-                                  <div className="appCommitMarker" title="This product was committed and pushed through this app workflow.">
-                                    App committed
-                                  </div>
-                                ) : null}
-                                {(row.collectionConflictFlags?.length ?? 0) > 0 ? (
-                                  <div
-                                    className="muted tiny pathConflictBadge"
-                                    title="Title/type may contradict an assigned category — open details"
-                                  >
-                                    Category conflict
-                                  </div>
-                                ) : null}
-                              </>
-                            )}
+                                  Category conflict
+                                </div>
+                              ) : null}
+                            </>
                           </td>
                           <td className="autoMappedCol">
                             {autoPathItems.length > 0 ? (
@@ -5929,6 +6130,191 @@ export default function ShopifyCollectionMapping() {
           </main>
         </div>
       </section>
+
+      {/* ─── MOBILE-ONLY: bottom commit + pager dock ─── */}
+      {isMobileIdea3Layout ? (
+        <div className="m3-dock" aria-label="Commit and pagination controls">
+          <div className="m3-dock-inner">
+            {/* Commit button */}
+            <button
+              type="button"
+              className="m3-dock-commit-btn"
+              disabled={saving || loading || executionBusy}
+              onClick={() => setMobileCommitOpen((prev) => !prev)}
+              aria-expanded={mobileCommitOpen}
+              aria-haspopup="menu"
+            >
+              COMMIT CHANGES
+              <svg className="m3-dock-commit-arrow" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                {mobileCommitOpen
+                  ? <path d="M7 14l5-5 5 5z" />
+                  : <path d="M7 10l5 5 5-5z" />}
+              </svg>
+            </button>
+            {/* Commit menu */}
+            <div className={`m3-dock-menu${mobileCommitOpen ? " m3-dock-menu--open" : ""}`} role="menu">
+              <h3 className="m3-dock-menu-section">SAFE ACTIONS</h3>
+              <button
+                type="button"
+                className="m3-dock-menu-item"
+                role="menuitem"
+                disabled={saving || loading || executionBusy || selectedProductCount < 1}
+                onClick={() => { setMobileCommitOpen(false); pushSelectedScaffold(); }}
+              >
+                <span className="m3-dock-menu-title">Push selected ({selectedProductCount})</span>
+                <span className="m3-dock-menu-sub">Push only ready-to-push items</span>
+              </button>
+              <button
+                type="button"
+                className="m3-dock-menu-item"
+                role="menuitem"
+                disabled={saving || loading || executionBusy}
+                onClick={() => { setMobileCommitOpen(false); pushAllFinalChangesScaffold(); }}
+              >
+                <span className="m3-dock-menu-title">Push all final changes</span>
+                <span className="m3-dock-menu-sub">All {rows.length} products will be updated</span>
+              </button>
+              <div className="m3-dock-menu-divider" />
+              <h3 className="m3-dock-menu-section">DESTRUCTIVE</h3>
+              <button
+                type="button"
+                className="m3-dock-menu-item m3-dock-menu-item--danger"
+                role="menuitem"
+                disabled={saving || loading || executionBusy || selectedProductCount < 1}
+                onClick={() => { setMobileCommitOpen(false); setShowRemoveConfirm(true); }}
+              >
+                <span className="m3-dock-menu-title">⚠ Remove all from selected ({selectedProductCount})</span>
+                <span className="m3-dock-menu-sub">Clears assignments only for selected products</span>
+              </button>
+            </div>
+            {/* Pager + per-page row */}
+            <div className="m3-dock-per-page">
+              <div className="m3-dock-pager">
+                <nav className="m3-dock-pager-nav" aria-label="Pagination">
+                  <button type="button" onClick={() => setPage(1)} disabled={page <= 1 || loading} aria-label="First page">{"<<"}</button>
+                  <button type="button" onClick={() => setPage((prev) => Math.max(1, prev - 1))} disabled={page <= 1 || loading} aria-label="Previous page">{"<"}</button>
+                  <span className="muted">Page {page} of {totalPages}</span>
+                  <button type="button" onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))} disabled={page >= totalPages || loading} aria-label="Next page">{">"}</button>
+                  <button type="button" onClick={() => setPage(totalPages)} disabled={page >= totalPages || loading} aria-label="Last page">{">>"}</button>
+                </nav>
+              </div>
+              <label className="m3-dock-per-page-select">
+                <span>Per page</span>
+                <select
+                  value={pageSize}
+                  onChange={(event) => { setPageSize(Number(event.target.value) || 20); setPage(1); }}
+                >
+                  {[20, 50, 100, 200, 500].map((size) => (
+                    <option key={size} value={size}>{size}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* ─── MOBILE-ONLY: image lightbox ─── */}
+      {isMobileIdea3Layout && mobileLightboxRowId ? (() => {
+        const lbRow = rows.find((r) => r.id === mobileLightboxRowId);
+        if (!lbRow?.image) return null;
+        return (
+          <div
+            className="m3-lightbox-scrim"
+            role="dialog"
+            aria-label={`Product image: ${lbRow.title}`}
+            onClick={() => setMobileLightboxRowId(null)}
+          >
+            <div className="m3-lightbox-panel" onClick={(ev) => ev.stopPropagation()}>
+              <div className="m3-lightbox-head">
+                <span className="m3-lightbox-title">{lbRow.title}</span>
+                <button
+                  type="button"
+                  className="m3-lightbox-close"
+                  aria-label="Close image"
+                  onClick={() => setMobileLightboxRowId(null)}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                </button>
+              </div>
+              <div className="m3-lightbox-body">
+                <img src={lbRow.image} alt={lbRow.title} className="m3-lightbox-img" />
+              </div>
+            </div>
+          </div>
+        );
+      })() : null}
+
+      {/* ─── MOBILE-ONLY: menu bottom sheet ─── */}
+      {isMobileIdea3Layout && mobileMenuSheetRowId ? (() => {
+        const sheetRow = rows.find((r) => r.id === mobileMenuSheetRowId);
+        const sheetStaging = sheetRow ? rowStagingById.get(sheetRow.id) : undefined;
+        if (!sheetRow || !sheetStaging) return null;
+        return (
+          <>
+            <div
+              className="m3-sheet-scrim"
+              onClick={() => setMobileMenuSheetRowId(null)}
+              aria-hidden="true"
+            />
+            <div
+              className="m3-sheet"
+              role="dialog"
+              aria-label={`Menu picker for ${sheetRow.title}`}
+            >
+              <div className="m3-sheet-handle" aria-hidden="true" />
+              <div className="m3-sheet-head">
+                <h3 className="m3-sheet-title">Pick menu path</h3>
+                <button
+                  type="button"
+                  className="m3-sheet-close"
+                  aria-label="Close"
+                  onClick={() => setMobileMenuSheetRowId(null)}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                </button>
+              </div>
+              <div className="m3-sheet-body">
+                {/* Navigation tree — shows current final menu paths */}
+                <div className="m3-sheet-tree-wrap">
+                  <p className="m3-sheet-tree-hint">Current final menu paths for this product:</p>
+                  {(sheetStaging.finalMenuPaths || []).length > 0 ? (
+                    <ul className="m3-sheet-tree-list">
+                      {sheetStaging.finalMenuPaths!.map((p) => (
+                        <li key={p} className="m3-sheet-tree-item">
+                          <span>{p}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="m3-sheet-tree-empty">No menu paths assigned yet.</p>
+                  )}
+                </div>
+              </div>
+              <div className="m3-sheet-footer">
+                <button
+                  type="button"
+                  className="m3-sheet-save"
+                  onClick={() => setMobileMenuSheetRowId(null)}
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  className="m3-sheet-cancel"
+                  onClick={() => setMobileMenuSheetRowId(null)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </>
+        );
+      })() : null}
 
       {/* Custom horizontal scroll dock — spans full right panel, replaces native horizontal scrollbar */}
       <div
@@ -9709,7 +10095,8 @@ export default function ShopifyCollectionMapping() {
             font-size: 22px;
           }
         }
-        /* Idea 3 — mobile KPI inbox: horizontal KPI strip, product panel first, full-width search, scrollable tree band. ≤900px only. */
+        /* ═══ MOBILE LAYOUT (≤900px) — matches 04-mobile-idea-v2.html prototype ═══ */
+        /* Design tokens from prototype --surface:#081328 --surface-container:#151f35 --surface-container-high:#1f2a40 --surface-container-lowest:#030e22 --primary:#adc6ff --secondary:#4ae176 --tertiary:#ffb95f --error:#ffb4ab */
         @media (max-width: 900px) {
           :global(html),
           :global(body) {
@@ -9787,8 +10174,10 @@ export default function ShopifyCollectionMapping() {
             max-width: 100% !important;
             overflow-x: hidden !important;
             overflow-y: visible !important;
-            padding-left: 8px !important;
-            padding-right: 8px !important;
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+            /* Account for fixed shell header (56px) + fixed KPI strip (~44px) + safe area */
+            padding-top: calc(env(safe-area-inset-top, 0px) + 100px) !important;
           }
           .page.pageExpanded {
             display: flex !important;
@@ -9916,367 +10305,1078 @@ export default function ShopifyCollectionMapping() {
             height: 6px !important;
             width: 6px !important;
           }
-          /* Idea 3 — KPI inbox: search + pill filters + dense card rows (see carbon-collection-mapping-3-ideas.html). */
-          /* Flatten inner card: one shell frame from .workspaceSection.card only (no nested bordered panel). */
-          .productPanel.productPanelMobileIdea3,
-          .grid2 > .card.panel.productPanel.productPanelMobileIdea3 {
-            border: none !important;
-            outline: none !important;
-            box-shadow: none !important;
-            background: transparent !important;
-            border-radius: 0 !important;
-            isolation: auto !important;
+          /* ── Hide desktop-only controls on mobile ── */
+          .tableScrollDockWrap,
+          .tableScrollDockVertWrap {
+            display: none !important;
           }
-          .productPanelMobileIdea3 {
-            padding-top: 4px !important;
-            padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)) !important;
+          /* Desktop pager bar hidden — replaced by bottom dock */
+          .topbar.pagerBar {
+            display: none !important;
           }
-          /* Idea 3 · KPI inbox — full-width search + pill filters (prototype pic1). */
-          .i3-inbox-top {
-            position: sticky !important;
-            top: calc(var(--shell-content-top-offset, 70px) + env(safe-area-inset-top, 0px)) !important;
-            z-index: 11 !important;
-            padding: 2px 0 12px !important;
-            margin-bottom: 6px !important;
-            background: linear-gradient(180deg, rgba(15, 23, 42, 0.99) 0%, rgba(15, 23, 42, 0.94) 70%, transparent 100%) !important;
+          /* Desktop product controls toolbar hidden — replaced by m3-shell + m3-search-row + m3-dock */
+          .productControls {
+            display: none !important;
           }
-          .page.pageStandaloneKpi .i3-inbox-top {
-            top: calc(var(--collection-mapping-shell-content-top-offset, 70px) + env(safe-area-inset-top, 0px)) !important;
+          /* Hide tree pane on mobile entirely — navigation is via shell drawer */
+          .treePaneHost {
+            display: none !important;
           }
-          .i3-inbox-brand {
-            margin: 0 0 10px !important;
-            font-size: 0.7rem !important;
-            font-weight: 800 !important;
-            letter-spacing: 0.08em !important;
-            color: #f1f5f9 !important;
+          .paneDivider {
+            display: none !important;
           }
-          .i3-search {
+          /* Full width product panel */
+          .workspaceGridHost.grid2 {
+            grid-template-columns: minmax(0, 1fr) !important;
+          }
+
+          /* ════ m3-shell: fixed top bar ════ */
+          .m3-shell {
+            position: fixed !important;
+            top: env(safe-area-inset-top, 0px) !important;
+            left: 0 !important;
+            right: 0 !important;
+            z-index: 200 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            padding: 0 16px !important;
+            height: 56px !important;
+            background: #081328 !important;
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35) !important;
+          }
+          .m3-shell-left {
+            display: flex !important;
+            align-items: center !important;
+            gap: 10px !important;
+            min-width: 0 !important;
+          }
+          .m3-brand-mark {
+            width: 36px !important;
+            height: 36px !important;
+            border-radius: 999px !important;
+            background: #1f2a40 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            flex-shrink: 0 !important;
+            overflow: hidden !important;
+            outline: 1px solid rgba(66, 71, 84, 0.35) !important;
+          }
+          .m3-brand-mark img {
             display: block !important;
-            width: 100% !important;
-            max-width: 100% !important;
-            margin: 0 0 12px !important;
-            box-sizing: border-box !important;
-            padding: 12px 14px !important;
-            border-radius: 12px !important;
-            border: 1px solid #4c5d78 !important;
-            background: #121c30 !important;
-            color: #e5edf9 !important;
-            font-size: 16px !important;
-            min-height: 46px !important;
+            width: 22px !important;
+            height: 22px !important;
+            object-fit: contain !important;
           }
-          .i3-filters {
+          .m3-shell-title {
+            font-size: 15px !important;
+            font-weight: 800 !important;
+            letter-spacing: -0.03em !important;
+            color: #d8e2ff !important;
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            margin: 0 !important;
+          }
+          .m3-shell-title-light {
+            font-weight: 500 !important;
+            opacity: 0.55 !important;
+          }
+
+          /* ── icon button ── */
+          .m3-icon-btn {
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            width: 44px !important;
+            height: 44px !important;
+            min-width: 44px !important;
+            border-radius: 12px !important;
+            border: none !important;
+            background: #151f35 !important;
+            color: #adc6ff !important;
+            cursor: pointer !important;
+            padding: 0 !important;
+            flex-shrink: 0 !important;
+          }
+          .m3-icon-btn:disabled { opacity: 0.45 !important; cursor: not-allowed !important; }
+          .m3-icon-btn:active:not(:disabled) { transform: scale(0.97) !important; }
+
+          /* ── nav overlay + drawer ── */
+          .m3-overlay {
+            position: fixed !important;
+            inset: 0 !important;
+            z-index: 300 !important;
+            background: rgba(0, 0, 0, 0.55) !important;
+          }
+          .m3-drawer {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: min(320px, 92vw) !important;
+            height: 100% !important;
+            z-index: 310 !important;
+            background: #151f35 !important;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4) !important;
+            transform: translateX(-105%) !important;
+            transition: transform 0.25s ease !important;
+            padding: 20px 16px !important;
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 8px !important;
+            overflow-y: auto !important;
+          }
+          .m3-drawer--open {
+            transform: translateX(0) !important;
+          }
+          .m3-drawer h2 {
+            font-size: 12px !important;
+            font-weight: 700 !important;
+            letter-spacing: 0.12em !important;
+            text-transform: uppercase !important;
+            color: #9aa3bc !important;
+            margin: 0 0 16px !important;
+          }
+          .m3-drawer a {
+            display: block !important;
+            padding: 14px 12px !important;
+            border-radius: 12px !important;
+            color: #d8e2ff !important;
+            font-size: 0.88rem !important;
+            font-weight: 600 !important;
+            text-decoration: none !important;
+            margin-bottom: 6px !important;
+            background: #030e22 !important;
+          }
+          .m3-drawer a:hover { background: #2f3950 !important; }
+          .m3-drawer a small {
+            display: block !important;
+            font-size: 11px !important;
+            font-weight: 500 !important;
+            color: #9aa3bc !important;
+            margin-top: 4px !important;
+          }
+
+          /* ── KPI pill strip ── */
+          .m3-kpi-strip {
+            position: fixed !important;
+            top: calc(env(safe-area-inset-top, 0px) + 56px) !important;
+            left: 0 !important;
+            right: 0 !important;
+            z-index: 150 !important;
+            background: #151f35 !important;
+            padding: 4px 0 4px !important;
+            min-height: 44px !important;
+          }
+          .m3-kpi-scroll {
             display: flex !important;
             gap: 8px !important;
-            padding: 0 0 4px !important;
+            padding: 0 16px !important;
             overflow-x: auto !important;
             overflow-y: hidden !important;
             -webkit-overflow-scrolling: touch !important;
             scrollbar-width: none !important;
           }
-          .i3-filters::-webkit-scrollbar {
+          .m3-kpi-scroll::-webkit-scrollbar {
             display: none !important;
           }
-          .i3-filters button {
+          .m3-kpi-pill {
             flex: 0 0 auto !important;
-            padding: 8px 14px !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 5px !important;
+            padding: 6px 10px !important;
             border-radius: 999px !important;
-            border: 1px solid #3b4c66 !important;
-            background: #111c2f !important;
-            color: #94a3b8 !important;
-            font-size: 0.74rem !important;
-            font-weight: 600 !important;
-            cursor: pointer !important;
-            font-family: inherit !important;
-            white-space: nowrap !important;
-          }
-          .i3-filters button.on {
-            background: rgba(99, 102, 241, 0.22) !important;
-            border-color: #818cf8 !important;
-            color: #e0e7ff !important;
-            box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.35) !important;
-          }
-          .i3-filters button em {
-            font-style: normal !important;
+            border: none !important;
+            outline: 1px solid rgba(66, 71, 84, 0.35) !important;
+            background: #030e22 !important;
+            color: #9aa3bc !important;
+            font-size: 10px !important;
             font-weight: 800 !important;
-            color: #c7d2fe !important;
-            margin-right: 4px !important;
-          }
-          .i3-filters button.on em {
-            color: #eef2ff !important;
-          }
-          .tableWrap--i3 {
-            padding: 0 !important;
-            box-sizing: border-box !important;
-          }
-          .mobileIdea3NameHead {
-            display: flex !important;
-            align-items: flex-start !important;
-            gap: 8px !important;
-            min-width: 0 !important;
-          }
-          .mobileIdea3NameText {
-            flex: 1 1 auto !important;
-            min-width: 0 !important;
-          }
-          .mobileIdea3Title {
-            font-size: 1rem !important;
-            font-weight: 700 !important;
-            line-height: 1.22 !important;
-            color: #f8fafc !important;
-            white-space: normal !important;
-            word-break: break-word !important;
-          }
-          .mobileIdea3Pills {
-            display: flex !important;
-            flex-wrap: wrap !important;
-            gap: 4px !important;
-            margin-top: 6px !important;
-          }
-          .mobileIdea3MiniPill {
-            font-size: 0.58rem !important;
-            padding: 3px 8px !important;
-            border-radius: 999px !important;
-            font-weight: 600 !important;
-            background: #1e2948 !important;
-            border: 1px solid #334155 !important;
-            color: #c7d2fe !important;
-          }
-          .mobileIdea3MiniPill.decision-auto_mapped {
-            color: #bbf7d0 !important;
-            border-color: #166534 !important;
-            background: rgba(22, 101, 52, 0.2) !important;
-          }
-          .mobileIdea3MiniPill.decision-suggested {
-            color: #bfdbfe !important;
-            border-color: #1d4ed8 !important;
-            background: rgba(29, 78, 216, 0.18) !important;
-          }
-          .mobileIdea3MiniPill.decision-manual_review {
-            color: #fed7aa !important;
-            border-color: #c2410c !important;
-            background: rgba(194, 65, 12, 0.18) !important;
-          }
-          .mobileIdea3MiniPill.sync-review {
-            color: #fdba74 !important;
-            border-color: #b45309 !important;
-            background: rgba(180, 83, 9, 0.15) !important;
-          }
-          .mobileIdea3MiniPill.sync-add-pending {
-            color: #93c5fd !important;
-            border-color: #2563eb !important;
-            background: rgba(37, 99, 235, 0.12) !important;
-          }
-          .mobileIdea3MiniPill.sync-removal-pending {
-            color: #fca5a5 !important;
-            border-color: #b91c1c !important;
-            background: rgba(185, 28, 28, 0.12) !important;
-          }
-          .mobileIdea3MiniPill.sync-failed {
-            color: #fecaca !important;
-            border-color: #dc2626 !important;
-            background: rgba(220, 38, 38, 0.15) !important;
-          }
-          .mobileIdea3MiniPill.sync-synced {
-            color: #bbf7d0 !important;
-            border-color: #15803d !important;
-            background: rgba(21, 128, 61, 0.15) !important;
-          }
-          .mobileIdea3RowChevron {
-            flex-shrink: 0 !important;
-            width: 36px !important;
-            min-width: 36px !important;
-            height: 36px !important;
-            border-radius: 12px !important;
-            border: 1px solid #3c4f70 !important;
-            background: #122038 !important;
-            color: #94a3b8 !important;
-            font-size: 11px !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.06em !important;
             cursor: pointer !important;
-            padding: 0 !important;
+            white-space: nowrap !important;
+            font-family: inherit !important;
+          }
+          .m3-kpi-pill em {
+            font-style: normal !important;
+            color: #d8e2ff !important;
+            font-weight: 800 !important;
+          }
+          .m3-kpi-pill--on {
+            color: #d8e2ff !important;
+            outline-color: rgba(173, 198, 255, 0.35) !important;
+            background: rgba(173, 198, 255, 0.08) !important;
+          }
+          .m3-kpi-pill--on em {
+            color: #d8e2ff !important;
+          }
+          .m3-kpi-dot {
+            width: 6px !important;
+            height: 6px !important;
+            border-radius: 999px !important;
+            flex-shrink: 0 !important;
+            background: currentColor !important;
+            opacity: 0.85 !important;
+          }
+          .m3-kpi-pill--green .m3-kpi-dot { color: #4ae176 !important; }
+          .m3-kpi-pill--blue .m3-kpi-dot { color: #adc6ff !important; }
+          .m3-kpi-pill--amber .m3-kpi-dot { color: #ffb95f !important; }
+          .m3-kpi-pill--red .m3-kpi-dot { color: #ffb4ab !important; }
+          .m3-kpi-pill--purple .m3-kpi-dot { color: #a5b4fc !important; }
+          .m3-kpi-sub {
+            margin-left: 4px !important;
+            font-size: 9px !important;
+            font-weight: 700 !important;
+            opacity: 0.85 !important;
+            text-transform: none !important;
+            letter-spacing: 0 !important;
+          }
+
+          /* ── search row ── */
+          .m3-search-row {
+            display: flex !important;
+            align-items: stretch !important;
+            gap: 8px !important;
+            padding: 0 16px 6px !important;
+          }
+          .m3-search-wrap {
+            flex: 1 1 0 !important;
+            position: relative !important;
+            display: flex !important;
+            align-items: center !important;
+            min-width: 0 !important;
+          }
+          .m3-search-icon {
+            position: absolute !important;
+            left: 12px !important;
+            top: 50% !important;
+            transform: translateY(-50%) !important;
+            opacity: 0.55 !important;
+            color: #9aa3bc !important;
+            pointer-events: none !important;
+            flex-shrink: 0 !important;
+          }
+          .m3-search-input {
+            display: block !important;
+            width: 100% !important;
+            min-height: 48px !important;
+            padding: 12px 12px 12px 40px !important;
+            border-radius: 14px !important;
+            border: none !important;
+            background: #030e22 !important;
+            color: #d8e2ff !important;
+            font-size: 14px !important;
+            font-family: inherit !important;
             box-sizing: border-box !important;
+            outline: none !important;
+            box-shadow: inset 0 0 0 1px rgba(173, 198, 255, 0.12) !important;
+          }
+          .m3-search-input::placeholder {
+            color: rgba(154, 163, 188, 0.75) !important;
+          }
+          .m3-search-input:focus {
+            box-shadow: inset 0 0 0 2px rgba(173, 198, 255, 0.35) !important;
+          }
+          .m3-search-submit {
+            flex: 0 0 auto !important;
+            width: 48px !important;
+            min-width: 48px !important;
+            height: 48px !important;
+            border-radius: 14px !important;
+            border: none !important;
+            background: linear-gradient(180deg, rgba(173, 198, 255, 0.95) 0%, #4d8eff 100%) !important;
+            color: #002e6a !important;
+            cursor: pointer !important;
             display: inline-flex !important;
             align-items: center !important;
             justify-content: center !important;
-            transition: transform 0.2s ease, color 0.15s ease !important;
-          }
-          .mobileIdea3RowChevron:hover {
-            color: #c7d2fe !important;
-          }
-          .mobileIdea3RowExpanded .mobileIdea3RowChevron {
-            transform: rotate(180deg) !important;
-          }
-          .i3-page-select {
-            margin-top: 8px !important;
-            padding: 0 2px 2px !important;
-          }
-          .i3-select-page {
-            display: inline-flex !important;
-            align-items: center !important;
-            gap: 8px !important;
-            font-size: 0.78rem !important;
-            font-weight: 600 !important;
-            color: #94a3b8 !important;
-            cursor: pointer !important;
-            user-select: none !important;
+            padding: 0 !important;
             font-family: inherit !important;
           }
-          .i3-select-page input {
-            width: 18px !important;
-            height: 18px !important;
-            accent-color: #818cf8 !important;
+          .m3-search-submit:active { transform: scale(0.98) !important; }
+
+          /* ── section head ── */
+          .m3-section-head {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            gap: 6px !important;
+            padding: 0 4px 10px !important;
+            margin-top: 10px !important;
+          }
+          .m3-section-label {
+            font-size: 10px !important;
+            font-weight: 900 !important;
+            letter-spacing: 0.1em !important;
+            text-transform: uppercase !important;
+            color: #9aa3bc !important;
+            margin: 0 !important;
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            flex: 1 1 auto !important;
+            min-width: 0 !important;
+          }
+          .m3-select-all-lbl {
+            display: flex !important;
+            align-items: center !important;
+            gap: 8px !important;
+            font-size: 9px !important;
+            font-weight: 800 !important;
+            color: #adc6ff !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.04em !important;
+            cursor: pointer !important;
+            user-select: none !important;
+            white-space: nowrap !important;
+            flex-shrink: 0 !important;
+          }
+          .m3-select-all-lbl input[type="checkbox"] {
+            accent-color: #4d8eff !important;
             cursor: pointer !important;
           }
-          .mobileIdea3ThumbWrap {
-            position: relative !important;
-            display: inline-block !important;
-            line-height: 0 !important;
+
+          /* ── card list ── */
+          .m3-cards-list {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 16px !important;
+            padding: 0 16px calc(env(safe-area-inset-bottom, 0px) + 160px) !important;
           }
-          .mobileIdea3ThumbChkLbl {
+          .m3-empty {
+            padding: 32px 16px !important;
+            text-align: center !important;
+            color: #9aa3bc !important;
+            font-size: 14px !important;
+          }
+
+          /* ── individual card ── */
+          .m3-card {
+            position: relative !important;
+            display: flex !important;
+            flex-direction: column !important;
+            border-radius: 18px !important;
+            background: #1f2a40 !important;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4) !important;
+          }
+          .m3-card--selected {
+            outline: 2px solid rgba(173, 198, 255, 0.35) !important;
+          }
+          /* Left accent rail — ::before pseudo approach */
+          .m3-card-rail {
+            position: absolute !important;
+            top: 16px !important;
+            left: 0 !important;
+            bottom: 16px !important;
+            width: 4px !important;
+            border-radius: 4px !important;
+          }
+          .m3-card--synced .m3-card-rail { background: #4ae176 !important; }
+          .m3-card--add-pending .m3-card-rail { background: #a5b4fc !important; }
+          .m3-card--review .m3-card-rail { background: #ffb95f !important; }
+          .m3-card--failed .m3-card-rail { background: #ffb4ab !important; }
+
+          /* ── card head ── */
+          .m3-card-head {
+            display: flex !important;
+            gap: 12px !important;
+            align-items: flex-start !important;
+            padding: 16px 16px 16px !important;
+            cursor: pointer !important;
+            width: 100% !important;
+            text-align: left !important;
+          }
+
+          /* ── thumb ── */
+          .m3-thumb-wrap {
+            position: relative !important;
+            flex-shrink: 0 !important;
+            width: 76px !important;
+            height: 92px !important;
+            border-radius: 12px !important;
+            overflow: hidden !important;
+            background: #030e22 !important;
+          }
+          .m3-thumb-img-btn {
+            display: block !important;
+            width: 100% !important;
+            height: 100% !important;
+            padding: 0 !important;
+            border: none !important;
+            background: transparent !important;
+            cursor: zoom-in !important;
+            border-radius: 0 !important;
+            overflow: hidden !important;
+          }
+          .m3-thumb-img {
+            display: block !important;
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: cover !important;
+          }
+          .m3-thumb-placeholder {
+            display: block !important;
+            width: 100% !important;
+            height: 100% !important;
+            background: #030e22 !important;
+          }
+          .m3-thumb-chk-lbl {
             position: absolute !important;
             top: 6px !important;
             left: 6px !important;
-            z-index: 3 !important;
+            z-index: 2 !important;
             margin: 0 !important;
             line-height: 0 !important;
             cursor: pointer !important;
           }
-          .mobileIdea3ThumbChk {
-            width: 22px !important;
-            height: 22px !important;
+          .m3-thumb-chk {
+            width: 18px !important;
+            height: 18px !important;
             margin: 0 !important;
+            accent-color: #4d8eff !important;
             cursor: pointer !important;
-            accent-color: #818cf8 !important;
           }
-          .mobileIdea3ThumbOpen {
-            position: relative !important;
-            z-index: 1 !important;
+
+          /* ── card body ── */
+          .m3-card-body {
+            flex: 1 1 0 !important;
+            min-width: 0 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 4px !important;
           }
-          .mobileIdea3ThumbPlaceholder {
-            display: inline-block !important;
-            min-width: 56px !important;
-            min-height: 72px !important;
+          .m3-row-status {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            gap: 8px !important;
+            margin-bottom: 4px !important;
           }
-          .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3Row .eyeActionBtn {
+          .m3-row-controls {
+            display: flex !important;
+            align-items: center !important;
+            gap: 6px !important;
+          }
+          .m3-ctrl-wrap {
+            display: inline-flex !important;
+          }
+          .m3-ctrl-btn {
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
             width: 36px !important;
             height: 36px !important;
+            min-width: 36px !important;
             border-radius: 12px !important;
-            background: #122038 !important;
-            border: 1px solid #3c4f70 !important;
+            border: none !important;
+            background: #151f35 !important;
+            color: #adc6ff !important;
+            cursor: pointer !important;
+            padding: 0 !important;
+          }
+          .m3-ctrl-btn:active { transform: scale(0.97) !important; }
+          .m3-chev-btn svg {
+            transition: transform 0.2s ease !important;
+          }
+          .m3-chev-btn--open svg {
+            transform: rotate(180deg) !important;
+          }
+
+          /* ── badge (workflow pill) ── */
+          .m3-badge {
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            min-height: 24px !important;
+            padding: 0 8px !important;
+            border-radius: 8px !important;
+            border: 1px solid transparent !important;
+            font-size: 10px !important;
+            font-weight: 800 !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.04em !important;
+          }
+          .m3-badge--synced {
+            background: #123522 !important;
+            border-color: #22c55e !important;
+            color: #bbf7d0 !important;
+          }
+          .m3-badge--add-pending {
+            background: #3f2368 !important;
+            border-color: #7c3aed !important;
+            color: #f5f3ff !important;
+          }
+          .m3-badge--review {
+            background: #452d12 !important;
+            border-color: #f59e0b !important;
+            color: #fdcc88 !important;
+          }
+          .m3-badge--failed {
+            background: #4b1f24 !important;
+            border-color: #ef4444 !important;
+            color: #fecaca !important;
+          }
+
+          /* ── product title + meta ── */
+          .m3-product-title {
+            margin: 0 !important;
+            font-size: 15px !important;
+            font-weight: 700 !important;
+            color: #d8e2ff !important;
+            line-height: 1.25 !important;
+            padding: 0 !important;
+          }
+          .m3-meta-line {
+            margin: 4px 0 0 !important;
+            font-size: 10px !important;
+            font-weight: 600 !important;
+            color: #9aa3bc !important;
+            line-height: 1.4 !important;
+          }
+
+          /* ── chips ── */
+          .m3-chips {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            gap: 6px !important;
+            margin-top: 10px !important;
+          }
+          .m3-chip {
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            font-size: 9px !important;
+            font-weight: 800 !important;
+            letter-spacing: 0.06em !important;
+            text-transform: uppercase !important;
+            padding: 5px 9px 6px !important;
+            border-radius: 7px !important;
+            border: 1.5px solid transparent !important;
+            line-height: 1.15 !important;
+            cursor: default !important;
+            background: rgba(30, 41, 59, 0.65) !important;
+            border-color: #64748b !important;
+            color: #cbd5e1 !important;
+          }
+          .m3-chip--mapped {
+            background: #123522 !important;
+            border-color: #22c55e !important;
+            color: #bbf7d0 !important;
+          }
+          .m3-chip--synced {
+            background: #123522 !important;
+            border-color: #22c55e !important;
+            color: #bbf7d0 !important;
+          }
+          .m3-chip--ready {
+            background: #3f2368 !important;
+            border-color: #7c3aed !important;
+            color: #f5f3ff !important;
+          }
+          .m3-chip--review {
+            background: #452d12 !important;
+            border-color: #f59e0b !important;
+            color: #fdcc88 !important;
+          }
+          .m3-chip--failed {
+            background: #4b1f24 !important;
+            border-color: #ef4444 !important;
+            color: #fecaca !important;
+          }
+          .m3-chip--appcommit {
+            background: linear-gradient(180deg, #134e4a 0%, #0a2f2e 100%) !important;
+            border: 2px solid #2dd4bf !important;
+            color: #ecfdf5 !important;
+            box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.35) !important;
+          }
+          .m3-chip--suggestion {
+            cursor: pointer !important;
+            background: rgba(12, 28, 52, 0.35) !important;
+            border-color: #6478a8 !important;
+            color: #dbeafe !important;
+          }
+          .m3-chip--suggestion:active { transform: scale(0.98) !important; }
+
+          /* ── expanded card details ── */
+          .m3-card-details {
+            max-height: 0 !important;
+            overflow: hidden !important;
+            transition: max-height 0.35s ease !important;
+            padding: 0 16px !important;
+          }
+          .m3-card--expanded .m3-card-details {
+            max-height: 720px !important;
+            padding: 0 16px 16px !important;
+          }
+          .m3-detail-stack {
+            margin-top: 8px !important;
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 8px !important;
+          }
+          .m3-path-row {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 4px !important;
+            padding: 10px 12px !important;
+            border-radius: 12px !important;
+            background: #030e22 !important;
+            font-size: 11px !important;
+            color: #9aa3bc !important;
+            line-height: 1.35 !important;
+          }
+          .m3-path-row strong { color: #d8e2ff !important; font-weight: 700 !important; }
+          .m3-path-row--btn {
+            width: 100% !important;
+            border: none !important;
+            cursor: pointer !important;
+            font: inherit !important;
+            text-align: left !important;
+            color: inherit !important;
+            outline: 1px solid rgba(173, 198, 255, 0.2) !important;
+            box-shadow: inset 0 0 0 1px rgba(173, 198, 255, 0.06) !important;
+          }
+          .m3-path-row-hint {
+            display: block !important;
+            margin-top: 6px !important;
+            font-size: 9px !important;
+            font-weight: 700 !important;
+            letter-spacing: 0.08em !important;
+            text-transform: uppercase !important;
+            color: #adc6ff !important;
+            opacity: 0.9 !important;
+          }
+          .m3-suggestion-applied {
+            width: 100% !important;
+            border: none !important;
+            cursor: pointer !important;
+            text-align: left !important;
+            font: inherit !important;
+            padding: 12px 14px !important;
+            border-radius: 12px !important;
+            background: #1e2330 !important;
+            outline: 1px solid rgba(100, 120, 168, 0.4) !important;
             color: #94a3b8 !important;
             box-sizing: border-box !important;
           }
-          .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3Row .eyeActionBtn:hover {
-            color: #c7d2fe !important;
+          .m3-suggestion-applied-label {
+            font-size: 9px !important;
+            font-weight: 800 !important;
+            letter-spacing: 0.12em !important;
+            text-transform: uppercase !important;
+            color: #94a3b8 !important;
           }
-          .productPanelMobileIdea3 .topbar.pagerBar {
+          .m3-suggestion-applied-path {
+            display: block !important;
+            margin-top: 8px !important;
+            font-size: 12px !important;
+            font-weight: 800 !important;
+            letter-spacing: 0.06em !important;
+            text-transform: uppercase !important;
+            color: #f1f5f9 !important;
+            line-height: 1.3 !important;
+          }
+          .m3-suggestion-applied-empty {
+            display: block !important;
+            margin-top: 8px !important;
+            font-size: 11px !important;
+            font-weight: 600 !important;
+            color: #64748b !important;
+          }
+          .m3-delta {
+            font-size: 11px !important;
+            font-weight: 700 !important;
+            color: #fed7aa !important;
+          }
+          .m3-delta-pos { color: #4ae176 !important; }
+          .m3-delta-neg { color: #ffb4ab !important; }
+          .m3-delta-neutral { color: #9aa3bc !important; }
+          .m3-row-links {
+            display: flex !important;
             flex-wrap: wrap !important;
-            justify-content: space-between !important;
             gap: 8px !important;
+            margin-top: 8px !important;
+          }
+          .m3-row-link {
+            font-size: 11px !important;
+            font-weight: 600 !important;
+            color: #adc6ff !important;
+            text-decoration: none !important;
+          }
+          .m3-row-link:hover { text-decoration: underline !important; }
+
+          /* ════ m3-dock: fixed bottom commit + pager ════ */
+          .m3-dock {
+            position: fixed !important;
+            bottom: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            z-index: 200 !important;
+            padding: 12px 16px 20px !important;
+            padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 20px) !important;
+            background: rgba(8, 19, 40, 0.88) !important;
+            backdrop-filter: blur(16px) !important;
+          }
+          .m3-dock-inner {
+            max-width: 520px !important;
+            margin: 0 auto !important;
+          }
+          .m3-dock-commit-btn {
+            width: 100% !important;
+            min-height: 52px !important;
+            display: inline-flex !important;
             align-items: center !important;
-          }
-          .productPanelMobileIdea3 .pagerNav {
-            flex: 1 1 auto !important;
-            min-width: 0 !important;
             justify-content: center !important;
+            gap: 10px !important;
+            border: none !important;
+            border-radius: 16px !important;
+            font-size: 13px !important;
+            font-weight: 900 !important;
+            letter-spacing: 0.14em !important;
+            text-transform: uppercase !important;
+            color: #002e6a !important;
+            background: linear-gradient(90deg, #adc6ff 0%, #4d8eff 100%) !important;
+            box-shadow: 0 12px 32px rgba(77, 142, 255, 0.28) !important;
+            cursor: pointer !important;
+            font-family: inherit !important;
           }
-          .productPanelMobileIdea3 .pagerPerPage {
+          .m3-dock-commit-btn:disabled {
+            opacity: 0.5 !important;
+            cursor: not-allowed !important;
+          }
+          .m3-dock-commit-arrow {
             flex-shrink: 0 !important;
           }
-          .tableWrap table.tableMobileIdea3 {
-            width: 100% !important;
-            min-width: 0 !important;
-            table-layout: auto !important;
-            border-collapse: separate !important;
-            border-spacing: 0 10px !important;
-          }
-          .tableWrap table.tableMobileIdea3 thead {
+          .m3-dock-menu {
             display: none !important;
-          }
-          .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3Row {
-            display: grid !important;
-            grid-template-columns: auto 56px minmax(0, 1fr) !important;
-            gap: 0 10px !important;
-            align-items: start !important;
+            margin-top: 12px !important;
             padding: 12px !important;
-            border: 1px solid #2a3a56 !important;
             border-radius: 14px !important;
-            background: linear-gradient(180deg, #111c32, #0d1628) !important;
-            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22) !important;
-            height: auto !important;
-            min-height: 0 !important;
-            max-height: none !important;
+            background: #151f35 !important;
+            font-size: 12px !important;
           }
-          .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3Row > td {
-            border-bottom: none !important;
+          .m3-dock-menu--open {
+            display: block !important;
           }
-          .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3Row:not(.mobileIdea3RowExpanded) > td {
-            height: auto !important;
-            min-height: 0 !important;
-            max-height: none !important;
+          .m3-dock-menu-section {
+            margin: 0 0 8px !important;
+            font-size: 10px !important;
+            font-weight: 900 !important;
+            letter-spacing: 0.12em !important;
+            color: #9aa3bc !important;
+            text-transform: uppercase !important;
           }
-          .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3Row:not(.mobileIdea3RowExpanded) td.stickyCheckboxCol {
-            display: none !important;
-          }
-          .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3Row:not(.mobileIdea3RowExpanded) td.stickyEyeCol {
-            display: flex !important;
-            grid-column: 1 !important;
-            grid-row: 1 !important;
-            align-items: center !important;
-            justify-content: center !important;
-            align-self: start !important;
-            padding: 0 !important;
-            position: static !important;
-            left: auto !important;
-            background: transparent !important;
-          }
-          .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3Row:not(.mobileIdea3RowExpanded) td.stickyPictureCol {
-            grid-column: 2 !important;
-            grid-row: 1 !important;
-            padding: 0 !important;
-            position: static !important;
-          }
-          .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3Row:not(.mobileIdea3RowExpanded) td.stickyPictureCol .thumb,
-          .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3Row:not(.mobileIdea3RowExpanded) td.stickyPictureCol .thumbPlaceholder {
-            border-radius: 10px !important;
-          }
-          .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3Row:not(.mobileIdea3RowExpanded) td.stickyProductNameCol {
-            grid-column: 3 !important;
-            grid-row: 1 !important;
-            padding: 0 !important;
-            position: static !important;
-            white-space: normal !important;
-          }
-          .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3Row:not(.mobileIdea3RowExpanded)
-            > td:not(.stickyEyeCol):not(.stickyPictureCol):not(.stickyProductNameCol) {
-            display: none !important;
-          }
-          .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3RowExpanded {
+          .m3-dock-menu-item {
             display: flex !important;
             flex-direction: column !important;
-            align-items: stretch !important;
+            gap: 2px !important;
+            width: 100% !important;
+            padding: 12px !important;
+            margin-bottom: 8px !important;
+            border-radius: 12px !important;
+            border: none !important;
+            background: #030e22 !important;
+            color: #d8e2ff !important;
+            font-family: inherit !important;
+            text-align: left !important;
+            cursor: pointer !important;
           }
-          .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3RowExpanded > td {
+          .m3-dock-menu-item:disabled {
+            opacity: 0.45 !important;
+            cursor: not-allowed !important;
+          }
+          .m3-dock-menu-title {
+            font-size: 0.82rem !important;
+            font-weight: 700 !important;
+            display: block !important;
+            margin-bottom: 4px !important;
+          }
+          .m3-dock-menu-sub {
+            font-size: 11px !important;
+            color: #9aa3bc !important;
+            font-weight: 500 !important;
+          }
+          .m3-dock-menu-item--danger {
+            background: rgba(255, 180, 171, 0.08) !important;
+            outline: 1px solid rgba(255, 180, 171, 0.2) !important;
+          }
+          .m3-dock-menu-divider {
+            height: 1px !important;
+            margin: 10px 0 !important;
+            background: rgba(255, 255, 255, 0.06) !important;
+          }
+          .m3-dock-per-page {
+            margin-top: 12px !important;
+            padding-top: 12px !important;
+            border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+            display: flex !important;
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            gap: 8px !important;
+          }
+          .m3-dock-pager {
+            flex: 1 1 0 !important;
+            min-width: 0 !important;
+            display: flex !important;
+            align-items: center !important;
+            overflow-x: auto !important;
+            scrollbar-width: none !important;
+            -webkit-overflow-scrolling: touch !important;
+            padding: 6px 4px 6px 6px !important;
+          }
+          .m3-dock-pager::-webkit-scrollbar { display: none !important; }
+          .m3-dock-pager-nav {
+            display: flex !important;
+            align-items: center !important;
+            gap: 4px !important;
+            flex-wrap: nowrap !important;
+          }
+          .m3-dock-pager-nav button {
+            min-width: 34px !important;
+            height: 34px !important;
+            border-radius: 10px !important;
+            border: none !important;
+            background: #030e22 !important;
+            color: #d8e2ff !important;
+            font-weight: 700 !important;
+            font-size: 12px !important;
+            padding: 0 !important;
+            cursor: pointer !important;
+          }
+          .m3-dock-pager-nav button:disabled { opacity: 0.4 !important; cursor: not-allowed !important; }
+          .m3-dock-pager-nav span {
+            font-size: 11px !important;
+            font-weight: 600 !important;
+            color: #9aa3bc !important;
+            padding: 0 4px !important;
+            white-space: nowrap !important;
+          }
+          .m3-dock-per-page-select {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            gap: 6px !important;
+            font-size: 12px !important;
+            color: #9aa3bc !important;
+            flex: 0 0 auto !important;
+            white-space: nowrap !important;
+          }
+          .m3-dock-per-page-select select {
+            border-radius: 10px !important;
+            border: none !important;
+            padding: 6px 8px !important;
+            background: #030e22 !important;
+            color: #d8e2ff !important;
+            font-weight: 600 !important;
+            font-size: 12px !important;
+          }
+
+          /* ════ m3-lightbox ════ */
+          .m3-lightbox-scrim {
+            position: fixed !important;
+            inset: 0 !important;
+            z-index: 500 !important;
+            background: rgba(0, 0, 0, 0.82) !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            padding: 16px !important;
+          }
+          .m3-lightbox-panel {
+            background: #1f2a40 !important;
+            border-radius: 18px !important;
+            max-width: min(90vw, 480px) !important;
+            width: 100% !important;
+            overflow: hidden !important;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4) !important;
+            padding: 20px !important;
+          }
+          .m3-lightbox-head {
+            display: flex !important;
+            justify-content: flex-end !important;
+            margin-bottom: 8px !important;
+          }
+          .m3-lightbox-title {
+            flex: 1 !important;
+            font-size: 18px !important;
+            font-weight: 700 !important;
+            color: #d8e2ff !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            white-space: nowrap !important;
+            margin: 0 !important;
+          }
+          .m3-lightbox-close {
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            width: 34px !important;
+            height: 34px !important;
+            border-radius: 8px !important;
+            border: none !important;
+            background: transparent !important;
+            color: #9aa3bc !important;
+            cursor: pointer !important;
+            flex-shrink: 0 !important;
+          }
+          .m3-lightbox-body {
+            padding: 0 !important;
+          }
+          .m3-lightbox-img {
             display: block !important;
             width: 100% !important;
-            max-width: 100% !important;
-            position: static !important;
-            left: auto !important;
-            background: #0f1a2f !important;
-            border-bottom: 1px solid #24354e !important;
-            padding: 10px 12px !important;
-            white-space: normal !important;
-            overflow: visible !important;
             height: auto !important;
-            min-height: 0 !important;
-            max-height: none !important;
+            border-radius: 8px !important;
+            object-fit: contain !important;
           }
-          .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3RowExpanded > td.stickyCheckboxCol {
-            border-bottom: 0 !important;
-            padding-bottom: 4px !important;
+
+          /* ════ m3-sheet: bottom sheet ════ */
+          .m3-sheet-scrim {
+            position: fixed !important;
+            inset: 0 !important;
+            z-index: 400 !important;
+            background: rgba(0, 0, 0, 0.52) !important;
+            border: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            cursor: pointer !important;
           }
-          .tableWrap table.tableMobileIdea3 tbody tr.mobileIdea3RowExpanded .mobileIdea3Pills {
-            display: none !important;
+          .m3-sheet {
+            position: fixed !important;
+            bottom: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            z-index: 410 !important;
+            background: #1f2a40 !important;
+            border-radius: 20px 20px 0 0 !important;
+            box-shadow: 0 -16px 48px rgba(0, 0, 0, 0.5) !important;
+            outline: 1px solid rgba(173, 198, 255, 0.18) !important;
+            max-height: 92dvh !important;
+            display: flex !important;
+            flex-direction: column !important;
+            padding-bottom: env(safe-area-inset-bottom, 0px) !important;
           }
+          .m3-sheet-handle {
+            width: 36px !important;
+            height: 4px !important;
+            border-radius: 4px !important;
+            background: #2a3d58 !important;
+            margin: 10px auto 0 !important;
+            flex-shrink: 0 !important;
+          }
+          .m3-sheet-head {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            padding: 10px 16px 8px !important;
+            border-bottom: 1px solid rgba(66, 71, 84, 0.35) !important;
+            flex-shrink: 0 !important;
+          }
+          .m3-sheet-title {
+            font-size: 0.9rem !important;
+            font-weight: 700 !important;
+            color: #d8e2ff !important;
+            margin: 0 !important;
+          }
+          .m3-sheet-close {
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            width: 34px !important;
+            height: 34px !important;
+            border-radius: 8px !important;
+            border: none !important;
+            background: transparent !important;
+            color: #9aa3bc !important;
+            cursor: pointer !important;
+          }
+          .m3-sheet-body {
+            flex: 1 1 auto !important;
+            overflow-y: auto !important;
+            padding: 14px 16px !important;
+          }
+          .m3-sheet-tree-hint {
+            margin: 0 0 12px !important;
+            font-size: 12px !important;
+            color: #9aa3bc !important;
+            line-height: 1.4 !important;
+          }
+          .m3-sheet-tree-list {
+            list-style: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 8px !important;
+            max-height: 52vh !important;
+            overflow-y: auto !important;
+          }
+          .m3-sheet-tree-item {
+            width: 100% !important;
+            text-align: left !important;
+            padding: 12px 14px !important;
+            border-radius: 12px !important;
+            border: 1.5px solid #6478a8 !important;
+            background: rgba(12, 28, 52, 0.45) !important;
+            color: #dbeafe !important;
+            font-size: 12px !important;
+            font-weight: 700 !important;
+            letter-spacing: 0.04em !important;
+            text-transform: uppercase !important;
+            font-family: inherit !important;
+            cursor: pointer !important;
+          }
+          .m3-sheet-tree-item:hover {
+            border-color: #7c9fd4 !important;
+            background: rgba(22, 45, 78, 0.85) !important;
+            color: #f0f7ff !important;
+          }
+          .m3-sheet-tree-empty {
+            font-size: 0.78rem !important;
+            color: #9aa3bc !important;
+            font-style: italic !important;
+            margin: 0 !important;
+          }
+          .m3-sheet-footer {
+            display: flex !important;
+            gap: 8px !important;
+            padding: 10px 16px 14px !important;
+            border-top: 1px solid rgba(66, 71, 84, 0.35) !important;
+            flex-shrink: 0 !important;
+          }
+          .m3-sheet-save {
+            flex: 1 1 0 !important;
+            height: 46px !important;
+            border-radius: 10px !important;
+            border: none !important;
+            background: linear-gradient(90deg, #adc6ff 0%, #4d8eff 100%) !important;
+            color: #002e6a !important;
+            font-size: 0.84rem !important;
+            font-weight: 700 !important;
+            cursor: pointer !important;
+          }
+          .m3-sheet-cancel {
+            flex: 1 1 0 !important;
+            height: 46px !important;
+            border-radius: 10px !important;
+            border: 1px solid rgba(66, 71, 84, 0.35) !important;
+            background: transparent !important;
+            color: #9aa3bc !important;
+            font-size: 0.84rem !important;
+            font-weight: 600 !important;
+            cursor: pointer !important;
+          }
+
+          /* ── push padding so cards clear the bottom dock ── */
+          .productPanel {
+            padding-bottom: 0 !important;
+          }
+
           .workflowRail,
           .reportHubGrid {
             grid-template-columns: 1fr !important;
