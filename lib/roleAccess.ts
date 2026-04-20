@@ -3,7 +3,7 @@ import "server-only";
 import type { NextRequest } from "next/server";
 import { fetchRolePermissionAllowed } from "@/lib/authRepository";
 import { readSession } from "@/lib/authSession";
-import { hasFullAppAccess, isMetaReviewRole, isSuperAdminRole } from "@/lib/authRoleConstants";
+import { hasFullAppAccess, isMetaReviewRole } from "@/lib/authRoleConstants";
 import { defaultAllowedForRole } from "@/lib/rolePermissions";
 
 export async function sessionAllowsAppPermission(req: NextRequest, permissionKey: string): Promise<boolean> {
@@ -23,7 +23,5 @@ export async function sessionCanManageUsers(req: NextRequest): Promise<boolean> 
 }
 
 export async function sessionCanManageRoles(req: NextRequest): Promise<boolean> {
-  const session = readSession(req);
-  if (!session.isAuthed) return false;
-  return isSuperAdminRole(session.role);
+  return sessionAllowsAppPermission(req, "page.settings_roles");
 }
