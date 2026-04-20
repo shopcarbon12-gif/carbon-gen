@@ -149,6 +149,7 @@ export function WorkspaceShell({
   const isCollectionMappingRoute =
     pathname.startsWith("/shopify-collection-mapping") ||
     pathname.startsWith("/studio/shopify-collection-mapping");
+  const isDashboardRoute = pathname === "/dashboard";
   const hideSideRailsOnCollectionMapping = isCollectionMappingRoute;
   const isInstagramWidgetRoute = pathname.startsWith(INSTAGRAM_WIDGET_ROOT);
   const isInstagramWidgetRootPage =
@@ -1073,7 +1074,7 @@ export function WorkspaceShell({
           showIntegrationPanel ? "" : "no-integration-panel"
         } ${isCollectionMappingRoute ? "collection-mapping-content" : ""} ${
           isInstagramWidgetRoute ? "instagram-widget-content" : ""
-        }`}
+        } ${isDashboardRoute ? "dashboard-content" : ""}`}
         style={drawerOpen ? { paddingLeft: "calc(13px + 255px + 13px)" } : undefined}
         data-ig-mobile-preview={
           isInstagramWidgetRoute && instagramMobilePreview ? "true" : undefined
@@ -2302,13 +2303,17 @@ export function WorkspaceShell({
           position: relative;
           box-sizing: border-box;
           min-height: 100vh;
-          padding-top: 100px;
+          padding-top: 124px;
           padding-left: var(--page-edge-gap);
           padding-right: var(--content-right-pad);
           will-change: padding-left, padding-right;
           transition:
             padding-left 360ms cubic-bezier(0.22, 1, 0.36, 1),
             padding-right var(--chat-expand-duration) var(--chat-expand-ease);
+        }
+        .content.dashboard-content {
+          /* Keep all dashboard blocks fully below the decorative patch. */
+          padding-top: 232px;
         }
         .shell.chat-expanded .content {
           --content-right-pad: calc(

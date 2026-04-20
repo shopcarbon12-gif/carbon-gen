@@ -122,7 +122,7 @@ export function proxy(req: NextRequest) {
     }
     if (pathname === "/login" && !loginPreview) {
       const studioUrl = req.nextUrl.clone();
-      studioUrl.pathname = "/studio/images";
+      studioUrl.pathname = "/dashboard";
       return NextResponse.redirect(studioUrl);
     }
     return res;
@@ -206,7 +206,7 @@ export function proxy(req: NextRequest) {
     const studioUrl = req.nextUrl.clone();
     studioUrl.pathname = parseRole(req.cookies.get("carbon_gen_user_role")?.value || "") === META_REVIEW_ROLE
       ? "/studio/instagram-widget"
-      : "/studio/images";
+      : "/dashboard";
     return NextResponse.redirect(studioUrl);
   }
 

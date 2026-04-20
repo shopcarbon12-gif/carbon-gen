@@ -42,7 +42,7 @@ export default function LoginPage() {
       }
 
       const next =
-        typeof data?.next === "string" && data.next.startsWith("/") ? data.next : "/studio/images";
+        typeof data?.next === "string" && data.next.startsWith("/") ? data.next : "/dashboard";
       window.location.href = next;
     } catch (e: any) {
       const msg = String(e?.message || "Login failed");
