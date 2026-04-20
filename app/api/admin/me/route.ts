@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { sessionCanManageRoles, sessionCanManageUsers } from "@/lib/roleAccess";
 import { readSession } from "@/lib/userAuth";
 
 export async function GET(req: NextRequest) {
@@ -8,11 +9,20 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const [manageUsers, manageRoles] = await Promise.all([
+    sessionCanManageUsers(req),
+    sessionCanManageRoles(req),
+  ]);
+
   return NextResponse.json({
     user: {
       id: session.userId || null,
       username: session.username || null,
       role: session.role || "user",
+    },
+    capabilities: {
+      manageUsers,
+      manageRoles,
     },
   });
 }

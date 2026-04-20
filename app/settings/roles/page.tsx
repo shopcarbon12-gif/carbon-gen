@@ -9,6 +9,11 @@ type SessionUser = {
   role: string;
 };
 
+type Capabilities = {
+  manageUsers: boolean;
+  manageRoles: boolean;
+};
+
 type PermissionOption = {
   key: string;
   label: string;
@@ -24,6 +29,7 @@ type RoleRow = {
 
 export default function RolesPage() {
   const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
+  const [roleMatrixAllowed, setRoleMatrixAllowed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [permissions, setPermissions] = useState<PermissionOption[]>([]);
@@ -33,22 +39,25 @@ export default function RolesPage() {
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const isAdmin = sessionUser?.role === "admin";
-
   const roleNames = useMemo(() => roles.map((r) => r.name), [roles]);
 
-  const refreshSession = useCallback(async () => {
+  const refreshSession = useCallback(async (): Promise<boolean> => {
     const resp = await fetch("/api/admin/me", { cache: "no-store" });
     const json = await resp.json().catch(() => ({}));
     if (!resp.ok || !json?.user) {
       setSessionUser(null);
-      return;
+      setRoleMatrixAllowed(false);
+      return false;
     }
     setSessionUser({
       id: json.user.id || null,
       username: json.user.username || null,
       role: String(json.user.role || "user"),
     });
+    const cap = json.capabilities as Capabilities | undefined;
+    const allowed = Boolean(cap?.manageRoles);
+    setRoleMatrixAllowed(allowed);
+    return allowed;
   }, []);
 
   const refreshRoles = useCallback(async () => {
@@ -66,8 +75,8 @@ export default function RolesPage() {
     (async () => {
       setLoading(true);
       try {
-        await refreshSession();
-        if (!cancelled) {
+        const allowed = await refreshSession();
+        if (!cancelled && allowed) {
           await refreshRoles();
         }
       } catch (e: any) {
@@ -168,9 +177,19 @@ export default function RolesPage() {
         <section className="card">
           <p className="muted">Loading role manager...</p>
         </section>
-      ) : !isAdmin ? (
+      ) : !sessionUser ? (
         <section className="card">
-          <p className="error">Admin access required.</p>
+          <p className="error">Sign in required.</p>
+          <p className="muted">
+            <Link href="/login">Go to login</Link>
+          </p>
+        </section>
+      ) : !roleMatrixAllowed ? (
+        <section className="card">
+          <p className="error">You need the &quot;Manage roles &amp; permissions&quot; capability to use this page.</p>
+          <p className="muted">
+            <Link href="/settings">Back to settings</Link>
+          </p>
         </section>
       ) : (
         <>

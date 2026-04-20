@@ -113,7 +113,8 @@ const WORKBOOK_RULE_ROWS: WorkbookRuleRow[] = [
   { routeKey: "12", digit: "6", targetCells: ["MEN > ACCESSORIES & SHOES > SHOES"] },
   { routeKey: "12", digit: "7", category: "DENIM SHIRT", targetCells: ["MEN > CLOTHING > DENIM SHIRTS"] },
   { routeKey: "12", digit: "7", category: "BUTTON SHIRT", targetCells: ["MEN > CLOTHING > DRESS SHIRT"] },
-  { routeKey: "12", digit: "8", targetCells: ["MEN > CLOTHING > SWEATPANTS"] },
+  // 12::8 — auto PANTS; SWEATPANTS comes from suggestion rules (base MEN > CLOTHING > PANTS).
+  { routeKey: "12", digit: "8", targetCells: ["MEN > CLOTHING > PANTS"] },
   { routeKey: "12", digit: "9", targetCells: ["MEN > ACCESSORIES & SHOES > ALL ACCESSORIES"] },
 
   // Route 21 (Women Summer)

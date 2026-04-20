@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import bcrypt from "bcryptjs";
 import { deleteUserById, findUserById, roleExists, updateUserById } from "@/lib/authRepository";
-import { countAdmins, isAdminSession, normalizeUsername, parseRole, readSession } from "@/lib/userAuth";
+import { sessionCanManageUsers } from "@/lib/roleAccess";
+import { countAdmins, normalizeUsername, parseRole, readSession } from "@/lib/userAuth";
 
 function toUser(row: any) {
   return {
@@ -41,7 +42,7 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  if (!isAdminSession(req)) {
+  if (!(await sessionCanManageUsers(req))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -125,7 +126,7 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  if (!isAdminSession(req)) {
+  if (!(await sessionCanManageUsers(req))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

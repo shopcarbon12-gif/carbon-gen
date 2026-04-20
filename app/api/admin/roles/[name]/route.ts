@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { countUsersWithRole, deleteRole, touchRoleUpdatedAt, upsertRolePermissions } from "@/lib/authRepository";
 import { normalizeRoleName, PERMISSION_OPTIONS, SYSTEM_ROLES } from "@/lib/rolePermissions";
-import { isAdminSession } from "@/lib/userAuth";
+import { sessionCanManageRoles } from "@/lib/roleAccess";
 
 function validPermissionKey(key: string) {
   return PERMISSION_OPTIONS.some((p) => p.key === key);
@@ -12,7 +12,7 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ name: string }> }
 ) {
-  if (!isAdminSession(req)) {
+  if (!(await sessionCanManageRoles(req))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   try {
@@ -54,7 +54,7 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ name: string }> }
 ) {
-  if (!isAdminSession(req)) {
+  if (!(await sessionCanManageRoles(req))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   try {
@@ -67,9 +67,13 @@ export async function DELETE(
       return NextResponse.json({ error: "System roles cannot be deleted." }, { status: 400 });
     }
 
-    await countUsersWithRole(roleName);
-    // If app_users has legacy role constraint, custom roles are not assignable anyway.
-    // Keep delete simple and rely on FK cascade for permissions.
+    const assigned = await countUsersWithRole(roleName);
+    if (assigned > 0) {
+      return NextResponse.json(
+        { error: `Cannot delete role "${roleName}" while ${assigned} user(s) still have it.` },
+        { status: 400 }
+      );
+    }
     await deleteRole(roleName);
     return NextResponse.json({ ok: true });
   } catch (e: any) {

@@ -7,7 +7,7 @@ import {
   PERMISSION_OPTIONS,
   SYSTEM_ROLES,
 } from "@/lib/rolePermissions";
-import { isAdminSession } from "@/lib/userAuth";
+import { sessionCanManageRoles } from "@/lib/roleAccess";
 
 function missingTablesMessage(err: unknown) {
   const message = String((err as any)?.message || "");
@@ -33,7 +33,7 @@ async function seedSystemRoles() {
 }
 
 export async function GET(req: NextRequest) {
-  if (!isAdminSession(req)) {
+  if (!(await sessionCanManageRoles(req))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   try {
@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!isAdminSession(req)) {
+  if (!(await sessionCanManageRoles(req))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   try {

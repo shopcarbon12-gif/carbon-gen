@@ -78,13 +78,18 @@ type ShopifyPrinterConfigResponse = {
 type SessionUser = {
   id: string | null;
   username: string | null;
-  role: "admin" | "manager" | "user";
+  role: string;
+};
+
+type Capabilities = {
+  manageUsers: boolean;
+  manageRoles: boolean;
 };
 
 type AdminUser = {
   id: string;
   username: string;
-  role: "admin" | "manager" | "user";
+  role: string;
   isActive: boolean;
   createdAt: string | null;
   updatedAt: string | null;
@@ -92,7 +97,7 @@ type AdminUser = {
 
 type UserDraft = {
   username: string;
-  role: "admin" | "manager" | "user";
+  role: string;
   isActive: boolean;
   password: string;
 };
@@ -105,8 +110,11 @@ function isValidShop(value: string) {
   return /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(value);
 }
 
-function roleLabel(role: SessionUser["role"]) {
-  return role === "admin" ? "Admin" : role === "manager" ? "Manager" : "User";
+function roleLabel(role: string) {
+  if (role === "admin") return "Admin";
+  if (role === "manager") return "Manager";
+  if (role === "user") return "User";
+  return role;
 }
 
 export default function SettingsPage() {
@@ -139,6 +147,11 @@ export default function SettingsPage() {
 
 
   const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
+  const [capabilities, setCapabilities] = useState<Capabilities>({
+    manageUsers: false,
+    manageRoles: false,
+  });
+  const [roleOptions, setRoleOptions] = useState<string[]>(["admin", "manager", "user"]);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [drafts, setDrafts] = useState<Record<string, UserDraft>>({});
   const [adminLoading, setAdminLoading] = useState(true);
@@ -147,11 +160,12 @@ export default function SettingsPage() {
   const [adminError, setAdminError] = useState<string | null>(null);
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [newRole, setNewRole] = useState<"admin" | "manager" | "user">("user");
+  const [newRole, setNewRole] = useState("user");
 
   const normalizedShop = useMemo(() => normalizeShop(shop), [shop]);
   const canConnect = useMemo(() => isValidShop(normalizedShop), [normalizedShop]);
-  const isAdmin = sessionUser?.role === "admin";
+  const canManageUsers = capabilities.manageUsers;
+  const canManageRoles = capabilities.manageRoles;
   const connectHref = useMemo(() => {
     if (!canConnect) return "#";
     return `/api/shopify/auth?shop=${encodeURIComponent(normalizedShop)}`;
@@ -318,22 +332,46 @@ export default function SettingsPage() {
       const json = await resp.json().catch(() => ({}));
       if (!resp.ok || !json?.user) {
         setSessionUser(null);
+        setCapabilities({ manageUsers: false, manageRoles: false });
       } else {
         setSessionUser({
           id: json.user.id || null,
           username: json.user.username || null,
           role: json.user.role || "user",
         });
+        const cap = json.capabilities as Capabilities | undefined;
+        setCapabilities({
+          manageUsers: Boolean(cap?.manageUsers),
+          manageRoles: Boolean(cap?.manageRoles),
+        });
       }
     } catch {
       setSessionUser(null);
+      setCapabilities({ manageUsers: false, manageRoles: false });
     } finally {
       setAdminLoading(false);
     }
   }, []);
 
+  const refreshAssignableRoles = useCallback(async () => {
+    try {
+      const resp = await fetch("/api/admin/role-names", { cache: "no-store" });
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        setRoleOptions(["admin", "manager", "user"]);
+        return;
+      }
+      const names = Array.isArray(json?.names)
+        ? (json.names as string[]).map((n) => String(n || "").trim()).filter(Boolean)
+        : [];
+      setRoleOptions(names.length ? names.sort() : ["admin", "manager", "user"]);
+    } catch {
+      setRoleOptions(["admin", "manager", "user"]);
+    }
+  }, []);
+
   const refreshUsers = useCallback(async () => {
-    if (!isAdmin) return;
+    if (!canManageUsers) return;
     setAdminBusy(true);
     setAdminError(null);
     try {
@@ -359,7 +397,7 @@ export default function SettingsPage() {
     } finally {
       setAdminBusy(false);
     }
-  }, [isAdmin]);
+  }, [canManageUsers]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -436,9 +474,14 @@ export default function SettingsPage() {
   }, [normalizedShop, canConnect, refreshStatus]);
 
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!canManageUsers) return;
     void refreshUsers();
-  }, [isAdmin, refreshUsers]);
+  }, [canManageUsers, refreshUsers]);
+
+  useEffect(() => {
+    if (!canManageUsers) return;
+    void refreshAssignableRoles();
+  }, [canManageUsers, refreshAssignableRoles]);
 
   async function handleDisconnect() {
     if (!canConnect) {
@@ -495,7 +538,7 @@ export default function SettingsPage() {
   }
 
   async function handleCreateUser() {
-    if (!isAdmin) return;
+    if (!canManageUsers) return;
     setAdminBusy(true);
     setAdminStatus(null);
     setAdminError(null);
@@ -534,7 +577,7 @@ export default function SettingsPage() {
   }
 
   async function handleSaveUser(user: AdminUser) {
-    if (!isAdmin) return;
+    if (!canManageUsers) return;
     const draft = drafts[user.id];
     if (!draft) return;
 
@@ -571,7 +614,7 @@ export default function SettingsPage() {
   }
 
   async function handleDeleteUser(user: AdminUser) {
-    if (!isAdmin) return;
+    if (!canManageUsers) return;
     const ok = window.confirm(`Delete user "${user.username}"? This cannot be undone.`);
     if (!ok) return;
 
@@ -797,14 +840,16 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      {isAdmin ? (
+      {canManageUsers ? (
         <section className="card">
-          <div className="card-title">User Management (Admin)</div>
-          <p className="muted">Create users, assign roles, change passwords, disable or delete accounts.</p>
+          <div className="card-title">User management</div>
+          <p className="muted">Create users, assign roles from the database, set passwords, disable or delete accounts.</p>
           <div className="actions">
-            <Link className="btn ghost" href="/settings/roles">
-              Create New Role
-            </Link>
+            {canManageRoles ? (
+              <Link className="btn ghost" href="/settings/roles">
+                Roles &amp; permissions
+              </Link>
+            ) : null}
           </div>
 
           <div className="create-grid">
@@ -821,10 +866,12 @@ export default function SettingsPage() {
               placeholder="temporary password"
               autoComplete="new-password"
             />
-            <select value={newRole} onChange={(e) => setNewRole(e.target.value as UserDraft["role"])}>
-              <option value="user">user</option>
-              <option value="manager">manager</option>
-              <option value="admin">admin</option>
+            <select value={newRole} onChange={(e) => setNewRole(e.target.value)}>
+              {roleOptions.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
             </select>
             <button className="btn" onClick={handleCreateUser} disabled={adminBusy}>
               Create User
@@ -847,11 +894,13 @@ export default function SettingsPage() {
                     />
                     <select
                       value={draft?.role || "user"}
-                      onChange={(e) => updateDraft(user.id, { role: e.target.value as UserDraft["role"] })}
+                      onChange={(e) => updateDraft(user.id, { role: e.target.value })}
                     >
-                      <option value="user">user</option>
-                      <option value="manager">manager</option>
-                      <option value="admin">admin</option>
+                      {roleOptions.map((name) => (
+                        <option key={name} value={name}>
+                          {name}
+                        </option>
+                      ))}
                     </select>
                     <label className="active-toggle">
                       <input
@@ -880,10 +929,22 @@ export default function SettingsPage() {
             )}
           </div>
         </section>
+      ) : canManageRoles ? (
+        <section className="card">
+          <div className="card-title">Roles &amp; permissions</div>
+          <p className="muted">You can edit the permission matrix but not user accounts.</p>
+          <div className="actions">
+            <Link className="btn ghost" href="/settings/roles">
+              Open role manager
+            </Link>
+          </div>
+        </section>
       ) : (
         <section className="card">
-          <div className="card-title">User & Role Management</div>
-          <p className="muted">Only admin users can manage accounts, roles, and passwords.</p>
+          <div className="card-title">User &amp; role management</div>
+          <p className="muted">
+            Managing accounts or custom roles requires the corresponding permissions (typically full admin).
+          </p>
         </section>
       )}
 

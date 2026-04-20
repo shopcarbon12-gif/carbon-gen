@@ -5,6 +5,17 @@ alwaysApply: true
 
 # Browser automation: Playwright MCP only
 
+## If Playwright MCP tools are missing in chat
+
+The agent only sees MCP tools when **Cursor has started the server** for that workspace and the **chat session is allowed to use MCP**.
+
+1. **Confirm config** — This repo uses `.cursor/mcp.json` with a **local** server: `node ./node_modules/@playwright/mcp/cli.js`. Run `npm install` in the repo so `node_modules/@playwright/mcp` exists.
+2. **Cursor → Settings → MCP** — Open the MCP panel; `playwright` should show as **connected** (not red / error). Expand it and read any stderr (missing `node`, blocked spawn, etc.).
+3. **Restart Cursor** after changing `.cursor/mcp.json` or `package.json` MCP dependencies (required per [Playwright MCP install](https://playwright.dev/docs/getting-started-mcp)).
+4. **User-level override** — If the project file is ignored or not loaded, add the same `playwright` block to your **user** MCP file: `%USERPROFILE%\.cursor\mcp.json` (create the file if needed).
+5. **New chat** — Start a new Agent chat; some sessions start before MCP finishes connecting.
+6. **C: drive / npx** — This config avoids `npx @playwright/mcp@latest` so the server does not download into a tight `%LOCALAPPDATA%` cache on every update; browsers still install under Playwright’s usual cache unless you override env vars.
+
 For any task that drives a real browser (especially **Shopify Admin**), use the **Playwright MCP** server (`user-playwright` / `playwright` in Cursor). Do **not** use **cursor-ide-browser** for Shopify page body editing (CodeMirror breaks snapshots and fill).
 
 ## Why `browser_run_code` failed with `require` / `import()`

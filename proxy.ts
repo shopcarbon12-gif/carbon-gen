@@ -79,8 +79,6 @@ export function proxy(req: NextRequest) {
   }
 
   const loginPreview = req.nextUrl.searchParams.get("preview") === "1";
-  const isPublicCollectionMappingPath =
-    pathname === publicCollectionMappingPath || pathname.startsWith(`${publicCollectionMappingPath}/`);
   const isProd = process.env.NODE_ENV === "production";
   const authBypass =
     !isProd && (process.env.AUTH_BYPASS || "false").trim().toLowerCase() === "true";
@@ -171,7 +169,10 @@ export function proxy(req: NextRequest) {
   }
 
   const isAuthed = req.cookies.get("carbon_gen_auth_v1")?.value === "true";
-  const protectedRoutes = [
+  function pathMatchesProtectedBase(pathname: string, base: string) {
+    return pathname === base || pathname.startsWith(`${base}/`);
+  }
+  const protectedBasePaths = [
     "/dashboard",
     "/generate",
     "/studio",
@@ -181,10 +182,18 @@ export function proxy(req: NextRequest) {
     "/ops",
     "/activity",
     "/settings",
+    "/accessibility-statement",
+    "/accessibility",
+    "/image-upload",
+    "/barcode-scan",
+    "/preview",
+    publicCollectionMappingPath,
   ];
-  const isProtected = protectedRoutes.some((route) => pathname.startsWith(route));
+  const isProtected =
+    pathname === "/" ||
+    protectedBasePaths.some((base) => pathMatchesProtectedBase(pathname, base));
 
-  if (isProtected && !isAuthed && !isPublicCollectionMappingPath) {
+  if (isProtected && !isAuthed) {
     const loginUrl = req.nextUrl.clone();
     loginUrl.pathname = "/login";
     return NextResponse.redirect(loginUrl);
@@ -218,6 +227,12 @@ export const config = {
     "/activity/:path*",
     "/settings/:path*",
     "/login",
+    "/accessibility",
     "/accessibility/:path*",
+    "/accessibility-statement",
+    "/accessibility-statement/:path*",
+    "/image-upload/:path*",
+    "/barcode-scan/:path*",
+    "/preview/:path*",
   ],
 };

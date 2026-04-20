@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import bcrypt from "bcryptjs";
 import { createUser, listUsers, roleExists } from "@/lib/authRepository";
-import { isAdminSession, normalizeUsername, parseRole } from "@/lib/userAuth";
+import { sessionCanManageUsers } from "@/lib/roleAccess";
+import { normalizeUsername, parseRole } from "@/lib/userAuth";
 
 function userPayload(row: any) {
   return {
@@ -35,7 +36,7 @@ function adminUsersErrorMessage(err: any) {
 }
 
 export async function GET(req: NextRequest) {
-  if (!isAdminSession(req)) {
+  if (!(await sessionCanManageUsers(req))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -52,7 +53,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!isAdminSession(req)) {
+  if (!(await sessionCanManageUsers(req))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

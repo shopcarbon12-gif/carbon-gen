@@ -323,6 +323,22 @@ export async function listRolePermissions(roleName?: string) {
   }));
 }
 
+/** `undefined` when no row exists (caller may fall back to defaults). */
+export async function fetchRolePermissionAllowed(
+  roleName: string,
+  permissionKey: string
+): Promise<boolean | undefined> {
+  resolveMode();
+  await ensurePgReady();
+  const pool = getPgPool();
+  const { rows } = await pool.query(
+    `SELECT allowed FROM app_role_permissions WHERE role_name = $1 AND permission_key = $2 LIMIT 1`,
+    [roleName, permissionKey]
+  );
+  if (!rows?.length) return undefined;
+  return Boolean(rows[0]?.allowed);
+}
+
 export async function insertRole(name: string, isSystem: boolean) {
   resolveMode();
   await ensurePgReady();
