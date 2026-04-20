@@ -36,6 +36,8 @@ type MenuNode = {
   depth: number;
   enabled: boolean;
   collectionId: string | null;
+  /** Shopify collection handle when this menu item links to a collection (used to skip automated collections in push deltas). */
+  collectionHandle?: string | null;
   linkedTargetType?: string;
   linkedTargetLabel?: string;
   linkedTargetResourceId?: string | null;
@@ -4220,7 +4222,7 @@ export default function ShopifyCollectionMapping() {
 
   function exportPushSummaryReport() {
     const rowsToPlan = rows.map((row) => plannerRowsById.get(row.id)).filter((row): row is PushPlannerRow => Boolean(row));
-    const summary = plannerSummaryFromRows(rowsToPlan);
+    const summary = plannerSummaryFromRows(rowsToPlan, "push-all-final");
     const lines = [
       "report,value",
       `total_rows,${summary.totalRows}`,
