@@ -5594,6 +5594,11 @@ export default function ShopifyCollectionMapping() {
                     const isExpanded = mobileIdea3ExpandedRowId === row.id;
                     const hasSuggestions = (staging.suggestionOptions || []).length > 0;
                     const appliedSuggestion = (staging.selectedSuggestionPaths[0] || staging.selectedSuggestionDirectCollections[0]) || "";
+                    const selectedSuggestionLabels = [
+                      ...staging.selectedSuggestionPaths.map((path) => getLastPathSegment(path)),
+                      ...staging.selectedSuggestionDirectCollections.map((handle) => getCollectionDisplayName(handle)),
+                    ];
+                    const isAppSyncedRow = isAppCommittedRow && workflow.statusBadgeTone === "synced";
                     return (
                       <article
                         key={row.id}
@@ -5707,7 +5712,9 @@ export default function ShopifyCollectionMapping() {
                                 <span className="m3-chip m3-chip--failed">Push Failed</span>
                               ) : null}
                               {isAppCommittedRow ? (
-                                <span className="m3-chip m3-chip--appcommit">App committed</span>
+                                <span className={`m3-chip ${isAppSyncedRow ? "m3-chip--appsynced" : "m3-chip--appcommit"}`}>
+                                  {isAppSyncedRow ? "App synced" : "App committed"}
+                                </span>
                               ) : null}
                             </div>
                           </div>
@@ -5756,6 +5763,15 @@ export default function ShopifyCollectionMapping() {
                                   <span className="m3-suggestion-applied-empty">Tap to choose a suggestion</span>
                                 )}
                               </button>
+                            ) : null}
+                            {selectedSuggestionLabels.length > 0 ? (
+                              <div className="m3-selected-suggestions">
+                                {selectedSuggestionLabels.map((label, index) => (
+                                  <span key={`${row.id}-selected-suggestion-${index}`} className="m3-selected-suggestion-chip">
+                                    {label}
+                                  </span>
+                                ))}
+                              </div>
                             ) : null}
                             <div className="m3-delta">
                               Changed:{" "}
@@ -6378,6 +6394,7 @@ export default function ShopifyCollectionMapping() {
         const sheetRow = rows.find((r) => r.id === mobileMenuSheetRowId);
         const sheetStaging = sheetRow ? rowStagingById.get(sheetRow.id) : undefined;
         if (!sheetRow || !sheetStaging) return null;
+        const selectedTreeNodeKeys = toClosedNodeSetFromPaths(sheetStaging.finalMenuPaths || []);
         return (
           <>
             <div
@@ -6425,7 +6442,7 @@ export default function ShopifyCollectionMapping() {
                         <li key={node.nodeKey} className="m3-sheet-tree-item">
                           <button
                             type="button"
-                            className={`m3-sheet-tree-node-btn${childCount > 0 ? " m3-sheet-tree-node-btn--parent" : ""}`}
+                            className={`m3-sheet-tree-node-btn${childCount > 0 ? " m3-sheet-tree-node-btn--parent" : ""}${selectedTreeNodeKeys.has(node.nodeKey) ? " m3-sheet-tree-node-btn--selected" : ""}`}
                             style={{ ["--m3-tree-depth" as string]: String(Math.max(0, node.depth)) }}
                             onClick={() => {
                               if (childCount < 1) return;
@@ -11192,6 +11209,12 @@ export default function ShopifyCollectionMapping() {
             color: #ecfdf5 !important;
             box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.35) !important;
           }
+          .m3-chip--appsynced {
+            background: linear-gradient(180deg, #5a4706 0%, #3d2f05 100%) !important;
+            border: 2px solid #facc15 !important;
+            color: #fef9c3 !important;
+            box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.35) !important;
+          }
           .m3-chip--suggestion {
             cursor: pointer !important;
             background: rgba(12, 28, 52, 0.35) !important;
@@ -11199,6 +11222,27 @@ export default function ShopifyCollectionMapping() {
             color: #dbeafe !important;
           }
           .m3-chip--suggestion:active { transform: scale(0.98) !important; }
+          .m3-selected-suggestions {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            gap: 6px !important;
+            margin-top: 8px !important;
+          }
+          .m3-selected-suggestion-chip {
+            display: inline-flex !important;
+            align-items: center !important;
+            min-height: 28px !important;
+            padding: 0 10px !important;
+            border-radius: 8px !important;
+            border: 1px solid rgba(124, 58, 237, 0.85) !important;
+            background: rgba(63, 35, 104, 0.55) !important;
+            color: #ede9fe !important;
+            font-size: 10px !important;
+            font-weight: 800 !important;
+            letter-spacing: 0.04em !important;
+            text-transform: uppercase !important;
+            line-height: 1 !important;
+          }
 
           /* ── expanded card details ── */
           .m3-card-details {
@@ -11652,6 +11696,11 @@ export default function ShopifyCollectionMapping() {
           }
           .m3-sheet-tree-node-btn--parent {
             cursor: pointer !important;
+          }
+          .m3-sheet-tree-node-btn--selected {
+            box-shadow: inset 0 0 0 2px rgba(77, 142, 255, 0.65) !important;
+            border-radius: 10px !important;
+            background: rgba(77, 142, 255, 0.14) !important;
           }
           .m3-sheet-tree-node-label {
             flex: 1 1 auto !important;
