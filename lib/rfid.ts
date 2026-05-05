@@ -1,5 +1,8 @@
-export const LABEL_WIDTH_DOTS = 812;
-export const LABEL_HEIGHT_DOTS = 594;
+// 6.5 × 5 cm physical label stock at 12 dpmm (300 DPI):
+//   65 mm × 12 = 780 dots wide
+//   50 mm × 12 = 600 dots tall
+export const LABEL_WIDTH_DOTS = 780;
+export const LABEL_HEIGHT_DOTS = 600;
 export const PRINTER_DPI = 300;
 
 export type RfidSettings = {
@@ -362,8 +365,8 @@ function normalizeSizesColumn(value: string) {
     unique.push(token);
   }
 
-  if (unique.length === 0) return "XS, S, M, L";
-  return unique.join(", ");
+  if (unique.length === 0) return "XS S M L";
+  return unique.join(" ");
 }
 
 export function generateLabelZpl({
@@ -398,8 +401,18 @@ export function generateLabelZpl({
   const safePrice = formatDisplayPrice(input.retailPrice);
   const safeCountry = normalizeSizesColumn(input.countryCode);
   const [line1, line2] = splitVerticalColumns(input.itemName, safeColorResolved, safeSize);
-  const barcodeY = safeSku.length === 13 ? 95 : 125;
+  const barcodeSeed = safeSku || safeUpc || sanitizeZpl(input.itemName).toUpperCase();
+  const numericBarcode = barcodeSeed.replace(/\D+/g, "");
+  const barcodeData = numericBarcode.length >= 8 ? numericBarcode : barcodeSeed;
 
+  // Carbon hang-tag (warehouse-approved layout, May 2026):
+  //   • Bold font for UPC + retail price via E:ARI000.TTF (mapped as B).
+  //   • Merged description cell — divider line removed; both lines fit
+  //     in the same row (operator-specified per physical reference).
+  //   • Vertical Code 128 ^BCB at FO 455,79 in the gap column with
+  //     numeric-only payload (subset C density). Trailing letter on
+  //     the SKU is kept in the human-readable text strip only.
+  //   • Symmetrical column dividers (5 vertical lines instead of 6).
   return `^XA
 ^CI28
 ^PON
@@ -412,31 +425,26 @@ export function generateLabelZpl({
 ^LS${settings.labelShiftX}
 ^LT${settings.labelShiftY}
 ^CWK,E:ARIAL.TTF
-
-^FO34,79^GB410,427,2^FS
-^FO83,77^GB0,423,3^FS
-^FO207,80^GB0,425,3^FS
-^FO266,80^GB0,425,3^FS
-^FO325,80^GB0,425,3^FS
-^FO387,80^GB0,425,3^FS
-^FO612,79^GB107,426,3^FS
-^FO783,57^GB0,477,3^FS
-
-^FT73,490^AKB,38,^FDTALLA/SIZE^FS
-^FT194,522^AKB,134^FB515,1,0,C^FD${safeSize}^FS
-^FT253,590^AKB,36^FB600,1,0,C^FD${safeUpc}^FS
-^FT313,552^AKB,36^FB550,1,0,C^FD${line1}^FS
-^FT373,552^AKB,36^FB550,1,0,C^FD${line2}^FS
-^FT432,552^AKB,36^FB550,1,0,C^FD${safeColorResolved}^FS
-
-^FO455,${barcodeY}^BY2,2^BCB,110,N,N,N^FD${safeSku}^FS
-^FT600,552^AKB,32^FB550,1,0,C^FD${safeSku}^FS
-^FT687,552^AKB,60^FB550,1,0,C^FD$${safePrice}^FS
-^FT765,552^AKB,38^FB550,1,0,C^FD${safeCountry}^FS
-
+^CWB,E:ARI000.TTF
+^FO15,86^GB410,427,2^FS
+^FO64,84^GB0,423,3^FS
+^FO188,87^GB0,425,3^FS
+^FO247,87^GB0,425,3^FS
+^FO368,87^GB0,425,3^FS
+^FO593,86^GB107,426,3^FS
+^FO764,64^GB0,477,3^FS
+^FT54,497^AKB,38,^FDTALLA/SIZE^FS
+^FT175,529^AKB,134^FB515,1,0,C^FD${safeSize || "M"}^FS
+^FT234,597^ABB,36^FB600,1,0,C^FD${safeUpc || safeSku || "-"}^FS
+^FT294,559^AKB,34^FB550,1,0,C^FD${line1 || "ITEM"}^FS
+^FT354,559^AKB,34^FB550,1,0,C^FD${line2 || "SHIRT"}^FS
+^FT413,559^AKB,36^FB550,1,0,C^FD${safeColorResolved || "COLOR"}^FS
+^FO436,86^BY3,2^BCB,112,N,N,N^FD${barcodeData}^FS
+^FT581,559^AKB,32^FB550,1,0,C^FD${safeSku || barcodeData}^FS
+^FT668,559^ABB,60^FB550,1,0,C^FD$${safePrice}^FS
+^FT746,559^AKB,34^FB550,1,0,C^FD${safeCountry}^FS
 ^RB${epcConfig.epcLength},${epcConfig.companyPrefixBits},${epcConfig.itemNumberBits},${epcConfig.serialBits}^FS
 ^RFW,E^FD${epcWrite.companyPrefix},${epcWrite.itemNumber},${epcWrite.serialNumber}^FS
-
 ^PQ1,0,1,Y
 ^XZ`;
 }
