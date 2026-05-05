@@ -441,7 +441,8 @@ export function generateLabelZpl({
 ^FT413,559^AKB,36^FB550,1,0,C^FD${safeColorResolved || "COLOR"}^FS
 ^FO436,86^BY3,2^BCB,112,N,N,N^FD${barcodeData}^FS
 ^FT581,559^AKB,32^FB550,1,0,C^FD${safeSku || barcodeData}^FS
-^FT668,559^ABB,60^FB550,1,0,C^FD$${safePrice}^FS
+^FT668,559^AKB,60^FB550,1,0,C^FD$${safePrice}^FS
+^FT669,559^AKB,60^FB550,1,0,C^FD$${safePrice}^FS
 ^FT746,559^AKB,34^FB550,1,0,C^FD${safeCountry}^FS
 ^RB${epcConfig.epcLength},${epcConfig.companyPrefixBits},${epcConfig.itemNumberBits},${epcConfig.serialBits}^FS
 ^RFW,E^FD${epcWrite.companyPrefix},${epcWrite.itemNumber},${epcWrite.serialNumber}^FS
