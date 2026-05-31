@@ -65,6 +65,55 @@ const DEBUG_INGEST_ENABLED =
   normalizeLower(process.env.COLLECTION_MAPPING_DEBUG_INGEST || "") === "true";
 const DEBUG_INGEST_URL = "http://127.0.0.1:7510/ingest/a563c88f-df2a-4570-a887-c7a3035d0692";
 
+// ---- Per-shop menu-write serialization -------------------------------------
+// Editing the menu is a fetch-modify-write of the WHOLE Shopify menu (the
+// `menuUpdate` mutation replaces every item). Two concurrent edits would each
+// fetch the old menu and the second write would clobber the first
+// (last-write-wins). This per-shop async lock makes the entire
+// fetch→modify→write atomic: a second editor waits for the first to finish and
+// then re-reads the latest menu before applying its change. A 60s acquire
+// ceiling prevents a crashed/timed-out request from deadlocking a shop's edits.
+const MENU_MUTATING_ACTIONS = new Set<string>([
+  "refresh-menu",
+  "save-menu-tree",
+  "restore-mega-menu-from-seed",
+  "set-node-mapping-live",
+  "set-node-mapping-live-batch",
+  "create-menu-node",
+  "add-menu-node",
+  "move-menu-node",
+  "edit-menu-node",
+  "delete-menu-node",
+]);
+const MENU_LOCK_ACQUIRE_TIMEOUT_MS = 60 * 1000;
+const shopMenuLocks = new Map<string, Promise<void>>();
+
+async function acquireShopMenuLock(shop: string): Promise<() => void> {
+  const key = normalizeLower(shop) || "__default_shop__";
+  const previous = shopMenuLocks.get(key) ?? Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  // Chain so the next waiter blocks on this holder's `current`.
+  shopMenuLocks.set(
+    key,
+    previous.then(() => current)
+  );
+  // Wait for the previous holder — but never longer than the ceiling, so a
+  // wedged request can't block this shop's menu edits forever.
+  await Promise.race([
+    previous.catch(() => {}),
+    new Promise<void>((resolve) => setTimeout(resolve, MENU_LOCK_ACQUIRE_TIMEOUT_MS)),
+  ]);
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    release();
+  };
+}
+
 type CacheEntry<T> = {
   expiresAt: number;
   value: T;
@@ -2824,7 +2873,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-
+  let releaseMenuLock: (() => void) | null = null;
   try {
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
     const action = normalizeText(body.action || "");
@@ -2840,6 +2889,12 @@ export async function POST(req: NextRequest) {
     const tokenResult = await resolveWorkingToken(shop, apiVersion);
     if (!tokenResult.ok) {
       return NextResponse.json({ ok: false, error: tokenResult.error }, { status: 401 });
+    }
+
+    // Serialize menu fetch→modify→write per shop so concurrent editors can't
+    // clobber each other (released in the finally below).
+    if (MENU_MUTATING_ACTIONS.has(action)) {
+      releaseMenuLock = await acquireShopMenuLock(shop);
     }
 
     if (action === "fetch-link-assets") {
@@ -4507,5 +4562,7 @@ export async function POST(req: NextRequest) {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json({ ok: false, error: message || "Collection mapping update failed" }, { status: 500 });
+  } finally {
+    if (releaseMenuLock) releaseMenuLock();
   }
 }
