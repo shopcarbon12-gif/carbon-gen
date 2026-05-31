@@ -49,8 +49,11 @@ export function getShopifyAdminToken(shop: string) {
   const global = (process.env.SHOPIFY_ADMIN_ACCESS_TOKEN || "").trim();
   if (!global) return "";
 
+  // Only hand out the global admin token for the explicitly-configured store.
+  // Previously, when SHOPIFY_SHOP_DOMAIN was unset the guard fell open and the
+  // global token was returned for ANY client-supplied shop domain.
   const configuredShop = normalizeShopDomain(process.env.SHOPIFY_SHOP_DOMAIN || "") || "";
-  if (configuredShop && normalizedShop && configuredShop !== normalizedShop) {
+  if (!configuredShop || !normalizedShop || configuredShop !== normalizedShop) {
     return "";
   }
   return global;

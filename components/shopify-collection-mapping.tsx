@@ -843,7 +843,9 @@ export default function ShopifyCollectionMapping() {
         setSort(parsed.sort as SortValue);
       }
       if (Number.isFinite(Number(parsed.pageSize)) && Number(parsed.pageSize) > 0) {
-        setPageSize(Math.min(500, Number(parsed.pageSize)));
+        // Floor + clamp so a fractional/huge persisted value can't leak into
+        // the page query string.
+        setPageSize(Math.max(1, Math.min(500, Math.floor(Number(parsed.pageSize)))));
       }
       if (Array.isArray(parsed.appliedFilterTypes)) setAppliedFilterTypes(parsed.appliedFilterTypes.map((v) => String(v || "")));
       if (Array.isArray(parsed.appliedFilterDecisions)) {
@@ -866,23 +868,29 @@ export default function ShopifyCollectionMapping() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    try {
-      const payload = {
-        savedAt: Date.now(),
-        expiresAt: Date.now() + UI_PREFS_TTL_MS,
-        activeQueueTab,
-        search,
-        sort,
-        pageSize,
-        appliedFilterTypes,
-        appliedFilterDecisions,
-        appliedFilterHasSuggestions,
-        appliedFilterIncludeSynced,
-      };
-      window.localStorage.setItem(UI_PREFS_STORAGE_KEY, JSON.stringify(payload));
-    } catch {
-      // ignore storage failures
-    }
+    // Debounce so we don't serialize + write to localStorage on every keystroke
+    // of the search box (the previous effect ran the full JSON.stringify +
+    // setItem per character).
+    const timer = window.setTimeout(() => {
+      try {
+        const payload = {
+          savedAt: Date.now(),
+          expiresAt: Date.now() + UI_PREFS_TTL_MS,
+          activeQueueTab,
+          search,
+          sort,
+          pageSize,
+          appliedFilterTypes,
+          appliedFilterDecisions,
+          appliedFilterHasSuggestions,
+          appliedFilterIncludeSynced,
+        };
+        window.localStorage.setItem(UI_PREFS_STORAGE_KEY, JSON.stringify(payload));
+      } catch {
+        // ignore storage failures
+      }
+    }, 400);
+    return () => window.clearTimeout(timer);
   }, [
     activeQueueTab,
     search,

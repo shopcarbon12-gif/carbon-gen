@@ -158,15 +158,21 @@ export function computeCollectionAutoMap(input: CollectionAutoMapInput): Collect
   const autoMapFailureDetails: string[] = [];
   if (!autoMapSucceeded) {
     const compactSku = String(input.sku || "").trim().toUpperCase();
-    if (parsed.parserType === "UNKNOWN") {
-      if (!compactSku) autoMapFailureCode = "PARSE_FAILED";
-      else if (compactSku.startsWith("C")) autoMapFailureCode = "LEGACY_REVIEW_REQUIRED";
-      else if (compactSku.startsWith("1") || compactSku.startsWith("2")) autoMapFailureCode = "PARSE_FAILED";
-      else autoMapFailureCode = "UNKNOWN_PARSER";
+    // Order matters. The SKU parser resets parserType to "UNKNOWN" whenever
+    // routeKey/digit are empty, so gating MISSING_ROUTE_KEY/INVALID_CATEGORY_DIGIT
+    // behind `parserType !== "UNKNOWN"` made them unreachable — those rows were
+    // mislabeled PARSE_FAILED/UNKNOWN_PARSER. Check the specific empties first.
+    if (!compactSku) {
+      autoMapFailureCode = "PARSE_FAILED";
+    } else if (compactSku.startsWith("C")) {
+      autoMapFailureCode = "LEGACY_REVIEW_REQUIRED";
     } else if (!parsed.routeKey) {
       autoMapFailureCode = "MISSING_ROUTE_KEY";
     } else if (!parsed.digit) {
       autoMapFailureCode = "INVALID_CATEGORY_DIGIT";
+    } else if (parsed.parserType === "UNKNOWN") {
+      autoMapFailureCode =
+        compactSku.startsWith("1") || compactSku.startsWith("2") ? "PARSE_FAILED" : "UNKNOWN_PARSER";
     } else {
       autoMapFailureCode = mapRuleReasonToFailureCode(ruleResult.reason);
     }

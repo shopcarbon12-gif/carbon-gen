@@ -145,6 +145,15 @@ type DraftActorScope = {
   actorSource: "user_id" | "username" | "anonymous_fallback";
 };
 
+/** Cheap, dependency-free stable hash (djb2 → base36) for the anon fingerprint. */
+function hashFingerprint(value: string): string {
+  let hash = 5381;
+  for (let i = 0; i < value.length; i++) {
+    hash = (hash * 33) ^ value.charCodeAt(i);
+  }
+  return (hash >>> 0).toString(36);
+}
+
 function resolveDraftActorScope(req: NextRequest): DraftActorScope {
   const session = readSession(req);
   const userId = normalizeText(session.userId);
@@ -161,8 +170,17 @@ function resolveDraftActorScope(req: NextRequest): DraftActorScope {
       actorSource: "username",
     };
   }
+  // No session: isolate each anonymous client by a stable fingerprint (client
+  // IP + user-agent) rather than dumping every sessionless caller into one
+  // shared "anon:sessionless" bucket — there, one user's drafts were visible to
+  // others and a single "clear all" wiped everyone's in-progress review state.
+  const ip = normalizeText(
+    (req.headers.get("x-forwarded-for") || "").split(",")[0] || req.headers.get("x-real-ip") || ""
+  );
+  const ua = normalizeText(req.headers.get("user-agent") || "");
+  const fingerprint = `${ip}|${ua}`.trim();
   return {
-    actorKey: "anon:sessionless",
+    actorKey: fingerprint && fingerprint !== "|" ? `anon:${hashFingerprint(fingerprint)}` : "anon:sessionless",
     actorSource: "anonymous_fallback",
   };
 }
