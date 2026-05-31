@@ -39,13 +39,24 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 const BASE_PRODUCT_QUERY = "status:active -status:unlisted published_status:published";
-const MAX_PRODUCT_PAGES = 60;
+// Page caps are runaway guards, not catalog limits. They are sized far above
+// the real catalog so products/collections are NEVER silently truncated; if a
+// cap is ever actually hit while Shopify still reports more pages, we log a
+// loud warning (see the fetch loops) instead of dropping data on the floor.
+// (Old caps of 60×100=6,000 products / 20×250=5,000 collections silently
+// dropped everything past those ceilings — the store was already near 6,000.)
+const MAX_PRODUCT_PAGES = 250; // 250 × 100 = 25,000 products
 const PRODUCT_PAGE_SIZE = 100;
-const MAX_COLLECTION_PAGES = 20;
+const MAX_COLLECTION_PAGES = 80; // 80 × 250 = 20,000 collections
 const COLLECTION_PAGE_SIZE = 250;
 const COLLECTION_CACHE_TTL_MS = 60 * 1000;
 const PRODUCT_CACHE_TTL_MS = 45 * 1000;
 const TOKEN_CACHE_TTL_MS = 60 * 1000;
+// Failures get a much shorter TTL than successes. Caching a failed/invalid
+// token result for a full 60s meant a transient probe blip — or a freshly
+// rotated/reinstalled token — locked the whole shop out with 401s for up to a
+// minute. 5s still prevents request storms but recovers almost immediately.
+const TOKEN_FAIL_CACHE_TTL_MS = 5 * 1000;
 const MAX_MENU_DEPTH = 4;
 const MAX_SHOPIFY_MENU_DEPTH = 2;
 const DEFAULT_MENU_HANDLE = normalizeText(process.env.SHOPIFY_COLLECTION_MAPPING_MENU_HANDLE || "main-menu") || "main-menu";
@@ -307,7 +318,7 @@ async function resolveWorkingToken(shop: string, apiVersion: string) {
   const candidates = await getTokenCandidates(shop);
   if (!candidates.length) {
     const out = { ok: false as const, error: "Shop not connected." };
-    tokenCache.set(cacheKey, { value: out, expiresAt: Date.now() + TOKEN_CACHE_TTL_MS });
+    tokenCache.set(cacheKey, { value: out, expiresAt: Date.now() + TOKEN_FAIL_CACHE_TTL_MS });
     return out;
   }
 
@@ -361,7 +372,7 @@ async function resolveWorkingToken(shop: string, apiVersion: string) {
     ok: false as const,
     error: `Shop token validation failed.${lastError ? ` ${lastError}` : ""}`,
   };
-  tokenCache.set(cacheKey, { value: out, expiresAt: Date.now() + TOKEN_CACHE_TTL_MS });
+  tokenCache.set(cacheKey, { value: out, expiresAt: Date.now() + TOKEN_FAIL_CACHE_TTL_MS });
   return out;
 }
 
@@ -498,6 +509,11 @@ async function fetchAllCollections(
     page += 1;
     if (!hasNext || !endCursor) break;
     cursor = endCursor;
+    if (page >= MAX_COLLECTION_PAGES) {
+      console.warn(
+        `[collection-mapping] collection page cap (${MAX_COLLECTION_PAGES}) hit for ${shop} with more pages still available — collections beyond ${MAX_COLLECTION_PAGES * COLLECTION_PAGE_SIZE} were NOT loaded. Raise MAX_COLLECTION_PAGES.`,
+      );
+    }
   }
 
   out.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: "base" }));
@@ -792,6 +808,11 @@ async function fetchAllProducts(
     page += 1;
     if (!hasNext || !endCursor) break;
     cursor = endCursor;
+    if (page >= MAX_PRODUCT_PAGES) {
+      console.warn(
+        `[collection-mapping] product page cap (${MAX_PRODUCT_PAGES}) hit for ${shop} with more pages still available — products beyond ${MAX_PRODUCT_PAGES * PRODUCT_PAGE_SIZE} were NOT loaded (grid + push resolver would miss them). Raise MAX_PRODUCT_PAGES.`,
+      );
+    }
   }
 
   return { ok: true, products: out };
@@ -2254,65 +2275,79 @@ async function fetchProductCollections(
   apiVersion: string,
   productGid: string
 ): Promise<ProductCollectionsFetchResult> {
+  // Page through ALL of the product's collections. A product in >250
+  // collections previously had its membership undercounted, which made the
+  // push diff re-add collections it was already in and miss removals.
   const query = `
-    query ProductCollections($id: ID!) {
+    query ProductCollections($id: ID!, $after: String) {
       product(id: $id) {
         id
         title
-        collections(first: 250) {
+        collections(first: 250, after: $after) {
           nodes {
             id
+          }
+          pageInfo {
+            hasNextPage
+            endCursor
           }
         }
       }
     }
   `;
 
-  const gqlResult: GraphResult<{
+  type ProductCollectionsData = {
     product: {
       id: string;
       title: string;
-      collections: { nodes: Array<{ id: string }> };
+      collections: {
+        nodes: Array<{ id: string }>;
+        pageInfo: { hasNextPage: boolean; endCursor: string | null };
+      };
     } | null;
-  }> = (await runShopifyGraphql<{
-    product: {
-      id: string;
-      title: string;
-      collections: { nodes: Array<{ id: string }> };
-    } | null;
-  }>({
-    shop,
-    token,
-    apiVersion,
-    query,
-    variables: { id: productGid },
-  })) as GraphResult<{
-    product: {
-      id: string;
-      title: string;
-      collections: { nodes: Array<{ id: string }> };
-    } | null;
-  }>;
+  };
 
-  if (!gqlResult.ok || !gqlResult.data?.product) {
-    return {
-      ok: false,
-      error: `Failed to fetch product collections: ${JSON.stringify(gqlResult.errors || "unknown")}`,
-    };
+  let cursor: string | null = null;
+  let productId = "";
+  let title = "";
+  const collectionIds = new Set<string>();
+  const MAX_PRODUCT_COLLECTION_PAGES = 40; // 40 × 250 = 10,000 collections per product
+
+  for (let page = 0; page < MAX_PRODUCT_COLLECTION_PAGES; page++) {
+    const gqlResult = (await runShopifyGraphql<ProductCollectionsData>({
+      shop,
+      token,
+      apiVersion,
+      query,
+      variables: { id: productGid, after: cursor },
+    })) as GraphResult<ProductCollectionsData>;
+
+    if (!gqlResult.ok || !gqlResult.data?.product) {
+      return {
+        ok: false,
+        error: `Failed to fetch product collections: ${JSON.stringify(gqlResult.errors || "unknown")}`,
+      };
+    }
+
+    const product = gqlResult.data.product;
+    productId = normalizeText(product.id);
+    title = normalizeText(product.title);
+    for (const row of Array.isArray(product.collections?.nodes) ? product.collections.nodes : []) {
+      const id = normalizeText(row.id);
+      if (id) collectionIds.add(id);
+    }
+
+    const hasNext = Boolean(product.collections?.pageInfo?.hasNextPage);
+    const endCursor = normalizeText(product.collections?.pageInfo?.endCursor) || null;
+    if (!hasNext || !endCursor) break;
+    cursor = endCursor;
   }
 
-  const product = gqlResult.data.product;
   return {
     ok: true,
-    productId: normalizeText(product.id),
-    title: normalizeText(product.title),
-    collectionIds: Array.from(
-      new Set(
-        (Array.isArray(product.collections?.nodes) ? product.collections.nodes : [])
-          .map((row) => normalizeText(row.id))
-          .filter(Boolean)
-      )
-    ),
+    productId,
+    title,
+    collectionIds: Array.from(collectionIds),
   };
 }
 

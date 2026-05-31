@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import ShopifyMenuItemsTree from "@/components/shopify-menu-items-tree";
 import { formatAppDateTime } from "@/lib/formatAppDateTime";
 import { normalizeMenuPath } from "@/lib/shopifyCollectionSkuParser";
@@ -757,6 +757,16 @@ export default function ShopifyCollectionMapping() {
   const syncedDraftClearInFlightRef = useRef(false);
   const lastDraftSavePayloadRef = useRef("");
   const syncedDraftClearedRowIdsRef = useRef<Set<string>>(new Set());
+  // Latest draft payload ready to persist (computed eagerly so it can be
+  // flushed on unmount/navigation, not just when the debounce fires).
+  const pendingDraftRef = useRef<{
+    payloadHash: string;
+    saveBody: Record<string, unknown> | null;
+    clearBody: Record<string, unknown> | null;
+  } | null>(null);
+  // Serializes draft saves so an out-of-order/in-flight write can't clobber a
+  // newer one (lost-update). Each flush chains after the previous.
+  const draftSaveChainRef = useRef<Promise<void>>(Promise.resolve());
 
   const activeShop = useMemo(() => {
     const normalized = normalizeShopDomain(shop);
@@ -2181,6 +2191,10 @@ export default function ShopifyCollectionMapping() {
       setReviewedByRow(nextReviewedByRow);
       setHoldFromSyncByRow(nextHoldFromSyncByRow);
       syncedDraftClearedRowIdsRef.current.clear();
+      // Reset the autosave dedup so a hash left over from the previous dataset
+      // or shop can't cause the next genuinely-needed save/clear to be skipped.
+      lastDraftSavePayloadRef.current = "";
+      pendingDraftRef.current = null;
       draftHydrationDoneRef.current = true;
       const nextCollections = (json.collections || []).map((row) => ({
         id: String(row.id || ""),
@@ -2453,7 +2467,10 @@ export default function ShopifyCollectionMapping() {
           return { ...prev, [activeRowId]: current };
         });
       } else {
-        if (!menuNodeIsLeaf(nodeKey)) return;
+        if (!menuNodeIsLeaf(nodeKey)) {
+          setWarning("Pick a leaf menu item (the lowest level) to map — parent categories can't be assigned directly.");
+          return;
+        }
         setManualAddedPathsByRow((prev) => ({
           ...prev,
           [activeRowId]: { ...(prev[activeRowId] || {}), [nodePath]: true },
@@ -2482,7 +2499,10 @@ export default function ShopifyCollectionMapping() {
       }
       for (const key of toRemove) next.delete(key);
     } else {
-      if (!menuNodeIsLeaf(nodeKey)) return;
+      if (!menuNodeIsLeaf(nodeKey)) {
+        setWarning("Pick a leaf menu item (the lowest level) to map — parent categories can't be assigned directly.");
+        return;
+      }
       next.add(nodeKey);
     }
 
@@ -2623,73 +2643,106 @@ export default function ShopifyCollectionMapping() {
       }
       return next;
     });
+    // Prune the mobile "promote to Ready-to-Push" map too — without this it
+    // leaked stale entries across reloads, so a reused row id could be shown
+    // Ready-to-Push (and have needsReview flipped off) on stale client state.
+    setMobileThumbPromotedByRow((prev) => {
+      const next: Record<string, boolean> = {};
+      for (const [rowId, value] of Object.entries(prev)) {
+        if (!valid.has(rowId)) continue;
+        next[rowId] = Boolean(value);
+      }
+      return next;
+    });
   }, [rows]);
+
+  const flushPendingDrafts = useCallback((immediate: boolean) => {
+    const pending = pendingDraftRef.current;
+    if (!pending) return;
+    if (pending.payloadHash === lastDraftSavePayloadRef.current) return;
+    lastDraftSavePayloadRef.current = pending.payloadHash;
+    const send = (body: Record<string, unknown>) =>
+      fetch("/api/collection-mapping", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        keepalive: immediate,
+      }).catch(() => {});
+    if (immediate) {
+      // Final flush (unmount / page hide): fire directly with keepalive so the
+      // write survives navigation. Latest staged state wins.
+      if (pending.saveBody) void send(pending.saveBody);
+      if (pending.clearBody) void send(pending.clearBody);
+      return;
+    }
+    // Normal flush: chain after the previous save so two quick edits can't
+    // land out of order and clobber the newer one (lost-update).
+    draftSaveChainRef.current = draftSaveChainRef.current
+      .then(async () => {
+        if (pending.saveBody) await send(pending.saveBody);
+        if (pending.clearBody) await send(pending.clearBody);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!draftHydrationDoneRef.current) return;
     if (!activeShop) return;
-    const timer = window.setTimeout(() => {
-      const drafts: Array<{ rowId: string; draft: Record<string, unknown> }> = [];
-      const rowIdsToClear: string[] = [];
-      for (const row of rows) {
-        const rowId = String(row.id || "").trim();
-        if (!rowId) continue;
-        const selectedSuggestionPaths = selectedRecordToList(selectedSuggestionPathsByRow[rowId]);
-        const selectedSuggestionCollections = selectedRecordToList(selectedSuggestionCollectionsByRow[rowId]);
-        const manualAddedPaths = selectedRecordToList(manualAddedPathsByRow[rowId]);
-        const manualRemovedPaths = selectedRecordToList(manualRemovedPathsByRow[rowId]);
-        const staging = rowStagingById.get(rowId);
-        const isReviewed = Boolean(reviewedByRow[rowId] ?? row.isReviewed);
-        const holdFromSync = Boolean(holdFromSyncByRow[rowId] ?? row.draft?.holdFromSync);
-        const hasDraft =
-          isReviewed ||
-          holdFromSync ||
-          selectedSuggestionPaths.length > 0 ||
-          selectedSuggestionCollections.length > 0 ||
-          manualAddedPaths.length > 0 ||
-          manualRemovedPaths.length > 0;
-        if (!hasDraft) {
-          if (row.draft) rowIdsToClear.push(rowId);
-          continue;
-        }
-        drafts.push({
-          rowId,
-          draft: {
-            isReviewed,
-            holdFromSync,
-            selectedSuggestionPaths,
-            selectedSuggestionCollections,
-            manualAddedPaths,
-            manualRemovedPaths,
-            mappingDecision: staging?.mappingDecision || row.mappingDecision || null,
-            collectionSyncStatus: staging?.collectionSyncStatus || null,
-            finalMenuPaths: staging?.finalMenuPaths || [],
-            finalDirectCollections: staging?.finalDirectCollections || [],
-            currentMatchesFinal: typeof staging?.currentMatchesFinal === "boolean" ? staging.currentMatchesFinal : null,
-          },
-        });
+    // Compute the payload eagerly (outside the timer) so it can be flushed on
+    // unmount/navigation; the debounce only gates the actual network send.
+    const drafts: Array<{ rowId: string; draft: Record<string, unknown> }> = [];
+    const rowIdsToClear: string[] = [];
+    for (const row of rows) {
+      const rowId = String(row.id || "").trim();
+      if (!rowId) continue;
+      const selectedSuggestionPaths = selectedRecordToList(selectedSuggestionPathsByRow[rowId]);
+      const selectedSuggestionCollections = selectedRecordToList(selectedSuggestionCollectionsByRow[rowId]);
+      const manualAddedPaths = selectedRecordToList(manualAddedPathsByRow[rowId]);
+      const manualRemovedPaths = selectedRecordToList(manualRemovedPathsByRow[rowId]);
+      const staging = rowStagingById.get(rowId);
+      const isReviewed = Boolean(reviewedByRow[rowId] ?? row.isReviewed);
+      const holdFromSync = Boolean(holdFromSyncByRow[rowId] ?? row.draft?.holdFromSync);
+      const hasDraft =
+        isReviewed ||
+        holdFromSync ||
+        selectedSuggestionPaths.length > 0 ||
+        selectedSuggestionCollections.length > 0 ||
+        manualAddedPaths.length > 0 ||
+        manualRemovedPaths.length > 0;
+      if (!hasDraft) {
+        if (row.draft) rowIdsToClear.push(rowId);
+        continue;
       }
-      const payloadHash = JSON.stringify({
-        drafts,
-        rowIdsToClear: [...rowIdsToClear].sort((a, b) => a.localeCompare(b)),
+      drafts.push({
+        rowId,
+        draft: {
+          isReviewed,
+          holdFromSync,
+          selectedSuggestionPaths,
+          selectedSuggestionCollections,
+          manualAddedPaths,
+          manualRemovedPaths,
+          mappingDecision: staging?.mappingDecision || row.mappingDecision || null,
+          collectionSyncStatus: staging?.collectionSyncStatus || null,
+          finalMenuPaths: staging?.finalMenuPaths || [],
+          finalDirectCollections: staging?.finalDirectCollections || [],
+          currentMatchesFinal: typeof staging?.currentMatchesFinal === "boolean" ? staging.currentMatchesFinal : null,
+        },
       });
-      if (payloadHash === lastDraftSavePayloadRef.current) return;
-      lastDraftSavePayloadRef.current = payloadHash;
-      if (drafts.length > 0) {
-        void fetch("/api/collection-mapping", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(withShopContext({ action: "set-row-draft-batch", drafts })),
-        }).catch(() => {});
-      }
-      if (rowIdsToClear.length > 0) {
-        void fetch("/api/collection-mapping", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(withShopContext({ action: "clear-row-drafts", rowIds: rowIdsToClear })),
-        }).catch(() => {});
-      }
-    }, DRAFT_AUTOSAVE_DEBOUNCE_MS);
+    }
+    const payloadHash = JSON.stringify({
+      drafts,
+      rowIdsToClear: [...rowIdsToClear].sort((a, b) => a.localeCompare(b)),
+    });
+    pendingDraftRef.current = {
+      payloadHash,
+      saveBody: drafts.length > 0 ? withShopContext({ action: "set-row-draft-batch", drafts }) : null,
+      clearBody:
+        rowIdsToClear.length > 0
+          ? withShopContext({ action: "clear-row-drafts", rowIds: rowIdsToClear })
+          : null,
+    };
+    const timer = window.setTimeout(() => flushPendingDrafts(false), DRAFT_AUTOSAVE_DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
   }, [
     activeShop,
@@ -2701,7 +2754,24 @@ export default function ShopifyCollectionMapping() {
     manualRemovedPathsByRow,
     holdFromSyncByRow,
     rowStagingById,
+    flushPendingDrafts,
   ]);
+
+  // Flush any pending (debounce-in-flight) draft on tab hide / unmount so work
+  // made within the debounce window before leaving isn't silently lost.
+  useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState === "hidden") flushPendingDrafts(true);
+    };
+    const onPageHide = () => flushPendingDrafts(true);
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", onPageHide);
+      flushPendingDrafts(true);
+    };
+  }, [flushPendingDrafts]);
 
   useEffect(() => {
     if (!draftHydrationDoneRef.current) return;
@@ -3424,6 +3494,14 @@ export default function ShopifyCollectionMapping() {
     setError("");
     const beforeNodes = cloneNodes(nodes);
     const afterNodes = moveLocalNode(cloneNodes(nodes), nodeKey, nextDropTarget.targetKey, nextDropTarget.position);
+    // moveLocalNode returns the tree UNCHANGED when the move is rejected (e.g.
+    // dropping a node inside its own descendant = a cycle). Bail on a no-op so
+    // we don't mark the tree dirty or queue a doomed server move op that does
+    // nothing visible.
+    if (JSON.stringify(afterNodes) === JSON.stringify(beforeNodes)) {
+      setWarning("That move isn't allowed — a menu item can't be dropped inside itself.");
+      return;
+    }
     const movedLabel = nodeByKey.get(nodeKey)?.label || "Menu item";
     const targetLabel = nodeByKey.get(nextDropTarget.targetKey)?.label || "Menu item";
     const placementText =
@@ -4642,6 +4720,11 @@ export default function ShopifyCollectionMapping() {
         )
       );
       setError(message);
+      // A mid-loop failure may have already pushed some rows to Shopify and
+      // applied optimistic local state. Reload so the table reflects server
+      // truth for both the committed and the failed rows instead of stranding
+      // optimistic state that never reconciles.
+      await loadData({ refreshProducts: true }).catch(() => {});
     } finally {
       setExecutionBusy(false);
       setPushPreviewModal(null);
@@ -5047,15 +5130,17 @@ export default function ShopifyCollectionMapping() {
           timestamp: Date.now(),
         });
       // #endregion
-      const ordered = [...undoPreviewEntries].reverse();
-      let nextNodes = cloneNodes(nodes);
-      const applied: string[] = [];
-      const selected = new Set(undoSelectedEntryIds);
-      for (const entry of ordered) {
-        if (!selected.has(entry.id)) continue;
-        nextNodes = cloneNodes(entry.beforeNodes);
-        applied.push(entry.title);
-      }
+      // undoSelectedEntries is newest-first. Reverting the selected run means
+      // restoring the tree to the state BEFORE the OLDEST selected action —
+      // that one snapshot already predates every newer selected action.
+      // (The previous loop reversed the list and reassigned `nextNodes` each
+      // iteration, so only the NEWEST action's snapshot ever survived: it
+      // silently undid just one action while the result claimed "Reverted N".)
+      const applied: string[] = undoSelectedEntries.map((entry) => entry.title);
+      const oldestSelected = undoSelectedEntries[undoSelectedEntries.length - 1];
+      const nextNodes = oldestSelected
+        ? cloneNodes(oldestSelected.beforeNodes)
+        : cloneNodes(nodes);
       setNodes(nextNodes);
       setPendingTreeOps([]);
       const appliedSet = new Set(undoSelectedEntryIds);

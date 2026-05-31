@@ -907,6 +907,18 @@ export async function syncLiveMenuNodes(
     const byExisting = new Map(existing.map((row) => [row.nodeKey, row]));
     const normalizedKeys = new Set(normalized.map((row) => row.nodeKey));
     const nowIso = new Date().toISOString();
+    // Same partial/throttled-pull guard as the SQL path: don't drop mappings
+    // when Shopify returned far fewer nodes than we already have.
+    const existingManagedMem = existing.filter(
+      (row) => row.enabled && !row.nodeKey.startsWith("local4:")
+    ).length;
+    if (existingManagedMem >= 5 && normalized.length < existingManagedMem * 0.5) {
+      return {
+        backend: "memory",
+        warning: `Skipped pruning stale menu nodes: Shopify returned ${normalized.length} node(s) but ${existingManagedMem} are stored — likely a partial/throttled menu pull, so existing mappings were preserved.`,
+        nodes: sortNodes(existing.map(cloneNode)),
+      };
+    }
     const next: MenuNodeRecord[] = normalized.map((row) => {
       const current = byExisting.get(row.nodeKey);
       const collectionState = resolveNodeCollectionState(current, row, byId, byHandle);
@@ -1005,6 +1017,25 @@ export async function syncLiveMenuNodes(
         now,
       ]
     );
+  }
+
+  // Guard against a partial/throttled menu pull silently wiping live mappings.
+  // The deep menus{items{items{items}}} query Shopify aggressively throttles can
+  // return a truncated item set; if that happened, the reconciling DELETE below
+  // would permanently remove every enabled, mapped node missing from the
+  // snapshot. If Shopify returned far fewer nodes than we already have stored,
+  // treat the pull as incomplete and SKIP the destructive reconciliation — the
+  // upsert above already applied any genuine additions/changes, and a real bulk
+  // deletion can simply be re-run. (The empty-menu case is handled earlier.)
+  const existingManaged = existingRows.filter(
+    (row) => row.enabled && !row.nodeKey.startsWith("local4:")
+  ).length;
+  if (existingManaged >= 5 && normalized.length < existingManaged * 0.5) {
+    return {
+      backend: "sql",
+      warning: `Skipped pruning stale menu nodes: Shopify returned ${normalized.length} node(s) but ${existingManaged} are stored — this looks like a partial or throttled menu pull, so existing mappings were preserved. Refresh again to reconcile.`,
+      nodes: sortNodes(await listSqlNodes(safeShop)),
+    };
   }
 
   const keys = normalized.map((row) => row.nodeKey);

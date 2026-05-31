@@ -573,7 +573,11 @@ export default function ShopifyMenuItemsTree({
   const hasTreeSearch = treeSearch.trim().length > 0;
   const [dragSourceKey, setDragSourceKey] = useState("");
   const [dropTarget, setDropTarget] = useState<DropTarget>(null);
-  const [dragDeltaX, setDragDeltaX] = useState(0);
+  // Horizontal drag delta as a ref (not state): resolveDropTarget runs in
+  // onDragEnd (and the onDragMove preview) where a batched state value would
+  // lag the latest pointer move — the ref means the committed drop position
+  // matches what the user actually sees, with no extra re-renders per move.
+  const dragDeltaXRef = useRef(0);
   const [editingNodeKey, setEditingNodeKey] = useState("");
   const [editingLabel, setEditingLabel] = useState("");
   const [editingLink, setEditingLink] = useState("");
@@ -618,9 +622,10 @@ export default function ShopifyMenuItemsTree({
     if (!overKey || sourceKey === overKey) return null;
     let targetKey = overKey;
     let position: DropPosition = "after";
-    if (dragDeltaX > 26) {
+    const delta = dragDeltaXRef.current;
+    if (delta > 26) {
       position = "inside";
-    } else if (dragDeltaX < -26) {
+    } else if (delta < -26) {
       const parent = parentByKey.get(overKey) || null;
       if (parent) {
         targetKey = parent;
@@ -642,7 +647,6 @@ export default function ShopifyMenuItemsTree({
     if (!sourceKey || !overKey || sourceKey === overKey) {
       setDragSourceKey("");
       setDropTarget(null);
-      setDragDeltaX(0);
       return;
     }
     const target = resolveDropTarget(sourceKey, overKey);
@@ -653,7 +657,7 @@ export default function ShopifyMenuItemsTree({
     }
     setDragSourceKey("");
     setDropTarget(null);
-    setDragDeltaX(0);
+    dragDeltaXRef.current = 0;
   }
 
   function onDragMove(event: DragMoveEvent) {
@@ -661,7 +665,7 @@ export default function ShopifyMenuItemsTree({
     const overKey = String(event.over?.id || "");
     if (!sourceKey || !overKey) return;
     setDragSourceKey(sourceKey);
-    setDragDeltaX(event.delta.x || 0);
+    dragDeltaXRef.current = event.delta.x || 0;
     setDropTarget(resolveDropTarget(sourceKey, overKey));
   }
 

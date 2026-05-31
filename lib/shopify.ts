@@ -56,8 +56,9 @@ export function getShopifyAdminToken(shop: string) {
   return global;
 }
 
-const SHOPIFY_THROTTLE_MAX_RETRIES = 4;
-const SHOPIFY_THROTTLE_BASE_DELAY_MS = 1500;
+const SHOPIFY_THROTTLE_MAX_RETRIES = 6;
+const SHOPIFY_THROTTLE_BASE_DELAY_MS = 1000;
+const SHOPIFY_THROTTLE_MAX_DELAY_MS = 15000;
 
 export async function runShopifyGraphql<T>({
   shop,
@@ -93,12 +94,39 @@ export async function runShopifyGraphql<T>({
       json = { raw: text };
     }
 
-    if (res.status === 429 || (Array.isArray(json?.errors) && json.errors.some((e: any) => e?.extensions?.code === "THROTTLED"))) {
-      if (attempt < SHOPIFY_THROTTLE_MAX_RETRIES) {
-        const delay = SHOPIFY_THROTTLE_BASE_DELAY_MS * Math.pow(2, attempt);
-        await new Promise((r) => setTimeout(r, delay));
-        continue;
+    const throttled =
+      res.status === 429 ||
+      (Array.isArray(json?.errors) &&
+        json.errors.some((e: any) => e?.extensions?.code === "THROTTLED"));
+    if (throttled && attempt < SHOPIFY_THROTTLE_MAX_RETRIES) {
+      // Honor Shopify's pacing signals instead of a blind backoff:
+      //   1) the REST-style `Retry-After` header (seconds), then
+      //   2) GraphQL cost-based throttling — wait long enough for the
+      //      leaky bucket to refill the points this query needs
+      //      ((requestedQueryCost - currentlyAvailable) / restoreRate),
+      //   3) otherwise exponential backoff.
+      // A little jitter avoids thundering-herd retries; capped so we never
+      // sleep longer than the route's time budget tolerates.
+      const retryAfterSec = Number(res.headers.get("retry-after"));
+      const cost = json?.extensions?.cost;
+      const throttleStatus = cost?.throttleStatus;
+      let delay: number;
+      if (Number.isFinite(retryAfterSec) && retryAfterSec > 0) {
+        delay = retryAfterSec * 1000;
+      } else if (throttleStatus && Number(throttleStatus.restoreRate) > 0) {
+        const needed = Math.max(
+          0,
+          Number(cost?.requestedQueryCost ?? 0) - Number(throttleStatus.currentlyAvailable ?? 0),
+        );
+        delay =
+          Math.ceil((needed / Number(throttleStatus.restoreRate)) * 1000) ||
+          SHOPIFY_THROTTLE_BASE_DELAY_MS;
+      } else {
+        delay = SHOPIFY_THROTTLE_BASE_DELAY_MS * Math.pow(2, attempt);
       }
+      delay = Math.min(SHOPIFY_THROTTLE_MAX_DELAY_MS, delay) + Math.floor(Math.random() * 250);
+      await new Promise((r) => setTimeout(r, delay));
+      continue;
     }
 
     if (!res.ok) {
