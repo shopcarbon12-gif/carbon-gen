@@ -1,8 +1,9 @@
-// 6.5 × 5 cm physical label stock at 12 dpmm (300 DPI):
-//   65 mm × 12 = 780 dots wide
-//   50 mm × 12 = 600 dots tall
-export const LABEL_WIDTH_DOTS = 780;
-export const LABEL_HEIGHT_DOTS = 600;
+// Carbon RFID hang-tag stock at 12 dpmm (300 DPI). The ZD500R's media is
+// 812 dots wide (ezpl.print_width=812) — PW780 left blank padding on the
+// right. Height bumped to 624 to fit the final box grid (see
+// project_zd500r_font_and_calibration_2026_06_01).
+export const LABEL_WIDTH_DOTS = 812;
+export const LABEL_HEIGHT_DOTS = 624;
 export const PRINTER_DPI = 300;
 
 export type RfidSettings = {
@@ -28,8 +29,10 @@ export const DEFAULT_RFID_SETTINGS: RfidSettings = {
   printerPort: 80,
   labelWidthDots: LABEL_WIDTH_DOTS,
   labelHeightDots: LABEL_HEIGHT_DOTS,
-  labelShiftX: 0,
-  labelShiftY: 0,
+  // Whole-label registration tuned on-printer 2026-06-01: ^LS-32 shifts
+  // content right, ^LT24 nudges it down so the grid sits on the stock.
+  labelShiftX: -32,
+  labelShiftY: 24,
 };
 
 export type LabelInput = {
@@ -273,31 +276,6 @@ export function buildEpc({
   };
 }
 
-function splitVerticalColumns(description: string, color: string, size: string) {
-  const words = sanitizeZpl(description)
-    .toUpperCase()
-    .split(/\s+/)
-    .filter(Boolean);
-  const excluded = [sanitizeZpl(color), sanitizeZpl(size)]
-    .join(" ")
-    .toUpperCase()
-    .split(/\s+/)
-    .filter(Boolean);
-
-  const filteredWords = words.filter((word) => !excluded.includes(word));
-
-  if (filteredWords.length === 0) return ["ITEM", ""] as const;
-  if (filteredWords.length === 1) return [sanitizeZpl(filteredWords[0]), ""] as const;
-  if (filteredWords.length === 2) {
-    return [sanitizeZpl(filteredWords[0]), sanitizeZpl(filteredWords[1])] as const;
-  }
-
-  const half = Math.ceil(filteredWords.length / 2);
-  const line1 = sanitizeZpl(filteredWords.slice(0, half).join(" "));
-  const line2 = sanitizeZpl(filteredWords.slice(half).join(" "));
-  return [line1, line2] as const;
-}
-
 export function inferSizeFromDescription(description: string) {
   const tokens = sanitizeZpl(description).split(/\s+/).filter(Boolean);
   if (tokens.length === 0) return "";
@@ -338,6 +316,67 @@ export function inferColorFromDescription(description: string, inferredSize: str
   }
 
   return tokens[lastIdx] || "";
+}
+
+function greedyWrap(words: string[], max: number): string[] {
+  const out: string[] = [];
+  let cur: string[] = [];
+  for (const w of words) {
+    const cand = [...cur, w].join(" ");
+    if (cur.length && cand.length > max) {
+      out.push(cur.join(" "));
+      cur = [w];
+    } else {
+      cur.push(w);
+    }
+  }
+  if (cur.length) out.push(cur.join(" "));
+  return out;
+}
+
+/**
+ * Box-4 item-name layout (tuned on-printer 2026-06-01). Strips color/size
+ * words from the name, then fits on ONE centered row (font 40) when ≤16
+ * chars (x324); else greedy-wraps to TWO rows (font 40, ≤16 each) at
+ * x294/354; else drops to font 36 and THREE rows (≤18 each) at x284/324/364.
+ */
+function layoutItemName(
+  name: string,
+  color: string,
+  size: string
+): { rows: string[]; font: number; xs: number[] } {
+  const remove = new Set(
+    [sanitizeZpl(color), sanitizeZpl(size)].join(" ").toUpperCase().split(/\s+/).filter(Boolean)
+  );
+  const words = sanitizeZpl(name)
+    .toUpperCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .filter((w) => !remove.has(w));
+  if (words.length === 0) return { rows: ["ITEM"], font: 40, xs: [324] };
+  const full = words.join(" ");
+  if (full.length <= 16) return { rows: [full], font: 40, xs: [324] };
+  const r2 = greedyWrap(words, 16);
+  if (r2.length <= 2) return { rows: r2, font: 40, xs: [294, 354] };
+  const r3 = greedyWrap(words, 18);
+  const rows = r3.length <= 3 ? r3 : [r3[0], r3[1], r3.slice(2).join(" ")];
+  return { rows, font: 36, xs: [284, 324, 364] };
+}
+
+/** Box-8 size-run auto-shrink: largest font ≤48 whose estimated Arial width
+ *  fits the ^FB550 block (~530 usable), nudging x up as the glyph shrinks. */
+function box8Layout(text: string): { font: number; x: number } {
+  const em = [...text].reduce((a, c) => a + (c === " " ? 0.278 : 0.556), 0);
+  const font = Math.min(48, Math.max(20, Math.floor(530 / Math.max(em, 1))));
+  const x = Math.round(756 - (48 - font) * 0.5);
+  return { font, x };
+}
+
+/** Box-6 barcode is Code 93 at ^BY3 — length grows with the SKU. Center it
+ *  in the content height (y64..541) so short/long SKUs stay balanced. */
+function barcodeStartY(sku: string): number {
+  const lengthDots = (9 * sku.length + 37) * 3; // Code 93 module count × ^BY3
+  return Math.max(30, Math.round(64 + (477 - lengthDots) / 2));
 }
 
 function formatDisplayPrice(value: string) {
@@ -400,19 +439,22 @@ export function generateLabelZpl({
   const safeSku = sanitizeZpl(input.customSku).toUpperCase();
   const safePrice = formatDisplayPrice(input.retailPrice);
   const safeCountry = normalizeSizesColumn(input.countryCode);
-  const [line1, line2] = splitVerticalColumns(input.itemName, safeColorResolved, safeSize);
-  const barcodeSeed = safeSku || safeUpc || sanitizeZpl(input.itemName).toUpperCase();
-  const numericBarcode = barcodeSeed.replace(/\D+/g, "");
-  const barcodeData = numericBarcode.length >= 8 ? numericBarcode : barcodeSeed;
+  const name = layoutItemName(input.itemName, safeColorResolved, safeSize);
+  const nameLines = name.rows
+    .map((r, i) => `^FT${name.xs[i]},575^AKB,${name.font}^FB550,1,0,C^FD${r}^FS`)
+    .join("\n");
+  const b8 = box8Layout(safeCountry);
+  const bcY = barcodeStartY(safeSku || safeUpc);
 
-  // Carbon hang-tag (warehouse-approved layout, May 2026):
-  //   • Bold font for UPC + retail price via E:ARI000.TTF (mapped as B).
-  //   • Merged description cell — divider line removed; both lines fit
-  //     in the same row (operator-specified per physical reference).
-  //   • Vertical Code 128 ^BCB at FO 455,79 in the gap column with
-  //     numeric-only payload (subset C density). Trailing letter on
-  //     the SKU is kept in the human-readable text strip only.
-  //   • Symmetrical column dividers (5 vertical lines instead of 6).
+  // Carbon RFID price-tag — final layout dialed in on-printer 2026-06-01
+  // (see project_zd500r_font_and_calibration_2026_06_01). Fonts: K=Arial,
+  // B=Arial heavy bold (ARI000), M=Liberation Sans Bold uploaded as
+  // E:LSB3.TTF via BINARY ~DY (ASCII-hex stores but won't render). ^PR2
+  // slows the print so the thin Code 93 bars come out crisp. Box 6 barcode
+  // = Code 93 (^BAB) of the FULL SKU incl. letters (laser/red-light
+  // scannable), centered by length. EPC via ^RB + ^RFW,E decimal triplet.
+  // REQUIRES E:LSB3.TTF on the target printer, else box 3 (UPC) and box 7
+  // (price) render blank.
   return `^XA
 ^CI28
 ^PON
@@ -421,29 +463,29 @@ export function generateLabelZpl({
 ^PW${settings.labelWidthDots}
 ^LL${settings.labelHeightDots}
 ^MD20
+^PR2
 ^LH0,0
 ^LS${settings.labelShiftX}
 ^LT${settings.labelShiftY}
 ^CWK,E:ARIAL.TTF
 ^CWB,E:ARI000.TTF
+^CWM,E:LSB3.TTF
 ^FO15,86^GB410,427,2^FS
 ^FO64,84^GB0,423,3^FS
 ^FO188,87^GB0,425,3^FS
 ^FO247,87^GB0,425,3^FS
 ^FO368,87^GB0,425,3^FS
 ^FO593,86^GB107,426,3^FS
-^FO764,64^GB0,477,3^FS
+^FO775,64^GB0,477,3^FS
 ^FT54,497^AKB,38,^FDTALLA/SIZE^FS
-^FT175,529^AKB,134^FB515,1,0,C^FD${safeSize || "M"}^FS
-^FT234,597^ABB,36^FB600,1,0,C^FD${safeUpc || safeSku || "-"}^FS
-^FT294,559^AKB,34^FB550,1,0,C^FD${line1 || "ITEM"}^FS
-^FT354,559^AKB,34^FB550,1,0,C^FD${line2 || "SHIRT"}^FS
+^FT161,529^AKB,100^FB515,1,0,C^FD${safeSize || "M"}^FS
+^FT232,575^AMB,44^FB550,1,0,C^FD${safeUpc || safeSku || "-"}^FS
+${nameLines}
 ^FT413,559^AKB,36^FB550,1,0,C^FD${safeColorResolved || "COLOR"}^FS
-^FO436,86^BY3,2^BCB,112,N,N,N^FD${barcodeData}^FS
-^FT581,559^AKB,32^FB550,1,0,C^FD${safeSku || barcodeData}^FS
-^FT668,559^AKB,60^FB550,1,0,C^FD$${safePrice}^FS
-^FT669,559^AKB,60^FB550,1,0,C^FD$${safePrice}^FS
-^FT746,559^AKB,34^FB550,1,0,C^FD${safeCountry}^FS
+^FO436,${bcY}^BY3,2^BAB,112,N,N^FD${safeSku || safeUpc}^FS
+^FT581,559^AKB,38^FB550,1,0,C^FD${safeSku || safeUpc}^FS
+^FT662,559^AMB,58^FB550,1,0,C^FD$${safePrice}^FS
+^FT${b8.x},567^AKB,${b8.font}^FB550,1,0,C^FD${safeCountry}^FS
 ^RB${epcConfig.epcLength},${epcConfig.companyPrefixBits},${epcConfig.itemNumberBits},${epcConfig.serialBits}^FS
 ^RFW,E^FD${epcWrite.companyPrefix},${epcWrite.itemNumber},${epcWrite.serialNumber}^FS
 ^PQ1,0,1,Y
