@@ -130,6 +130,15 @@ type BarcodeDetectorLike = {
 type BarcodeDetectorCtorLike = new (options?: { formats?: string[] }) => BarcodeDetectorLike;
 
 const IMAGE_FILE_EXT_RE = /\.(avif|bmp|gif|heic|heif|jpeg|jpg|png|tif|tiff|webp)$/i;
+// Per-file upload cap. Apparel source/reference photos are large, but anything
+// beyond this is almost certainly a mistake and risks exhausting memory while we
+// read it into a data URL / object URL.
+const MAX_IMAGE_BYTES = 40 * 1024 * 1024; // 40 MB
+function formatBytes(bytes: number) {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(0)} MB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${bytes} B`;
+}
 
 function isImageLikeFile(file: File) {
   const mime = String(file.type || "").toLowerCase();
@@ -507,6 +516,17 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   const modelUploadingRef = useRef(false);
   const modelSavingRef = useRef(false);
   const modelUploadPendingRef = useRef(0);
+  // Tracks whether the component is still mounted so async upload workers can
+  // skip state updates after unmount, and an AbortController that cancels any
+  // in-flight uploads when we unmount.
+  const componentMountedRef = useRef(true);
+  const componentUnmountAbortRef = useRef<AbortController | null>(null);
+  if (!componentUnmountAbortRef.current) {
+    componentUnmountAbortRef.current = new AbortController();
+  }
+  // Every object URL we create for model previews, so we can revoke them all on
+  // unmount regardless of what the (frequently-changing) preview array holds.
+  const modelObjectUrlsRef = useRef<Set<string>>(new Set());
   const [models, setModels] = useState<
     Array<{
       model_id: string;
@@ -1301,6 +1321,21 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     modelPreviewRef.current = modelPreviewItems;
   }, [modelPreviewItems]);
 
+  // Mark unmounted and cancel any in-flight uploads so async workers stop
+  // touching state after the component is gone.
+  useEffect(() => {
+    componentMountedRef.current = true;
+    // Re-arm the controller if a prior cleanup (e.g. StrictMode's dev
+    // mount→unmount→mount) already aborted it, so uploads aren't dead on arrival.
+    if (!componentUnmountAbortRef.current || componentUnmountAbortRef.current.signal.aborted) {
+      componentUnmountAbortRef.current = new AbortController();
+    }
+    return () => {
+      componentMountedRef.current = false;
+      componentUnmountAbortRef.current?.abort();
+    };
+  }, []);
+
   useEffect(() => {
     selectedCatalogImagesRef.current = selectedCatalogImages;
   }, [selectedCatalogImages]);
@@ -1466,12 +1501,18 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     endpoint: string,
     init: RequestInit,
     retries = 1,
-    timeoutMs = 45000
+    timeoutMs = 45000,
+    externalSignal?: AbortSignal
   ): Promise<{ resp: Response; json: any }> {
     let attempt = 0;
     let lastError: any = null;
     while (attempt <= retries) {
+      if (externalSignal?.aborted) {
+        throw new DOMException("Aborted", "AbortError");
+      }
       const controller = new AbortController();
+      const onExternalAbort = () => controller.abort();
+      externalSignal?.addEventListener("abort", onExternalAbort, { once: true });
       const timeout = setTimeout(() => controller.abort(), timeoutMs);
       try {
         const resp = await fetch(endpoint, { ...init, signal: controller.signal });
@@ -1479,6 +1520,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         return { resp, json };
       } catch (e: any) {
         lastError = e;
+        // An external abort (component unmount) should stop retrying immediately.
+        if (externalSignal?.aborted) break;
         const msg = String(e?.message || "");
         const isNetwork =
           /failed to fetch/i.test(msg) ||
@@ -1489,6 +1532,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         await new Promise((resolve) => setTimeout(resolve, 500));
       } finally {
         clearTimeout(timeout);
+        externalSignal?.removeEventListener("abort", onExternalAbort);
       }
       attempt += 1;
     }
@@ -1580,7 +1624,10 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       setModelName("");
       setModelGender("");
       setModelFiles([]);
-      modelPreviewItems.forEach((item) => URL.revokeObjectURL(item.localUrl));
+      modelPreviewItems.forEach((item) => {
+        URL.revokeObjectURL(item.localUrl);
+        modelObjectUrlsRef.current.delete(item.localUrl);
+      });
       setModelUploads([]);
       setModelPreviewItems([]);
       setModelDraftId(null);
@@ -2779,7 +2826,11 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ path: objectPath }),
-          }).catch(() => undefined);
+          }).catch((err) => {
+            // Non-fatal: the capture already succeeded. Log so orphaned temp
+            // files are at least traceable instead of disappearing silently.
+            console.warn("Failed to delete remote camera temp file", objectPath, err);
+          });
         }
         itemCameraRemoteLastPayloadRef.current = payloadSignature;
         setItemFiles((prev) =>
@@ -3259,7 +3310,24 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   }
 
   function filterImages(files: FileList | File[]) {
-    return Array.from(files).filter((file) => isImageLikeFile(file));
+    const images = Array.from(files).filter((file) => isImageLikeFile(file));
+    const tooLarge = images.filter((file) => file.size > MAX_IMAGE_BYTES);
+    if (tooLarge.length) {
+      const names = tooLarge.map((f) => f.name).slice(0, 3).join(", ");
+      const more = tooLarge.length > 3 ? ` and ${tooLarge.length - 3} more` : "";
+      setError(
+        `${tooLarge.length} file(s) skipped — over the ${formatBytes(MAX_IMAGE_BYTES)} limit: ${names}${more}.`
+      );
+    }
+    return images.filter((file) => file.size <= MAX_IMAGE_BYTES);
+  }
+
+  // Makes role="button" dropzones operable via keyboard (Enter / Space).
+  function handleDropzoneKey(e: React.KeyboardEvent, action: () => void) {
+    if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") {
+      e.preventDefault();
+      action();
+    }
   }
 
   async function runWithConcurrency<T>(
@@ -3331,13 +3399,20 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     setModelUploadPending((prev) => prev + filtered.length);
     setModelUploadTotal((prev) => prev + filtered.length);
 
-    const localItems = filtered.map((file) => ({
-      id: `${file.name}-${file.size}-${file.lastModified}-${crypto.randomUUID()}`,
-      name: file.name,
-      localUrl: URL.createObjectURL(file),
-    }));
+    const localItems = filtered.map((file) => {
+      const localUrl = URL.createObjectURL(file);
+      // Remember every URL we mint so it can be revoked on unmount (see the
+      // unmount cleanup effect) even after the preview array has changed.
+      modelObjectUrlsRef.current.add(localUrl);
+      return {
+        id: `${file.name}-${file.size}-${file.lastModified}-${crypto.randomUUID()}`,
+        name: file.name,
+        localUrl,
+      };
+    });
     setModelPreviewItems((prev) => [...prev, ...localItems]);
 
+    const abortSignal = componentUnmountAbortRef.current?.signal;
     const failures: string[] = [];
     await runWithConcurrency(filtered, 3, async (file, index) => {
       const preview = localItems[index];
@@ -3352,8 +3427,11 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             body: uploadForm,
           },
           2,
-          45000
+          45000,
+          abortSignal
         );
+        // Bail out quietly if we unmounted mid-flight — no state writes.
+        if (!componentMountedRef.current || abortSignal?.aborted) return;
         if (!resp.ok) {
           throw new Error(json.error || "File upload failed");
         }
@@ -3370,13 +3448,27 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         ]);
         setModelUploadDone((prev) => prev + 1);
       } catch (error: any) {
+        if (abortSignal?.aborted) return;
         failures.push(error?.message || "File upload failed");
+        // Drop the failed preview so it can't masquerade as a ready image and
+        // silently block Save (which needs an uploadedUrl for every item).
+        URL.revokeObjectURL(preview.localUrl);
+        modelObjectUrlsRef.current.delete(preview.localUrl);
+        if (componentMountedRef.current) {
+          setModelPreviewItems((prev) => prev.filter((item) => item.id !== preview.id));
+        }
       } finally {
-        setModelUploadPending((prev) => Math.max(0, prev - 1));
+        if (componentMountedRef.current) {
+          setModelUploadPending((prev) => Math.max(0, prev - 1));
+        }
       }
     });
-    if (failures.length) {
-      setError(failures[0] || "Some uploads failed.");
+    if (failures.length && componentMountedRef.current) {
+      setError(
+        failures.length === 1
+          ? failures[0]
+          : `${failures.length} uploads failed and were removed. ${failures[0]}`
+      );
     }
   }
 
@@ -3384,6 +3476,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     const item = modelPreviewItems.find((p) => p.id === target.id);
     if (item?.localUrl) {
       URL.revokeObjectURL(item.localUrl);
+      modelObjectUrlsRef.current.delete(item.localUrl);
     }
     setModelPreviewItems((prev) => prev.filter((p) => p.id !== target.id));
     if (item?.path) {
@@ -4582,19 +4675,26 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     }));
     setItemPreviews(previews);
     return () => {
-      previews.forEach((p) => URL.revokeObjectURL(p.url));
+      // Defer revocation to the next frame so the replacement previews paint
+      // first — revoking synchronously here blanks images that are still on
+      // screen during a rapid add/remove.
+      const urls = previews.map((p) => p.url);
+      requestAnimationFrame(() => urls.forEach((u) => URL.revokeObjectURL(u)));
     };
   }, [itemFiles]);
 
   useEffect(() => {
     const previews = finalResultFiles.map((file) => ({
-      id: `${file.name}::${file.size}::${file.lastModified}`,
+      // Append a UUID so two look-alike files (same name/size/mtime) get
+      // distinct React keys instead of colliding and merging.
+      id: `${file.name}::${file.size}::${file.lastModified}::${crypto.randomUUID()}`,
       name: file.name,
       url: URL.createObjectURL(file),
     }));
     setFinalResultPreviews(previews);
     return () => {
-      previews.forEach((p) => URL.revokeObjectURL(p.url));
+      const urls = previews.map((p) => p.url);
+      requestAnimationFrame(() => urls.forEach((u) => URL.revokeObjectURL(u)));
     };
   }, [finalResultFiles]);
 
@@ -4629,8 +4729,13 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   }
 
   useEffect(() => {
+    // Revoke every model-preview object URL we ever created. The previous
+    // implementation closed over the initial (empty) modelPreviewItems array, so
+    // it never revoked anything; the ref captures URLs across all renders.
+    const urls = modelObjectUrlsRef.current;
     return () => {
-      modelPreviewItems.forEach((p) => URL.revokeObjectURL(p.localUrl));
+      urls.forEach((url) => URL.revokeObjectURL(url));
+      urls.clear();
     };
   }, []);
 
@@ -4850,24 +4955,36 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       ? [sourceUrl]
       : [`/api/storage/preview?url=${encodeURIComponent(sourceUrl)}`, sourceUrl];
 
+    let lastError: unknown = null;
     for (const candidate of candidateUrls) {
       try {
         const response = await fetch(candidate, {
           cache: "no-store",
           credentials: "include",
         });
-        if (!response.ok) continue;
+        if (!response.ok) {
+          lastError = new Error(`HTTP ${response.status}`);
+          continue;
+        }
         const blob = await response.blob();
         const blobUrl = URL.createObjectURL(blob);
         triggerImageDownload(safeName, blobUrl);
         setTimeout(() => URL.revokeObjectURL(blobUrl), 1200);
         return;
-      } catch {
+      } catch (e) {
         // Try next candidate (proxy -> direct URL fallback).
+        lastError = e;
       }
     }
 
+    // Proxy and direct fetch both failed — open the original link directly and
+    // tell the user instead of silently swallowing the failure.
     triggerImageDownload(safeName, sourceUrl);
+    if (lastError) {
+      setError(
+        `Could not download "${safeName}" through the storage proxy; opened the original link instead.`
+      );
+    }
   }
 
   function base64ToFile(base64: string, fileName: string) {
@@ -5748,7 +5865,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             data-integration-anchor="model-dropzone"
             role="button"
             tabIndex={0}
+            aria-label="Add model reference images: drop files or folder here, or activate to browse"
             onClick={() => openInputPickerWithMask(modelPickerRef.current)}
+            onKeyDown={(e) => handleDropzoneKey(e, () => openInputPickerWithMask(modelPickerRef.current))}
             onDragOver={(e) => e.preventDefault()}
             onDrop={async (e) => {
               e.preventDefault();
@@ -5813,6 +5932,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                         className="preview-remove"
                         onClick={() => removeModelUpload(file)}
                         type="button"
+                        aria-label={`Remove ${file.name}`}
                       >
                         Remove
                       </button>
@@ -6335,7 +6455,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             className="dropzone item-dropzone"
             role="button"
             tabIndex={0}
+            aria-label="Add item reference images: drop files or folder here, or activate to browse"
             onClick={() => openInputPickerWithMask(itemPickerRef.current)}
+            onKeyDown={(e) => handleDropzoneKey(e, () => openInputPickerWithMask(itemPickerRef.current))}
             onDragOver={(e) => e.preventDefault()}
             onDrop={async (e) => {
               e.preventDefault();
@@ -6441,7 +6563,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             {itemPreviews.length ? (
               <div className="preview-grid item-selected-grid mobile-carousel">
                 {itemPreviews.map((file, idx) => (
-                  <div className="preview-card item-device-selected-card" key={file.url}>
+                  <div className="preview-card item-device-selected-card" key={`${file.name}::${idx}`}>
                     <img
                       className="item-device-selected-image"
                       src={file.url}
@@ -7221,7 +7343,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               className="dropzone final-results-dropzone"
               role="button"
               tabIndex={0}
+              aria-label="Add final result images: drop files or folders here, or activate to browse"
               onClick={() => openInputPickerWithMask(finalResultPickerRef.current)}
+              onKeyDown={(e) => handleDropzoneKey(e, () => openInputPickerWithMask(finalResultPickerRef.current))}
               onDragOver={(e) => e.preventDefault()}
               onDrop={async (e) => {
                 e.preventDefault();
@@ -7374,7 +7498,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
               className="dropzone"
               role="button"
               tabIndex={0}
+              aria-label="Add images for Shopify push: drop files or folders here, or activate to browse"
               onClick={() => openInputPickerWithMask(pushPickerRef.current)}
+              onKeyDown={(e) => handleDropzoneKey(e, () => openInputPickerWithMask(pushPickerRef.current))}
               onDragOver={(e) => e.preventDefault()}
               onDrop={async (e) => {
                 e.preventDefault();
