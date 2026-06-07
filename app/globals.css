@@ -435,3 +435,12 @@ button:disabled,
     flex-wrap: wrap;
   }
 }
+
+/* SEO manager page: force high-contrast (white) text so nothing is unreadable. */
+.seo-route .muted,
+.seo-route .control-label,
+.seo-route p.muted,
+.seo-route span.muted,
+.seo-route div.muted {
+  color: #f8fafc !important;
+}

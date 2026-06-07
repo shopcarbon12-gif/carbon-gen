@@ -150,6 +150,7 @@ export default function SeoStudio({ shop }: { shop: string }) {
   const [decisions, setDecisions] = useState<Partial<Record<SeoFieldKey, Decision>>>({});
   const [busy, setBusy] = useState(false);
   const [previewSide, setPreviewSide] = useState<Decision>("proposed");
+  const [useVision, setUseVision] = useState(true);
 
   // ---- bulk mode state ----
   const [selected, setSelected] = useState<Record<string, boolean>>({});
@@ -230,7 +231,7 @@ export default function SeoStudio({ shop }: { shop: string }) {
       const resp = await fetch("/api/seo/optimize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ context: audit.context, current: audit.current }),
+        body: JSON.stringify({ context: audit.context, current: audit.current, useVision }),
       });
       const json = await resp.json();
       if (!resp.ok) throw new Error(json.error || "Optimize failed");
@@ -345,12 +346,19 @@ export default function SeoStudio({ shop }: { shop: string }) {
         row.current = a.current;
         row.context = a.context;
         row.currentOverall = a.scorecard.overall;
+        // Skip products with no images — leave them completely unchanged.
+        if (!(a.current?.imageAlts || []).length) {
+          row.publish = false;
+          row.status = "skipped (no images)";
+          setBulkRows([...rows]);
+          continue;
+        }
         row.status = "optimizing…";
         setBulkRows([...rows]);
         const oResp = await fetch("/api/seo/optimize", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ context: a.context, current: a.current }),
+          body: JSON.stringify({ context: a.context, current: a.current, useVision }),
         });
         const o = await oResp.json();
         if (!oResp.ok) throw new Error(o.error || "optimize failed");
@@ -424,7 +432,15 @@ export default function SeoStudio({ shop }: { shop: string }) {
         <button className={`btn ${mode === "bulk" ? "" : "ghost"}`} onClick={() => setMode("bulk")} type="button">
           Bulk catalog
         </button>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto", color: "#f8fafc", fontSize: 13 }}>
+          <input type="checkbox" checked={useVision} onChange={(e) => setUseVision(e.target.checked)} />
+          🔍 Analyze product photos (recommended)
+        </label>
       </div>
+      <p style={{ color: "#cbd5e1", fontSize: 12, marginTop: -6, marginBottom: 12 }}>
+        SEO is generated from the product <strong>name + color + photos only</strong> — existing descriptions/tags are ignored.
+        {mode === "bulk" ? " Products with no images are skipped and left unchanged." : ""}
+      </p>
 
       {error ? (
         <p style={{ color: "#b91c1c", fontWeight: 600 }}>{error}</p>
@@ -518,7 +534,7 @@ export default function SeoStudio({ shop }: { shop: string }) {
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                           <div>
                             <div className="muted" style={{ fontSize: 11 }}>CURRENT</div>
-                            <div style={{ fontSize: 13, whiteSpace: "pre-wrap", color: "#374151" }}>
+                            <div style={{ fontSize: 13, whiteSpace: "pre-wrap", color: "#e2e8f0" }}>
                               {f === "imageAlts"
                                 ? (audit.current.imageAlts || []).map((a, i) => `${i + 1}. ${a.altText || "(none)"}`).join("\n") || "(no images)"
                                 : valueToText(f, audit.current) || "(empty)"}

@@ -5,51 +5,19 @@ import { isRequestAuthed } from "@/lib/auth";
 import { checkGenerateRateLimit } from "@/lib/ratelimit";
 import { getOpenAiApiKey } from "@/lib/openaiConfig";
 import { withTimeout, parseJsonObjectFromText, asStringArray } from "@/lib/seo/aiText";
-import { scoreAll, blendLlmScores, stripHtml } from "@/lib/seo/deterministic";
+import { scoreAll, blendLlmScores } from "@/lib/seo/deterministic";
 import type { ProductContext, SeoFields, SeoFieldKey } from "@/lib/seo/types";
 
 const MODEL = (process.env.SEO_MODEL || "gpt-4o").trim() || "gpt-4o";
-const TIMEOUT_MS = Math.max(20000, Math.min(Number(process.env.SEO_TIMEOUT_MS) || 60000, 120000));
+const TIMEOUT_MS = Math.max(20000, Math.min(Number(process.env.SEO_TIMEOUT_MS) || 90000, 150000));
+const MAX_VISION_IMAGES = Math.max(1, Math.min(Number(process.env.SEO_MAX_IMAGES) || 6, 10));
 
 function getClientKey(req: NextRequest) {
   const fwd = req.headers.get("x-forwarded-for") || "";
   return fwd.split(",")[0]?.trim() || "unknown";
 }
 
-function buildPrompt(context: ProductContext, current: SeoFields) {
-  const imgs = (current.imageAlts || []).map((i, idx) => ({
-    id: i.id,
-    position: idx + 1,
-    currentAlt: i.altText || "",
-  }));
-  return [
-    "You are a senior e-commerce SEO strategist optimizing a Shopify product for Google search and social sharing.",
-    "Optimize for ranking + click-through using current best practice. Do not keyword-stuff. Keep copy natural, specific, and benefit-led.",
-    "",
-    "PRODUCT CONTEXT:",
-    JSON.stringify(context, null, 2),
-    "",
-    "CURRENT SEO:",
-    JSON.stringify(
-      {
-        title: current.title,
-        seoTitle: current.seoTitle,
-        metaDescription: current.metaDescription,
-        handle: current.handle,
-        bodyText: stripHtml(current.bodyHtml).slice(0, 1200),
-        tags: current.tags,
-        productType: current.productType,
-        vendor: current.vendor,
-      },
-      null,
-      2
-    ),
-    "",
-    "IMAGES (return one optimized alt per id):",
-    JSON.stringify(imgs, null, 2),
-    "",
-    "Return STRICT JSON only, no prose, with this exact shape:",
-    `{
+const SCHEMA = `{
   "focusKeyword": string,
   "secondaryKeywords": string[],
   "proposed": {
@@ -57,22 +25,42 @@ function buildPrompt(context: ProductContext, current: SeoFields) {
     "metaDescription": string,     // 120-155 chars, benefit + keyword + call to action
     "handle": string,              // lowercase-hyphenated, keyword-rich, no stop words
     "title": string,               // descriptive H1
-    "bodyHtml": string,            // valid HTML: short intro <p>, a <ul> of features/benefits, a details <p>. 400-900 chars of text.
+    "bodyHtml": string,            // valid HTML: short intro <p>, a <ul> of features/benefits you can SEE, a details <p>. 400-900 chars of text.
     "tags": string[],              // 5-12 relevant, deduped
     "productType": string,
     "vendor": string,
-    "imageAlts": [{ "id": string, "altText": string }]  // 15-125 chars each, descriptive, one per input image id
+    "imageAlts": [{ "id": string, "altText": string }]  // 15-125 chars each, describe what is actually in THAT photo
   },
-  "rationale": {                   // one short sentence per field explaining the change
+  "rationale": {
     "seoTitle": string, "metaDescription": string, "handle": string, "title": string,
     "bodyHtml": string, "tags": string, "productType": string, "vendor": string, "imageAlts": string
   },
-  "llmScores": {                   // 0-100 quality scores for fair comparison
-    "current": { "seoTitle": number, "metaDescription": number, "handle": number, "title": number, "bodyHtml": number, "tags": number, "productType": number, "vendor": number, "imageAlts": number },
+  "llmScores": {
     "proposed": { "seoTitle": number, "metaDescription": number, "handle": number, "title": number, "bodyHtml": number, "tags": number, "productType": number, "vendor": number, "imageAlts": number }
   }
-}`,
-    "If the current value is already excellent, keep it (and reflect that in scores).",
+}`;
+
+function buildInstruction(context: ProductContext, imageIds: string[], useVision: boolean) {
+  const colors = (context.colors || []).join(", ") || "(not specified)";
+  return [
+    "You are a senior e-commerce SEO strategist and apparel product-photo analyst.",
+    "",
+    "IMPORTANT — generate SEO using ONLY these inputs:",
+    `  • Product name: "${context.title}"`,
+    `  • Color(s): ${colors}`,
+    useVision
+      ? "  • The product PHOTOS provided in this message (analyze them)."
+      : "  • (No photos provided — work from the name and color only.)",
+    "",
+    "Do NOT use or assume any pre-existing description, tags, or metadata — treat them as unreliable and ignore them. Base every detail (fabric, fit, neckline, sleeves, print/pattern, hardware, silhouette) ONLY on what you can actually SEE in the photos plus the name and color. Never invent attributes that are not visible.",
+    "Optimize for Google search ranking + click-through using current best practice. Natural language, benefit-led, no keyword stuffing.",
+    "",
+    useVision && imageIds.length
+      ? `The photos are attached in order; their image ids (use these exact ids in imageAlts) are:\n${imageIds.map((id, i) => `  ${i + 1}. ${id}`).join("\n")}`
+      : "",
+    "",
+    "Return STRICT JSON only, no prose, with this exact shape:",
+    SCHEMA,
   ].join("\n");
 }
 
@@ -106,8 +94,25 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const context = body?.context as ProductContext | undefined;
     const current = body?.current as SeoFields | undefined;
+    const useVision = body?.useVision !== false; // default ON
     if (!context || !current) {
       return NextResponse.json({ error: "Missing context or current SEO fields." }, { status: 400 });
+    }
+
+    // Image list comes from the pulled product, but ONLY the URLs/ids are used —
+    // never the existing alt text — to keep generation free of stale references.
+    const images = (current.imageAlts || [])
+      .filter((a) => /^https?:\/\//i.test(String(a.url || "")))
+      .slice(0, MAX_VISION_IMAGES);
+    const imageIds = images.map((a) => a.id);
+    const visionActive = useVision && images.length > 0;
+
+    const instruction = buildInstruction(context, imageIds, visionActive);
+    const userContent: any[] = [{ type: "text", text: instruction }];
+    if (visionActive) {
+      for (const img of images) {
+        userContent.push({ type: "image_url", image_url: { url: img.url, detail: "auto" } });
+      }
     }
 
     const openai = new OpenAI({ apiKey });
@@ -117,8 +122,12 @@ export async function POST(req: NextRequest) {
         temperature: 0.4,
         response_format: { type: "json_object" },
         messages: [
-          { role: "system", content: "You are a precise SEO optimizer that returns only valid JSON." },
-          { role: "user", content: buildPrompt(context, current) },
+          {
+            role: "system",
+            content:
+              "You generate apparel e-commerce SEO from a product name, its color, and its photos only. You ignore any pre-existing copy. Return only valid JSON.",
+          },
+          { role: "user", content: userContent },
         ],
       }),
       TIMEOUT_MS,
@@ -134,20 +143,21 @@ export async function POST(req: NextRequest) {
     const focusKeyword = String(parsed.focusKeyword || "").trim();
     const secondaryKeywords = asStringArray(parsed.secondaryKeywords, 8);
 
-    // Map proposed alts back onto the current image list (preserve id + url).
+    // Map proposed alts back onto the pulled image list (preserve id + url).
     const altById = new Map<string, string>();
-    for (const a of Array.isArray(parsed.proposed.imageAlts) ? parsed.proposed.imageAlts : []) {
-      const id = String(a?.id || "").trim();
+    const proposedAltsArr = Array.isArray(parsed.proposed.imageAlts) ? parsed.proposed.imageAlts : [];
+    proposedAltsArr.forEach((a: any, i: number) => {
+      const id = String(a?.id || images[i]?.id || "").trim();
       if (id) altById.set(id, String(a?.altText || "").trim());
-    }
+    });
     const proposedImageAlts = (current.imageAlts || []).map((img) => ({
       id: img.id,
       url: img.url,
-      altText: altById.get(img.id) ?? img.altText ?? "",
+      altText: altById.get(img.id) ?? "",
     }));
 
     const proposed: SeoFields = {
-      title: String(parsed.proposed.title || current.title || "").trim(),
+      title: String(parsed.proposed.title || context.title || "").trim(),
       seoTitle: String(parsed.proposed.seoTitle || "").trim(),
       metaDescription: String(parsed.proposed.metaDescription || "").trim(),
       handle: String(parsed.proposed.handle || current.handle || "").trim().toLowerCase(),
@@ -160,14 +170,12 @@ export async function POST(req: NextRequest) {
       secondaryKeywords,
     };
 
-    // Score both sides against the SAME focus keyword for a fair comparison.
+    // Score both sides against the SAME focus keyword. Current is scored
+    // deterministically only (it is NOT shown to the model); proposed blends
+    // deterministic rules with the model's self-assessment.
     const currentWithKw: SeoFields = { ...current, focusKeyword, secondaryKeywords };
-    const currentDet = scoreAll(currentWithKw);
-    const proposedDet = scoreAll(proposed);
-
-    const llmScores = parsed.llmScores || {};
-    const currentScorecard = blendLlmScores(currentDet, toLlmScoreMap(llmScores.current));
-    const proposedScorecard = blendLlmScores(proposedDet, toLlmScoreMap(llmScores.proposed));
+    const currentScorecard = scoreAll(currentWithKw);
+    const proposedScorecard = blendLlmScores(scoreAll(proposed), toLlmScoreMap(parsed.llmScores?.proposed));
 
     const rationale: Partial<Record<SeoFieldKey, string>> = {};
     if (parsed.rationale && typeof parsed.rationale === "object") {
@@ -179,6 +187,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       focusKeyword,
       secondaryKeywords,
+      visionUsed: visionActive,
+      imagesAnalyzed: visionActive ? images.length : 0,
       proposed,
       currentScorecard,
       proposedScorecard,

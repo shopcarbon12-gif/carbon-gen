@@ -59,6 +59,7 @@ export interface ProductContext {
   currency?: string;
   variantSkus?: string[];
   barcodes?: string[];
+  colors?: string[];
   imageCount: number;
   onlineStoreUrl?: string;
 }

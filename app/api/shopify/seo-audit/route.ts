@@ -40,7 +40,7 @@ const PRODUCT_FIELDS = `
   media(first: 50) {
     nodes { ... on MediaImage { id image { url altText } } }
   }
-  variants(first: 50) { nodes { id sku barcode price } }
+  variants(first: 50) { nodes { id sku barcode price selectedOptions { name value } } }
 `;
 
 interface AuditProduct {
@@ -55,7 +55,15 @@ interface AuditProduct {
   seo: { title: string | null; description: string | null } | null;
   priceRangeV2?: { minVariantPrice?: { amount?: string; currencyCode?: string } };
   media?: { nodes: Array<{ id?: string; image?: { url?: string; altText?: string | null } }> };
-  variants?: { nodes: Array<{ id: string; sku?: string | null; barcode?: string | null; price?: string | null }> };
+  variants?: {
+    nodes: Array<{
+      id: string;
+      sku?: string | null;
+      barcode?: string | null;
+      price?: string | null;
+      selectedOptions?: Array<{ name?: string | null; value?: string | null }>;
+    }>;
+  };
 }
 
 export async function POST(req: NextRequest) {
@@ -130,6 +138,15 @@ export async function POST(req: NextRequest) {
       currency: product.priceRangeV2?.minVariantPrice?.currencyCode || undefined,
       variantSkus: variantNodes.map((v) => String(v.sku || "")).filter(Boolean).slice(0, 10),
       barcodes: variantNodes.map((v) => String(v.barcode || "")).filter(Boolean).slice(0, 10),
+      colors: Array.from(
+        new Set(
+          variantNodes
+            .flatMap((v) => v.selectedOptions || [])
+            .filter((o) => /colou?r/i.test(String(o?.name || "")))
+            .map((o) => String(o?.value || "").trim())
+            .filter(Boolean)
+        )
+      ).slice(0, 12),
       imageCount: mediaNodes.length,
       onlineStoreUrl: product.onlineStoreUrl || undefined,
     };
