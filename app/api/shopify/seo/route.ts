@@ -160,6 +160,40 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // ---- Add product to recommended collections (manual only; smart reject) ----
+    const collectionResults: { added: string[]; errors: string[] } = { added: [], errors: [] };
+    const addToCollections = Array.isArray(body?.addToCollections)
+      ? body.addToCollections
+          .map((c: any) => String(c || "").trim())
+          .filter((c: string) => c.startsWith("gid://shopify/Collection/"))
+      : [];
+    if (addToCollections.length) {
+      const addMutation = `
+        mutation AddToCollection($id: ID!, $productIds: [ID!]!) {
+          collectionAddProducts(id: $id, productIds: $productIds) {
+            collection { id title }
+            userErrors { field message }
+          }
+        }
+      `;
+      for (const cid of addToCollections) {
+        try {
+          const r = await runShopifyGraphql<{
+            collectionAddProducts?: { collection?: { title?: string }; userErrors?: Array<{ message: string }> };
+          }>({ shop, token, query: addMutation, variables: { id: cid, productIds: [productId] }, apiVersion: API_VERSION });
+          const errs = r.data?.collectionAddProducts?.userErrors || [];
+          if (!r.ok || r.errors || errs.length) {
+            collectionResults.errors.push(`${cid}: ${errs.map((e: { message: string }) => e.message).join("; ") || "failed (smart collections can't be edited)"}`);
+          } else {
+            collectionResults.added.push(r.data?.collectionAddProducts?.collection?.title || cid);
+          }
+        } catch (e: any) {
+          collectionResults.errors.push(`${cid}: ${e?.message || "error"}`);
+        }
+      }
+      if (collectionResults.added.length) updatedFields.push("collections");
+    }
+
     if (!updatedFields.length && !redirectCreated) {
       return NextResponse.json({ error: "No fields provided to publish." }, { status: 400 });
     }
@@ -169,6 +203,7 @@ export async function POST(req: NextRequest) {
       updatedFields,
       redirectCreated,
       altResults,
+      collectionResults,
     });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "SEO publish failed" }, { status: 500 });

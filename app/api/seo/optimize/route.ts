@@ -37,10 +37,16 @@ const SCHEMA = `{
   },
   "llmScores": {
     "proposed": { "seoTitle": number, "metaDescription": number, "handle": number, "title": number, "bodyHtml": number, "tags": number, "productType": number, "vendor": number, "imageAlts": number }
-  }
+  },
+  "recommendedCollections": [{ "id": string, "reason": string }]
 }`;
 
-function buildInstruction(context: ProductContext, imageIds: string[], useVision: boolean) {
+function buildInstruction(
+  context: ProductContext,
+  imageIds: string[],
+  useVision: boolean,
+  collections: Array<{ id: string; title: string }>
+) {
   const colors = (context.colors || []).join(", ") || "(not specified)";
   return [
     "You are a senior e-commerce SEO strategist and apparel product-photo analyst.",
@@ -59,6 +65,13 @@ function buildInstruction(context: ProductContext, imageIds: string[], useVision
     useVision && imageIds.length
       ? `The photos are attached in order; their image ids (use these exact ids in imageAlts) are:\n${imageIds.map((id, i) => `  ${i + 1}. ${id}`).join("\n")}`
       : "",
+    "",
+    collections.length
+      ? [
+          "COLLECTIONS (the store's existing categories). From this list, pick EVERY collection this product genuinely belongs to — a product can fit multiple categories. Use only ids from this list; never invent one. Put them in recommendedCollections with a short reason each. If none fit, return an empty array.",
+          ...collections.map((c) => `  • ${c.id} :: ${c.title}`),
+        ].join("\n")
+      : "No collections provided — return recommendedCollections as an empty array.",
     "",
     "Return STRICT JSON only, no prose, with this exact shape:",
     SCHEMA,
@@ -96,6 +109,12 @@ export async function POST(req: NextRequest) {
     const context = body?.context as ProductContext | undefined;
     const current = body?.current as SeoFields | undefined;
     const useVision = body?.useVision !== false; // default ON
+    const collectionsIn: Array<{ id: string; title: string }> = Array.isArray(body?.collections)
+      ? body.collections
+          .map((c: any) => ({ id: String(c?.id || "").trim(), title: String(c?.title || "").trim() }))
+          .filter((c: { id: string; title: string }) => c.id && c.title)
+          .slice(0, 200)
+      : [];
     if (!context || !current) {
       return NextResponse.json({ error: "Missing context or current SEO fields." }, { status: 400 });
     }
@@ -108,7 +127,7 @@ export async function POST(req: NextRequest) {
     const imageIds = images.map((a) => a.id);
     const visionActive = useVision && images.length > 0;
 
-    const instruction = buildInstruction(context, imageIds, visionActive);
+    const instruction = buildInstruction(context, imageIds, visionActive, collectionsIn);
     const userContent: any[] = [{ type: "text", text: instruction }];
     if (visionActive) {
       for (const img of images) {
@@ -187,6 +206,13 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Validate recommended collections against the ones we actually sent.
+    const collById = new Map(collectionsIn.map((c) => [c.id, c.title]));
+    const recommendedCollections = (Array.isArray(parsed.recommendedCollections) ? parsed.recommendedCollections : [])
+      .map((r: any) => ({ id: String(r?.id || "").trim(), reason: String(r?.reason || "").trim() }))
+      .filter((r: { id: string }) => collById.has(r.id))
+      .map((r: { id: string; reason: string }) => ({ id: r.id, title: collById.get(r.id) || "", reason: r.reason }));
+
     return NextResponse.json({
       focusKeyword,
       secondaryKeywords,
@@ -196,6 +222,7 @@ export async function POST(req: NextRequest) {
       currentScorecard,
       proposedScorecard,
       rationale,
+      recommendedCollections,
     });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "SEO optimize failed" }, { status: 500 });
