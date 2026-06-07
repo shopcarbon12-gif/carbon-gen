@@ -42,17 +42,9 @@ interface CollectionInfo {
   productsCount: number;
 }
 
-const FIELD_ORDER: SeoFieldKey[] = [
-  "seoTitle",
-  "metaDescription",
-  "handle",
-  "title",
-  "bodyHtml",
-  "tags",
-  "productType",
-  "vendor",
-  "imageAlts",
-];
+// Vendor, product type and image alt are intentionally NOT managed here:
+// vendor/type are preserved from Shopify, and image alt lives in the Push section.
+const FIELD_ORDER: SeoFieldKey[] = ["seoTitle", "metaDescription", "handle", "title", "bodyHtml", "tags"];
 
 const TEXTAREA_FIELDS = new Set<SeoFieldKey>(["metaDescription", "bodyHtml"]);
 
@@ -159,7 +151,10 @@ export default function SeoStudio({ shop }: { shop: string }) {
   const [previewSide, setPreviewSide] = useState<Decision>("proposed");
   const [useVision, setUseVision] = useState(true);
   const [collections, setCollections] = useState<CollectionInfo[]>([]);
-  const [recommendedCollections, setRecommendedCollections] = useState<Array<{ id: string; title: string; reason: string }>>([]);
+  const [recommendedCollections, setRecommendedCollections] = useState<
+    Array<{ id: string; title: string; reason: string; smart?: boolean; source?: "auto" | "suggested" }>
+  >([]);
+  const [collectionBarcodeLabel, setCollectionBarcodeLabel] = useState<string>("");
   const [selectedCollections, setSelectedCollections] = useState<Record<string, boolean>>({});
   const [showAllCollections, setShowAllCollections] = useState(false);
 
@@ -212,6 +207,32 @@ export default function SeoStudio({ shop }: { shop: string }) {
     return [];
   }
 
+  async function loadCollectionSuggestions(ctx: ProductContext) {
+    try {
+      const resp = await fetch("/api/seo/collection-suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          shop: shop.trim(),
+          sku: (ctx.variantSkus || [])[0] || "",
+          barcode: (ctx.barcodes || [])[0] || "",
+          title: ctx.title,
+          itemType: ctx.productType,
+        }),
+      });
+      const json = await resp.json();
+      if (!resp.ok) return;
+      const recs = Array.isArray(json.recommendations) ? json.recommendations : [];
+      setCollectionBarcodeLabel(json.barcodeLabel || "");
+      setRecommendedCollections(recs);
+      // Pre-select everything we can actually add (non-smart). Smart collections
+      // are rule-based and can't be edited manually, so leave them unchecked.
+      setSelectedCollections(Object.fromEntries(recs.filter((r: { smart?: boolean }) => !r.smart).map((r: { id: string }) => [r.id, true])));
+    } catch {
+      /* non-fatal */
+    }
+  }
+
   async function runAudit(idOrHandle?: { productId?: string; handle?: string }) {
     const body = {
       shop: shop.trim(),
@@ -230,6 +251,7 @@ export default function SeoStudio({ shop }: { shop: string }) {
     setDecisions({});
     setRecommendedCollections([]);
     setSelectedCollections({});
+    setCollectionBarcodeLabel("");
     void ensureCollectionsLoaded();
     try {
       const resp = await fetch("/api/shopify/seo-audit", {
@@ -243,6 +265,7 @@ export default function SeoStudio({ shop }: { shop: string }) {
       setProductId(json.product.id);
       setHandle(json.current.handle || "");
       setStatus(`Audited "${json.product.title}". Overall grade ${json.scorecard.grade} (${json.scorecard.overall}).`);
+      void loadCollectionSuggestions(json.context);
     } catch (e: any) {
       setError(e?.message || "Audit failed");
       setStatus(null);
@@ -257,31 +280,19 @@ export default function SeoStudio({ shop }: { shop: string }) {
     setError(null);
     setStatus("Generating optimized SEO with AI…");
     try {
-      const cols = await ensureCollectionsLoaded();
       const resp = await fetch("/api/seo/optimize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          context: audit.context,
-          current: audit.current,
-          useVision,
-          collections: cols.map((c) => ({ id: c.id, title: c.title })),
-        }),
+        body: JSON.stringify({ context: audit.context, current: audit.current, useVision }),
       });
       const json = await resp.json();
       if (!resp.ok) throw new Error(json.error || "Optimize failed");
       setOptimize(json);
       setEditedProposed(json.proposed);
-      const recs = Array.isArray(json.recommendedCollections) ? json.recommendedCollections : [];
-      setRecommendedCollections(recs);
-      setSelectedCollections(Object.fromEntries(recs.map((r: { id: string }) => [r.id, true])));
-      // default every field to "proposed" only where it actually improves
+      // Default every field to "use proposed" — the user reviews and can switch
+      // any back to current before publishing.
       const initial: Partial<Record<SeoFieldKey, Decision>> = {};
-      for (const f of FIELD_ORDER) {
-        const cur = json.currentScorecard.fields[f]?.score ?? 0;
-        const pro = json.proposedScorecard.fields[f]?.score ?? 0;
-        initial[f] = pro >= cur ? "proposed" : "current";
-      }
+      for (const f of FIELD_ORDER) initial[f] = "proposed";
       setDecisions(initial);
       setStatus(`Proposed grade ${json.proposedScorecard.grade} (${json.proposedScorecard.overall}) vs current ${json.currentScorecard.grade} (${json.currentScorecard.overall}).`);
     } catch (e: any) {
@@ -650,27 +661,30 @@ export default function SeoStudio({ shop }: { shop: string }) {
 
                   <div style={{ border: "1px solid #334155", borderRadius: 10, padding: 12, marginBottom: 12 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                      <strong style={{ color: "#f8fafc" }}>📁 Recommended collections (categories)</strong>
+                      <strong style={{ color: "#f8fafc" }}>
+                        📁 Recommended collections{collectionBarcodeLabel ? ` — ${collectionBarcodeLabel}` : ""}
+                      </strong>
                       <button className="btn ghost" style={{ fontSize: 11 }} type="button" onClick={() => setShowAllCollections((s) => !s)}>
                         {showAllCollections ? "Hide all" : "Add another"}
                       </button>
                     </div>
                     {recommendedCollections.length ? (
-                      recommendedCollections.map((rc) => {
-                        const info = collections.find((c) => c.id === rc.id);
-                        return (
-                          <label key={rc.id} style={{ display: "block", fontSize: 13, color: "#e2e8f0", padding: "3px 0" }}>
-                            <input
-                              type="checkbox"
-                              checked={!!selectedCollections[rc.id]}
-                              onChange={(e) => setSelectedCollections((s) => ({ ...s, [rc.id]: e.target.checked }))}
-                            />{" "}
-                            <strong>{rc.title}</strong>
-                            {info?.smart ? <span style={{ fontSize: 11, color: "#f59e0b" }}> (smart — auto)</span> : null}
-                            {rc.reason ? <span style={{ color: "#cbd5e1" }}> — {rc.reason}</span> : null}
-                          </label>
-                        );
-                      })
+                      recommendedCollections.map((rc) => (
+                        <label key={rc.id} style={{ display: "block", fontSize: 13, color: "#e2e8f0", padding: "3px 0", opacity: rc.smart ? 0.6 : 1 }}>
+                          <input
+                            type="checkbox"
+                            disabled={rc.smart}
+                            checked={!!selectedCollections[rc.id]}
+                            onChange={(e) => setSelectedCollections((s) => ({ ...s, [rc.id]: e.target.checked }))}
+                          />{" "}
+                          <strong>{rc.title}</strong>
+                          <span style={{ fontSize: 10, marginLeft: 6, padding: "0 5px", borderRadius: 4, background: rc.source === "auto" ? "#15803d" : "#475569", color: "#fff" }}>
+                            {rc.source === "auto" ? "match" : "suggested"}
+                          </span>
+                          {rc.smart ? <span style={{ fontSize: 11, color: "#f59e0b" }}> (smart — auto)</span> : null}
+                          {rc.reason ? <span style={{ color: "#cbd5e1" }}> — {rc.reason}</span> : null}
+                        </label>
+                      ))
                     ) : (
                       <div style={{ color: "#cbd5e1", fontSize: 12 }}>No strong category matches found. Use “Add another” to pick manually.</div>
                     )}
