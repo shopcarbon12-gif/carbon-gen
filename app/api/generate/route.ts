@@ -679,34 +679,54 @@ async function runPanelComplianceCheck(args: {
     },
   ];
 
-  const qaResponse: any = await withTimeout(
-    args.openai.responses.create({
-      model: qaModel,
-      temperature: 0,
-      max_output_tokens: 260,
-      input: [
-        {
-          role: "system",
-          content: [
+  const qaAttempts = Math.max(1, Number(process.env.PANEL_QA_ATTEMPTS) || 2);
+  let qaResponse: any = null;
+  let qaCallErr: any = null;
+  for (let attempt = 0; attempt < qaAttempts; attempt += 1) {
+    try {
+      qaResponse = await withTimeout(
+        args.openai.responses.create({
+          model: qaModel,
+          temperature: 0,
+          max_output_tokens: 260,
+          input: [
             {
-              type: "input_text",
-              text:
-                "You are a strict pass/fail QA gate for fashion ecommerce panel outputs. " +
-                "Fail the audit if model identity is not clearly from model refs, item/outfit is not clearly from item refs, " +
-                "or expected pose pairing is not respected. Treat face-geometry drift and skin-tone drift from model refs as identity failures. " +
-                "Also fail any non-pure-white/tinted background. No prose. Return JSON only.",
+              role: "system",
+              content: [
+                {
+                  type: "input_text",
+                  text:
+                    "You are a strict pass/fail QA gate for fashion ecommerce panel outputs. " +
+                    "Fail the audit if model identity is not clearly from model refs, item/outfit is not clearly from item refs, " +
+                    "or expected pose pairing is not respected. Treat face-geometry drift and skin-tone drift from model refs as identity failures. " +
+                    "Also fail any non-pure-white/tinted background. No prose. Return JSON only.",
+                },
+              ],
+            },
+            {
+              role: "user",
+              content: userContent,
             },
           ],
-        },
-        {
-          role: "user",
-          content: userContent,
-        },
-      ],
-    }),
-    Math.max(30000, Math.min(args.timeoutMs, 90000)),
-    "OpenAI panel compliance check"
-  );
+        }),
+        Math.max(30000, Math.min(args.timeoutMs, 90000)),
+        "OpenAI panel compliance check"
+      );
+      break;
+    } catch (e: any) {
+      qaCallErr = e;
+      qaResponse = null;
+    }
+  }
+  if (!qaResponse) {
+    return {
+      decisive: false,
+      pass: true,
+      unavailable: true,
+      reasons: [`Compliance check unavailable: ${qaCallErr?.message || "unknown error"}`],
+      raw: "",
+    };
+  }
 
   const raw = extractOpenAiOutputText(qaResponse).slice(0, 3000);
   const parsed = parseJsonObjectFromText(raw);
@@ -714,6 +734,7 @@ async function runPanelComplianceCheck(args: {
     return {
       decisive: false,
       pass: true,
+      unavailable: false,
       reasons: ["Compliance check returned unparsable output."],
       raw,
     };
@@ -724,6 +745,7 @@ async function runPanelComplianceCheck(args: {
     return {
       decisive: false,
       pass: true,
+      unavailable: false,
       reasons: ["Compliance check missing boolean pass field."],
       raw,
     };
@@ -732,6 +754,7 @@ async function runPanelComplianceCheck(args: {
   return {
     decisive: true,
     pass: passFlag === true,
+    unavailable: false,
     reasons: reasons.length ? reasons : passFlag ? [] : ["Compliance check failed."],
     raw,
   };
@@ -1046,9 +1069,15 @@ export async function POST(req: NextRequest) {
 
     const strictLocksEnabled =
       (process.env.STRICT_PANEL_LOCKS || "true").trim().toLowerCase() !== "false";
+    // When QA can't reach a confident verdict (inconclusive, or the QA call itself
+    // failed/timed out), fail open by default: serve the already-generated image
+    // instead of discarding it. Set PANEL_QA_FAIL_OPEN=false to hard-block instead.
+    const qaFailOpen =
+      (process.env.PANEL_QA_FAIL_OPEN || "true").trim().toLowerCase() !== "false";
     if (strictLocksEnabled) {
+      let qa: any;
       try {
-        const qa = await runPanelComplianceCheck({
+        qa = await runPanelComplianceCheck({
           openai,
           imageBase64: b64,
           modelRefs: modelAnchors,
@@ -1056,44 +1085,50 @@ export async function POST(req: NextRequest) {
           panelQa: normalizedPanelQa,
           timeoutMs: imageTimeoutMs,
         });
-        if (qa.decisive && !qa.pass) {
-          return NextResponse.json(
-            {
-              error: {
-                type: "lock_violation",
-                code: "identity_or_item_lock_failed",
-                message:
-                  "Generated output failed identity/item lock QA. Regenerate this panel with stricter matching.",
-                reasons: qa.reasons,
-              },
-            },
-            { status: 422 }
-          );
-        }
-        if (!qa.decisive) {
-          return NextResponse.json(
-            {
-              error: {
-                type: "lock_violation",
-                code: "qa_inconclusive_blocked",
-                message:
-                  "Generated output was blocked because compliance QA was inconclusive. Regenerate this panel.",
-              },
-            },
-            { status: 422 }
-          );
-        }
       } catch (qaErr: any) {
+        qa = {
+          decisive: false,
+          pass: true,
+          unavailable: true,
+          reasons: [`Compliance check threw: ${qaErr?.message || "unknown error"}`],
+        };
+      }
+      if (qa.decisive && !qa.pass) {
+        // Confident lock violation — keep blocking.
         return NextResponse.json(
           {
             error: {
               type: "lock_violation",
-              code: "qa_unavailable_blocked",
+              code: "identity_or_item_lock_failed",
               message:
-                "Generated output was blocked because lock QA was unavailable. Please retry this panel.",
+                "Generated output failed identity/item lock QA. Regenerate this panel with stricter matching.",
+              reasons: qa.reasons,
             },
           },
-          { status: 503 }
+          { status: 422 }
+        );
+      }
+      if (!qa.decisive && !qaFailOpen) {
+        // Strict mode: block when QA could not confidently clear the image.
+        const unavailable = qa.unavailable === true;
+        return NextResponse.json(
+          {
+            error: {
+              type: "lock_violation",
+              code: unavailable ? "qa_unavailable_blocked" : "qa_inconclusive_blocked",
+              message: unavailable
+                ? "Generated output was blocked because lock QA was unavailable. Please retry this panel."
+                : "Generated output was blocked because compliance QA was inconclusive. Regenerate this panel.",
+              reasons: qa.reasons,
+            },
+          },
+          { status: unavailable ? 503 : 422 }
+        );
+      }
+      if (!qa.decisive) {
+        console.warn(
+          `[generate] Panel QA non-decisive (${qa.unavailable ? "unavailable" : "inconclusive"}); serving image (fail-open).`,
+          qa.reasons
         );
       }
     }
