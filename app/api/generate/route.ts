@@ -189,6 +189,26 @@ function clampLockedPrompt(
   return { prompt: `${trimmedClient}${separator}${serverLockBlock}`, trimmed: true };
 }
 
+// Final hard guard applied at the single point where any prompt is sent to a
+// modern image model — covers the main prompt AND the safety-retry prompts
+// (which append text to the locked prompt and could otherwise exceed the limit).
+function enforcePromptLength(prompt: string, maxLen = MODEL_PROMPT_MAX_CHARS) {
+  if (prompt.length <= maxLen) return prompt;
+  const compacted = prompt
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  if (compacted.length <= maxLen) return compacted;
+  const ellipsis = "\n...[prompt trimmed to fit model length limit]...\n";
+  const keep = maxLen - ellipsis.length;
+  if (keep <= 0) return compacted.slice(0, maxLen);
+  const headLen = Math.ceil(keep * 0.6);
+  const tailLen = keep - headLen;
+  const head = compacted.slice(0, headLen).trimEnd();
+  const tail = compacted.slice(compacted.length - tailLen).trimStart();
+  return `${head}${ellipsis}${tail}`;
+}
+
 function compactPromptForDalle2(prompt: string, maxLen = 1000) {
   const normalized = String(prompt || "").replace(/\s+/g, " ").trim();
   if (normalized.length <= maxLen) return normalized;
@@ -909,7 +929,7 @@ export async function POST(req: NextRequest) {
             prompt:
               modelName === "dall-e-2"
                 ? compactPromptForDalle2(params.prompt, 1000)
-                : params.prompt,
+                : enforcePromptLength(params.prompt),
             // dall-e-2 supports square edit sizes only.
             size: modelName === "dall-e-2" ? "1024x1024" : finalSize,
           };

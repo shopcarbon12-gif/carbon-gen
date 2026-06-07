@@ -4103,12 +4103,14 @@ function buildMasterPanelPromptV2(args: {
   poseSafetySuggestions?: string[];
 }) {
   const poseLibrary = getPoseLibraryForGender(args.modelGender);
+  // Only embed the active gender's pose library (sending both ~doubled this
+  // section and bloated the prompt). The unused gender's poses are never
+  // referenced for this generation, so dropping them changes no output.
   const fullPoseLibraries = [
-    "MALE POSE LIBRARY (ORIGINAL, UNCHANGED):",
-    MALE_POSE_LIBRARY,
-    "",
-    "FEMALE POSE LIBRARY (ORIGINAL, UNCHANGED):",
-    FEMALE_POSE_LIBRARY,
+    String(args.modelGender || "").toLowerCase() === "female"
+      ? "FEMALE POSE LIBRARY (ORIGINAL, UNCHANGED):"
+      : "MALE POSE LIBRARY (ORIGINAL, UNCHANGED):",
+    poseLibrary,
   ].join("\n");
   const mappingText =
     String(args.modelGender || "").toLowerCase() === "female"
