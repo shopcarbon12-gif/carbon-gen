@@ -1794,7 +1794,10 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             itemType: effectiveItemType,
           }),
         },
-        1
+        1,
+        // Image generation can run up to the server's 120s allowance; the client
+        // must wait longer than that or it aborts a still-valid request.
+        150000
       );
 
       if (!resp.ok) {
@@ -1814,10 +1817,14 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       setItemFlatCompositeBase64(b64);
       const splitImages = await splitFlatFrontBackToThreeByFour(b64, itemBarcodeSaved.trim());
       setItemFlatSplitImages(splitImages);
+      // Auto-add generated flats straight into Selected Pictures (no extra click).
+      for (const crop of splitImages) {
+        await addFlatSplitToSelectedItems(crop, { silent: true });
+      }
       const refCount =
         Number(json?.referencesUsed) > 0 ? Number(json.referencesUsed) : effectiveItemRefs.length;
       setStatus(
-        `Flat front/back generated and split to 3:4 (front + back) from ${refCount} item reference image(s).`
+        `Flat front/back generated, split to 3:4, and added to Selected Pictures from ${refCount} item reference image(s).`
       );
     } catch (e: any) {
       setError(e?.message || "Flat front/back generation failed.");
@@ -4469,7 +4476,10 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                   },
                 }),
               },
-              1
+              1,
+              // Panel image generation can run up to the server's 120s allowance;
+              // the client must wait longer than that or it aborts a valid request.
+              150000
             );
 
             if (!resp.ok) {

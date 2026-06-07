@@ -144,6 +144,51 @@ function isOpenAiImagesEditModelError(err: unknown) {
   );
 }
 
+// Modern image models (gpt-image-1.5 and similar) reject prompts longer than
+// this many characters with a 400 "string too long" error. We keep a small
+// safety margin under the documented 32000 ceiling.
+const MODEL_PROMPT_MAX_CHARS = 31800;
+
+// Enforce the model prompt length limit while always preserving the
+// server-appended identity/safety/coverage locks (they are non-negotiable).
+// Only the client-built portion is trimmed, keeping its head (scene setup) and
+// tail (panel-specific locks) and dropping the middle if necessary.
+function clampLockedPrompt(
+  clientPrompt: string,
+  serverLockBlock: string,
+  maxLen = MODEL_PROMPT_MAX_CHARS
+) {
+  const separator = "\n\n";
+  const full = `${clientPrompt}${separator}${serverLockBlock}`;
+  if (full.length <= maxLen) return { prompt: full, trimmed: false };
+
+  // First try a lossless pass: collapse runs of blank lines and trailing
+  // whitespace in the client portion. This often recovers the small overflow
+  // (typically a few hundred to ~2000 chars) without dropping any content.
+  const compactedClient = clientPrompt
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  const compactedFull = `${compactedClient}${separator}${serverLockBlock}`;
+  if (compactedFull.length <= maxLen) return { prompt: compactedFull, trimmed: false };
+
+  const reserved = serverLockBlock.length + separator.length;
+  const ellipsis = "\n...[prompt trimmed to fit model length limit]...\n";
+  const budget = maxLen - reserved;
+  // Pathological case: the server lock block alone is near/over the limit.
+  // Hard-cap the whole string so we never exceed the API contract.
+  if (budget <= ellipsis.length) {
+    return { prompt: compactedFull.slice(0, maxLen), trimmed: true };
+  }
+  const keep = budget - ellipsis.length;
+  const headLen = Math.ceil(keep * 0.6);
+  const tailLen = keep - headLen;
+  const head = compactedClient.slice(0, headLen).trimEnd();
+  const tail = compactedClient.slice(compactedClient.length - tailLen).trimStart();
+  const trimmedClient = `${head}${ellipsis}${tail}`;
+  return { prompt: `${trimmedClient}${separator}${serverLockBlock}`, trimmed: true };
+}
+
 function compactPromptForDalle2(prompt: string, maxLen = 1000) {
   const normalized = String(prompt || "").replace(/\s+/g, " ").trim();
   if (normalized.length <= maxLen) return normalized;
@@ -780,9 +825,7 @@ export async function POST(req: NextRequest) {
     const imageModel = (process.env.OPENAI_IMAGE_MODEL || "gpt-image-1.5").trim() || "gpt-image-1.5";
     const swimwearActive = isSwimwearItemType(normalizedPanelQa.itemType);
     const serverIdentityLockPrompt = buildServerIdentityLockPrompt(normalizedPanelQa);
-    const lockedPrompt = [
-      prompt,
-      "",
+    const serverLockBlock = [
       serverIdentityLockPrompt,
       ...(swimwearActive
         ? [
@@ -794,6 +837,13 @@ export async function POST(req: NextRequest) {
           ]
         : [buildNonSwimwearCoverageLock(normalizedPanelQa.itemType)]),
     ].join("\n");
+    const clamped = clampLockedPrompt(prompt, serverLockBlock);
+    const lockedPrompt = clamped.prompt;
+    if (clamped.trimmed) {
+      console.warn(
+        `[generate] prompt exceeded ${MODEL_PROMPT_MAX_CHARS} chars (client portion ${prompt.length}); trimmed client prompt to fit while preserving server locks.`
+      );
+    }
 
     // Keep model identity anchors bounded; include all item refs provided by section 0.5.
     const modelAnchors = normalizedModelRefs.slice(0, 6);
