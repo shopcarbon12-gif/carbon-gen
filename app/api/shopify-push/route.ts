@@ -170,6 +170,16 @@ function parseDataImage(value: string) {
   return { contentType, bytes, ext };
 }
 
+// Host + path only, so logs never leak signed query tokens / credentials.
+function safeUrlForLog(value: string) {
+  try {
+    const u = new URL(String(value || ""));
+    return `${u.protocol}//${u.host}${u.pathname}`;
+  } catch {
+    return "(unparsable url)";
+  }
+}
+
 async function getShopifySourceUrl(sourceUrl: string, appOrigin: string) {
   let raw = norm(sourceUrl);
   if (!/^https?:\/\//i.test(raw)) return "";
@@ -221,26 +231,45 @@ async function getShopifySourceUrl(sourceUrl: string, appOrigin: string) {
     return signedPreviewUrl || norm(uploaded.url);
   };
 
-  // Some rows carry /api/storage/preview URLs. Resolve those first.
-  try {
-    const parsed = new URL(raw);
-    if (parsed.pathname === "/api/storage/preview") {
-      const previewPath = String(parsed.searchParams.get("path") || "").trim();
-      const previewUrl = String(parsed.searchParams.get("url") || "").trim();
-      const resolvedPath = previewPath || (previewUrl ? tryGetStoragePathFromUrl(previewUrl) : "");
-      if (resolvedPath) {
-        const { body, contentType } = await downloadStorageObject(resolvedPath);
-        return await stageBytesToStorage(new Uint8Array(body), contentType);
+  // Prefer downloading directly from our own storage (via the storage SDK)
+  // whenever the source points at it — an /api/storage/preview link OR a direct
+  // R2/public storage URL. Server-side credentials always work, so this avoids
+  // the public-access / signing / expiry / hairpin-NAT failures that otherwise
+  // surface as "source fetch failed (4xx)".
+  let previewUnderlyingUrl = "";
+  const directStoragePath = (() => {
+    try {
+      const parsed = new URL(raw);
+      if (parsed.pathname === "/api/storage/preview") {
+        const previewPath = String(parsed.searchParams.get("path") || "").trim();
+        if (previewPath) return previewPath.replace(/^\/+/, "");
+        const previewUrl = String(parsed.searchParams.get("url") || "").trim();
+        if (previewUrl) {
+          if (/^https?:\/\//i.test(previewUrl)) previewUnderlyingUrl = previewUrl;
+          return tryGetStoragePathFromUrl(previewUrl);
+        }
+        return "";
       }
-      if (previewUrl && /^https?:\/\//i.test(previewUrl)) {
-        raw = previewUrl;
-      } else {
-        throw new Error("source fetch failed (400)");
-      }
+    } catch {
+      return "";
     }
-  } catch (err: any) {
-    const message = String(err?.message || "");
-    if (/source fetch failed/i.test(message)) throw err;
+    // Direct R2 / public-storage URL → map back to its object path.
+    return tryGetStoragePathFromUrl(raw);
+  })();
+  if (directStoragePath) {
+    try {
+      const { body, contentType } = await downloadStorageObject(directStoragePath);
+      return await stageBytesToStorage(new Uint8Array(body), contentType);
+    } catch (err: any) {
+      console.warn(
+        `[shopify-push] direct storage download failed for "${directStoragePath}": ${String(err?.message || err)} — falling back to HTTP fetch`
+      );
+    }
+  }
+  // A preview link that wrapped an external http(s) URL we couldn't map to
+  // storage: fetch that underlying URL rather than our own preview wrapper.
+  if (previewUnderlyingUrl) {
+    raw = previewUnderlyingUrl;
   }
 
   const candidates = new Set<string>([raw]);
@@ -269,17 +298,20 @@ async function getShopifySourceUrl(sourceUrl: string, appOrigin: string) {
       });
       if (!resp.ok) {
         lastError = `source fetch failed (${resp.status})`;
+        console.warn(`[shopify-push] ${lastError} for ${safeUrlForLog(candidate)}`);
         continue;
       }
       const bytes = new Uint8Array(await resp.arrayBuffer());
       return await stageBytesToStorage(bytes, String(resp.headers.get("content-type") || ""));
     } catch (err: any) {
       lastError = String(err?.message || "source fetch failed");
+      console.warn(`[shopify-push] source fetch error for ${safeUrlForLog(candidate)}: ${lastError}`);
     } finally {
       clearTimeout(timeout);
     }
   }
 
+  console.error(`[shopify-push] all source candidates failed (${safeUrlForLog(raw)}): ${lastError}`);
   throw new Error(lastError || "source fetch failed (400)");
 }
 

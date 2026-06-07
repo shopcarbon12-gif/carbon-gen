@@ -8,6 +8,7 @@ import {
   useState,
   type CSSProperties,
 } from "react";
+import SeoStudio from "@/components/seo-studio";
 import {
   FEMALE_PANEL_MAPPING_TEXT,
   FEMALE_POSE_LIBRARY,
@@ -204,10 +205,10 @@ function openInputPicker(input: HTMLInputElement | null) {
 }
 
 function sanitizeBarcodeInput(value: string) {
+  // Allow letters and digits (alphanumeric SKUs), not just digits / legacy "c"-codes.
   return String(value || "")
-    .toLowerCase()
-    .replace(/[^c0-9]/g, "")
-    .slice(0, 9);
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .slice(0, 32);
 }
 
 function dataUrlToFile(dataUrl: string, fileName: string) {
@@ -331,7 +332,8 @@ function fileToDataUrl(file: File) {
 
 function isValidBarcode(value: string) {
   const v = String(value || "").trim();
-  return /^(?:c\d{6,8}|\d{7,9})$/.test(v);
+  // Numeric barcodes (7-9 digits), legacy C-codes, or any alphanumeric SKU (3-32 chars).
+  return /^(?:c\d{6,8}|\d{7,9}|[a-z0-9]{3,32})$/i.test(v);
 }
 
 function getLocalDayKey(dateLike: Date) {
@@ -419,11 +421,6 @@ type StudioWorkspaceProps = {
 
 export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) {
   const [shop, setShop] = useState("");
-  const [handle, setHandle] = useState("");
-  const [productId, setProductId] = useState("");
-  const [seoTitle, setSeoTitle] = useState("");
-  const [seoDescription, setSeoDescription] = useState("");
-  const [altText, setAltText] = useState("");
   const [modelName, setModelName] = useState("");
   const [modelGender, setModelGender] = useState("");
   const [modelFiles, setModelFiles] = useState<File[]>([]);
@@ -1432,36 +1429,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
     return `Panel ${panelNumber}:\n${compact}`;
   }
 
-  async function pullProduct() {
-    setError(null);
-    setStatus("Pulling product...");
-    try {
-      const resp = await fetch("/api/shopify/pull", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          shop: shop.trim(),
-          handle: handle.trim() || null,
-          productId: productId.trim() || null,
-        }),
-      });
-      const json = await resp.json();
-      if (!resp.ok) {
-        const details =
-          typeof json?.details === "string"
-            ? json.details
-            : json?.details
-              ? JSON.stringify(json.details)
-              : "";
-        throw new Error(`${json.error || "Pull failed"}${details ? `: ${details}` : ""}`);
-      }
-      setStatus(`Pulled: ${json.product?.title || "OK"}`);
-    } catch (e: any) {
-      setError(e?.message || "Pull failed");
-      setStatus(null);
-    }
-  }
-
   async function parseJsonResponse(resp: Response, endpoint?: string) {
     const contentType = resp.headers.get("content-type") || "";
     if (contentType.includes("application/json")) {
@@ -1541,30 +1508,6 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
         ? "Network issue while calling generation API. Check internet/VPN and retry."
         : "Network request failed.";
     throw new Error(`${lastError?.message || "Request failed"} ${suffix}`.trim());
-  }
-
-  async function pushSeo() {
-    setError(null);
-    setStatus("Pushing SEO...");
-    try {
-      const resp = await fetch("/api/shopify/seo", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          shop: shop.trim(),
-          productId: productId.trim(),
-          seoTitle: seoTitle.trim(),
-          seoDescription: seoDescription.trim(),
-          altText: altText.trim(),
-        }),
-      });
-      const json = await parseJsonResponse(resp);
-      if (!resp.ok) throw new Error(json.error || "SEO push failed");
-      setStatus("SEO updated.");
-    } catch (e: any) {
-      setError(e?.message || "SEO push failed");
-      setStatus(null);
-    }
   }
 
   async function createModel() {
@@ -1656,7 +1599,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
       }
     }
     if (!activeBarcode) {
-      throw new Error("Please enter a valid item barcode (7-9 digits, or C + 6-8 digits).");
+      throw new Error("Please enter a valid item barcode or SKU (letters and numbers, 3-32 characters).");
     }
     if (!isValidBarcode(activeBarcode)) {
       throw new Error("Barcode must be 7-9 chars: digits only, or C + 6-8 digits.");
@@ -6164,7 +6107,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                   setItemBarcodeSaved("");
                 }
               }}
-              placeholder="Item barcode (required: 7-9 digits, or C + 6-8 digits)"
+              placeholder="Item barcode or SKU (letters & numbers allowed)"
             />
           </div>
           <div className="row barcode-action-row">
@@ -7874,47 +7817,11 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
           {!seoCollapsed ? (
           <>
           <p className="muted">
-            Pull product data, edit SEO title/description and alt text.
+            Pull a product&apos;s SEO from Shopify, score it, generate AI-optimized SEO,
+            and publish only the fields you accept. Works one product at a time or in bulk.
+            Nothing is stored locally — everything reads from and writes to Shopify.
           </p>
-          <div className="row">
-            <input
-              suppressHydrationWarning
-              value={handle}
-              onChange={(e) => setHandle(e.target.value)}
-              placeholder="Handle (vintage-wash-hoodie)"
-            />
-            <input
-              suppressHydrationWarning
-              value={productId}
-              onChange={(e) => setProductId(e.target.value)}
-              placeholder="Product ID (gid://shopify/Product/...)"
-            />
-          </div>
-          <button className="btn ghost" onClick={pullProduct}>
-            Pull Product
-          </button>
-          <p className="muted">
-            Generate or edit SEO title/description and accessibility alt text.
-          </p>
-          <input
-            suppressHydrationWarning
-            value={seoTitle}
-            onChange={(e) => setSeoTitle(e.target.value)}
-            placeholder="SEO Title"
-          />
-          <textarea
-            value={seoDescription}
-            onChange={(e) => setSeoDescription(e.target.value)}
-            placeholder="SEO Description"
-          />
-          <textarea
-            value={altText}
-            onChange={(e) => setAltText(e.target.value)}
-            placeholder="Alt Text (Accessibility)"
-          />
-          <button className="btn" onClick={pushSeo}>
-            Push SEO
-          </button>
+          <SeoStudio shop={shop} />
           </>
           ) : null}
         </section>
