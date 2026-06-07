@@ -5,7 +5,7 @@ import { isRequestAuthed } from "@/lib/auth";
 import { checkGenerateRateLimit } from "@/lib/ratelimit";
 import { getOpenAiApiKey } from "@/lib/openaiConfig";
 import { withTimeout, parseJsonObjectFromText, asStringArray } from "@/lib/seo/aiText";
-import { scoreAll, blendLlmScores } from "@/lib/seo/deterministic";
+import { scoreAll } from "@/lib/seo/deterministic";
 import type { ProductContext, SeoFields, SeoFieldKey } from "@/lib/seo/types";
 
 const MODEL = (process.env.SEO_MODEL || "gpt-4o").trim() || "gpt-4o";
@@ -35,10 +35,7 @@ const SCHEMA = `{
     "seoTitle": string, "metaDescription": string, "handle": string, "title": string,
     "bodyHtml": string, "tags": string, "productType": string, "vendor": string, "imageAlts": string
   },
-  "llmScores": {
-    "proposed": { "seoTitle": number, "metaDescription": number, "handle": number, "title": number, "bodyHtml": number, "tags": number, "productType": number, "vendor": number, "imageAlts": number }
-  },
-  "recommendedCollections": [{ "id": string, "reason": string }]
+  "recommendedCollections": [{ "index": number, "reason": string }]
 }`;
 
 function buildInstruction(
@@ -68,26 +65,14 @@ function buildInstruction(
     "",
     collections.length
       ? [
-          "COLLECTIONS (the store's existing categories). From this list, pick EVERY collection this product genuinely belongs to — a product can fit multiple categories. Use only ids from this list; never invent one. Put them in recommendedCollections with a short reason each. If none fit, return an empty array.",
-          ...collections.map((c) => `  • ${c.id} :: ${c.title}`),
+          "COLLECTIONS — the store's existing categories, each with an index number. Pick EVERY collection this product genuinely belongs to: an apparel product usually fits several (its garment type, its gender, and any matching style/season). Return recommendedCollections as the matching INDEX numbers with a short reason each. Use only indexes from this list; never invent. Return an empty array only if truly nothing fits.",
+          ...collections.map((c, i) => `  [${i}] ${c.title}`),
         ].join("\n")
       : "No collections provided — return recommendedCollections as an empty array.",
     "",
     "Return STRICT JSON only, no prose, with this exact shape:",
     SCHEMA,
   ].join("\n");
-}
-
-function toLlmScoreMap(obj: any): Partial<Record<SeoFieldKey, number>> {
-  const out: Partial<Record<SeoFieldKey, number>> = {};
-  const keys: SeoFieldKey[] = [
-    "seoTitle", "metaDescription", "handle", "title", "bodyHtml", "tags", "productType", "vendor", "imageAlts",
-  ];
-  for (const k of keys) {
-    const v = Number(obj?.[k]);
-    if (Number.isFinite(v)) out[k] = Math.max(0, Math.min(100, Math.round(v)));
-  }
-  return out;
 }
 
 export async function POST(req: NextRequest) {
@@ -192,12 +177,11 @@ export async function POST(req: NextRequest) {
       secondaryKeywords,
     };
 
-    // Score both sides against the SAME focus keyword. Current is scored
-    // deterministically only (it is NOT shown to the model); proposed blends
-    // deterministic rules with the model's self-assessment.
+    // Score both sides with the SAME objective deterministic rules and the same
+    // focus keyword — a fair apples-to-apples comparison the user can trust.
     const currentWithKw: SeoFields = { ...current, focusKeyword, secondaryKeywords };
     const currentScorecard = scoreAll(currentWithKw);
-    const proposedScorecard = blendLlmScores(scoreAll(proposed), toLlmScoreMap(parsed.llmScores?.proposed));
+    const proposedScorecard = scoreAll(proposed);
 
     const rationale: Partial<Record<SeoFieldKey, string>> = {};
     if (parsed.rationale && typeof parsed.rationale === "object") {
@@ -206,12 +190,18 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Validate recommended collections against the ones we actually sent.
-    const collById = new Map(collectionsIn.map((c) => [c.id, c.title]));
+    // Map recommended collections by index (models echo small integers reliably,
+    // not long opaque gids). Dedupe and keep only valid in-range indexes.
+    const seenIdx = new Set<number>();
     const recommendedCollections = (Array.isArray(parsed.recommendedCollections) ? parsed.recommendedCollections : [])
-      .map((r: any) => ({ id: String(r?.id || "").trim(), reason: String(r?.reason || "").trim() }))
-      .filter((r: { id: string }) => collById.has(r.id))
-      .map((r: { id: string; reason: string }) => ({ id: r.id, title: collById.get(r.id) || "", reason: r.reason }));
+      .map((r: any) => ({ index: Number(r?.index), reason: String(r?.reason || "").trim() }))
+      .filter((r: { index: number }) => Number.isInteger(r.index) && r.index >= 0 && r.index < collectionsIn.length)
+      .filter((r: { index: number }) => (seenIdx.has(r.index) ? false : (seenIdx.add(r.index), true)))
+      .map((r: { index: number; reason: string }) => ({
+        id: collectionsIn[r.index].id,
+        title: collectionsIn[r.index].title,
+        reason: r.reason,
+      }));
 
     return NextResponse.json({
       focusKeyword,
