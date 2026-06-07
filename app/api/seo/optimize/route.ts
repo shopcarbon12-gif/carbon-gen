@@ -21,7 +21,7 @@ const SCHEMA = `{
   "focusKeyword": string,
   "secondaryKeywords": string[],
   "proposed": {
-    "seoTitle": string,            // <= 60 chars, focus keyword near front, brand at end
+    "seoTitle": string,            // <= 60 chars, focus keyword near front. Do NOT add any brand/company name or placeholder text.
     "metaDescription": string,     // 120-155 chars, benefit + keyword + call to action
     "handle": string,              // lowercase-hyphenated, keyword-rich, no stop words
     "title": string,               // descriptive H1
@@ -53,6 +53,7 @@ function buildInstruction(context: ProductContext, imageIds: string[], useVision
       : "  • (No photos provided — work from the name and color only.)",
     "",
     "Do NOT use or assume any pre-existing description, tags, or metadata — treat them as unreliable and ignore them. Base every detail (fabric, fit, neckline, sleeves, print/pattern, hardware, silhouette) ONLY on what you can actually SEE in the photos plus the name and color. Never invent attributes that are not visible.",
+    "Do NOT output any brand, company, or vendor name anywhere, and never use placeholder text like 'Brand'. Leave the product type and vendor unchanged (they are handled separately).",
     "Optimize for Google search ranking + click-through using current best practice. Natural language, benefit-led, no keyword stuffing.",
     "",
     useVision && imageIds.length
@@ -163,8 +164,10 @@ export async function POST(req: NextRequest) {
       handle: String(parsed.proposed.handle || current.handle || "").trim().toLowerCase(),
       bodyHtml: String(parsed.proposed.bodyHtml || "").trim(),
       tags: asStringArray(parsed.proposed.tags, 20),
-      productType: String(parsed.proposed.productType || current.productType || "").trim(),
-      vendor: String(parsed.proposed.vendor || current.vendor || "").trim(),
+      // Vendor & product type are reliable catalog facts — preserve them as-is
+      // rather than letting the model invent them from name+color+photos.
+      productType: String(current.productType || "").trim(),
+      vendor: String(current.vendor || "").trim(),
       imageAlts: proposedImageAlts,
       focusKeyword,
       secondaryKeywords,
