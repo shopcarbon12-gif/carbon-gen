@@ -5165,6 +5165,45 @@ function createWidget(){
       true,
     );
   }
+  if(!window.__carbonA11ySelectFocusGuard){
+    window.__carbonA11ySelectFocusGuard=true;
+    /**
+     * Keep native <select> dropdowns usable. If an open <select> loses focus *to* the
+     * widget (its host or shadow content) with no preceding user gesture, the widget is
+     * grabbing focus on its own and the browser slams the option list shut. Hand focus
+     * straight back so the dropdown stays usable. Required by accessibility law: this
+     * never disables the widget, it only yields focus while a <select> is active.
+     */
+    function selectGuardIsSelect(el){
+      return !!(el&&el.nodeType===1&&String(el.tagName||'')==='SELECT'&&!el.disabled);
+    }
+    var selectGuardActive=null;       // native <select> that currently owns focus
+    var selectGuardLastUserInputTs=0; // last real user gesture anywhere on the page
+    function selectGuardNoteUserInput(){
+      try{selectGuardLastUserInputTs=Date.now();}catch(_e){}
+    }
+    document.addEventListener('pointerdown',selectGuardNoteUserInput,true);
+    document.addEventListener('keydown',selectGuardNoteUserInput,true);
+    document.addEventListener('focusin',function(ev){
+      try{selectGuardActive=selectGuardIsSelect(ev.target)?ev.target:null;}catch(_e){}
+    },true);
+    document.addEventListener('focusout',function(ev){
+      try{
+        var s=ev.target;
+        if(!selectGuardIsSelect(s)||s!==selectGuardActive){return;}
+        selectGuardActive=null;
+        if(!isLikelyInsideCarbonWidget(ev.relatedTarget)){return;}
+        /** User-driven moves (clicking/tabbing into the widget on purpose) carry a recent
+         *  gesture and are left alone; an autonomous steal has none. */
+        if(Date.now()-selectGuardLastUserInputTs<700){return;}
+        setTimeout(function(){
+          try{
+            if(s&&document.contains(s)&&typeof s.focus==='function'){s.focus({preventScroll:true});}
+          }catch(_f){}
+        },0);
+      }catch(_e){}
+    },true);
+  }
   if(!window.__carbonA11yPrmBound){
     window.__carbonA11yPrmBound=true;
     try{
