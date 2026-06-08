@@ -4981,6 +4981,10 @@ function createWidget(){
   document.addEventListener("click",function(event){
     var path=(event.composedPath&&event.composedPath())||[];
     if(path.indexOf(wrap)>=0){return;}
+    /** Only act when the panel is actually open. Otherwise this ran setOpen(false) on
+     *  every page click — needless work, and the close path's focus-restore could steal
+     *  focus from whatever the user just clicked (e.g. an open <select>). */
+    if(panel.style.display==='none'||panel.style.display===''){return;}
     setOpen(false);
   });
 
