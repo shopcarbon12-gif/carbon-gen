@@ -4843,10 +4843,22 @@ function createWidget(){
       },0);
     }else{
       track("panel_close",{});
+      var restoreLauncherFocus=function(){
+        try{
+          var ae=document.activeElement;
+          var fh=document.getElementById('carbon-a11y-widget');
+          var stillInWidget=ae===fh||(fh&&fh.shadowRoot&&fh.shadowRoot.contains(ae))||ae===document.body||ae==null;
+          /** Only return focus to the launcher when the panel was closed from inside
+           *  the widget (Esc / close button). If the user moved focus to a page control
+           *  — e.g. clicking an open <select> dropdown — never steal it back, or the
+           *  native dropdown slams shut ~closeAnimMs later. */
+          if(stillInWidget&&trigger&&typeof trigger.focus==='function'){trigger.focus();}
+        }catch(_e){}
+      };
       if(closeAnimMs>0){
-        setTimeout(function(){trigger.focus();},closeAnimMs);
+        setTimeout(restoreLauncherFocus,closeAnimMs);
       }else{
-        trigger.focus();
+        restoreLauncherFocus();
       }
     }
   }
