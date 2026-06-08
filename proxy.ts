@@ -53,6 +53,14 @@ export function proxy(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // Public storefront widget script: every shopper loads it cross-site via <script>,
+  // and none are logged into the admin app. It must bypass auth (the /accessibility
+  // admin pages stay protected). Without this it 307-redirects to /login under the
+  // "/accessibility" protected base and the widget never loads on the storefront.
+  if (pathname === "/accessibility/widget") {
+    return NextResponse.next();
+  }
+
   const legacyCollectionMappingPath = "/studio/shopify-collection-mapping";
   const publicCollectionMappingPath = "/shopify-collection-mapping";
 
