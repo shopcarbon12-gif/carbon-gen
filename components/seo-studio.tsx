@@ -48,6 +48,19 @@ const FIELD_ORDER: SeoFieldKey[] = ["seoTitle", "metaDescription", "handle", "ti
 
 const TEXTAREA_FIELDS = new Set<SeoFieldKey>(["metaDescription", "bodyHtml"]);
 
+function slugify(s: string): string {
+  return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+// WMS (Lightspeed) item name = the variant description with trailing color/size removed.
+function wmsBaseName(description: string, color: string, size: string): string {
+  let n = String(description || "").trim();
+  for (const tok of [size, color]) {
+    const t = String(tok || "").trim();
+    if (t && n.toUpperCase().endsWith(t.toUpperCase())) n = n.slice(0, n.length - t.length).trim();
+  }
+  return n;
+}
+
 function gradeColor(grade: Grade): string {
   if (grade === "A" || grade === "B") return "#15803d";
   if (grade === "C") return "#b45309";
@@ -155,6 +168,9 @@ export default function SeoStudio({ shop }: { shop: string }) {
     Array<{ id: string; title: string; reason: string; smart?: boolean; source?: "auto" | "suggested" }>
   >([]);
   const [collectionBarcodeLabel, setCollectionBarcodeLabel] = useState<string>("");
+  const [wmsName, setWmsName] = useState<string>("");
+  const [wmsDesiredHandle, setWmsDesiredHandle] = useState<string>("");
+  const [wmsApplying, setWmsApplying] = useState(false);
   const [selectedCollections, setSelectedCollections] = useState<Record<string, boolean>>({});
   const [showAllCollections, setShowAllCollections] = useState(false);
 
@@ -205,6 +221,53 @@ export default function SeoStudio({ shop }: { shop: string }) {
       /* non-fatal — recommendations just won't be available */
     }
     return [];
+  }
+
+  async function loadWmsHandle(ctx: ProductContext) {
+    setWmsName("");
+    setWmsDesiredHandle("");
+    const barcode = (ctx.barcodes || [])[0] || "";
+    if (!barcode) return;
+    try {
+      const resp = await fetch(`/api/lightspeed/catalog?q=${encodeURIComponent(barcode)}&pageSize=20`, { cache: "no-store" });
+      const json = await resp.json();
+      if (!resp.ok) return;
+      const rows = Array.isArray(json.rows) ? json.rows : [];
+      const row = rows.find((r: any) => String(r.upc || "").trim() === barcode) || rows[0];
+      if (!row) return;
+      const name = wmsBaseName(row.description, row.color, row.size);
+      if (!name) return;
+      setWmsName(name);
+      setWmsDesiredHandle(slugify(name));
+    } catch {
+      /* non-fatal */
+    }
+  }
+
+  async function applyWmsHandle() {
+    if (!audit || !wmsDesiredHandle) return;
+    setWmsApplying(true);
+    setError(null);
+    try {
+      const resp = await fetch("/api/shopify/seo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          shop: shop.trim(),
+          productId: audit.product.id,
+          fields: { handle: wmsDesiredHandle },
+          oldHandle: audit.current.handle,
+        }),
+      });
+      const json = await resp.json();
+      if (!resp.ok) throw new Error(json.error || "Handle update failed");
+      setStatus(`Handle set to "${wmsDesiredHandle}"${json.redirectCreated ? " (301 redirect created)" : ""}.`);
+      await runAudit({ productId: audit.product.id });
+    } catch (e: any) {
+      setError(e?.message || "Handle update failed");
+    } finally {
+      setWmsApplying(false);
+    }
   }
 
   async function loadCollectionSuggestions(ctx: ProductContext) {
@@ -266,6 +329,7 @@ export default function SeoStudio({ shop }: { shop: string }) {
       setHandle(json.current.handle || "");
       setStatus(`Audited "${json.product.title}". Overall grade ${json.scorecard.grade} (${json.scorecard.overall}).`);
       void loadCollectionSuggestions(json.context);
+      void loadWmsHandle(json.context);
     } catch (e: any) {
       setError(e?.message || "Audit failed");
       setStatus(null);
@@ -560,6 +624,26 @@ export default function SeoStudio({ shop }: { shop: string }) {
                   </button>
                 ) : null}
               </div>
+
+              {wmsDesiredHandle ? (
+                audit.current.handle === wmsDesiredHandle ? (
+                  <div style={{ border: "1px solid #15803d", borderRadius: 10, padding: "8px 12px", marginBottom: 10, color: "#86efac", fontSize: 13 }}>
+                    ✓ URL handle is in sync with the WMS name <strong>“{wmsName}”</strong> — nothing to change.
+                  </div>
+                ) : (
+                  <div style={{ border: "1px solid #b45309", borderRadius: 10, padding: "10px 12px", marginBottom: 10 }}>
+                    <div style={{ fontSize: 13, color: "#f8fafc", marginBottom: 4 }}>
+                      🔁 URL handle differs from the WMS name <strong>“{wmsName}”</strong>:
+                    </div>
+                    <div style={{ fontSize: 12, color: "#e2e8f0", marginBottom: 8 }}>
+                      <code>{audit.current.handle}</code> → <code style={{ color: "#86efac" }}>{wmsDesiredHandle}</code>
+                    </div>
+                    <button className="btn" type="button" onClick={applyWmsHandle} disabled={wmsApplying}>
+                      {wmsApplying ? "Applying…" : "Set handle to WMS name (+301 redirect)"}
+                    </button>
+                  </div>
+                )
+              ) : null}
 
               {optimize ? (
                 <>
