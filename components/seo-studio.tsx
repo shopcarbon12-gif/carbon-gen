@@ -232,10 +232,16 @@ export default function SeoStudio({ shop }: { shop: string }) {
       const resp = await fetch(`/api/lightspeed/catalog?q=${encodeURIComponent(barcode)}&pageSize=20`, { cache: "no-store" });
       const json = await resp.json();
       if (!resp.ok) return;
-      const rows = Array.isArray(json.rows) ? json.rows : [];
-      const row = rows.find((r: any) => String(r.upc || "").trim() === barcode) || rows[0];
-      if (!row) return;
-      const name = wmsBaseName(row.description, row.color, row.size);
+      const rows = (Array.isArray(json.rows) ? json.rows : []).filter(
+        (r: any) => String(r.upc || "").trim() === barcode
+      );
+      // Distinct WMS item names sharing this barcode. One = unambiguous WMS name.
+      // More than one = the UPC is shared by separate products, so follow the
+      // product's OWN item name (its title) instead of guessing.
+      const names = Array.from(
+        new Set(rows.map((r: any) => wmsBaseName(r.description, r.color, r.size)).filter(Boolean))
+      ) as string[];
+      const name = names.length === 1 ? names[0] : names.length > 1 ? ctx.title : "";
       if (!name) return;
       setWmsName(name);
       setWmsDesiredHandle(slugify(name));
