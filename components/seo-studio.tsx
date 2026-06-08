@@ -34,14 +34,6 @@ interface CatalogProduct {
   title: string;
   handle: string;
 }
-interface CollectionInfo {
-  id: string;
-  title: string;
-  handle: string;
-  smart: boolean;
-  productsCount: number;
-}
-
 // Vendor, product type and image alt are intentionally NOT managed here:
 // vendor/type are preserved from Shopify, and image alt lives in the Push section.
 const FIELD_ORDER: SeoFieldKey[] = ["seoTitle", "metaDescription", "handle", "title", "bodyHtml", "tags"];
@@ -163,16 +155,9 @@ export default function SeoStudio({ shop }: { shop: string }) {
   const [busy, setBusy] = useState(false);
   const [previewSide, setPreviewSide] = useState<Decision>("proposed");
   const [useVision, setUseVision] = useState(true);
-  const [collections, setCollections] = useState<CollectionInfo[]>([]);
-  const [recommendedCollections, setRecommendedCollections] = useState<
-    Array<{ id: string; title: string; reason: string; smart?: boolean; source?: "auto" | "suggested" }>
-  >([]);
-  const [collectionBarcodeLabel, setCollectionBarcodeLabel] = useState<string>("");
   const [wmsName, setWmsName] = useState<string>("");
   const [wmsDesiredHandle, setWmsDesiredHandle] = useState<string>("");
   const [wmsApplying, setWmsApplying] = useState(false);
-  const [selectedCollections, setSelectedCollections] = useState<Record<string, boolean>>({});
-  const [showAllCollections, setShowAllCollections] = useState(false);
 
   // ---- bulk mode state ----
   const [selected, setSelected] = useState<Record<string, boolean>>({});
@@ -206,21 +191,6 @@ export default function SeoStudio({ shop }: { shop: string }) {
     } finally {
       setSearching(false);
     }
-  }
-
-  async function ensureCollectionsLoaded(): Promise<CollectionInfo[]> {
-    if (collections.length) return collections;
-    try {
-      const resp = await fetch(`/api/shopify/collections?shop=${encodeURIComponent(shop.trim())}`, { cache: "no-store" });
-      const json = await resp.json();
-      if (resp.ok && Array.isArray(json.collections)) {
-        setCollections(json.collections);
-        return json.collections;
-      }
-    } catch {
-      /* non-fatal — recommendations just won't be available */
-    }
-    return [];
   }
 
   async function loadWmsHandle(ctx: ProductContext) {
@@ -276,32 +246,6 @@ export default function SeoStudio({ shop }: { shop: string }) {
     }
   }
 
-  async function loadCollectionSuggestions(ctx: ProductContext) {
-    try {
-      const resp = await fetch("/api/seo/collection-suggest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          shop: shop.trim(),
-          sku: (ctx.variantSkus || [])[0] || "",
-          barcode: (ctx.barcodes || [])[0] || "",
-          title: ctx.title,
-          itemType: ctx.productType,
-        }),
-      });
-      const json = await resp.json();
-      if (!resp.ok) return;
-      const recs = Array.isArray(json.recommendations) ? json.recommendations : [];
-      setCollectionBarcodeLabel(json.barcodeLabel || "");
-      setRecommendedCollections(recs);
-      // Pre-select everything we can actually add (non-smart). Smart collections
-      // are rule-based and can't be edited manually, so leave them unchecked.
-      setSelectedCollections(Object.fromEntries(recs.filter((r: { smart?: boolean }) => !r.smart).map((r: { id: string }) => [r.id, true])));
-    } catch {
-      /* non-fatal */
-    }
-  }
-
   async function runAudit(idOrHandle?: { productId?: string; handle?: string }) {
     const body = {
       shop: shop.trim(),
@@ -318,10 +262,6 @@ export default function SeoStudio({ shop }: { shop: string }) {
     setOptimize(null);
     setEditedProposed(null);
     setDecisions({});
-    setRecommendedCollections([]);
-    setSelectedCollections({});
-    setCollectionBarcodeLabel("");
-    void ensureCollectionsLoaded();
     try {
       const resp = await fetch("/api/shopify/seo-audit", {
         method: "POST",
@@ -334,7 +274,6 @@ export default function SeoStudio({ shop }: { shop: string }) {
       setProductId(json.product.id);
       setHandle(json.current.handle || "");
       setStatus(`Audited "${json.product.title}". Overall grade ${json.scorecard.grade} (${json.scorecard.overall}).`);
-      void loadCollectionSuggestions(json.context);
       void loadWmsHandle(json.context);
     } catch (e: any) {
       setError(e?.message || "Audit failed");
@@ -402,9 +341,8 @@ export default function SeoStudio({ shop }: { shop: string }) {
       else (fields as any)[f] = (editedProposed as any)[f];
       if (f === "handle" && editedProposed.handle !== audit.current.handle) handleChanged = true;
     }
-    const addToCollections = Object.keys(selectedCollections).filter((id) => selectedCollections[id]);
-    if (!Object.keys(fields).length && !addToCollections.length) {
-      setError("Nothing accepted to publish. Toggle a field to ‘Use proposed’ or select a collection.");
+    if (!Object.keys(fields).length) {
+      setError("Nothing accepted to publish. Toggle a field to ‘Use proposed’.");
       return;
     }
     setBusy(true);
@@ -419,7 +357,6 @@ export default function SeoStudio({ shop }: { shop: string }) {
           productId: audit.product.id,
           fields,
           oldHandle: handleChanged ? audit.current.handle : undefined,
-          addToCollections,
         }),
       });
       const json = await resp.json();
@@ -427,8 +364,6 @@ export default function SeoStudio({ shop }: { shop: string }) {
       const bits = [`Published: ${(json.updatedFields || []).join(", ") || "nothing"}`];
       if (json.redirectCreated) bits.push("301 redirect created for old URL");
       if (json.altResults?.updated) bits.push(`${json.altResults.updated} alt texts updated`);
-      if (json.collectionResults?.added?.length) bits.push(`added to: ${json.collectionResults.added.join(", ")}`);
-      if (json.collectionResults?.errors?.length) bits.push(`collection issues: ${json.collectionResults.errors.length} (smart collections can't be edited)`);
       setStatus(bits.join(". ") + ".");
       // re-audit to reflect new live state
       await runAudit({ productId: audit.product.id });
@@ -747,57 +682,6 @@ export default function SeoStudio({ shop }: { shop: string }) {
                       </button>
                     </div>
                     <SerpPreview shop={shop} fields={previewSide === "proposed" && editedProposed ? editedProposed : audit.current} />
-                  </div>
-
-                  <div style={{ border: "1px solid #334155", borderRadius: 10, padding: 12, marginBottom: 12 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                      <strong style={{ color: "#f8fafc" }}>
-                        📁 Recommended collections{collectionBarcodeLabel ? ` — ${collectionBarcodeLabel}` : ""}
-                      </strong>
-                      <button className="btn ghost" style={{ fontSize: 11 }} type="button" onClick={() => setShowAllCollections((s) => !s)}>
-                        {showAllCollections ? "Hide all" : "Add another"}
-                      </button>
-                    </div>
-                    {recommendedCollections.length ? (
-                      recommendedCollections.map((rc) => (
-                        <label key={rc.id} style={{ display: "block", fontSize: 13, color: "#e2e8f0", padding: "3px 0", opacity: rc.smart ? 0.6 : 1 }}>
-                          <input
-                            type="checkbox"
-                            disabled={rc.smart}
-                            checked={!!selectedCollections[rc.id]}
-                            onChange={(e) => setSelectedCollections((s) => ({ ...s, [rc.id]: e.target.checked }))}
-                          />{" "}
-                          <strong>{rc.title}</strong>
-                          <span style={{ fontSize: 10, marginLeft: 6, padding: "0 5px", borderRadius: 4, background: rc.source === "auto" ? "#15803d" : "#475569", color: "#fff" }}>
-                            {rc.source === "auto" ? "match" : "suggested"}
-                          </span>
-                          {rc.smart ? <span style={{ fontSize: 11, color: "#f59e0b" }}> (smart — auto)</span> : null}
-                          {rc.reason ? <span style={{ color: "#cbd5e1" }}> — {rc.reason}</span> : null}
-                        </label>
-                      ))
-                    ) : (
-                      <div style={{ color: "#cbd5e1", fontSize: 12 }}>No strong category matches found. Use “Add another” to pick manually.</div>
-                    )}
-                    {showAllCollections ? (
-                      <div style={{ marginTop: 8, maxHeight: 180, overflow: "auto", borderTop: "1px solid #334155", paddingTop: 8 }}>
-                        {collections
-                          .filter((c) => !recommendedCollections.some((r) => r.id === c.id))
-                          .map((c) => (
-                            <label key={c.id} style={{ display: "block", fontSize: 12, color: "#e2e8f0", padding: "2px 0" }}>
-                              <input
-                                type="checkbox"
-                                checked={!!selectedCollections[c.id]}
-                                onChange={(e) => setSelectedCollections((s) => ({ ...s, [c.id]: e.target.checked }))}
-                              />{" "}
-                              {c.title}
-                              {c.smart ? <span style={{ fontSize: 11, color: "#f59e0b" }}> (smart)</span> : null}
-                            </label>
-                          ))}
-                      </div>
-                    ) : null}
-                    <div style={{ fontSize: 11, color: "#cbd5e1", marginTop: 6 }}>
-                      Selected collections get the product added on publish. Smart (rule-based) collections can’t be edited here.
-                    </div>
                   </div>
 
                   <button className="btn" onClick={publishSingle} disabled={busy} type="button">

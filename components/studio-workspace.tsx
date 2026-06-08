@@ -25,6 +25,82 @@ const SPLIT_TARGET_HEIGHT = 1200;
 const FLAT_SPLIT_TARGET_WIDTH = 900;
 const FLAT_SPLIT_TARGET_HEIGHT = 1200;
 const PUSH_TRANSFER_STORAGE_KEY = "cg_push_transfer_v1";
+const PUSH_TRANSFER_DB = "carbon_studio_transfer";
+const PUSH_TRANSFER_STORE = "push";
+const PUSH_TRANSFER_RECORD_ID = "current";
+
+/**
+ * Split crops are large base64 PNG data URLs — a few of them blow past the ~5MB
+ * localStorage quota, so the old hand-off (localStorage.setItem) threw and the SEO
+ * Manager silently received nothing. IndexedDB has no practical size limit, so the
+ * "Use Results In SEO Manager" hand-off rides through here instead.
+ */
+function openPushTransferDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    try {
+      const req = window.indexedDB.open(PUSH_TRANSFER_DB, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(PUSH_TRANSFER_STORE)) {
+          db.createObjectStore(PUSH_TRANSFER_STORE);
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error || new Error("IndexedDB open failed"));
+    } catch (e) {
+      reject(e as Error);
+    }
+  });
+}
+
+async function savePushTransferPayload(payload: unknown): Promise<void> {
+  const db = await openPushTransferDb();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(PUSH_TRANSFER_STORE, "readwrite");
+      tx.objectStore(PUSH_TRANSFER_STORE).put(payload, PUSH_TRANSFER_RECORD_ID);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error || new Error("IndexedDB write failed"));
+      tx.onabort = () => reject(tx.error || new Error("IndexedDB write aborted"));
+    });
+  } finally {
+    db.close();
+  }
+}
+
+async function readPushTransferPayload(): Promise<any | null> {
+  const db = await openPushTransferDb();
+  try {
+    return await new Promise<any | null>((resolve, reject) => {
+      const tx = db.transaction(PUSH_TRANSFER_STORE, "readonly");
+      const req = tx.objectStore(PUSH_TRANSFER_STORE).get(PUSH_TRANSFER_RECORD_ID);
+      req.onsuccess = () => resolve(req.result ?? null);
+      req.onerror = () => reject(req.error || new Error("IndexedDB read failed"));
+    });
+  } finally {
+    db.close();
+  }
+}
+
+async function clearPushTransferPayload(): Promise<void> {
+  try {
+    const db = await openPushTransferDb();
+    try {
+      await new Promise<void>((resolve) => {
+        const tx = db.transaction(PUSH_TRANSFER_STORE, "readwrite");
+        tx.objectStore(PUSH_TRANSFER_STORE).delete(PUSH_TRANSFER_RECORD_ID);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => resolve();
+        tx.onabort = () => resolve();
+      });
+    } finally {
+      db.close();
+    }
+  } catch {
+    /* best-effort cleanup */
+  }
+}
+
 const DAILY_MODEL_UPLOAD_CLEANUP_STORAGE_KEY = "cg_daily_model_upload_cleanup_day_v1";
 const ALT_GENERATION_BATCH_SIZE = 3;
 const PUSH_STAGING_BATCH_SIZE = 4;
@@ -1098,60 +1174,90 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   }, [finalResultUploads]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const raw = window.localStorage.getItem(PUSH_TRANSFER_STORAGE_KEY);
-    if (!raw) return;
+    // The hand-off only lands in the SEO Manager (Shopify Push lives in ops-seo).
+    if (typeof window === "undefined" || mode !== "ops-seo") return;
+    let cancelled = false;
 
-    try {
-      const parsed = JSON.parse(raw) as {
-        barcode?: unknown;
-        images?: unknown;
-      };
-      const transferred = Array.isArray(parsed?.images) ? parsed.images : [];
-      const rows: PushQueueImage[] = transferred.reduce((acc: PushQueueImage[], row: any, idx: number) => {
-        const url = String(row?.url || "").trim();
-        if (!url) return acc;
-        acc.push({
-          id: String(row?.id || `transfer:${idx}:${crypto.randomUUID()}`),
-          sourceImageId: String(row?.sourceImageId || `transfer:${idx}`),
-          mediaId: null,
-          url,
-          title: String(row?.title || `Transferred image ${idx + 1}`),
-          source: "device_upload",
-          altText: String(row?.altText || ""),
-          generatingAlt: false,
-          deleting: false,
-        });
-        return acc;
-      }, []);
+    async function consumePushTransfer() {
+      let parsed: { barcode?: unknown; images?: unknown } | null = null;
 
-      if (rows.length) {
-        setPushImages((prev) => {
-          const merged = [...rows, ...prev];
-          const deduped = new Map<string, PushQueueImage>();
-          merged.forEach((row) => {
-            const key = `${row.sourceImageId}::${row.url}`;
-            if (!deduped.has(key)) deduped.set(key, row);
-          });
-          return [...deduped.values()];
-        });
-        if (mode === "ops-seo") {
-          setShopifyPushCollapsed(false);
-          setStatus(`Loaded ${rows.length} transferred image(s) for Shopify Push.`);
+      // Primary path: IndexedDB (split crops are too large for localStorage).
+      try {
+        parsed = await readPushTransferPayload();
+      } catch {
+        parsed = null;
+      }
+
+      // Fallback / legacy path: small payloads written straight to localStorage.
+      if (!parsed || !Array.isArray(parsed.images) || !parsed.images.length) {
+        try {
+          const raw = window.localStorage.getItem(PUSH_TRANSFER_STORAGE_KEY);
+          if (raw) {
+            const legacy = JSON.parse(raw);
+            if (legacy && (Array.isArray(legacy.images) ? legacy.images.length : !parsed)) {
+              parsed = legacy;
+            }
+          }
+        } catch {
+          /* ignore malformed localStorage payload */
         }
       }
 
-      const transferredBarcode = sanitizeBarcodeInput(String(parsed?.barcode || "")).trim();
-      if (transferredBarcode && isValidBarcode(transferredBarcode)) {
-        setItemBarcode(transferredBarcode);
-        setItemBarcodeSaved(transferredBarcode);
-        setPushSearchQuery(transferredBarcode);
+      if (!parsed || cancelled) {
+        await clearPushTransferPayload();
+        try { window.localStorage.removeItem(PUSH_TRANSFER_STORAGE_KEY); } catch {}
+        return;
       }
-    } catch {
-      // Ignore malformed transfer payloads.
-    } finally {
-      window.localStorage.removeItem(PUSH_TRANSFER_STORAGE_KEY);
+
+      try {
+        const transferred = Array.isArray(parsed.images) ? parsed.images : [];
+        const rows: PushQueueImage[] = transferred.reduce((acc: PushQueueImage[], row: any, idx: number) => {
+          const url = String(row?.url || "").trim();
+          if (!url) return acc;
+          acc.push({
+            id: String(row?.id || `transfer:${idx}:${crypto.randomUUID()}`),
+            sourceImageId: String(row?.sourceImageId || `transfer:${idx}`),
+            mediaId: null,
+            url,
+            title: String(row?.title || `Transferred image ${idx + 1}`),
+            source: "device_upload",
+            altText: String(row?.altText || ""),
+            generatingAlt: false,
+            deleting: false,
+          });
+          return acc;
+        }, []);
+
+        if (rows.length && !cancelled) {
+          setPushImages((prev) => {
+            const merged = [...rows, ...prev];
+            const deduped = new Map<string, PushQueueImage>();
+            merged.forEach((row) => {
+              const key = `${row.sourceImageId}::${row.url}`;
+              if (!deduped.has(key)) deduped.set(key, row);
+            });
+            return [...deduped.values()];
+          });
+          setShopifyPushCollapsed(false);
+          setStatus(`Loaded ${rows.length} transferred image(s) for Shopify Push.`);
+        }
+
+        const transferredBarcode = sanitizeBarcodeInput(String(parsed.barcode || "")).trim();
+        if (transferredBarcode && isValidBarcode(transferredBarcode) && !cancelled) {
+          setItemBarcode(transferredBarcode);
+          setItemBarcodeSaved(transferredBarcode);
+          setPushSearchQuery(transferredBarcode);
+        }
+      } catch {
+        // Ignore malformed transfer payloads.
+      } finally {
+        await clearPushTransferPayload();
+        try { window.localStorage.removeItem(PUSH_TRANSFER_STORAGE_KEY); } catch {}
+      }
     }
+
+    void consumePushTransfer();
+    return () => { cancelled = true; };
   }, [mode]);
 
   useEffect(() => {
@@ -5085,7 +5191,20 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             altText: row.altText || "",
           })),
         };
-        window.localStorage.setItem(PUSH_TRANSFER_STORAGE_KEY, JSON.stringify(transferPayload));
+        // Persist through IndexedDB first (split crops overflow localStorage), then
+        // fall back to localStorage for small/non-split sets so older flows still work.
+        try {
+          await savePushTransferPayload(transferPayload);
+          try { window.localStorage.removeItem(PUSH_TRANSFER_STORAGE_KEY); } catch {}
+        } catch {
+          try {
+            window.localStorage.setItem(PUSH_TRANSFER_STORAGE_KEY, JSON.stringify(transferPayload));
+          } catch {
+            throw new Error(
+              "Could not hand the images to the SEO Manager — too large for browser storage. Try fewer images at once."
+            );
+          }
+        }
       }
 
       setStatus(`Prepared ${pushRows.length} image(s) for Shopify Push.`);
