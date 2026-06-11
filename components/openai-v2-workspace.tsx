@@ -199,7 +199,7 @@ export default function OpenAiV2Workspace() {
   const [generating, setGenerating] = useState(false);
   const [panelProgress, setPanelProgress] = useState<Record<number, string>>({});
   const [results, setResults] = useState<ResultImage[]>([]);
-  const [zoom, setZoom] = useState<ResultImage | null>(null);
+  const [preview, setPreview] = useState<{ src: string; label?: string } | null>(null);
 
   // step 3 — publish (unified media manager: existing Shopify + new generated)
   const [pushImages, setPushImages] = useState<PushImage[]>([]);
@@ -952,6 +952,11 @@ export default function OpenAiV2Workspace() {
     setResults((prev) => prev.map((r) => (r.id === id ? { ...r, selected: !r.selected } : r)));
   }
 
+  // Open a full-size preview of any thumbnail, in any section.
+  function openPreview(src: string, label?: string) {
+    if (src) setPreview({ src, label });
+  }
+
   // ---------- step 3: publish (unified media manager) ----------
   async function goToPublish() {
     if (!product) return setError("No matched product to publish to.");
@@ -1354,6 +1359,7 @@ export default function OpenAiV2Workspace() {
             {models.map((m) => (
               <div key={m.model_id} className={`v2-model ${m.model_id === selectedModelId ? "sel" : ""}`} onClick={() => setSelectedModelId(m.model_id)}>
                 <button className="v2-del" title="Delete model + its photos" onClick={(e) => { e.stopPropagation(); deleteModel(m); }}>×</button>
+                {m.ref_image_urls[0] ? <button className="v2-cardzoom" title="View full size" onClick={(e) => { e.stopPropagation(); openPreview(storagePreview(m.ref_image_urls[0]), m.name); }}>⛶</button> : null}
                 {m.ref_image_urls[0] ? <img src={storagePreview(m.ref_image_urls[0])} alt="" /> : <div className="v2-noimg" />}
                 <small>{m.name}</small>
                 <small className="muted">{m.gender}</small>
@@ -1380,7 +1386,7 @@ export default function OpenAiV2Workspace() {
               <div className="v2-thumbs">
                 {mRefs.map((r) => (
                   <div key={r.id} className="v2-thumb">
-                    <img src={r.preview} alt="" />
+                    <img src={r.preview} alt="" onClick={() => openPreview(r.preview)} />
                     {r.uploading ? <span className="v2-uploading">…</span> : null}
                     <span className="x" onClick={() => setMRefs((p) => p.filter((x) => x.id !== r.id))}>×</span>
                   </div>
@@ -1407,7 +1413,7 @@ export default function OpenAiV2Workspace() {
           <div className="v2-thumbs">
             {itemRefs.map((r) => (
               <div key={r.id} className="v2-thumb">
-                <img src={r.preview} alt="" />
+                <img src={r.preview} alt="" onClick={() => openPreview(r.preview)} />
                 {r.uploading ? <span className="v2-uploading">…</span> : null}
                 <span className="x" onClick={() => setItemRefs((p) => p.filter((x) => x.id !== r.id))}>×</span>
               </div>
@@ -1489,7 +1495,7 @@ export default function OpenAiV2Workspace() {
                   <div key={r.id} className={`v2-res ${r.selected ? "sel" : ""}`} onClick={() => toggleResult(r.id)}>
                     <div className="v2-tick">{r.selected ? "✓" : ""}</div>
                     <div className="v2-qa">QA ✓</div>
-                    <button className="v2-zoom" title="Zoom in" onClick={(e) => { e.stopPropagation(); setZoom(r); }}>⛶</button>
+                    <button className="v2-zoom" title="Zoom in" onClick={(e) => { e.stopPropagation(); openPreview(dataUrlFromB64(r.b64), r.label); }}>⛶</button>
                     <img src={dataUrlFromB64(r.b64)} alt={r.label} />
                     <div className="v2-meta">{r.label}</div>
                   </div>
@@ -1525,6 +1531,7 @@ export default function OpenAiV2Workspace() {
                 key={im.id}
                 className={`v2-mediacard ${draggingImageId === im.id ? "drag" : ""}`}
                 draggable
+                onClick={() => openPreview(im.preview, im.altText)}
                 onDragStart={(e) => { setDraggingImageId(im.id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/v2-image-id", im.id); }}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => { e.preventDefault(); const id = e.dataTransfer.getData("text/v2-image-id") || draggingImageId || ""; if (id) movePushImage(id, im.id); setDraggingImageId(null); }}
@@ -1532,7 +1539,7 @@ export default function OpenAiV2Workspace() {
               >
                 <span className="v2-pos">{idx + 1}</span>
                 <span className={`v2-srcbadge ${im.source}`}>{im.source === "shopify" ? "current" : "new"}</span>
-                <button className="v2-mediax" title="Remove from Shopify" onClick={() => removePushImage(im)}>×</button>
+                <button className="v2-mediax" title="Remove from Shopify" onClick={(e) => { e.stopPropagation(); removePushImage(im); }}>×</button>
                 <img src={im.preview} alt={im.altText} />
               </div>
             ))}
@@ -1558,7 +1565,7 @@ export default function OpenAiV2Workspace() {
                         {v.assignedImageId ? <button className="v2-shopedit" style={{ marginLeft: "auto" }} onClick={() => clearVariant(v.id)}>clear</button> : null}
                       </div>
                       <div className="v2-vmain">
-                        {assigned ? <img src={assigned.preview} alt="" /> : <div className="v2-vdrop">drop image here</div>}
+                        {assigned ? <img src={assigned.preview} alt="" style={{ cursor: "zoom-in" }} onClick={() => openPreview(assigned.preview, v.color)} /> : <div className="v2-vdrop">drop image here</div>}
                       </div>
                       <div className="v2-vpics">
                         {pushImages.map((im) => (
@@ -1582,7 +1589,7 @@ export default function OpenAiV2Workspace() {
           <div className="v2-altlist">
             {pushImages.map((im) => (
               <div key={im.id} className="v2-altrow">
-                <img src={im.preview} alt="" />
+                <img src={im.preview} alt="" style={{ cursor: "zoom-in" }} onClick={() => openPreview(im.preview, im.altText)} />
                 <input className="v2-input" value={im.altText} placeholder={im.generatingAlt ? "Writing alt…" : "Alt text…"} onChange={(e) => setPushAlt(im.id, e.target.value)} />
                 <button className="v2-btn ghost" disabled={im.generatingAlt} title="Regenerate alt" onClick={() => void genAltForImage(im)}>↻</button>
               </div>
@@ -1642,12 +1649,12 @@ export default function OpenAiV2Workspace() {
         </section>
       ) : null}
 
-      {zoom ? (
-        <div className="v2-lb" onClick={() => setZoom(null)}>
-          <button className="v2-lbclose" onClick={() => setZoom(null)}>×</button>
+      {preview ? (
+        <div className="v2-lb" onClick={() => setPreview(null)}>
+          <button className="v2-lbclose" onClick={() => setPreview(null)}>×</button>
           <div className="v2-frame" onClick={(e) => e.stopPropagation()}>
-            <img src={dataUrlFromB64(zoom.b64)} alt={zoom.label} />
-            <div className="v2-cap">{zoom.label}</div>
+            <img src={preview.src} alt={preview.label || ""} />
+            {preview.label ? <div className="v2-cap">{preview.label}</div> : null}
           </div>
         </div>
       ) : null}
@@ -1711,10 +1718,13 @@ export default function OpenAiV2Workspace() {
                 </div>
                 <div className="v2-dbgrid">
                   {dropboxResults.map((d) => (
-                    <button key={d.id} className="v2-dbcell" onClick={() => { importRemoteToItemRef(d.temporaryLink, d.title); }} title={d.title}>
-                      <img src={d.temporaryLink} alt={d.title} />
-                      <span>{d.title}</span>
-                    </button>
+                    <div key={d.id} className="v2-dbcell">
+                      <span className="v2-cardzoom" title="View full size" onClick={() => openPreview(d.temporaryLink, d.title)}>⛶</span>
+                      <button className="v2-dbcell-add" onClick={() => { importRemoteToItemRef(d.temporaryLink, d.title); }} title={`Add ${d.title}`}>
+                        <img src={d.temporaryLink} alt={d.title} />
+                        <span>{d.title}</span>
+                      </button>
+                    </div>
                   ))}
                 </div>
               </>
@@ -1814,7 +1824,8 @@ const V2_CSS = `
 .v2-drop.mt8,.mt8{margin-top:8px}
 .v2-thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 .v2-thumb{position:relative;width:64px;height:84px;border-radius:9px;overflow:hidden;border:1px solid var(--panel-border);background:rgba(255,255,255,.04)}
-.v2-thumb img{width:100%;height:100%;object-fit:cover}
+.v2-thumb img{width:100%;height:100%;object-fit:cover;cursor:zoom-in}
+.v2-mediacard img{cursor:zoom-in}
 .v2-thumb .x{position:absolute;top:3px;right:3px;background:rgba(0,0,0,.6);border-radius:50%;width:18px;height:18px;display:grid;place-items:center;font-size:12px;color:#fff;cursor:pointer}
 .v2-uploading{position:absolute;inset:0;display:grid;place-items:center;background:rgba(0,0,0,.4);color:#fff;font-size:18px;letter-spacing:2px}
 .v2-hint{font-size:12px;color:var(--muted);margin-top:10px}
@@ -1896,10 +1907,13 @@ const V2_CSS = `
 .v2-qrlabel{text-align:center;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px}
 .v2-modalwide{width:min(94vw,640px)}
 .v2-dbgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;margin-top:12px;max-height:60vh;overflow-y:auto}
-.v2-dbcell{display:flex;flex-direction:column;gap:5px;background:rgba(255,255,255,.04);border:1px solid var(--panel-border);border-radius:10px;padding:6px;cursor:pointer;color:var(--fg);font:inherit}
-.v2-dbcell:hover{border-color:var(--accent)}
-.v2-dbcell img{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:7px}
-.v2-dbcell span{font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v2-dbcell{position:relative}
+.v2-dbcell-add{display:flex;flex-direction:column;gap:5px;width:100%;background:rgba(255,255,255,.04);border:1px solid var(--panel-border);border-radius:10px;padding:6px;cursor:pointer;color:var(--fg);font:inherit}
+.v2-dbcell-add:hover{border-color:var(--accent)}
+.v2-dbcell-add img{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:7px}
+.v2-dbcell-add span{font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v2-cardzoom{position:absolute;top:4px;left:4px;z-index:2;width:22px;height:22px;border-radius:7px;background:rgba(0,0,0,.6);border:1px solid var(--panel-border);display:grid;place-items:center;font-size:12px;color:#fff;cursor:zoom-in}
+.v2-cardzoom:hover{background:var(--accent);color:#04261b}
 .v2-scanframe{position:relative;border-radius:14px;overflow:hidden;background:#000;aspect-ratio:4/3}
 .v2-scanvideo{width:100%;height:100%;object-fit:cover}
 .v2-scanguide{position:absolute;inset:18% 12%;border:2px solid rgba(75,201,154,.8);border-radius:10px;pointer-events:none}
