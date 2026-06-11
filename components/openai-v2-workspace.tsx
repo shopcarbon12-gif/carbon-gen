@@ -1054,6 +1054,18 @@ export default function OpenAiV2Workspace() {
     });
   }
 
+  // Reliable reorder via buttons (works on touch + desktop, unlike HTML5 drag).
+  function moveImageByOffset(idx: number, delta: number) {
+    setPushImages((prev) => {
+      const to = idx + delta;
+      if (idx < 0 || idx >= prev.length || to < 0 || to >= prev.length) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(idx, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  }
+
   async function removePushImage(img: PushImage) {
     // remove from the list + any variant pointing at it, immediately
     setPushImages((prev) => prev.filter((x) => x.id !== img.id));
@@ -1538,14 +1550,19 @@ export default function OpenAiV2Workspace() {
                 draggable
                 onClick={() => openPreview(im.preview, im.altText)}
                 onDragStart={(e) => { setDraggingImageId(im.id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/v2-image-id", im.id); }}
-                onDragOver={(e) => e.preventDefault()}
+                onDragEnter={(e) => e.preventDefault()}
+                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
                 onDrop={(e) => { e.preventDefault(); const id = e.dataTransfer.getData("text/v2-image-id") || draggingImageId || ""; if (id) movePushImage(id, im.id); setDraggingImageId(null); }}
                 onDragEnd={() => setDraggingImageId(null)}
               >
-                <span className="v2-pos">{idx + 1}</span>
                 <span className={`v2-srcbadge ${im.source}`}>{im.source === "shopify" ? "current" : "new"}</span>
                 <button className="v2-mediax" title="Remove from Shopify" onClick={(e) => { e.stopPropagation(); removePushImage(im); }}>×</button>
-                <img src={im.preview} alt={im.altText} />
+                <img src={im.preview} alt={im.altText} draggable={false} />
+                <div className="v2-mediabar" onClick={(e) => e.stopPropagation()}>
+                  <button className="v2-movebtn" title="Move earlier" disabled={idx === 0} onClick={() => moveImageByOffset(idx, -1)}>◀</button>
+                  <span className="v2-posnum">{idx + 1}</span>
+                  <button className="v2-movebtn" title="Move later" disabled={idx === pushImages.length - 1} onClick={() => moveImageByOffset(idx, 1)}>▶</button>
+                </div>
               </div>
             ))}
             {!pushImages.length && !publishBusy ? <div className="v2-hint" style={{ margin: 0 }}>No images.</div> : null}
@@ -1829,7 +1846,7 @@ const V2_CSS = `
 .v2-model img{width:80px;height:80px;border-radius:8px;object-fit:cover;display:block}
 .v2-model small{display:block;font-size:11px;margin-top:4px}
 .v2-model small.muted{color:var(--muted)}
-.v2-model .v2-del{position:absolute;top:4px;right:4px;z-index:3;width:22px;height:22px;border-radius:50%;background:rgba(248,113,113,.9);border:none;display:grid;place-items:center;font-size:14px;line-height:1;color:#fff;cursor:pointer;opacity:1}
+.v2-model .v2-del{position:absolute;top:4px;right:4px;z-index:3;width:22px;height:22px;min-width:22px;flex:none;aspect-ratio:1/1;box-sizing:border-box;padding:0;border-radius:50%;background:rgba(248,113,113,.9);border:none;display:flex;align-items:center;justify-content:center;font-size:15px;line-height:1;color:#fff;cursor:pointer;opacity:1}
 .v2-model .v2-del:hover{background:#ef4444}
 .v2-model.add{display:grid;place-items:center;color:var(--muted);border-style:dashed;min-height:113px}
 .v2-plus{font-size:24px}
@@ -1844,7 +1861,7 @@ const V2_CSS = `
 .v2-thumb{position:relative;width:64px;height:84px;border-radius:9px;overflow:hidden;border:1px solid var(--panel-border);background:rgba(255,255,255,.04)}
 .v2-thumb img{width:100%;height:100%;object-fit:cover;cursor:zoom-in}
 .v2-mediacard img{cursor:zoom-in}
-.v2-thumb .x{position:absolute;top:3px;right:3px;background:rgba(0,0,0,.6);border-radius:50%;width:18px;height:18px;display:grid;place-items:center;font-size:12px;color:#fff;cursor:pointer}
+.v2-thumb .x{position:absolute;top:3px;right:3px;background:rgba(0,0,0,.6);border-radius:50%;width:20px;height:20px;min-width:20px;aspect-ratio:1/1;box-sizing:border-box;padding:0;display:flex;align-items:center;justify-content:center;font-size:13px;line-height:1;color:#fff;cursor:pointer}
 .v2-uploading{position:absolute;inset:0;display:grid;place-items:center;background:rgba(0,0,0,.4);color:#fff;font-size:18px;letter-spacing:2px}
 .v2-hint{font-size:12px;color:var(--muted);margin-top:10px}
 .v2-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px;align-items:center}
@@ -1901,11 +1918,15 @@ const V2_CSS = `
 .v2-mediacard{position:relative;border:1px solid var(--panel-border);border-radius:10px;overflow:hidden;background:rgba(255,255,255,.04);cursor:grab}
 .v2-mediacard.drag{opacity:.4}
 .v2-mediacard img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block;pointer-events:none}
-.v2-pos{position:absolute;bottom:5px;left:5px;font-size:11px;font-weight:800;background:rgba(0,0,0,.6);border-radius:6px;padding:1px 7px;color:#fff}
+.v2-mediabar{position:absolute;bottom:4px;left:4px;right:4px;display:flex;align-items:center;justify-content:space-between;gap:4px;background:rgba(0,0,0,.55);border-radius:8px;padding:2px 4px}
+.v2-movebtn{width:24px;height:24px;min-width:24px;flex:none;box-sizing:border-box;padding:0;border:none;border-radius:6px;background:rgba(255,255,255,.16);color:#fff;font-size:12px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.v2-movebtn:hover:not(:disabled){background:var(--accent);color:#04261b}
+.v2-movebtn:disabled{opacity:.3;cursor:not-allowed}
+.v2-posnum{font-size:11px;font-weight:800;color:#fff}
 .v2-srcbadge{position:absolute;top:5px;left:5px;font-size:9px;font-weight:800;border-radius:5px;padding:1px 6px;text-transform:uppercase;letter-spacing:.04em}
 .v2-srcbadge.shopify{background:rgba(255,255,255,.85);color:#1f2937}
 .v2-srcbadge.generated{background:rgba(75,201,154,.9);color:#04261b}
-.v2-mediax{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(248,113,113,.9);border:none;color:#fff;font-size:14px;cursor:pointer;display:grid;place-items:center;line-height:1}
+.v2-mediax{position:absolute;top:4px;right:4px;z-index:3;width:22px;height:22px;min-width:22px;flex:none;aspect-ratio:1/1;box-sizing:border-box;padding:0;border-radius:50%;background:rgba(248,113,113,.9);border:none;color:#fff;font-size:15px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .v2-mediax:hover{background:#ef4444}
 .v2-vmain{margin-bottom:9px}
 .v2-vmain img{width:64px;height:84px;border-radius:8px;object-fit:cover;border:1px solid var(--accent)}
