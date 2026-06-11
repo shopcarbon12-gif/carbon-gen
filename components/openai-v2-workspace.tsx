@@ -23,6 +23,7 @@ import {
   splitPanelToThreeByFour,
   uniqueSortedPanels,
 } from "@/lib/panelGeneration";
+import { PANELS_DONE_SOUND } from "@/lib/panelsDoneSound";
 
 const SHOP_STORAGE_KEY = "shopify_shop"; // shared app-wide so the connected store persists everywhere
 const DROPBOX_ELIOR_FOLDER = "/elior perez"; // Dropbox folder to search for item photos by UPC
@@ -181,6 +182,7 @@ export default function OpenAiV2Workspace() {
   const [genMode, setGenMode] = useState<"auto" | "manual">("auto");
   const [selectedPanels, setSelectedPanels] = useState<number[]>([1, 2, 3, 4]);
   const [poseFeas, setPoseFeas] = useState(false);
+  const [regenInstruction, setRegenInstruction] = useState("");
   const [generating, setGenerating] = useState(false);
   const [panelProgress, setPanelProgress] = useState<Record<number, string>>({});
   const [results, setResults] = useState<ResultImage[]>([]);
@@ -837,6 +839,7 @@ export default function OpenAiV2Workspace() {
     }
     const chosen = genMode === "manual" ? uniqueSortedPanels(selectedPanels) : [...PANELS];
     if (!chosen.length) return setError("Pick at least one panel to generate.");
+    const isRegen = results.length > 0; // the Generate button becomes "Regenerate" after the first run
     setError(null);
     setGenerating(true);
     setResults([]);
@@ -846,6 +849,7 @@ export default function OpenAiV2Workspace() {
     setStatus(poseFeas ? "Running pose-feasibility check, then generating…" : "Generating panels…");
 
     const styleInstr = normalizePromptInstruction(instruction);
+    const regenNotes = isRegen ? normalizePromptInstruction(regenInstruction) : "";
 
     const genOne = async (panel: number): Promise<ResultImage[]> => {
       setPanelProgress((prev) => ({ ...prev, [panel]: "generating…" }));
@@ -862,6 +866,7 @@ export default function OpenAiV2Workspace() {
         itemRefs: uploadedItemRefs,
         itemType: effItemType,
         itemStyleInstructions: styleInstr,
+        regenerationComments: regenNotes,
       });
       const resp = await fetch("/api/generate", {
         method: "POST",
@@ -903,11 +908,22 @@ export default function OpenAiV2Workspace() {
     });
     setResults(ok);
     setGenerating(false);
+    if (ok.length) playDone(); // chime when panels are ready
     if (failures.length && ok.length) setStatus(`Some panels failed: ${failures.join(" | ")}`);
     else if (failures.length) {
       setStatus(null);
       setError(failures.join(" | "));
     } else setStatus(`Generated ${ok.length} images from ${chosen.length} panel(s).`);
+  }
+
+  function playDone() {
+    try {
+      const a = new Audio(PANELS_DONE_SOUND);
+      a.volume = 0.6;
+      void a.play().catch(() => {});
+    } catch {
+      /* audio not available */
+    }
   }
 
   function toggleResult(id: string) {
@@ -1123,6 +1139,7 @@ export default function OpenAiV2Workspace() {
     setGenMode("auto");
     setSelectedPanels([1, 2, 3, 4]);
     setPoseFeas(false);
+    setRegenInstruction("");
     setResults([]);
     setPanelProgress({});
     setCurrentMedia([]);
@@ -1344,6 +1361,19 @@ export default function OpenAiV2Workspace() {
               <small>optional — only runs when ticked (recommended for dresses / sets / swimwear)</small>
             </label>
           </div>
+
+          {results.length ? (
+            <div className="v2-regen">
+              <label className="v2-lbl" style={{ marginTop: 0 }}>Regeneration instructions (optional)</label>
+              <textarea
+                className="v2-input"
+                rows={2}
+                placeholder="What to fix on regenerate — e.g. 'fix the back print', 'looser fit', 'face looks off, keep identity'…"
+                value={regenInstruction}
+                onChange={(e) => setRegenInstruction(e.target.value)}
+              />
+            </div>
+          ) : null}
 
           <div className="v2-actions">
             <button className="v2-btn primary" disabled={generating} onClick={runGenerate}>{generating ? "Generating…" : results.length ? "↻ Regenerate" : "⚡ Generate"}</button>
@@ -1677,6 +1707,7 @@ const V2_CSS = `
 .v2-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px;align-items:center}
 .v2-spacer{flex:1}
 .v2-genopts{background:rgba(255,255,255,.04);border:1px solid var(--panel-border);border-radius:12px;padding:14px}
+.v2-regen{margin-top:14px}
 .v2-optrow{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .v2-panelpick{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .v2-pp{display:flex;align-items:center;gap:7px;border:1px solid var(--panel-border);border-radius:9px;padding:7px 11px;background:rgba(0,0,0,.2);cursor:pointer;font-size:13px}
