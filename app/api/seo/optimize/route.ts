@@ -7,6 +7,7 @@ import { getOpenAiApiKey } from "@/lib/openaiConfig";
 import { withTimeout, parseJsonObjectFromText, asStringArray } from "@/lib/seo/aiText";
 import { scoreAll } from "@/lib/seo/deterministic";
 import type { ProductContext, SeoFields, SeoFieldKey } from "@/lib/seo/types";
+import { fetchRemoteImageBytes, normalizeRemoteImageUrl, getImageFetchTimeoutMs } from "@/lib/remoteImage";
 
 const MODEL = (process.env.SEO_MODEL || "gpt-4o").trim() || "gpt-4o";
 const TIMEOUT_MS = Math.max(20000, Math.min(Number(process.env.SEO_TIMEOUT_MS) || 90000, 150000));
@@ -90,12 +91,29 @@ export async function POST(req: NextRequest) {
     const useVision = body?.useVision !== false;
     if (!context || !current) return NextResponse.json({ error: "Missing context or current SEO fields." }, { status: 400 });
 
-    const images = (current.imageAlts || []).filter((a) => /^https?:\/\//i.test(String(a.url || ""))).slice(0, MAX_VISION_IMAGES);
+    const candidateImages = (current.imageAlts || []).filter((a) => /^https?:\/\//i.test(String(a.url || ""))).slice(0, MAX_VISION_IMAGES);
+    // Fetch product photos server-side and inline them as base64 rather than handing
+    // OpenAI the raw CDN URL. OpenAI's own image downloader intermittently returns
+    // 400 "Timeout while downloading <url>" on slow/large images; this server reaches
+    // the CDN reliably, so we download here and skip any that fail instead of failing
+    // the whole optimize run.
+    const images: { id: string; dataUrl: string }[] = [];
+    if (useVision) {
+      for (const a of candidateImages) {
+        try {
+          const safeUrl = normalizeRemoteImageUrl(String(a.url));
+          const { bytes, contentType } = await fetchRemoteImageBytes(safeUrl, { timeoutMs: getImageFetchTimeoutMs() });
+          images.push({ id: String(a.id), dataUrl: `data:${contentType || "image/jpeg"};base64,${bytes.toString("base64")}` });
+        } catch {
+          // Unreachable / too-large image: analyze the rest rather than failing the request.
+        }
+      }
+    }
     const visionActive = useVision && images.length > 0;
 
     const openai = new OpenAI({ apiKey });
     const genContent: any[] = [{ type: "text", text: buildGenInstruction(context, images.map((i) => i.id), visionActive) }];
-    if (visionActive) for (const img of images) genContent.push({ type: "image_url", image_url: { url: img.url, detail: "auto" } });
+    if (visionActive) for (const img of images) genContent.push({ type: "image_url", image_url: { url: img.dataUrl, detail: "auto" } });
 
     const completion: any = await withTimeout(
       openai.chat.completions.create({
