@@ -194,6 +194,28 @@ export async function POST(req: NextRequest) {
       if (collectionResults.added.length) updatedFields.push("collections");
     }
 
+    // ---- Mark the product as optimized by this tool (persists bulk highlight) ----
+    let optimizedMarked = false;
+    if (body?.markOptimized === true) {
+      const metaMutation = `
+        mutation SetOptimized($m: [MetafieldsSetInput!]!) {
+          metafieldsSet(metafields: $m) { userErrors { field message } }
+        }
+      `;
+      const stamp = new Date().toISOString();
+      const mr = await runShopifyGraphql<{ metafieldsSet?: { userErrors?: Array<{ message: string }> } }>({
+        shop,
+        token,
+        query: metaMutation,
+        variables: {
+          m: [{ ownerId: productId, namespace: "carbon_seo", key: "optimized_at", type: "single_line_text_field", value: stamp }],
+        },
+        apiVersion: API_VERSION,
+      });
+      optimizedMarked = Boolean(mr.ok && !(mr.data?.metafieldsSet?.userErrors || []).length);
+      if (optimizedMarked) updatedFields.push("optimized-flag");
+    }
+
     if (!updatedFields.length && !redirectCreated) {
       return NextResponse.json({ error: "No fields provided to publish." }, { status: 400 });
     }
@@ -204,6 +226,7 @@ export async function POST(req: NextRequest) {
       redirectCreated,
       altResults,
       collectionResults,
+      optimizedMarked,
     });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "SEO publish failed" }, { status: 500 });

@@ -34,6 +34,19 @@ interface CatalogProduct {
   title: string;
   handle: string;
 }
+interface BulkRow {
+  id: string;
+  title: string;
+  handle: string;
+  image: string | null;
+  optimizedAt: string | null; // metafield -> permanent highlight when set
+  selected: boolean;
+  oldScore?: number;
+  newScore?: number;
+  proposed?: SeoFields;
+  oldHandle?: string;
+  status: string; // "", auditing…, optimizing…, ready, pushing…, updated, error:…
+}
 // Vendor, product type and image alt are intentionally NOT managed here:
 // vendor/type are preserved from Shopify, and image alt lives in the Push section.
 const FIELD_ORDER: SeoFieldKey[] = ["seoTitle", "metaDescription", "handle", "title", "bodyHtml", "tags"];
@@ -160,11 +173,11 @@ export default function SeoStudio({ shop }: { shop: string }) {
   const [wmsApplying, setWmsApplying] = useState(false);
 
   // ---- bulk mode state ----
-  const [selected, setSelected] = useState<Record<string, boolean>>({});
-  const [bulkRows, setBulkRows] = useState<
-    Array<{ productId: string; title: string; current: SeoFields; context: ProductContext; proposed?: SeoFields; currentOverall?: number; proposedOverall?: number; publish: boolean; status: string }>
-  >([]);
-  const [bulkRunning, setBulkRunning] = useState(false);
+  const [bulkRows, setBulkRows] = useState<BulkRow[]>([]);
+  const [bulkCursor, setBulkCursor] = useState<string | null>(null);
+  const [bulkHasNext, setBulkHasNext] = useState(false);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkWorking, setBulkWorking] = useState(false);
 
   // Live deterministic re-score of the edited proposal.
   const liveProposedScore = useMemo<Scorecard | null>(() => {
@@ -376,106 +389,122 @@ export default function SeoStudio({ shop }: { shop: string }) {
   }
 
   // ---------- bulk ----------
-  async function runBulk() {
-    const ids = Object.keys(selected).filter((id) => selected[id]);
-    if (!ids.length) {
-      setError("Select at least one product.");
-      return;
-    }
-    setBulkRunning(true);
-    setError(null);
-    const rows: typeof bulkRows = ids.map((id) => {
-      const p = searchResults.find((r) => r.id === id);
-      return { productId: id, title: p?.title || id, current: {} as SeoFields, context: {} as ProductContext, publish: true, status: "queued" };
-    });
-    setBulkRows(rows);
-    for (let i = 0; i < rows.length; i += 1) {
-      const row = rows[i];
-      try {
-        row.status = "auditing…";
-        setBulkRows([...rows]);
-        const aResp = await fetch("/api/shopify/seo-audit", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ shop: shop.trim(), productId: row.productId }),
-        });
-        const a = await aResp.json();
-        if (!aResp.ok) throw new Error(a.error || "audit failed");
-        row.current = a.current;
-        row.context = a.context;
-        row.currentOverall = a.scorecard.overall;
-        // Skip products with no images — leave them completely unchanged.
-        if (!(a.current?.imageAlts || []).length) {
-          row.publish = false;
-          row.status = "skipped (no images)";
-          setBulkRows([...rows]);
-          continue;
-        }
-        row.status = "optimizing…";
-        setBulkRows([...rows]);
-        const oResp = await fetch("/api/seo/optimize", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ context: a.context, current: a.current, useVision }),
-        });
-        const o = await oResp.json();
-        if (!oResp.ok) throw new Error(o.error || "optimize failed");
-        row.proposed = o.proposed;
-        row.proposedOverall = o.proposedScorecard.overall;
-        row.status = "ready";
-      } catch (e: any) {
-        row.status = `error: ${e?.message || "failed"}`;
-      }
-      setBulkRows([...rows]);
-    }
-    setBulkRunning(false);
-    setStatus("Bulk analysis complete. Review and publish the ones you want.");
+  function patchRow(id: string, patch: Partial<BulkRow>) {
+    setBulkRows((rows) => rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  }
+  function toggleAllBulk(on: boolean) {
+    // Select-all only touches rows that still need work (not the updated ones).
+    setBulkRows((rows) => rows.map((r) => (r.status === "updated" ? r : { ...r, selected: on })));
   }
 
-  async function publishBulk() {
-    const rows = bulkRows.filter((r) => r.publish && r.proposed && r.status === "ready");
-    if (!rows.length) {
-      setError("No ready rows selected to publish.");
+  async function loadBulkPage(reset: boolean) {
+    if (!shop.trim()) {
+      setError("Set the shop domain first.");
       return;
     }
-    setBulkRunning(true);
+    setBulkLoading(true);
     setError(null);
-    for (const row of rows) {
+    try {
+      const after = reset ? "" : bulkCursor || "";
+      const url = `/api/seo/bulk-list?shop=${encodeURIComponent(shop.trim())}&target=100${after ? `&after=${encodeURIComponent(after)}` : ""}`;
+      const resp = await fetch(url, { cache: "no-store" });
+      const json = await resp.json();
+      if (!resp.ok) throw new Error(json.error || "Load failed");
+      const incoming: BulkRow[] = (json.products || []).map((p: any) => ({
+        id: p.id,
+        title: p.title,
+        handle: p.handle,
+        image: p.image,
+        optimizedAt: p.optimizedAt,
+        selected: false,
+        status: p.optimizedAt ? "updated" : "",
+      }));
+      setBulkRows((prev) => (reset ? incoming : [...prev, ...incoming.filter((n) => !prev.some((x) => x.id === n.id))]));
+      setBulkCursor(json.pageInfo?.endCursor || null);
+      setBulkHasNext(Boolean(json.pageInfo?.hasNextPage));
+    } catch (e: any) {
+      setError(e?.message || "Load failed");
+    } finally {
+      setBulkLoading(false);
+    }
+  }
+
+  async function generateBulkSelected() {
+    const targets = bulkRows.filter((r) => r.selected && r.status !== "updated");
+    if (!targets.length) {
+      setError("Select at least one row to generate.");
+      return;
+    }
+    setBulkWorking(true);
+    setError(null);
+    for (const t of targets) {
       try {
-        row.status = "publishing…";
-        setBulkRows([...bulkRows]);
-        const p = row.proposed!;
-        const fields = {
-          seoTitle: p.seoTitle,
-          metaDescription: p.metaDescription,
-          handle: p.handle,
-          title: p.title,
-          bodyHtml: p.bodyHtml,
-          tags: p.tags,
-          productType: p.productType,
-          vendor: p.vendor,
-          imageAlts: p.imageAlts.map((a) => ({ id: a.id, altText: a.altText })),
-        };
+        patchRow(t.id, { status: "auditing…" });
+        const a = await (
+          await fetch("/api/shopify/seo-audit", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ shop: shop.trim(), productId: t.id }),
+          })
+        ).json();
+        if (a.error) throw new Error(a.error);
+        patchRow(t.id, { oldScore: a.scorecard.overall, oldHandle: a.current.handle, status: "optimizing…" });
+        const o = await (
+          await fetch("/api/seo/optimize", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ context: a.context, current: a.current, useVision: true }),
+          })
+        ).json();
+        if (o.error) throw new Error(o.error);
+        patchRow(t.id, { newScore: o.proposedScorecard.overall, proposed: o.proposed, status: "ready" });
+      } catch (e: any) {
+        patchRow(t.id, { status: `error: ${String(e?.message || "failed").slice(0, 40)}` });
+      }
+    }
+    setBulkWorking(false);
+    setStatus("Generated. Review old → new scores, then push the ones you approve.");
+  }
+
+  async function pushBulkSelected() {
+    const targets = bulkRows.filter((r) => r.selected && r.proposed && r.status === "ready");
+    if (!targets.length) {
+      setError("Generate first, then keep the approved rows selected and push.");
+      return;
+    }
+    setBulkWorking(true);
+    setError(null);
+    for (const t of targets) {
+      try {
+        patchRow(t.id, { status: "pushing…" });
+        const p = t.proposed!;
         const resp = await fetch("/api/shopify/seo", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             shop: shop.trim(),
-            productId: row.productId,
-            fields,
-            oldHandle: p.handle !== row.current.handle ? row.current.handle : undefined,
+            productId: t.id,
+            markOptimized: true,
+            fields: {
+              seoTitle: p.seoTitle,
+              metaDescription: p.metaDescription,
+              handle: p.handle,
+              title: p.title,
+              bodyHtml: p.bodyHtml,
+              tags: p.tags,
+            },
+            oldHandle: t.oldHandle && p.handle !== t.oldHandle ? t.oldHandle : undefined,
           }),
         });
         const json = await resp.json();
-        if (!resp.ok) throw new Error(json.error || "publish failed");
-        row.status = "published ✓";
+        if (!resp.ok) throw new Error(json.error || "push failed");
+        patchRow(t.id, { status: "updated", optimizedAt: new Date().toISOString(), selected: false });
       } catch (e: any) {
-        row.status = `error: ${e?.message || "failed"}`;
+        patchRow(t.id, { status: `error: ${String(e?.message || "failed").slice(0, 40)}` });
       }
-      setBulkRows([...bulkRows]);
     }
-    setBulkRunning(false);
-    setStatus("Bulk publish complete.");
+    setBulkWorking(false);
+    setStatus("Pushed the selected items to Shopify — they're now highlighted as updated.");
   }
 
   const proposedScoreForField = (f: SeoFieldKey): FieldScore | undefined =>
@@ -697,73 +726,90 @@ export default function SeoStudio({ shop }: { shop: string }) {
       {/* ---------------- BULK ---------------- */}
       {mode === "bulk" ? (
         <>
-          <div className="row">
-            <input
-              suppressHydrationWarning
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && runSearch()}
-              placeholder="Search products to optimize in bulk"
-            />
-            <button className="btn ghost" onClick={runSearch} disabled={searching} type="button">
-              {searching ? "Searching…" : "Search"}
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+            <button className="btn" onClick={() => loadBulkPage(true)} disabled={bulkLoading} type="button">
+              {bulkLoading ? "Loading…" : "Load products with images"}
             </button>
+            {bulkRows.length ? (
+              <span className="muted" style={{ fontSize: 12 }}>
+                {bulkRows.length} loaded · {bulkRows.filter((r) => r.status === "updated").length} already updated
+              </span>
+            ) : null}
           </div>
-          {searchResults.length ? (
-            <div style={{ margin: "8px 0", maxHeight: 200, overflow: "auto", border: "1px solid #e5e7eb", borderRadius: 8, padding: 8 }}>
-              {searchResults.map((p) => (
-                <label key={p.id} style={{ display: "block", fontSize: 13, padding: "2px 0" }}>
-                  <input
-                    type="checkbox"
-                    checked={!!selected[p.id]}
-                    onChange={(e) => setSelected((s) => ({ ...s, [p.id]: e.target.checked }))}
-                  />{" "}
-                  {p.title} <span className="muted">/{p.handle}</span>
-                </label>
-              ))}
-            </div>
-          ) : null}
-          <button className="btn" onClick={runBulk} disabled={bulkRunning} type="button">
-            {bulkRunning ? "Working…" : "Audit + optimize selected"}
-          </button>
 
           {bulkRows.length ? (
-            <div style={{ marginTop: 12 }}>
+            <>
+              <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                <button className="btn ghost" type="button" onClick={generateBulkSelected} disabled={bulkWorking}>
+                  ✨ Generate SEO for selected (scans photos)
+                </button>
+                <button className="btn" type="button" onClick={pushBulkSelected} disabled={bulkWorking}>
+                  🚀 Push selected to Shopify
+                </button>
+              </div>
               <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
                 <thead>
-                  <tr style={{ textAlign: "left", borderBottom: "1px solid #e5e7eb" }}>
-                    <th>Publish</th>
+                  <tr style={{ textAlign: "left", borderBottom: "1px solid #334155", color: "#f8fafc" }}>
+                    <th style={{ padding: "4px" }}>
+                      <input
+                        type="checkbox"
+                        onChange={(e) => toggleAllBulk(e.target.checked)}
+                        checked={bulkRows.length > 0 && bulkRows.every((r) => r.selected || r.status === "updated")}
+                      />
+                    </th>
                     <th>Product</th>
-                    <th>Current</th>
+                    <th>Old</th>
                     <th></th>
-                    <th>Proposed</th>
+                    <th>New</th>
                     <th>Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {bulkRows.map((r) => (
-                    <tr key={r.productId} style={{ borderBottom: "1px solid #f1f5f9" }}>
-                      <td>
+                    <tr
+                      key={r.id}
+                      style={{
+                        borderBottom: "1px solid #1e293b",
+                        background: r.status === "updated" ? "rgba(21,128,61,0.28)" : "transparent",
+                      }}
+                    >
+                      <td style={{ padding: "4px" }}>
                         <input
                           type="checkbox"
-                          checked={r.publish}
-                          onChange={(e) => setBulkRows((rows) => rows.map((x) => (x.productId === r.productId ? { ...x, publish: e.target.checked } : x)))}
+                          disabled={r.status === "updated"}
+                          checked={r.selected}
+                          onChange={(e) => patchRow(r.id, { selected: e.target.checked })}
                         />
                       </td>
-                      <td>{r.title}</td>
-                      <td>{typeof r.currentOverall === "number" ? r.currentOverall : "—"}</td>
-                      <td><Delta from={r.currentOverall} to={r.proposedOverall} /></td>
-                      <td>{typeof r.proposedOverall === "number" ? r.proposedOverall : "—"}</td>
-                      <td className="muted">{r.status}</td>
+                      <td style={{ padding: "4px" }}>
+                        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          {r.image ? <img src={r.image} alt="" style={{ width: 34, height: 34, objectFit: "cover", borderRadius: 4 }} /> : null}
+                          <span style={{ color: "#e2e8f0" }}>{r.title}</span>
+                        </span>
+                      </td>
+                      <td>{typeof r.oldScore === "number" ? r.oldScore : "—"}</td>
+                      <td>
+                        <Delta from={r.oldScore} to={r.newScore} />
+                      </td>
+                      <td style={{ fontWeight: 700, color: typeof r.newScore === "number" ? "#86efac" : "#cbd5e1" }}>
+                        {typeof r.newScore === "number" ? r.newScore : "—"}
+                      </td>
+                      <td style={{ color: r.status === "updated" ? "#86efac" : "#cbd5e1" }}>
+                        {r.status === "updated" ? "✓ Updated" : r.status || ""}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              <button className="btn" onClick={publishBulk} disabled={bulkRunning} type="button" style={{ marginTop: 10 }}>
-                🚀 Publish selected (accept all proposed)
-              </button>
-            </div>
-          ) : null}
+              {bulkHasNext ? (
+                <button className="btn ghost" style={{ marginTop: 10 }} type="button" onClick={() => loadBulkPage(false)} disabled={bulkLoading}>
+                  {bulkLoading ? "Loading…" : "Load next 100"}
+                </button>
+              ) : null}
+            </>
+          ) : (
+            <p className="muted">Click “Load products with images” to begin. Already-optimized products appear highlighted in green.</p>
+          )}
         </>
       ) : null}
     </div>
