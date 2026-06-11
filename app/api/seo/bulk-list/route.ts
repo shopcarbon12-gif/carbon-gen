@@ -5,8 +5,8 @@ import { getShopifyAccessToken } from "@/lib/shopifyTokenRepository";
 import { isRequestAuthed } from "@/lib/auth";
 
 const API_VERSION = (process.env.SHOPIFY_API_VERSION || "2026-01").trim();
-export const SEO_META_NAMESPACE = "carbon_seo";
-export const SEO_META_KEY = "optimized_at";
+const SEO_META_NAMESPACE = "carbon_seo";
+const SEO_META_KEY = "optimized_at";
 
 function normalizeShop(value: string) {
   const v = String(value || "").trim().toLowerCase();
