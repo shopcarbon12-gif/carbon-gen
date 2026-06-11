@@ -1811,8 +1811,8 @@ const V2_CSS = `
 .v2-model img{width:80px;height:80px;border-radius:8px;object-fit:cover;display:block}
 .v2-model small{display:block;font-size:11px;margin-top:4px}
 .v2-model small.muted{color:var(--muted)}
-.v2-model .v2-del{position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,.6);border:none;display:grid;place-items:center;font-size:12px;color:#fff;cursor:pointer;opacity:0}
-.v2-model:hover .v2-del{opacity:1}
+.v2-model .v2-del{position:absolute;top:4px;right:4px;z-index:3;width:22px;height:22px;border-radius:50%;background:rgba(248,113,113,.9);border:none;display:grid;place-items:center;font-size:14px;line-height:1;color:#fff;cursor:pointer;opacity:1}
+.v2-model .v2-del:hover{background:#ef4444}
 .v2-model.add{display:grid;place-items:center;color:var(--muted);border-style:dashed;min-height:113px}
 .v2-plus{font-size:24px}
 .v2-addmodel{margin-top:10px;background:rgba(255,255,255,.04);border:1px solid var(--panel-border);border-radius:12px;padding:14px}
