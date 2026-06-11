@@ -353,6 +353,15 @@ export default function OpenAiV2Workspace() {
     setStatus(`Matched: ${p.title}`);
     setProductColors([]);
     setSelectedColor("");
+    // Replace the partially-typed value with the item's full barcode (UPC + color code).
+    // Prefer the variant barcode that matches what was typed; fall back to the first.
+    const typed = sanitizeBarcodeInput(barcode).toLowerCase();
+    const bcs = (p.barcodes || []).map((b) => String(b || "").trim()).filter(Boolean);
+    const fullBarcode =
+      (typed && (bcs.find((b) => b.toLowerCase().startsWith(typed)) || bcs.find((b) => b.toLowerCase().includes(typed)))) ||
+      bcs[0] ||
+      "";
+    if (fullBarcode) setBarcode(fullBarcode);
     // pull color variants so the operator must pick the color this upload is for
     try {
       const resp = await fetch("/api/shopify-push", {
