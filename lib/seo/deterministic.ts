@@ -147,18 +147,18 @@ export function scoreTitle(fields: SeoFields): FieldScore {
   if (!v) return mk(0, ["No product title."], "Empty H1.");
   let score = 100;
   const len = v.length;
-  if (len < SEO_LIMITS.titleMin) {
-    score -= 20;
-    issues.push(`Short (${len} chars) — add descriptive detail.`);
-  } else if (len > SEO_LIMITS.titleMax) {
+  // The product title is a PRESERVED WMS brand name (often a short, clean name like
+  // "TIGER SHIRT"). Its length is not an SEO lever here, so it is not penalized;
+  // only a gentle keyword nudge applies.
+  if (len > SEO_LIMITS.titleMax) {
     score -= 10;
     issues.push(`Long (${len} chars).`);
   }
   if (!containsKeyword(v, fields.focusKeyword)) {
-    score -= 15;
+    score -= 10;
     issues.push("Focus keyword not present.");
   }
-  return mk(score, issues, `${len} chars. The H1 search engines weigh heavily.`);
+  return mk(score, issues, `${len} chars. Preserved product title.`);
 }
 
 export function scoreBody(fields: SeoFields): FieldScore {

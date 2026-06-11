@@ -65,6 +65,7 @@ function buildGenInstruction(
       : `Leave "imageAlts" empty.`,
     "",
     "Ignore any pre-existing description, tags, or metadata. Base details (fabric, fit, neckline, sleeves, print/pattern, hardware, silhouette) ONLY on what you can SEE plus the name and color. Never invent attributes that aren't visible. Do NOT output any brand/company/vendor name or placeholder text.",
+    `The "focusKeyword" MUST be a concise 2-4 word search phrase that includes the core word(s) of the product name "${context.title}" (e.g. "graphic long-sleeve shirt"). Never use the full product title verbatim and never exceed 4 words — the handle and titles are graded for containing it.`,
     "Follow the character/format targets EXACTLY — they are graded by an automated scorer; aim for a perfect score.",
     "",
     useVision && altImageIds.length ? `Photos are attached in order.` : "",
