@@ -12,11 +12,11 @@ import { fetchRemoteImageBytes, normalizeRemoteImageUrl, getImageFetchTimeoutMs 
 const MODEL = (process.env.SEO_MODEL || "gpt-4o").trim() || "gpt-4o";
 const TIMEOUT_MS = Math.max(20000, Math.min(Number(process.env.SEO_TIMEOUT_MS) || 90000, 150000));
 const MAX_VISION_IMAGES = Math.max(1, Math.min(Number(process.env.SEO_MAX_IMAGES) || 6, 10));
-const TARGET_SCORE = 97;
-const MAX_REPAIRS = 2;
-// A section already scoring at/above this is NOT regenerated (saves AI cost). When every
-// generated field is here AND no image alt is missing, the whole product is skipped.
-const SKIP_THRESHOLD = Math.max(50, Math.min(Number(process.env.SEO_SKIP_SCORE) || 97, 100));
+const TARGET_SCORE = 100; // aim each regenerated field for a perfect score
+// The TOTAL proposed score must reach this; we regenerate until it does (or fields max out).
+const OVERALL_TARGET = Math.max(80, Math.min(Number(process.env.SEO_OVERALL_TARGET) || 98, 100));
+const MAX_REPAIRS = 3; // inner repair passes per generation
+const MAX_REGEN = 2; // extra fresh regenerations if the total is still short of OVERALL_TARGET
 
 // Fields the AI generates. The product TITLE and URL HANDLE are intentionally NOT
 // generated or changed (names/URLs are preserved). Vendor/type preserved from Shopify.
@@ -108,15 +108,15 @@ export async function POST(req: NextRequest) {
     const useVision = body?.useVision !== false;
     if (!context || !current) return NextResponse.json({ error: "Missing context or current SEO fields." }, { status: 400 });
 
-    // ---- Decide what needs work — already-good sections are skipped to save AI cost ----
+    // ---- Decide what needs work. Already-strong products are skipped to save AI cost. ----
     const currentScores = scoreAll(current);
-    const weakFields = GEN_FIELDS.filter((f) => (currentScores.fields[f]?.score ?? 0) < SKIP_THRESHOLD);
+    const weakFields = GEN_FIELDS.filter((f) => (currentScores.fields[f]?.score ?? 0) < TARGET_SCORE);
     const missingAlt = (current.imageAlts || []).filter(
       (a) => /^https?:\/\//i.test(String(a.url || "")) && !String(a.altText || "").trim()
     );
 
-    // Every generated section already scores >= threshold AND no alt is missing → no AI call.
-    if (!weakFields.length && !missingAlt.length) {
+    // The TOTAL is already at/above target AND no alt is missing → nothing to do.
+    if (currentScores.overall >= OVERALL_TARGET && !missingAlt.length) {
       return NextResponse.json({
         skipped: true,
         focusKeyword: String((current as any).focusKeyword || ""),
@@ -154,24 +154,44 @@ export async function POST(req: NextRequest) {
     const visionActive = useVision && images.length > 0;
     const altImageIds = images.filter((img) => altIdSet.has(img.id)).map((img) => img.id);
 
+    const ctx = context;
+    const cur = current;
     const openai = new OpenAI({ apiKey });
-    const genContent: any[] = [{ type: "text", text: buildGenInstruction(context, weakFields, visionActive, altImageIds) }];
-    if (visionActive) for (const img of images) genContent.push({ type: "image_url", image_url: { url: img.dataUrl, detail: "auto" } });
+    const imageParts: any[] = visionActive
+      ? images.map((img) => ({ type: "image_url", image_url: { url: img.dataUrl, detail: "auto" } }))
+      : [];
 
-    const completion: any = await withTimeout(
-      openai.chat.completions.create({
-        model: MODEL,
-        temperature: 0.4,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: "You generate apparel e-commerce SEO from a product name, color, and photos only. Return only valid JSON." },
-          { role: "user", content: genContent },
-        ],
-      }),
-      TIMEOUT_MS,
-      "SEO optimize"
-    );
-    const parsed = parseJsonObjectFromText(completion?.choices?.[0]?.message?.content || "");
+    // One fresh generation of the given fields (+ alt ids). Returns the parsed JSON.
+    async function callGenerate(fieldsToGen: SeoFieldKey[], altIds: string[], temperature: number): Promise<any> {
+      const content: any[] = [{ type: "text", text: buildGenInstruction(ctx, fieldsToGen, visionActive, altIds) }, ...imageParts];
+      const c: any = await withTimeout(
+        openai.chat.completions.create({
+          model: MODEL,
+          temperature,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: "You generate apparel e-commerce SEO from a product name, color, and photos only. Return only valid JSON." },
+            { role: "user", content },
+          ],
+        }),
+        TIMEOUT_MS,
+        "SEO optimize"
+      );
+      return parseJsonObjectFromText(c?.choices?.[0]?.message?.content || "");
+    }
+
+    // Apply generated field values (from a generation or a repair) onto a SeoFields.
+    function applyGenerated(target: SeoFields, src: any, fields: SeoFieldKey[]): SeoFields {
+      const out: SeoFields = { ...target, tags: [...(target.tags || [])] };
+      for (const f of fields) {
+        if (src?.[f] == null) continue;
+        if (f === "tags") out.tags = asStringArray(src.tags, 20);
+        else (out as any)[f] = String(src[f]).trim();
+      }
+      return out;
+    }
+
+    const parsed = await callGenerate(weakFields, altImageIds, 0.4);
     if (!parsed || (weakFields.length && !parsed.proposed)) {
       return NextResponse.json({ error: "Optimizer returned no usable result. Please retry." }, { status: 502 });
     }
@@ -183,63 +203,77 @@ export async function POST(req: NextRequest) {
       for (const [k, v] of Object.entries(parsed.rationale)) rationale[k as SeoFieldKey] = String(v || "").trim();
     }
 
-    let proposed = buildProposed(parsed, current, focusKeyword, secondaryKeywords);
-    // Sections already >= threshold are kept exactly as-is (never regenerated).
+    let proposed = buildProposed(parsed, cur, focusKeyword, secondaryKeywords);
+    // Sections that were already perfect are kept exactly as-is (never regenerated).
     for (const f of GEN_FIELDS) {
       if (!weakFields.includes(f)) {
-        if (f === "tags") proposed.tags = current.tags || [];
-        else (proposed as any)[f] = (current as any)[f];
+        if (f === "tags") proposed.tags = cur.tags || [];
+        else (proposed as any)[f] = (cur as any)[f];
       }
     }
     let proposedScorecard = scoreAll(proposed);
 
-    // ---- Refinement: push the regenerated fields toward the target (weak ones only) ----
-    for (let pass = 0; pass < MAX_REPAIRS; pass += 1) {
-      const weak = weakFields.filter((f) => (proposedScorecard.fields[f]?.score ?? 0) < TARGET_SCORE);
-      if (!weak.length) break;
-      const repairPrompt = [
-        "Improve ONLY these SEO fields so each fully satisfies its rule (they are auto-graded; aim for 100). Keep the same product, focus keyword, and visible facts.",
-        `Focus keyword: "${focusKeyword}"`,
-        "Current values and the problems to fix:",
-        ...weak.map((f) => {
-          const fs = proposedScorecard.fields[f];
-          const val = f === "tags" ? (proposed.tags || []).join(", ") : String((proposed as any)[f] ?? "");
-          return `• ${f}: ${JSON.stringify(val).slice(0, 600)}\n   issues: ${(fs?.issues || []).join(" ") || "raise quality"}`;
-        }),
-        "",
-        "Targets: seoTitle 40-60 chars w/ keyword; metaDescription 130-155 chars w/ keyword + CTA; bodyHtml HTML (<p> + <ul> 4-6 <li> + <p>), 450-850 chars text, keyword present; tags 7-12 lowercase deduped.",
-        `Return STRICT JSON only: { ${weak.map((f) => `"${f}": ${f === "tags" ? "string[]" : "string"}`).join(", ")} }`,
-      ].join("\n");
-      let repair: any = null;
-      try {
-        const rc: any = await withTimeout(
-          openai.chat.completions.create({
-            model: MODEL,
-            temperature: 0.3,
-            response_format: { type: "json_object" },
-            messages: [
-              { role: "system", content: "You refine SEO fields to satisfy strict formatting rules. Return only valid JSON." },
-              { role: "user", content: repairPrompt },
-            ],
+    // Inner repair: push the still-weak generated fields toward a perfect score.
+    async function refineToTarget() {
+      for (let pass = 0; pass < MAX_REPAIRS; pass += 1) {
+        const weak = weakFields.filter((f) => (proposedScorecard.fields[f]?.score ?? 0) < TARGET_SCORE);
+        if (!weak.length) break;
+        const repairPrompt = [
+          "Improve ONLY these SEO fields so each fully satisfies its rule (they are auto-graded; aim for 100). Keep the same product, focus keyword, and visible facts.",
+          `Focus keyword: "${focusKeyword}"`,
+          "Current values and the problems to fix:",
+          ...weak.map((f) => {
+            const fs = proposedScorecard.fields[f];
+            const val = f === "tags" ? (proposed.tags || []).join(", ") : String((proposed as any)[f] ?? "");
+            return `• ${f}: ${JSON.stringify(val).slice(0, 600)}\n   issues: ${(fs?.issues || []).join(" ") || "raise quality"}`;
           }),
-          TIMEOUT_MS,
-          "SEO repair"
-        );
-        repair = parseJsonObjectFromText(rc?.choices?.[0]?.message?.content || "");
-      } catch {
-        break;
+          "",
+          "Targets: seoTitle 40-60 chars w/ keyword; metaDescription 130-155 chars w/ keyword + CTA; bodyHtml HTML (<p> + <ul> 4-6 <li> + <p>), 450-850 chars text, keyword present; tags 7-12 lowercase deduped.",
+          `Return STRICT JSON only: { ${weak.map((f) => `"${f}": ${f === "tags" ? "string[]" : "string"}`).join(", ")} }`,
+        ].join("\n");
+        let repair: any = null;
+        try {
+          const rc: any = await withTimeout(
+            openai.chat.completions.create({
+              model: MODEL,
+              temperature: 0.3,
+              response_format: { type: "json_object" },
+              messages: [
+                { role: "system", content: "You refine SEO fields to satisfy strict formatting rules. Return only valid JSON." },
+                { role: "user", content: repairPrompt },
+              ],
+            }),
+            TIMEOUT_MS,
+            "SEO repair"
+          );
+          repair = parseJsonObjectFromText(rc?.choices?.[0]?.message?.content || "");
+        } catch {
+          break;
+        }
+        if (!repair) break;
+        proposed = applyGenerated(proposed, repair, weak);
+        proposedScorecard = scoreAll(proposed);
       }
-      if (!repair) break;
-      const merged: any = { proposed: { ...proposed } };
-      for (const f of weak) {
-        if (f === "tags" && repair.tags != null) merged.proposed.tags = asStringArray(repair.tags, 20);
-        else if (repair[f] != null) merged.proposed[f] = repair[f];
-      }
-      proposed = buildProposed(merged, current, focusKeyword, secondaryKeywords);
-      proposedScorecard = scoreAll(proposed);
     }
 
-    const currentScorecard = scoreAll({ ...current, focusKeyword, secondaryKeywords });
+    await refineToTarget();
+
+    // ---- Regenerate from scratch until the TOTAL score reaches the target ----
+    for (let attempt = 0; attempt < MAX_REGEN && proposedScorecard.overall < OVERALL_TARGET; attempt += 1) {
+      const stillWeak = weakFields.filter((f) => (proposedScorecard.fields[f]?.score ?? 0) < TARGET_SCORE);
+      if (!stillWeak.length) break; // generated fields are maxed — the preserved fields cap the total
+      const reparsed = await callGenerate(stillWeak, [], 0.6).catch(() => null);
+      if (!reparsed?.proposed) continue;
+      const candidate = applyGenerated(proposed, reparsed.proposed, stillWeak);
+      const candidateCard = scoreAll(candidate);
+      if (candidateCard.overall >= proposedScorecard.overall) {
+        proposed = candidate;
+        proposedScorecard = candidateCard;
+        await refineToTarget();
+      }
+    }
+
+    const currentScorecard = scoreAll({ ...cur, focusKeyword, secondaryKeywords });
 
     // ---- Never propose a change that scores worse than what's already there ----
     let clamped = false;
@@ -247,8 +281,8 @@ export async function POST(req: NextRequest) {
       const ps = proposedScorecard.fields[f]?.score ?? 0;
       const cs = currentScorecard.fields[f]?.score ?? 0;
       if (ps < cs) {
-        if (f === "tags") proposed.tags = current.tags || [];
-        else (proposed as any)[f] = (current as any)[f];
+        if (f === "tags") proposed.tags = cur.tags || [];
+        else (proposed as any)[f] = (cur as any)[f];
         clamped = true;
       }
     }
