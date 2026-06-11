@@ -18,9 +18,46 @@ export async function POST(req: NextRequest) {
     }
 
     const contentType = (req.headers.get("content-type") || "").toLowerCase();
+
+    // JSON { url } mode: fetch a remote image server-side (avoids browser CORS for
+    // Dropbox temporary links / Shopify CDN) and store it. Backward-compatible: the
+    // multipart file path below is unchanged.
+    if (contentType.includes("application/json")) {
+      const body = await req.json().catch(() => ({}));
+      const sourceUrl = String(body?.url || "").trim();
+      let host = "";
+      try {
+        host = new URL(sourceUrl).hostname.toLowerCase();
+      } catch {
+        return NextResponse.json({ error: "Invalid url." }, { status: 400 });
+      }
+      const allowed = /(^|\.)(dropboxusercontent\.com|dropbox\.com|shopify\.com|shopifycdn\.net)$/i.test(host);
+      if (!allowed) {
+        return NextResponse.json({ error: "URL host not allowed for import." }, { status: 400 });
+      }
+      const userId = req.cookies.get("carbon_gen_user_id")?.value?.trim() || "anonymous";
+      const resp = await fetch(sourceUrl);
+      if (!resp.ok) {
+        return NextResponse.json({ error: `Failed to fetch source image (${resp.status}).` }, { status: 400 });
+      }
+      const ct = String(resp.headers.get("content-type") || "").toLowerCase();
+      const buf = new Uint8Array(await resp.arrayBuffer());
+      if (buf.byteLength > MAX_MODEL_UPLOAD_FILE_BYTES) {
+        return NextResponse.json({ error: "Source image is too large." }, { status: 413 });
+      }
+      const ext = ct.includes("png") ? "png" : ct.includes("webp") ? "webp" : "jpg";
+      const path = `models/uploads/${userId}/${crypto.randomUUID()}/${Date.now()}-import.${ext}`;
+      const uploaded = await uploadBytesToStorage({
+        path,
+        bytes: buf,
+        contentType: ct.startsWith("image/") ? ct : "image/jpeg",
+      });
+      return NextResponse.json({ url: uploaded.url, path: uploaded.path });
+    }
+
     if (!contentType.includes("multipart/form-data")) {
       return NextResponse.json(
-        { error: "Unsupported request body. Use multipart form-data." },
+        { error: "Unsupported request body. Use multipart form-data or JSON { url }." },
         { status: 415 }
       );
     }

@@ -24,7 +24,8 @@ import {
   uniqueSortedPanels,
 } from "@/lib/panelGeneration";
 
-const SHOP_STORAGE_KEY = "cg_v2_shop_domain";
+const SHOP_STORAGE_KEY = "shopify_shop"; // shared app-wide so the connected store persists everywhere
+const DROPBOX_ELIOR_FOLDER = "/elior perez"; // Dropbox folder to search for item photos by UPC
 
 const PANELS = [1, 2, 3, 4];
 
@@ -108,6 +109,17 @@ function dataUrlFromB64(b64: string) {
   return `data:image/png;base64,${b64}`;
 }
 
+// R2_PUBLIC_URL_BASE isn't configured, so stored object URLs (model refs etc.) point at
+// the private S3 endpoint and won't render directly. Route them through the authed
+// /api/storage/preview proxy (browser sends the auth cookie). Pass data:/blob:/Shopify
+// CDN URLs through unchanged.
+function storagePreview(u: string): string {
+  const s = String(u || "");
+  if (!s || s.startsWith("data:") || s.startsWith("blob:") || s.startsWith("/api/storage/preview")) return s;
+  if (/(^https?:)?\/\/[^/]*cdn\.shopify(cdn)?\.(com|net)/i.test(s)) return s;
+  return `/api/storage/preview?url=${encodeURIComponent(s)}`;
+}
+
 function b64ToFile(b64: string, fileName: string): File {
   const byteString = atob(b64);
   const bytes = new Uint8Array(byteString.length);
@@ -133,6 +145,8 @@ type SeoScore = { overall: number; grade: string; fields: Record<string, { score
 
 export default function OpenAiV2Workspace() {
   const [shop, setShop] = useState("");
+  const [shopConnected, setShopConnected] = useState(false);
+  const [editShop, setEditShop] = useState(false);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -191,7 +205,6 @@ export default function OpenAiV2Workspace() {
   // ---- barcode scanner (local + remote) ----
   const [scanChooserOpen, setScanChooserOpen] = useState(false);
   const [scanLocalOpen, setScanLocalOpen] = useState(false);
-  const [scanRemoteOpen, setScanRemoteOpen] = useState(false);
   const [scanRemoteQr, setScanRemoteQr] = useState("");
   const [scanRemoteSession, setScanRemoteSession] = useState("");
   const [scanRemotePolling, setScanRemotePolling] = useState(false);
@@ -204,13 +217,18 @@ export default function OpenAiV2Workspace() {
 
   // ---- item-photo remote camera ----
   const [itemCamChooserOpen, setItemCamChooserOpen] = useState(false);
-  const [itemCamRemoteOpen, setItemCamRemoteOpen] = useState(false);
   const [itemCamRemoteQr, setItemCamRemoteQr] = useState("");
   const [itemCamRemoteSession, setItemCamRemoteSession] = useState("");
   const [itemCamRemotePolling, setItemCamRemotePolling] = useState(false);
   const [itemCamError, setItemCamError] = useState<string | null>(null);
   const itemCamPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const itemCamLastPayloadRef = useRef<string | null>(null);
+
+  // ---- item reference: Shopify import + Dropbox search ----
+  const [dropboxOpen, setDropboxOpen] = useState(false);
+  const [dropboxBusy, setDropboxBusy] = useState(false);
+  const [dropboxResults, setDropboxResults] = useState<Array<{ id: string; title: string; temporaryLink: string }>>([]);
+  const [dropboxError, setDropboxError] = useState<string | null>(null);
 
   const selectedModel = useMemo(
     () => models.find((m) => m.model_id === selectedModelId) || null,
@@ -228,6 +246,25 @@ export default function OpenAiV2Workspace() {
     } catch {
       /* ignore */
     }
+    // The connected store is permanent — pull it from API status (same source as the
+    // other pages) so it never needs typing.
+    fetch("/api/shopify/status", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((json) => {
+        const inferred = String(json?.shop || "").trim().toLowerCase();
+        if (inferred && inferred.includes(".myshopify.com")) {
+          setShop(inferred);
+          setShopConnected(typeof json?.connected === "boolean" ? Boolean(json.connected) : true);
+          try {
+            window.localStorage.setItem(SHOP_STORAGE_KEY, inferred);
+          } catch {
+            /* ignore */
+          }
+        }
+      })
+      .catch(() => {
+        /* status probe optional */
+      });
     refreshModels();
   }, []);
 
@@ -358,6 +395,90 @@ export default function OpenAiV2Workspace() {
     const arr = [...(files || [])].filter((f) => f.type.startsWith("image/")).slice(0, 8);
     if (arr.length) addFilesToRefs(arr, setItemRefs);
   }
+
+  // Add a remote image (Shopify CDN / Dropbox temp link) as an item reference:
+  // show it immediately, then download + re-upload to our storage so /api/generate can fetch it.
+  function importRemoteToItemRef(remoteUrl: string, name = "import.jpg") {
+    const url = String(remoteUrl || "").trim();
+    if (!url) return;
+    const id = `ref-${Date.now()}-${Math.round(performance.now())}-${itemRefs.length}`;
+    setItemRefs((prev) => [...prev, { id, preview: url, url: null, uploading: true }]);
+    void name;
+    (async () => {
+      try {
+        // Server-side fetch + store (avoids browser CORS on Dropbox/CDN links).
+        const resp = await fetch("/api/models/upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+        });
+        const json = await parseJson(resp);
+        if (!resp.ok) throw new Error(json?.error || "Import failed.");
+        const storedUrl = String(json?.url || "").trim();
+        if (!storedUrl) throw new Error("Import returned no URL.");
+        setItemRefs((prev) => prev.map((r) => (r.id === id ? { ...r, url: storedUrl, uploading: false } : r)));
+      } catch (e: any) {
+        setItemRefs((prev) => prev.filter((r) => r.id !== id));
+        setError(e?.message || "Failed to import image.");
+      }
+    })();
+  }
+
+  // "Import from Shopify": pull all images from the matched product (all variants).
+  function importFromShopify() {
+    if (!product) {
+      setError("Match a product by barcode first.");
+      return;
+    }
+    const imgs = Array.isArray(product.images) ? product.images : [];
+    if (!imgs.length) {
+      setStatus("This product has no images on Shopify.");
+      return;
+    }
+    // Shopify CDN URLs are directly usable by /api/generate, so no re-upload needed.
+    const entries: RefImg[] = imgs.map((img, i) => ({
+      id: `shopify-${img.id || i}-${Date.now()}`,
+      preview: img.url,
+      url: img.url,
+      uploading: false,
+    }));
+    setItemRefs((prev) => [...prev, ...entries]);
+    setStatus(`Imported ${entries.length} image(s) from Shopify.`);
+  }
+
+  // "Upload from Dropbox": search the UPC in the elior perez folder, show image files.
+  async function openDropboxSearch() {
+    const code = sanitizeBarcodeInput(barcode);
+    if (!code) {
+      setError("Scan or type the barcode/UPC first, then search Dropbox.");
+      return;
+    }
+    setDropboxOpen(true);
+    setDropboxBusy(true);
+    setDropboxError(null);
+    setDropboxResults([]);
+    try {
+      const resp = await fetch("/api/dropbox/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ barcode: code, root: DROPBOX_ELIOR_FOLDER }),
+      });
+      const json = await parseJson(resp);
+      if (!resp.ok) throw new Error(json?.error || "Dropbox search failed.");
+      const images = Array.isArray(json?.images) ? json.images : [];
+      setDropboxResults(
+        images.map((img: any) => ({
+          id: String(img?.id || ""),
+          title: String(img?.title || "Dropbox image"),
+          temporaryLink: String(img?.temporaryLink || ""),
+        })).filter((d: any) => d.temporaryLink)
+      );
+    } catch (e: any) {
+      setDropboxError(e?.message || "Dropbox search failed.");
+    } finally {
+      setDropboxBusy(false);
+    }
+  }
   function onModelFiles(files: FileList | null) {
     const arr = [...(files || [])].filter((f) => f.type.startsWith("image/")).slice(0, 12);
     if (arr.length) addFilesToRefs(arr, setMRefs);
@@ -383,8 +504,12 @@ export default function OpenAiV2Workspace() {
       setAddModelOpen(false);
       setMName("");
       setMRefs([]);
-      refreshModels();
-      if (saved?.model_id) setSelectedModelId(saved.model_id);
+      // Optimistic: the /api/models/list endpoint has an 8s server cache, so a refetch
+      // here would return stale data (without the new model). Update local state instead.
+      if (saved?.model_id) {
+        setModels((prev) => (prev.some((m) => m.model_id === saved.model_id) ? prev : [saved, ...prev]));
+        setSelectedModelId(saved.model_id);
+      }
       setStatus(`Saved model "${name}" (${mGender}) to the server.`);
     } catch (e: any) {
       setError(e?.message || "Failed to save model.");
@@ -395,6 +520,11 @@ export default function OpenAiV2Workspace() {
 
   async function deleteModel(model: ModelRow) {
     if (!window.confirm(`Delete model "${model.name}"?\nIts photos are removed from the server.`)) return;
+    // Optimistic removal up-front so the card disappears immediately (the list endpoint's
+    // 8s cache otherwise re-adds it on refetch, which is why a manual refresh was needed).
+    const remaining = models.filter((m) => m.model_id !== model.model_id);
+    setModels(remaining);
+    setSelectedModelId((prev) => (prev === model.model_id ? remaining[0]?.model_id ?? "" : prev));
     try {
       const resp = await fetch("/api/models/delete", {
         method: "POST",
@@ -403,10 +533,10 @@ export default function OpenAiV2Workspace() {
       });
       const json = await parseJson(resp);
       if (!resp.ok) throw new Error(json?.error || "Failed to delete model.");
-      if (selectedModelId === model.model_id) setSelectedModelId("");
-      refreshModels();
       setStatus(`Deleted "${model.name}" and its photos from the server.`);
     } catch (e: any) {
+      // Roll back the optimistic removal on failure.
+      setModels((prev) => (prev.some((m) => m.model_id === model.model_id) ? prev : [model, ...prev]));
       setError(e?.message || "Failed to delete model.");
     }
   }
@@ -448,9 +578,9 @@ export default function OpenAiV2Workspace() {
     const normalized = sanitizeBarcodeInput(raw);
     if (!normalized) return;
     setScanLocalOpen(false);
-    setScanRemoteOpen(false);
     setScanChooserOpen(false);
     setScanRemotePolling(false);
+    stopScanRemotePoll();
     stopLocalScan();
     onBarcodeChange(normalized);
     setStatus(`Scanned barcode: ${normalized}`);
@@ -567,11 +697,10 @@ export default function OpenAiV2Workspace() {
       const sessionId = String(json?.sessionId || "").trim();
       const qr = String(json?.qrCodeUrl || "").trim();
       if (!sessionId || !qr) throw new Error("Invalid remote scanner response.");
-      setScanChooserOpen(false);
+      // QR renders inline inside the chooser (not a separate modal).
       setScanRemoteSession(sessionId);
       setScanRemoteQr(qr);
       setScanRemotePolling(true);
-      setScanRemoteOpen(true);
     } catch (e: any) {
       setScanError(e?.message || "Failed to open remote scanner.");
     }
@@ -589,8 +718,7 @@ export default function OpenAiV2Workspace() {
         const json = await parseJson(resp);
         if (resp.status === 404) throw new Error(String(json?.error || "Session expired."));
         if (!resp.ok) return;
-        if (json?.connected && scanRemoteOpen) {
-          setScanRemoteOpen(false);
+        if (json?.connected && scanChooserOpen) {
           setStatus("Phone connected. Waiting for a scan…");
         }
         if (!json?.ready) return;
@@ -604,7 +732,7 @@ export default function OpenAiV2Workspace() {
     void poll();
     scanPollRef.current = setInterval(() => void poll(), 1200);
     return () => stopScanRemotePoll();
-  }, [scanRemotePolling, scanRemoteSession, scanRemoteOpen]);
+  }, [scanRemotePolling, scanRemoteSession, scanChooserOpen]);
 
   // ---------- item-photo remote camera ----------
   function stopItemCamPoll() {
@@ -628,11 +756,10 @@ export default function OpenAiV2Workspace() {
       const sessionId = String(json?.sessionId || "").trim();
       const qr = String(json?.qrCodeUrl || "").trim();
       if (!sessionId || !qr) throw new Error("Invalid remote camera response.");
-      setItemCamChooserOpen(false);
+      // QR renders inline inside the chooser (not a separate modal).
       setItemCamRemoteSession(sessionId);
       setItemCamRemoteQr(qr);
       setItemCamRemotePolling(true);
-      setItemCamRemoteOpen(true);
     } catch (e: any) {
       setItemCamError(e?.message || "Failed to open remote camera.");
     }
@@ -656,8 +783,7 @@ export default function OpenAiV2Workspace() {
           schedule(1800);
           return;
         }
-        if (json?.connected && itemCamRemoteOpen) {
-          setItemCamRemoteOpen(false);
+        if (json?.connected && itemCamChooserOpen) {
           setStatus("Phone connected. Take photos — they appear here automatically.");
         }
         if (!json?.ready) {
@@ -691,7 +817,7 @@ export default function OpenAiV2Workspace() {
     };
     void poll();
     return () => stopItemCamPoll();
-  }, [itemCamRemotePolling, itemCamRemoteSession, itemCamRemoteOpen]);
+  }, [itemCamRemotePolling, itemCamRemoteSession, itemCamChooserOpen]);
 
   // ---------- step 2: generate ----------
   function togglePanel(panel: number) {
@@ -1022,8 +1148,20 @@ export default function OpenAiV2Workspace() {
       </div>
 
       <div className="v2-shop">
-        <label className="v2-lbl">Shopify store domain</label>
-        <input className="v2-input" placeholder="yourstore.myshopify.com" value={shop} onChange={(e) => persistShop(e.target.value)} />
+        <label className="v2-lbl">Shopify store</label>
+        {shop && !editShop ? (
+          <div className="v2-shopval">
+            <span className={`v2-dotled ${shopConnected ? "on" : ""}`} />
+            <b>{shop}</b>
+            <span className="muted">· {shopConnected ? "connected" : "saved"}</span>
+            <button className="v2-shopedit" onClick={() => setEditShop(true)}>change</button>
+          </div>
+        ) : (
+          <div className="v2-row">
+            <input className="v2-input" placeholder="yourstore.myshopify.com" value={shop} onChange={(e) => persistShop(e.target.value)} />
+            {shop ? <button className="v2-btn ghost" onClick={() => setEditShop(false)}>Done</button> : null}
+          </div>
+        )}
       </div>
 
       <div className="v2-stepper">
@@ -1068,7 +1206,7 @@ export default function OpenAiV2Workspace() {
                 ) : null}
               </div>
               <button className="v2-btn" onClick={() => runSearch(barcode.trim())}>Look up</button>
-              <button className="v2-btn" title="Scan with camera" onClick={() => { setScanError(null); setScanChooserOpen(true); }}>📷 Scan</button>
+              <button className="v2-btn" title="Scan with camera" onClick={() => { setScanError(null); setScanChooserOpen(true); void openRemoteBarcodeScan(); }}>📷 Scan</button>
             </div>
           </div>
 
@@ -1110,7 +1248,7 @@ export default function OpenAiV2Workspace() {
             {models.map((m) => (
               <div key={m.model_id} className={`v2-model ${m.model_id === selectedModelId ? "sel" : ""}`} onClick={() => setSelectedModelId(m.model_id)}>
                 <button className="v2-del" title="Delete model + its photos" onClick={(e) => { e.stopPropagation(); deleteModel(m); }}>×</button>
-                {m.ref_image_urls[0] ? <img src={m.ref_image_urls[0]} alt="" /> : <div className="v2-noimg" />}
+                {m.ref_image_urls[0] ? <img src={storagePreview(m.ref_image_urls[0])} alt="" /> : <div className="v2-noimg" />}
                 <small>{m.name}</small>
                 <small className="muted">{m.gender}</small>
               </div>
@@ -1154,7 +1292,11 @@ export default function OpenAiV2Workspace() {
           <input ref={itemFileRef} type="file" accept="image/*" multiple hidden onChange={(e) => onItemFiles(e.target.files)} />
           <div className="v2-row">
             <button className="v2-drop" onClick={() => itemFileRef.current?.click()}>Upload item reference photos</button>
-            <button className="v2-btn" title="Capture with camera" onClick={() => { setItemCamError(null); setItemCamChooserOpen(true); }}>📷 Camera</button>
+            <button className="v2-btn" title="Capture with camera" onClick={() => { setItemCamError(null); setItemCamChooserOpen(true); void openItemCameraRemote(); }}>📷 Camera</button>
+          </div>
+          <div className="v2-row" style={{ marginTop: 8 }}>
+            <button className="v2-btn" disabled={!product} title={product ? "Add all images of this product" : "Match a product first"} onClick={importFromShopify}>⬇ Import from Shopify</button>
+            <button className="v2-btn" onClick={() => void openDropboxSearch()}>🗂 Upload from Dropbox</button>
           </div>
           <div className="v2-thumbs">
             {itemRefs.map((r) => (
@@ -1282,7 +1424,7 @@ export default function OpenAiV2Workspace() {
                     <div className="v2-vpics">
                       {selectedResults.map((r) => (
                         <div key={r.id} className={`v2-vpic ${v.assignedResultId === r.id ? "main" : ""}`} onClick={() => setVariantImage(v.id, r.id)}>
-                          <img src={r.stagedUrl || dataUrlFromB64(r.b64)} alt="" />
+                          <img src={dataUrlFromB64(r.b64)} alt="" />
                           <span className="star">★</span>
                         </div>
                       ))}
@@ -1297,7 +1439,7 @@ export default function OpenAiV2Workspace() {
           <div className="v2-altlist">
             {selectedResults.map((r) => (
               <div key={r.id} className="v2-altrow">
-                <img src={r.stagedUrl || dataUrlFromB64(r.b64)} alt="" />
+                <img src={dataUrlFromB64(r.b64)} alt="" />
                 <input className="v2-input" value={r.alt || ""} placeholder={r.altBusy ? "Writing alt text…" : "Alt text…"} onChange={(e) => setResultAlt(r.id, e.target.value)} />
               </div>
             ))}
@@ -1366,14 +1508,16 @@ export default function OpenAiV2Workspace() {
         </div>
       ) : null}
 
-      {/* barcode scan chooser */}
+      {/* barcode scan chooser — this-device button + QR for another device inline under it */}
       {scanChooserOpen ? (
-        <div className="v2-modal" onClick={() => setScanChooserOpen(false)}>
+        <div className="v2-modal" onClick={() => { setScanChooserOpen(false); setScanRemotePolling(false); stopScanRemotePoll(); }}>
           <div className="v2-modalcard" onClick={(e) => e.stopPropagation()}>
-            <div className="v2-modalhead"><b>Scan barcode</b><button className="v2-btn ghost" onClick={() => setScanChooserOpen(false)}>Close</button></div>
-            <div className="v2-modalactions">
-              <button className="v2-btn" onClick={() => { setScanChooserOpen(false); setScanError(null); setScanLocalOpen(true); }}>Use this device camera</button>
-              <button className="v2-btn" onClick={() => void openRemoteBarcodeScan()}>Use another device (QR)</button>
+            <div className="v2-modalhead"><b>Scan barcode</b><button className="v2-btn ghost" onClick={() => { setScanChooserOpen(false); setScanRemotePolling(false); stopScanRemotePoll(); }}>Close</button></div>
+            <button className="v2-btn primary" style={{ width: "100%" }} onClick={() => { setScanChooserOpen(false); setScanRemotePolling(false); stopScanRemotePoll(); setScanError(null); setScanLocalOpen(true); }}>Use this device camera</button>
+            <div className="v2-qrblock">
+              <div className="v2-qrlabel">or scan with another device</div>
+              {scanRemoteQr ? <img className="v2-qr" src={scanRemoteQr} alt="QR code" /> : <div className="v2-qr v2-qrloading">Loading QR…</div>}
+              <div className="v2-hint" style={{ textAlign: "center" }}>Scan this QR on your phone, then scan the barcode there. The phone camera turns off automatically once scanned.</div>
             </div>
             {scanError ? <div className="v2-banner err" style={{ marginTop: 12 }}>{scanError}</div> : null}
           </div>
@@ -1392,40 +1536,46 @@ export default function OpenAiV2Workspace() {
         </div>
       ) : null}
 
-      {/* barcode remote QR */}
-      {scanRemoteOpen ? (
-        <div className="v2-modal" onClick={() => setScanRemoteOpen(false)}>
-          <div className="v2-modalcard" onClick={(e) => e.stopPropagation()}>
-            <div className="v2-modalhead"><b>Scan with another device</b><button className="v2-btn ghost" onClick={() => setScanRemoteOpen(false)}>Close</button></div>
-            {scanRemoteQr ? <img className="v2-qr" src={scanRemoteQr} alt="QR code" /> : null}
-            <div className="v2-hint" style={{ textAlign: "center" }}>Scan this QR on your phone, then scan the barcode there. The phone camera turns off automatically once scanned.</div>
-            {scanError ? <div className="v2-banner err" style={{ marginTop: 12 }}>{scanError}</div> : null}
-          </div>
-        </div>
-      ) : null}
-
-      {/* item camera chooser */}
+      {/* item camera chooser — this-device button + QR for another device inline under it */}
       {itemCamChooserOpen ? (
-        <div className="v2-modal" onClick={() => setItemCamChooserOpen(false)}>
+        <div className="v2-modal" onClick={() => { setItemCamChooserOpen(false); setItemCamRemotePolling(false); stopItemCamPoll(); }}>
           <div className="v2-modalcard" onClick={(e) => e.stopPropagation()}>
-            <div className="v2-modalhead"><b>Add item photos from camera</b><button className="v2-btn ghost" onClick={() => setItemCamChooserOpen(false)}>Close</button></div>
-            <div className="v2-modalactions">
-              <button className="v2-btn" onClick={() => { setItemCamChooserOpen(false); itemFileRef.current?.click(); }}>Use this device (file/camera)</button>
-              <button className="v2-btn" onClick={() => void openItemCameraRemote()}>Use another device (QR)</button>
+            <div className="v2-modalhead"><b>Add item photos from camera</b><button className="v2-btn ghost" onClick={() => { setItemCamChooserOpen(false); setItemCamRemotePolling(false); stopItemCamPoll(); }}>Close</button></div>
+            <button className="v2-btn primary" style={{ width: "100%" }} onClick={() => { setItemCamChooserOpen(false); setItemCamRemotePolling(false); stopItemCamPoll(); itemFileRef.current?.click(); }}>Use this device (file/camera)</button>
+            <div className="v2-qrblock">
+              <div className="v2-qrlabel">or use another device</div>
+              {itemCamRemoteQr ? <img className="v2-qr" src={itemCamRemoteQr} alt="QR code" /> : <div className="v2-qr v2-qrloading">Loading QR…</div>}
+              <div className="v2-hint" style={{ textAlign: "center" }}>Scan the QR on your phone, then take photos. Each appears here automatically — you can upload multiple.</div>
             </div>
             {itemCamError ? <div className="v2-banner err" style={{ marginTop: 12 }}>{itemCamError}</div> : null}
           </div>
         </div>
       ) : null}
 
-      {/* item camera remote QR */}
-      {itemCamRemoteOpen ? (
-        <div className="v2-modal" onClick={() => setItemCamRemoteOpen(false)}>
-          <div className="v2-modalcard" onClick={(e) => e.stopPropagation()}>
-            <div className="v2-modalhead"><b>Upload photos from another device</b><button className="v2-btn ghost" onClick={() => setItemCamRemoteOpen(false)}>Close</button></div>
-            {itemCamRemoteQr ? <img className="v2-qr" src={itemCamRemoteQr} alt="QR code" /> : null}
-            <div className="v2-hint" style={{ textAlign: "center" }}>Scan the QR on your phone, then take photos. Each appears here automatically — you can upload multiple. Tap Done on the phone when finished.</div>
-            {itemCamError ? <div className="v2-banner err" style={{ marginTop: 12 }}>{itemCamError}</div> : null}
+      {/* Dropbox search results */}
+      {dropboxOpen ? (
+        <div className="v2-modal" onClick={() => setDropboxOpen(false)}>
+          <div className="v2-modalcard v2-modalwide" onClick={(e) => e.stopPropagation()}>
+            <div className="v2-modalhead"><b>Dropbox · elior perez</b><button className="v2-btn ghost" onClick={() => setDropboxOpen(false)}>Close</button></div>
+            {dropboxBusy ? <div className="v2-hint">Searching “{barcode.trim()}”…</div> : null}
+            {!dropboxBusy && !dropboxResults.length ? <div className="v2-hint">No image files found for “{barcode.trim()}”.</div> : null}
+            {dropboxResults.length ? (
+              <>
+                <div className="v2-row" style={{ justifyContent: "space-between" }}>
+                  <span className="v2-hint" style={{ margin: 0 }}>{dropboxResults.length} image(s) found</span>
+                  <button className="v2-btn" onClick={() => { dropboxResults.forEach((d) => importRemoteToItemRef(d.temporaryLink, d.title)); setDropboxOpen(false); }}>Add all</button>
+                </div>
+                <div className="v2-dbgrid">
+                  {dropboxResults.map((d) => (
+                    <button key={d.id} className="v2-dbcell" onClick={() => { importRemoteToItemRef(d.temporaryLink, d.title); }} title={d.title}>
+                      <img src={d.temporaryLink} alt={d.title} />
+                      <span>{d.title}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : null}
+            {dropboxError ? <div className="v2-banner err" style={{ marginTop: 12 }}>{dropboxError}</div> : null}
           </div>
         </div>
       ) : null}
@@ -1445,6 +1595,11 @@ const V2_CSS = `
 .v2-head h1{font-size:22px;margin:0 0 2px}
 .v2-sub{color:var(--muted);font-size:13px;margin:0 0 14px}
 .v2-shop{margin:0 0 14px}
+.v2-shopval{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.05);border:1px solid var(--panel-border);border-radius:12px;padding:11px 14px;font-size:14px}
+.v2-shopval .muted{color:var(--muted)}
+.v2-dotled{width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,.35);flex:none}
+.v2-dotled.on{background:var(--accent);box-shadow:0 0 0 3px rgba(75,201,154,.2)}
+.v2-shopedit{margin-left:auto;background:none;border:none;color:#7dd3c0;font:inherit;font-size:13px;cursor:pointer;text-decoration:underline}
 .v2-lbl{display:block;font-size:0.72rem;color:var(--muted);font-weight:700;margin:0 0 6px;letter-spacing:.1em;text-transform:uppercase}
 .v2-lbl.mt,.mt{margin-top:18px}
 .v2-req{color:#fca5a5;font-size:.7rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em}
@@ -1485,7 +1640,8 @@ const V2_CSS = `
 .v2-btn.cyan{background:linear-gradient(180deg,#22d3ee,#0891b2);border:none;color:#04222a;font-weight:700}
 .v2-card{background:rgba(255,255,255,.05);border:1px solid var(--panel-border);border-radius:14px;padding:14px;margin-top:14px}
 .v2-card.good{border-color:rgba(75,201,154,.4)}
-.v2-kv{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px dashed rgba(255,255,255,.1);font-size:14px}
+.v2-kv{display:flex;justify-content:flex-start;gap:8px;padding:6px 0;border-bottom:1px dashed rgba(255,255,255,.1);font-size:14px}
+.v2-kv span:first-child::after{content:":"}
 .v2-kv:last-child{border-bottom:none}
 .v2-kv.col{flex-direction:column;align-items:flex-start;gap:8px}
 .v2-kv span:first-child{color:var(--muted)}
@@ -1576,6 +1732,15 @@ const V2_CSS = `
 .v2-modalhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
 .v2-modalactions{display:flex;flex-direction:column;gap:10px}
 .v2-qr{display:block;margin:0 auto;width:240px;height:240px;border-radius:12px;background:#fff;padding:8px}
+.v2-qrloading{display:grid;place-items:center;color:#888;font-size:13px}
+.v2-qrblock{margin-top:14px;border-top:1px solid var(--panel-border);padding-top:14px}
+.v2-qrlabel{text-align:center;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px}
+.v2-modalwide{width:min(94vw,640px)}
+.v2-dbgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;margin-top:12px;max-height:60vh;overflow-y:auto}
+.v2-dbcell{display:flex;flex-direction:column;gap:5px;background:rgba(255,255,255,.04);border:1px solid var(--panel-border);border-radius:10px;padding:6px;cursor:pointer;color:var(--fg);font:inherit}
+.v2-dbcell:hover{border-color:var(--accent)}
+.v2-dbcell img{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:7px}
+.v2-dbcell span{font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .v2-scanframe{position:relative;border-radius:14px;overflow:hidden;background:#000;aspect-ratio:4/3}
 .v2-scanvideo{width:100%;height:100%;object-fit:cover}
 .v2-scanguide{position:absolute;inset:18% 12%;border:2px solid rgba(75,201,154,.8);border-radius:10px;pointer-events:none}

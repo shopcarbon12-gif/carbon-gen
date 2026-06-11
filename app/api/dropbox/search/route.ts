@@ -190,7 +190,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Dropbox is not connected for this user." }, { status: 400 });
     }
 
-    const rootPath = await resolveSearchRoot(accessToken, DROPBOX_SEARCH_ROOT);
+    // Optional per-request folder override (e.g. "/elior perez"). Falls back to the
+    // configured search root if the folder is missing/invalid, so existing callers are unaffected.
+    const requestedRoot = normalizePath(String(body?.root || ""));
+    let rootPath: string;
+    if (requestedRoot && requestedRoot !== "/") {
+      try {
+        await validateDropboxFolderPath(accessToken, requestedRoot);
+        rootPath = requestedRoot;
+      } catch {
+        rootPath = await resolveSearchRoot(accessToken, DROPBOX_SEARCH_ROOT);
+      }
+    } else {
+      rootPath = await resolveSearchRoot(accessToken, DROPBOX_SEARCH_ROOT);
+    }
     const barcodeCandidates = buildBarcodeCandidates(barcode);
     const searchQueries = barcodeCandidates.slice(0, 2);
     const searchResults = await Promise.all(
