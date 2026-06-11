@@ -79,6 +79,7 @@ const ACTIVE_ITEM_STYLE: CSSProperties = {
 
 const picturesGenSubItems: NavItem[] = [
   { href: "/studio/images", label: "OpenAI Generator" },
+  { href: "/studio/openai-v2-generator", label: "OpenAI V2 Generator" },
   { href: "/studio/gemini-generator", label: "Gemini Generator" },
 ];
 
