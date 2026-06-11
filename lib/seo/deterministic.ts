@@ -76,10 +76,7 @@ export function scoreSeoTitle(fields: SeoFields): FieldScore {
     score -= 25;
     issues.push("Focus keyword not present.");
   }
-  if (fields.vendor && !v.toLowerCase().includes(fields.vendor.toLowerCase())) {
-    score -= 8;
-    issues.push("Brand/vendor not included.");
-  }
+  // Brand/vendor is intentionally kept OUT of the generated copy, so it is not required here.
   return mk(score, issues, `${len} chars. Title tag is the strongest on-page ranking + click signal.`);
 }
 
@@ -134,11 +131,9 @@ export function scoreHandle(fields: SeoFields): FieldScore {
     score -= 8;
     issues.push("Contains filler/stop words.");
   }
-  if (!containsKeyword(v.replace(/-/g, " "), fields.focusKeyword)) {
-    score -= 15;
-    issues.push("Focus keyword not in URL.");
-  }
-  return mk(score, issues, `${v.length} chars. A clean, keyword-rich URL helps ranking and trust.`);
+  // The handle is a PRESERVED brand-name slug (e.g. "untimely-shirt"); it is not
+  // required to contain the descriptive focus keyword. Cleanliness is what matters.
+  return mk(score, issues, `${v.length} chars. A clean, brand-name URL slug.`);
 }
 
 export function scoreTitle(fields: SeoFields): FieldScore {
@@ -154,10 +149,7 @@ export function scoreTitle(fields: SeoFields): FieldScore {
     score -= 10;
     issues.push(`Long (${len} chars).`);
   }
-  if (!containsKeyword(v, fields.focusKeyword)) {
-    score -= 10;
-    issues.push("Focus keyword not present.");
-  }
+  // Preserved brand title — not required to contain the descriptive focus keyword.
   return mk(score, issues, `${len} chars. Preserved product title.`);
 }
 
