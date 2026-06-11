@@ -19,7 +19,7 @@ if (!token) {
 }
 
 const appUuid = "aw4800s4wsgok0wck480goco";
-const apiBase = "http://178.156.136.112:8000/api/v1";
+const apiBase = "http://152.53.210.171:8000/api/v1";
 const url = `${apiBase}/applications/${appUuid}/envs`;
 const payload = {
   key: "META_REVIEW_SEED_PASSWORD",

@@ -5,7 +5,7 @@ import path from "node:path";
 import { execSync } from "node:child_process";
 
 const DEFAULT_HOOK_URL =
-  "http://178.156.136.112:8000/api/v1/deploy?uuid=aw4800s4wsgok0wck480goco&force=true";
+  "http://152.53.210.171:8000/api/v1/deploy?uuid=aw4800s4wsgok0wck480goco&force=true";
 const LOCAL_CONFIG_PATH = path.resolve(process.cwd(), ".coolify-deploy.local.json");
 const DEPLOY_STATE_PATH = path.resolve(process.cwd(), ".bridge/runtime/coolify-deploy-state.json");
 const DEPLOY_GUARD =

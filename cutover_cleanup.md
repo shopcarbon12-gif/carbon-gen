@@ -2,7 +2,7 @@
 
 ## 1. Current Live Status
 - **Live Domain:** `https://app.shopcarbon.com`
-- **Host:** Hetzner VPS (`178.156.136.112`) running Coolify.
+- **Host:** Hetzner VPS (`152.53.210.171`) running Coolify.
 - **Status:** Application is responding successfully with valid SSL.
 
 ## 2. 24-48h Monitoring & Rollback Plan

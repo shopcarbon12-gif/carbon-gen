@@ -5,7 +5,7 @@
  * Password: get from Coolify → Projects → CARBON APP → postgresql-database → Connection
  * If omitted, prints template with YOUR_PASSWORD placeholder.
  */
-const COOLIFY_HOST = "178.156.136.112";
+const COOLIFY_HOST = "152.53.210.171";
 const DB_PORT = 55432;
 const DB_USER = "postgres";
 const DB_NAME = "postgres";

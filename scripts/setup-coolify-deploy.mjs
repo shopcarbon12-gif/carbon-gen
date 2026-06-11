@@ -6,7 +6,7 @@ import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 
 const DEFAULT_HOOK_URL =
-  "http://178.156.136.112:8000/api/v1/deploy?uuid=aw4800s4wsgok0wck480goco&force=false";
+  "http://152.53.210.171:8000/api/v1/deploy?uuid=aw4800s4wsgok0wck480goco&force=false";
 const CONFIG_PATH = path.resolve(process.cwd(), ".coolify-deploy.local.json");
 const DEPLOY_GUARD =
   String(process.env.ALLOW_COOLIFY_DEPLOY || "").trim().toLowerCase() === "true";
