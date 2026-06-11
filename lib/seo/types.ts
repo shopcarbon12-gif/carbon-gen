@@ -85,7 +85,9 @@ export const SEO_LIMITS = {
   metaDescriptionMax: 155,
   handleMin: 3,
   handleMax: 60,
-  titleMin: 15,
+  // Product titles are preserved WMS brand names (often short, e.g. "TIGER SHIRT");
+  // don't penalize a clean short product name.
+  titleMin: 8,
   titleMax: 70,
   bodyMinChars: 300,
   altMin: 15,
