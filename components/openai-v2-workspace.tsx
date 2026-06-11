@@ -90,14 +90,27 @@ type ResultImage = {
   altBusy?: boolean;
 };
 
-type CurrentMedia = { id: string; url: string; altText: string };
+// Unified media row (existing Shopify media + new generated), matching the SEO
+// manager push model. `preview` is what we render; `url` is sent to Shopify.
+type PushImage = {
+  id: string;
+  mediaId: string | null; // set for existing Shopify media (enables live delete)
+  source: "shopify" | "generated";
+  preview: string; // viewable URL (cdn or data:b64)
+  url: string; // https URL sent on push (cdn or staged R2)
+  storagePath?: string;
+  title: string;
+  altText: string;
+  generatingAlt: boolean;
+  deleting: boolean;
+};
 
-type VariantRow = {
+type PushVariant = {
   id: string;
   color: string;
   position: number;
   imageUrl: string | null;
-  assignedResultId: string | null;
+  assignedImageId: string | null;
   variantCount: number;
 };
 
@@ -188,10 +201,10 @@ export default function OpenAiV2Workspace() {
   const [results, setResults] = useState<ResultImage[]>([]);
   const [zoom, setZoom] = useState<ResultImage | null>(null);
 
-  // step 3 — publish
-  const [currentMedia, setCurrentMedia] = useState<CurrentMedia[]>([]);
-  const [variants, setVariants] = useState<VariantRow[]>([]);
-  const [pubMode, setPubMode] = useState<"replace" | "add">("replace");
+  // step 3 — publish (unified media manager: existing Shopify + new generated)
+  const [pushImages, setPushImages] = useState<PushImage[]>([]);
+  const [pushVariants, setPushVariants] = useState<PushVariant[]>([]);
+  const [draggingImageId, setDraggingImageId] = useState<string | null>(null);
   const [publishBusy, setPublishBusy] = useState(false);
   const [pushing, setPushing] = useState(false);
   const [pushed, setPushed] = useState(false);
@@ -930,7 +943,7 @@ export default function OpenAiV2Workspace() {
     setResults((prev) => prev.map((r) => (r.id === id ? { ...r, selected: !r.selected } : r)));
   }
 
-  // ---------- step 3: publish ----------
+  // ---------- step 3: publish (unified media manager) ----------
   async function goToPublish() {
     if (!product) return setError("No matched product to publish to.");
     const picked = results.filter((r) => r.selected);
@@ -939,60 +952,69 @@ export default function OpenAiV2Workspace() {
     setError(null);
     setPushed(false);
     setPublishBusy(true);
-    setStatus("Preparing images and loading current product media…");
+    setStatus("Preparing images and loading the product's existing media…");
     try {
-      const stagedById = new Map<string, { url: string; path: string }>();
+      // 1) stage the new generated crops -> R2 url + path
+      const newRows: PushImage[] = [];
       for (const r of picked) {
         const u = await uploadOne(b64ToFile(r.b64, `${product.handle}-${r.id}.png`));
-        stagedById.set(r.id, u);
+        newRows.push({
+          id: `new:${r.id}`,
+          mediaId: null,
+          source: "generated",
+          preview: dataUrlFromB64(r.b64),
+          url: u.url,
+          storagePath: u.path,
+          title: `${product.title} ${r.label}`,
+          altText: "",
+          generatingAlt: false,
+          deleting: false,
+        });
       }
-      setResults((prev) =>
-        prev.map((r) => (stagedById.has(r.id) ? { ...r, stagedUrl: stagedById.get(r.id)!.url, stagedPath: stagedById.get(r.id)!.path } : r))
-      );
 
+      // 2) load existing Shopify media + color variants
       const [mediaJson, variantsJson] = await Promise.all([
         fetch("/api/shopify-push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "get-product-media", shop: shop.trim(), productId: product.id }) }).then(parseJson),
         fetch("/api/shopify-push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "get-variants", shop: shop.trim(), productId: product.id }) }).then(parseJson),
       ]);
-      setCurrentMedia(
-        Array.isArray(mediaJson?.media)
-          ? mediaJson.media.map((m: any) => ({ id: String(m?.id || ""), url: String(m?.url || ""), altText: String(m?.altText || "") }))
-          : []
-      );
-      const rows = Array.isArray(variantsJson?.colors) ? variantsJson.colors : Array.isArray(variantsJson?.variants) ? variantsJson.variants : [];
-      const firstPickedId = picked[0]?.id || null;
-      setVariants(
-        rows.map((row: any, idx: number) => ({
-          id: String(row?.id || ""),
-          color: String(row?.color || ""),
-          position: Number(row?.position || idx + 1),
-          imageUrl: row?.imageUrl ? String(row.imageUrl) : null,
-          assignedResultId: firstPickedId,
-          variantCount: Number(row?.variantCount || 1),
-        }) as VariantRow)
-      );
+      const existingRows: PushImage[] = Array.isArray(mediaJson?.media)
+        ? mediaJson.media.map((m: any) => ({
+            id: `shopify:${String(m?.id || "")}`,
+            mediaId: String(m?.id || ""),
+            source: "shopify" as const,
+            preview: String(m?.url || ""),
+            url: String(m?.url || ""),
+            title: "Current Shopify image",
+            altText: String(m?.altText || "").trim(),
+            generatingAlt: false,
+            deleting: false,
+          }))
+        : [];
+      const merged = [...existingRows, ...newRows];
+      setPushImages(merged);
 
-      setStatus("Writing SEO alt text…");
-      await Promise.all(
-        picked.map(async (r) => {
-          const staged = stagedById.get(r.id);
-          if (!staged) return;
-          setResults((prev) => prev.map((x) => (x.id === r.id ? { ...x, altBusy: true } : x)));
-          try {
-            const resp = await fetch("/api/openai/image-alt", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ imageUrl: staged.url, storagePath: staged.path, itemType: itemType.trim() || "apparel item" }),
-            });
-            const json = await parseJson(resp);
-            const alt = String(json?.altText || "").trim();
-            setResults((prev) => prev.map((x) => (x.id === r.id ? { ...x, altBusy: false, alt: alt || `${product.title} – ${selectedColor || ""} ${r.label}`.replace(/\s+/g, " ").trim() } : x)));
-          } catch {
-            setResults((prev) => prev.map((x) => (x.id === r.id ? { ...x, altBusy: false, alt: `${product.title} – ${r.label}` } : x)));
-          }
+      const rows = Array.isArray(variantsJson?.colors) ? variantsJson.colors : Array.isArray(variantsJson?.variants) ? variantsJson.variants : [];
+      const firstNewId = newRows[0]?.id || merged[0]?.id || null;
+      setPushVariants(
+        rows.map((row: any, idx: number) => {
+          const color = String(row?.color || "");
+          const ckey = color.trim().toLowerCase();
+          const match = ckey ? merged.find((im) => `${im.title} ${im.altText} ${im.url}`.toLowerCase().includes(ckey)) : null;
+          return {
+            id: String(row?.id || ""),
+            color,
+            position: Number(row?.position || idx + 1),
+            imageUrl: row?.imageUrl ? String(row.imageUrl) : null,
+            assignedImageId: match?.id || firstNewId,
+            variantCount: Number(row?.variantCount || 1),
+          } as PushVariant;
         })
       );
-      setStatus("Ready to publish.");
+
+      // 3) auto-generate alt for any image missing it (existing + new)
+      setStatus("Writing alt text for images missing it…");
+      await genMissingAltFor(merged);
+      setStatus("Ready to review and publish.");
     } catch (e: any) {
       setError(e?.message || "Failed to prepare publish step.");
       setStatus(null);
@@ -1001,37 +1023,96 @@ export default function OpenAiV2Workspace() {
     }
   }
 
-  function setVariantImage(variantId: string, resultId: string) {
-    setVariants((prev) => prev.map((v) => (v.id === variantId ? { ...v, assignedResultId: resultId } : v)));
+  function movePushImage(fromId: string, toId: string) {
+    if (fromId === toId) return;
+    setPushImages((prev) => {
+      const from = prev.findIndex((x) => x.id === fromId);
+      const to = prev.findIndex((x) => x.id === toId);
+      if (from < 0 || to < 0) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
   }
-  function setResultAlt(id: string, alt: string) {
-    setResults((prev) => prev.map((r) => (r.id === id ? { ...r, alt } : r)));
+
+  async function removePushImage(img: PushImage) {
+    // remove from the list + any variant pointing at it, immediately
+    setPushImages((prev) => prev.filter((x) => x.id !== img.id));
+    setPushVariants((prev) => prev.map((v) => (v.assignedImageId === img.id ? { ...v, assignedImageId: null } : v)));
+    if (!img.mediaId || !product) return;
+    // delete the existing media from Shopify right away
+    try {
+      const resp = await fetch("/api/shopify-push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete-media", shop: shop.trim(), productId: product.id, mediaIds: [img.mediaId] }),
+      });
+      const json = await parseJson(resp);
+      if (!resp.ok) throw new Error(json?.error || "Failed to remove from Shopify.");
+      setStatus("Removed image from Shopify.");
+    } catch (e: any) {
+      setStatus(`Removed from the list. Shopify delete warning: ${e?.message || "failed"}`);
+    }
+  }
+
+  function setPushAlt(id: string, alt: string) {
+    setPushImages((prev) => prev.map((x) => (x.id === id ? { ...x, altText: alt } : x)));
+  }
+
+  async function genAltForImage(img: PushImage) {
+    setPushImages((prev) => prev.map((x) => (x.id === img.id ? { ...x, generatingAlt: true } : x)));
+    try {
+      const body: any = { itemType: itemType.trim() || "apparel item" };
+      if (img.storagePath) body.storagePath = img.storagePath;
+      else body.imageUrl = img.url;
+      const resp = await fetch("/api/openai/image-alt", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const json = await parseJson(resp);
+      const alt = String(json?.altText || "").trim();
+      setPushImages((prev) => prev.map((x) => (x.id === img.id ? { ...x, generatingAlt: false, altText: alt || x.altText } : x)));
+    } catch {
+      setPushImages((prev) => prev.map((x) => (x.id === img.id ? { ...x, generatingAlt: false } : x)));
+    }
+  }
+
+  async function genMissingAltFor(list: PushImage[]) {
+    const targets = list.filter((im) => !im.altText.trim());
+    for (let i = 0; i < targets.length; i += 3) {
+      await Promise.all(targets.slice(i, i + 3).map((im) => genAltForImage(im)));
+    }
+  }
+
+  function assignVariant(variantId: string, imageId: string) {
+    setPushVariants((prev) => prev.map((v) => (v.id === variantId ? { ...v, assignedImageId: imageId } : v)));
+  }
+  function clearVariant(variantId: string) {
+    setPushVariants((prev) => prev.map((v) => (v.id === variantId ? { ...v, assignedImageId: null } : v)));
   }
 
   async function pushToShopify() {
     if (!product) return;
-    const picked = results.filter((r) => r.selected);
-    if (picked.find((r) => !String(r.alt || "").trim())) return setError("Every image needs alt text before publishing.");
-    if (picked.find((r) => !r.stagedUrl)) return setError("Some images are still being prepared. Try again in a moment.");
+    if (!pushImages.length) return setError("No images to publish.");
+    if (pushImages.find((im) => !im.altText.trim())) return setError("Every image needs alt text. Use “Fill missing alt” or type it in.");
     setError(null);
     setPushing(true);
-    setStatus("Publishing to Shopify…");
+    setStatus("Publishing all images, order, variant images and alt text to Shopify…");
     try {
-      const images = picked.map((r) => ({ url: r.stagedUrl as string, altText: String(r.alt || "").trim(), storagePath: String(r.stagedPath || "") }));
-      const indexByResult = new Map(picked.map((r, idx) => [r.id, idx]));
-      const colorAssignments = variants
-        .filter((v) => v.assignedResultId && indexByResult.has(v.assignedResultId))
-        .map((v) => ({ color: v.color, imageIndex: indexByResult.get(v.assignedResultId as string) as number }));
-      const colorOrder = variants.map((v) => v.color).filter(Boolean);
+      const images = pushImages.map((im) => ({ url: im.url, altText: im.altText.trim(), storagePath: im.storagePath || "" }));
+      if (images.find((im) => !/^https?:\/\//i.test(im.url))) throw new Error("Some images aren't ready yet. Try again in a moment.");
+      const idxById = new Map(pushImages.map((im, i) => [im.id, i]));
+      const colorAssignments = pushVariants
+        .filter((v) => v.assignedImageId && idxById.has(v.assignedImageId))
+        .map((v) => ({ color: v.color, imageIndex: idxById.get(v.assignedImageId as string) as number }));
+      const colorOrder = pushVariants.map((v) => v.color).filter(Boolean);
       const resp = await fetch("/api/shopify-push", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "replace-product-images", shop: shop.trim(), productId: product.id, images, removeExisting: pubMode === "replace", colorAssignments, colorOrder }),
+        body: JSON.stringify({ action: "replace-product-images", shop: shop.trim(), productId: product.id, images, removeExisting: true, colorAssignments, colorOrder }),
       });
       const json = await parseJson(resp);
       if (!resp.ok) throw new Error(json?.error || "Shopify push failed.");
       setPushed(true);
-      setStatus(pubMode === "replace" ? `Replaced product media with ${images.length} new image(s). Alt text set on all.` : `Added ${images.length} new image(s) (kept existing). Alt text set on all.`);
+      setStatus(`Published ${images.length} image(s): order, variant main images and alt text all applied.`);
     } catch (e: any) {
       setError(e?.message || "Shopify push failed.");
       setStatus(null);
@@ -1142,9 +1223,8 @@ export default function OpenAiV2Workspace() {
     setRegenInstruction("");
     setResults([]);
     setPanelProgress({});
-    setCurrentMedia([]);
-    setVariants([]);
-    setPubMode("replace");
+    setPushImages([]);
+    setPushVariants([]);
     setPushed(false);
     setSeo(null);
     setSeoScore(null);
@@ -1419,64 +1499,89 @@ export default function OpenAiV2Workspace() {
       {step === 3 ? (
         <section className="v2-panel">
           <h2>3 · Publish</h2>
-          <p className="v2-lead">Product is matched from the barcode. Review current media, choose replace vs add, confirm alt text &amp; the main image per variant, then push.</p>
+          <p className="v2-lead">All images for this product — existing Shopify media + your new generated ones. Drag to reorder, X removes from Shopify, set the main image per variant, confirm alt text, then push everything at once.</p>
 
           {product ? (
             <div className="v2-card good">
               <div className="v2-kv"><span>Publishing to</span><b>{product.title}{selectedColor ? ` · ${selectedColor}` : ""}</b></div>
-              <div className="v2-kv"><span>New images</span><span>{selectedResults.length}</span></div>
+              <div className="v2-kv"><span>Total images</span><span>{pushImages.length}</span></div>
             </div>
           ) : null}
 
-          <label className="v2-lbl mt">Current images on this product</label>
-          <div className="v2-curgrid">
-            {currentMedia.length ? currentMedia.map((m) => (<div key={m.id} className="v2-cur"><img src={m.url} alt={m.altText} /></div>)) : <div className="v2-hint" style={{ margin: 0 }}>{publishBusy ? "Loading…" : "No current images."}</div>}
+          <label className="v2-lbl mt">Product images — drag to reorder · X removes from Shopify</label>
+          {publishBusy && !pushImages.length ? <div className="v2-hint">Loading current media…</div> : null}
+          <div className="v2-mediagrid">
+            {pushImages.map((im, idx) => (
+              <div
+                key={im.id}
+                className={`v2-mediacard ${draggingImageId === im.id ? "drag" : ""}`}
+                draggable
+                onDragStart={(e) => { setDraggingImageId(im.id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/v2-image-id", im.id); }}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => { e.preventDefault(); const id = e.dataTransfer.getData("text/v2-image-id") || draggingImageId || ""; if (id) movePushImage(id, im.id); setDraggingImageId(null); }}
+                onDragEnd={() => setDraggingImageId(null)}
+              >
+                <span className="v2-pos">{idx + 1}</span>
+                <span className={`v2-srcbadge ${im.source}`}>{im.source === "shopify" ? "current" : "new"}</span>
+                <button className="v2-mediax" title="Remove from Shopify" onClick={() => removePushImage(im)}>×</button>
+                <img src={im.preview} alt={im.altText} />
+              </div>
+            ))}
+            {!pushImages.length && !publishBusy ? <div className="v2-hint" style={{ margin: 0 }}>No images.</div> : null}
           </div>
 
-          <div className="v2-choice">
-            <div className={`v2-opt ${pubMode === "replace" ? "sel" : ""}`} onClick={() => setPubMode("replace")}>
-              <span className="v2-dot" />
-              <div><b>Replace — wipe current &amp; upload new</b><small>removes the images above, then adds the generated ones</small></div>
-            </div>
-            <div className={`v2-opt ${pubMode === "add" ? "sel" : ""}`} onClick={() => setPubMode("add")}>
-              <span className="v2-dot" />
-              <div><b>Keep current + add new</b><small>existing images stay; generated ones are appended</small></div>
-            </div>
-          </div>
-
-          {variants.length ? (
+          {pushVariants.length ? (
             <>
-              <label className="v2-lbl mt">Main image per variant</label>
+              <label className="v2-lbl mt">Main image per variant — drag an image onto a color, or click one below</label>
               <div className="v2-variants">
-                {variants.map((v) => (
-                  <div key={v.id} className="v2-variant">
-                    <div className="v2-vh"><b>{v.color || "Variant"}</b><small>· {v.variantCount} variant(s) — pick the featured image</small></div>
-                    <div className="v2-vpics">
-                      {selectedResults.map((r) => (
-                        <div key={r.id} className={`v2-vpic ${v.assignedResultId === r.id ? "main" : ""}`} onClick={() => setVariantImage(v.id, r.id)}>
-                          <img src={dataUrlFromB64(r.b64)} alt="" />
-                          <span className="star">★</span>
-                        </div>
-                      ))}
+                {pushVariants.map((v) => {
+                  const assigned = pushImages.find((im) => im.id === v.assignedImageId) || null;
+                  return (
+                    <div
+                      key={v.id}
+                      className="v2-variant"
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => { e.preventDefault(); const id = e.dataTransfer.getData("text/v2-image-id") || draggingImageId || ""; if (id) assignVariant(v.id, id); setDraggingImageId(null); }}
+                    >
+                      <div className="v2-vh">
+                        <b>{v.color || "Variant"}</b>
+                        <small>· {v.variantCount} variant(s)</small>
+                        {v.assignedImageId ? <button className="v2-shopedit" style={{ marginLeft: "auto" }} onClick={() => clearVariant(v.id)}>clear</button> : null}
+                      </div>
+                      <div className="v2-vmain">
+                        {assigned ? <img src={assigned.preview} alt="" /> : <div className="v2-vdrop">drop image here</div>}
+                      </div>
+                      <div className="v2-vpics">
+                        {pushImages.map((im) => (
+                          <div key={im.id} className={`v2-vpic ${v.assignedImageId === im.id ? "main" : ""}`} onClick={() => assignVariant(v.id, im.id)}>
+                            <img src={im.preview} alt="" />
+                            <span className="star">★</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </>
           ) : null}
 
-          <label className="v2-lbl mt">Alt text (SEO) on new images — auto-generated, editable</label>
+          <div className="v2-row mt" style={{ justifyContent: "space-between" }}>
+            <label className="v2-lbl" style={{ margin: 0 }}>Alt text — all images (auto-generated when missing)</label>
+            <button className="v2-btn ghost" disabled={publishBusy} onClick={() => void genMissingAltFor(pushImages)}>Fill missing alt</button>
+          </div>
           <div className="v2-altlist">
-            {selectedResults.map((r) => (
-              <div key={r.id} className="v2-altrow">
-                <img src={dataUrlFromB64(r.b64)} alt="" />
-                <input className="v2-input" value={r.alt || ""} placeholder={r.altBusy ? "Writing alt text…" : "Alt text…"} onChange={(e) => setResultAlt(r.id, e.target.value)} />
+            {pushImages.map((im) => (
+              <div key={im.id} className="v2-altrow">
+                <img src={im.preview} alt="" />
+                <input className="v2-input" value={im.altText} placeholder={im.generatingAlt ? "Writing alt…" : "Alt text…"} onChange={(e) => setPushAlt(im.id, e.target.value)} />
+                <button className="v2-btn ghost" disabled={im.generatingAlt} title="Regenerate alt" onClick={() => void genAltForImage(im)}>↻</button>
               </div>
             ))}
           </div>
 
           <div className="v2-actions">
-            <button className="v2-btn primary" disabled={pushing || publishBusy || pushed} onClick={pushToShopify}>{pushing ? "Publishing…" : pushed ? "✓ Images published" : pubMode === "replace" ? "Push to Shopify · replace all media" : "Push to Shopify · add to existing"}</button>
+            <button className="v2-btn primary" disabled={pushing || publishBusy || pushed} onClick={pushToShopify}>{pushing ? "Publishing…" : pushed ? "✓ Published" : "Push everything to Shopify"}</button>
             {pushed && !seo ? <button className="v2-btn cyan" disabled={seoBusy} onClick={optimizeSeo}>{seoBusy ? "Generating…" : "✨ Optimize SEO"}</button> : null}
             <button className="v2-btn ghost" onClick={() => setStep(2)}>← Back</button>
           </div>
@@ -1753,6 +1858,20 @@ const V2_CSS = `
 .v2-altlist{margin-top:10px;display:flex;flex-direction:column;gap:8px}
 .v2-altrow{display:flex;gap:10px;align-items:center}
 .v2-altrow img{width:34px;height:45px;border-radius:6px;object-fit:cover;flex:none}
+.v2-altrow .v2-btn{min-height:42px;padding:8px 12px;flex:none}
+.v2-mediagrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;margin-top:10px}
+.v2-mediacard{position:relative;border:1px solid var(--panel-border);border-radius:10px;overflow:hidden;background:rgba(255,255,255,.04);cursor:grab}
+.v2-mediacard.drag{opacity:.4}
+.v2-mediacard img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block;pointer-events:none}
+.v2-pos{position:absolute;bottom:5px;left:5px;font-size:11px;font-weight:800;background:rgba(0,0,0,.6);border-radius:6px;padding:1px 7px;color:#fff}
+.v2-srcbadge{position:absolute;top:5px;left:5px;font-size:9px;font-weight:800;border-radius:5px;padding:1px 6px;text-transform:uppercase;letter-spacing:.04em}
+.v2-srcbadge.shopify{background:rgba(255,255,255,.85);color:#1f2937}
+.v2-srcbadge.generated{background:rgba(75,201,154,.9);color:#04261b}
+.v2-mediax{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(248,113,113,.9);border:none;color:#fff;font-size:14px;cursor:pointer;display:grid;place-items:center;line-height:1}
+.v2-mediax:hover{background:#ef4444}
+.v2-vmain{margin-bottom:9px}
+.v2-vmain img{width:64px;height:84px;border-radius:8px;object-fit:cover;border:1px solid var(--accent)}
+.v2-vdrop{width:100%;border:2px dashed rgba(255,255,255,.2);border-radius:8px;padding:14px;text-align:center;color:var(--muted);font-size:12px}
 .v2-lb{position:fixed;inset:0;background:rgba(4,3,10,.86);display:grid;place-items:center;z-index:60;padding:24px}
 .v2-lbclose{position:absolute;top:18px;right:22px;font-size:28px;color:#fff;cursor:pointer;background:none;border:none}
 .v2-frame{max-width:min(92vw,520px);max-height:92vh;display:flex;flex-direction:column;gap:10px}
