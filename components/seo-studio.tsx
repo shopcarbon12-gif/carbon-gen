@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { scoreAll } from "@/lib/seo/deterministic";
 import {
   type FieldScore,
@@ -148,7 +148,7 @@ function SerpPreview({ fields, shop }: { fields: SeoFields; shop: string }) {
   );
 }
 
-export default function SeoStudio({ shop }: { shop: string }) {
+export default function SeoStudio({ shop, onProgress }: { shop: string; onProgress?: (msg: string | null) => void }) {
   const [mode, setMode] = useState<Mode>("single");
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -178,6 +178,18 @@ export default function SeoStudio({ shop }: { shop: string }) {
   const [bulkHasNext, setBulkHasNext] = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
   const [bulkWorking, setBulkWorking] = useState(false);
+  const [bulkProgressText, setBulkProgressText] = useState("");
+
+  // Report active work up to the page's "Progress" status bar.
+  useEffect(() => {
+    if (!onProgress) return;
+    if (busy) onProgress(status || "Working on SEO…");
+    else if (bulkLoading) onProgress("Loading products with images…");
+    else if (bulkWorking) onProgress(bulkProgressText || "Bulk SEO in progress…");
+    else if (wmsApplying) onProgress("Updating URL handle…");
+    else onProgress(null);
+  }, [busy, bulkLoading, bulkWorking, wmsApplying, status, bulkProgressText, onProgress]);
+  useEffect(() => () => onProgress?.(null), [onProgress]);
 
   // Live deterministic re-score of the edited proposal.
   const liveProposedScore = useMemo<Scorecard | null>(() => {
@@ -438,6 +450,7 @@ export default function SeoStudio({ shop }: { shop: string }) {
     setBulkWorking(true);
     setError(null);
     for (const t of targets) {
+      setBulkProgressText(`Generating SEO ${targets.indexOf(t) + 1}/${targets.length}…`);
       try {
         patchRow(t.id, { status: "auditing…" });
         const a = await (
@@ -463,6 +476,7 @@ export default function SeoStudio({ shop }: { shop: string }) {
       }
     }
     setBulkWorking(false);
+    setBulkProgressText("");
     setStatus("Generated. Review old → new scores, then push the ones you approve.");
   }
 
@@ -475,6 +489,7 @@ export default function SeoStudio({ shop }: { shop: string }) {
     setBulkWorking(true);
     setError(null);
     for (const t of targets) {
+      setBulkProgressText(`Pushing ${targets.indexOf(t) + 1}/${targets.length} to Shopify…`);
       try {
         patchRow(t.id, { status: "pushing…" });
         const p = t.proposed!;
@@ -504,6 +519,7 @@ export default function SeoStudio({ shop }: { shop: string }) {
       }
     }
     setBulkWorking(false);
+    setBulkProgressText("");
     setStatus("Pushed the selected items to Shopify — they're now highlighted as updated.");
   }
 
@@ -511,7 +527,7 @@ export default function SeoStudio({ shop }: { shop: string }) {
     liveProposedScore?.fields[f] || optimize?.proposedScorecard.fields[f];
 
   return (
-    <div>
+    <div className="seo-studio">
       <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
         <button className={`btn ${mode === "single" ? "" : "ghost"}`} onClick={() => setMode("single")} type="button">
           One product

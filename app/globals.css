@@ -444,3 +444,41 @@ button:disabled,
 .seo-route div.muted {
   color: #f8fafc !important;
 }
+
+/* SEO Studio (section 06) renders as its own component, so the workspace's
+   styled-jsx .btn rules don't reach it. Give its buttons the same look. */
+.seo-studio .btn {
+  min-height: 38px;
+  border: 1.5px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.1);
+  color: #f8fafc;
+  padding: 0 16px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 0.86rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: background-color 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+}
+.seo-studio .btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.36);
+  transform: translateY(-1px);
+}
+.seo-studio .btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.seo-studio .btn.ghost {
+  background: transparent;
+  color: rgba(255, 255, 255, 0.82);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+.seo-studio .btn.ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #fff;
+}

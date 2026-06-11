@@ -497,6 +497,7 @@ type StudioWorkspaceProps = {
 
 export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) {
   const [shop, setShop] = useState("");
+  const [seoProgress, setSeoProgress] = useState<string | null>(null);
   const [modelName, setModelName] = useState("");
   const [modelGender, setModelGender] = useState("");
   const [modelFiles, setModelFiles] = useState<File[]>([]);
@@ -5764,6 +5765,9 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   if (emptyingBucket) {
     activeProgress.push("Emptying storage");
   }
+  if (seoProgress) {
+    activeProgress.push(seoProgress);
+  }
 
   const statusTone: "error" | "working" | "success" | "idle" = error
     ? "error"
@@ -7940,7 +7944,7 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
             and publish only the fields you accept. Works one product at a time or in bulk.
             Nothing is stored locally — everything reads from and writes to Shopify.
           </p>
-          <SeoStudio shop={shop} />
+          <SeoStudio shop={shop} onProgress={setSeoProgress} />
           </>
           ) : null}
         </section>
