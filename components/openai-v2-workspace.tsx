@@ -199,7 +199,7 @@ export default function OpenAiV2Workspace() {
   const [generating, setGenerating] = useState(false);
   const [panelProgress, setPanelProgress] = useState<Record<number, string>>({});
   const [results, setResults] = useState<ResultImage[]>([]);
-  const [preview, setPreview] = useState<{ src: string; label?: string } | null>(null);
+  const [preview, setPreview] = useState<{ srcs: string[]; index: number; label?: string } | null>(null);
 
   // step 3 — publish (unified media manager: existing Shopify + new generated)
   const [pushImages, setPushImages] = useState<PushImage[]>([]);
@@ -952,9 +952,13 @@ export default function OpenAiV2Workspace() {
     setResults((prev) => prev.map((r) => (r.id === id ? { ...r, selected: !r.selected } : r)));
   }
 
-  // Open a full-size preview of any thumbnail, in any section.
-  function openPreview(src: string, label?: string) {
-    if (src) setPreview({ src, label });
+  // Open a full-size preview of any thumbnail (single image or a gallery), in any section.
+  function openPreview(src: string | string[], label?: string, startIndex = 0) {
+    const srcs = (Array.isArray(src) ? src : [src]).map((s) => String(s || "")).filter(Boolean);
+    if (srcs.length) setPreview({ srcs, index: Math.min(Math.max(0, startIndex), srcs.length - 1), label });
+  }
+  function previewStep(delta: number) {
+    setPreview((p) => (p ? { ...p, index: (p.index + delta + p.srcs.length) % p.srcs.length } : p));
   }
 
   // ---------- step 3: publish (unified media manager) ----------
@@ -1359,8 +1363,9 @@ export default function OpenAiV2Workspace() {
             {models.map((m) => (
               <div key={m.model_id} className={`v2-model ${m.model_id === selectedModelId ? "sel" : ""}`} onClick={() => setSelectedModelId(m.model_id)}>
                 <button className="v2-del" title="Delete model + its photos" onClick={(e) => { e.stopPropagation(); deleteModel(m); }}>×</button>
-                {m.ref_image_urls[0] ? <button className="v2-cardzoom" title="View full size" onClick={(e) => { e.stopPropagation(); openPreview(storagePreview(m.ref_image_urls[0]), m.name); }}>⛶</button> : null}
-                {m.ref_image_urls[0] ? <img src={storagePreview(m.ref_image_urls[0])} alt="" /> : <div className="v2-noimg" />}
+                {m.ref_image_urls[0]
+                  ? <img src={storagePreview(m.ref_image_urls[0])} alt="" title={`View all ${m.ref_image_urls.length} photos`} style={{ cursor: "zoom-in" }} onClick={(e) => { e.stopPropagation(); openPreview(m.ref_image_urls.map((u) => storagePreview(u)), `${m.name} · ${m.ref_image_urls.length} photos`); }} />
+                  : <div className="v2-noimg" />}
                 <small>{m.name}</small>
                 <small className="muted">{m.gender}</small>
               </div>
@@ -1653,8 +1658,21 @@ export default function OpenAiV2Workspace() {
         <div className="v2-lb" onClick={() => setPreview(null)}>
           <button className="v2-lbclose" onClick={() => setPreview(null)}>×</button>
           <div className="v2-frame" onClick={(e) => e.stopPropagation()}>
-            <img src={preview.src} alt={preview.label || ""} />
-            {preview.label ? <div className="v2-cap">{preview.label}</div> : null}
+            <div className="v2-lbmain">
+              {preview.srcs.length > 1 ? <button className="v2-lbnav" onClick={() => previewStep(-1)}>‹</button> : null}
+              <img src={preview.srcs[preview.index]} alt={preview.label || ""} />
+              {preview.srcs.length > 1 ? <button className="v2-lbnav" onClick={() => previewStep(1)}>›</button> : null}
+            </div>
+            {preview.label || preview.srcs.length > 1 ? (
+              <div className="v2-cap">{preview.label || ""}{preview.srcs.length > 1 ? ` · ${preview.index + 1}/${preview.srcs.length}` : ""}</div>
+            ) : null}
+            {preview.srcs.length > 1 ? (
+              <div className="v2-lbstrip">
+                {preview.srcs.map((s, i) => (
+                  <img key={i} src={s} alt="" className={i === preview.index ? "on" : ""} onClick={() => setPreview((p) => (p ? { ...p, index: i } : p))} />
+                ))}
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -1894,9 +1912,17 @@ const V2_CSS = `
 .v2-vdrop{width:100%;border:2px dashed rgba(255,255,255,.2);border-radius:8px;padding:14px;text-align:center;color:var(--muted);font-size:12px}
 .v2-lb{position:fixed;inset:0;background:rgba(4,3,10,.86);display:grid;place-items:center;z-index:60;padding:24px}
 .v2-lbclose{position:absolute;top:18px;right:22px;font-size:28px;color:#fff;cursor:pointer;background:none;border:none}
-.v2-frame{max-width:min(92vw,520px);max-height:92vh;display:flex;flex-direction:column;gap:10px}
-.v2-frame img{width:100%;height:auto;border-radius:14px;border:1px solid var(--panel-border)}
-.v2-cap{color:#fff;font-weight:700}
+.v2-frame{max-width:min(92vw,560px);max-height:92vh;display:flex;flex-direction:column;gap:10px;align-items:center}
+.v2-lbmain{position:relative;display:flex;align-items:center;justify-content:center;width:100%}
+.v2-lbmain img{max-width:100%;max-height:74vh;width:auto;height:auto;border-radius:14px;border:1px solid var(--panel-border)}
+.v2-lbnav{position:absolute;top:50%;transform:translateY(-50%);width:42px;height:42px;border-radius:50%;background:rgba(0,0,0,.55);border:1px solid var(--panel-border);color:#fff;font-size:24px;line-height:1;cursor:pointer;display:grid;place-items:center}
+.v2-lbnav:first-of-type{left:8px}
+.v2-lbnav:last-of-type{right:8px}
+.v2-lbnav:hover{background:var(--accent);color:#04261b}
+.v2-cap{color:#fff;font-weight:700;text-align:center}
+.v2-lbstrip{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;max-width:100%}
+.v2-lbstrip img{width:54px;height:54px;object-fit:cover;border-radius:8px;border:2px solid transparent;cursor:pointer;opacity:.6}
+.v2-lbstrip img.on{border-color:var(--accent);opacity:1}
 .v2-modal{position:fixed;inset:0;background:rgba(4,3,10,.8);display:grid;place-items:center;z-index:55;padding:20px}
 .v2-modalcard{width:min(94vw,420px);background:rgba(20,16,30,0.97);border:1px solid var(--panel-border);border-radius:16px;padding:18px;backdrop-filter:blur(16px)}
 .v2-modalhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
