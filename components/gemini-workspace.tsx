@@ -24,6 +24,45 @@ const SPLIT_TARGET_HEIGHT = 1200;
 const FLAT_SPLIT_TARGET_WIDTH = 900;
 const FLAT_SPLIT_TARGET_HEIGHT = 1200;
 const PUSH_TRANSFER_STORAGE_KEY = "cg_push_transfer_v1";
+// Same IndexedDB store the SEO Manager (studio-workspace) reads from. Split crops
+// are large base64 PNGs that overflow the ~5MB localStorage quota, so the hand-off
+// must ride through IndexedDB (localStorage write threw and silently moved nothing).
+const PUSH_TRANSFER_DB = "carbon_studio_transfer";
+const PUSH_TRANSFER_STORE = "push";
+const PUSH_TRANSFER_RECORD_ID = "current";
+
+function openPushTransferDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    try {
+      const req = window.indexedDB.open(PUSH_TRANSFER_DB, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(PUSH_TRANSFER_STORE)) {
+          db.createObjectStore(PUSH_TRANSFER_STORE);
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error || new Error("IndexedDB open failed"));
+    } catch (e) {
+      reject(e as Error);
+    }
+  });
+}
+
+async function savePushTransferPayload(payload: unknown): Promise<void> {
+  const db = await openPushTransferDb();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(PUSH_TRANSFER_STORE, "readwrite");
+      tx.objectStore(PUSH_TRANSFER_STORE).put(payload, PUSH_TRANSFER_RECORD_ID);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error || new Error("IndexedDB write failed"));
+      tx.onabort = () => reject(tx.error || new Error("IndexedDB write aborted"));
+    });
+  } finally {
+    db.close();
+  }
+}
 const DAILY_MODEL_UPLOAD_CLEANUP_STORAGE_KEY = "cg_daily_model_upload_cleanup_day_v1";
 const ALT_GENERATION_BATCH_SIZE = 3;
 const PUSH_STAGING_BATCH_SIZE = 4;
@@ -5109,7 +5148,20 @@ function buildMasterPanelPrompt(
             altText: row.altText || "",
           })),
         };
-        window.localStorage.setItem(PUSH_TRANSFER_STORAGE_KEY, JSON.stringify(transferPayload));
+        // Persist through IndexedDB first (split crops overflow localStorage), then
+        // fall back to localStorage for small/non-split sets so older flows still work.
+        try {
+          await savePushTransferPayload(transferPayload);
+          try { window.localStorage.removeItem(PUSH_TRANSFER_STORAGE_KEY); } catch {}
+        } catch {
+          try {
+            window.localStorage.setItem(PUSH_TRANSFER_STORAGE_KEY, JSON.stringify(transferPayload));
+          } catch {
+            throw new Error(
+              "Could not hand the images to the SEO Manager — too large for browser storage. Try fewer images at once."
+            );
+          }
+        }
       }
 
       setStatus(`Prepared ${pushRows.length} image(s) for Shopify Push.`);
