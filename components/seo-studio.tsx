@@ -28,6 +28,8 @@ interface OptimizeResponse {
   currentScorecard: Scorecard;
   proposedScorecard: Scorecard;
   rationale: Partial<Record<SeoFieldKey, string>>;
+  skipped?: boolean; // every section already >= threshold and no alt missing
+  imageAltsAdded?: Array<{ id: string; altText: string }>;
 }
 interface CatalogProduct {
   id: string;
@@ -44,12 +46,13 @@ interface BulkRow {
   oldScore?: number;
   newScore?: number;
   proposed?: SeoFields;
-  oldHandle?: string;
-  status: string; // "", auditing…, optimizing…, ready, pushing…, updated, error:…
+  imageAltsAdded?: Array<{ id: string; altText: string }>;
+  skipped?: boolean; // already fully optimized — nothing to push
+  status: string; // "", auditing…, optimizing…, ready, skip (already good), pushing…, updated, error:…
 }
-// Vendor, product type and image alt are intentionally NOT managed here:
-// vendor/type are preserved from Shopify, and image alt lives in the Push section.
-const FIELD_ORDER: SeoFieldKey[] = ["seoTitle", "metaDescription", "handle", "title", "bodyHtml", "tags"];
+// Title and URL handle are intentionally NOT generated/changed. Vendor/type are
+// preserved from Shopify. Image alt is generated only when a photo is missing it.
+const FIELD_ORDER: SeoFieldKey[] = ["seoTitle", "metaDescription", "bodyHtml", "tags"];
 
 const TEXTAREA_FIELDS = new Set<SeoFieldKey>(["metaDescription", "bodyHtml"]);
 
@@ -355,16 +358,14 @@ export default function SeoStudio({ shop, onProgress }: { shop: string; onProgre
   async function publishSingle() {
     if (!audit || !editedProposed) return;
     const fields: Record<string, unknown> = {};
-    let handleChanged = false;
     for (const f of FIELD_ORDER) {
       if (decisions[f] !== "proposed") continue;
       if (f === "tags") fields.tags = editedProposed.tags;
-      else if (f === "imageAlts") {
-        fields.imageAlts = editedProposed.imageAlts.map((a) => ({ id: a.id, altText: a.altText }));
-      } else if (f === "metaDescription") fields.metaDescription = editedProposed.metaDescription;
-      else if (f === "bodyHtml") fields.bodyHtml = editedProposed.bodyHtml;
       else (fields as any)[f] = (editedProposed as any)[f];
-      if (f === "handle" && editedProposed.handle !== audit.current.handle) handleChanged = true;
+    }
+    // Add generated alt text for photos that were missing it (title/handle never change).
+    if (optimize?.imageAltsAdded && optimize.imageAltsAdded.length) {
+      fields.imageAlts = optimize.imageAltsAdded;
     }
     if (!Object.keys(fields).length) {
       setError("Nothing accepted to publish. Toggle a field to ‘Use proposed’.");
@@ -381,7 +382,6 @@ export default function SeoStudio({ shop, onProgress }: { shop: string; onProgre
           shop: shop.trim(),
           productId: audit.product.id,
           fields,
-          oldHandle: handleChanged ? audit.current.handle : undefined,
         }),
       });
       const json = await resp.json();
@@ -449,8 +449,8 @@ export default function SeoStudio({ shop, onProgress }: { shop: string; onProgre
     }
     setBulkWorking(true);
     setError(null);
-    for (const t of targets) {
-      setBulkProgressText(`Generating SEO ${targets.indexOf(t) + 1}/${targets.length}…`);
+    let done = 0;
+    const generateOne = async (t: BulkRow) => {
       try {
         patchRow(t.id, { status: "auditing…" });
         const a = await (
@@ -461,8 +461,8 @@ export default function SeoStudio({ shop, onProgress }: { shop: string; onProgre
           })
         ).json();
         if (a.error) throw new Error(a.error);
-        patchRow(t.id, { oldScore: a.scorecard.overall, oldHandle: a.current.handle, status: "optimizing…" });
-        const o = await (
+        patchRow(t.id, { oldScore: a.scorecard.overall, status: "optimizing…" });
+        const o: OptimizeResponse & { error?: string } = await (
           await fetch("/api/seo/optimize", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -470,14 +470,38 @@ export default function SeoStudio({ shop, onProgress }: { shop: string; onProgre
           })
         ).json();
         if (o.error) throw new Error(o.error);
-        patchRow(t.id, { newScore: o.proposedScorecard.overall, proposed: o.proposed, status: "ready" });
+        if (o.skipped) {
+          patchRow(t.id, { newScore: o.proposedScorecard.overall, skipped: true, status: "skip (already ≥ target)" });
+        } else {
+          patchRow(t.id, {
+            newScore: o.proposedScorecard.overall,
+            proposed: o.proposed,
+            imageAltsAdded: o.imageAltsAdded || [],
+            skipped: false,
+            status: "ready",
+          });
+        }
       } catch (e: any) {
         patchRow(t.id, { status: `error: ${String(e?.message || "failed").slice(0, 40)}` });
+      } finally {
+        done += 1;
+        setBulkProgressText(`Generated ${done}/${targets.length}…`);
       }
-    }
+    };
+    // Run ALL selected rows together (capped concurrency to respect API rate limits).
+    const queue = [...targets];
+    const CONCURRENCY = 6;
+    await Promise.all(
+      Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
+        while (queue.length) {
+          const t = queue.shift();
+          if (t) await generateOne(t);
+        }
+      })
+    );
     setBulkWorking(false);
     setBulkProgressText("");
-    setStatus("Generated. Review old → new scores, then push the ones you approve.");
+    setStatus("Generated. Review old → new scores, then push the ones you approve. Items already ≥ target were skipped (no AI cost).");
   }
 
   async function pushBulkSelected() {
@@ -488,8 +512,8 @@ export default function SeoStudio({ shop, onProgress }: { shop: string; onProgre
     }
     setBulkWorking(true);
     setError(null);
-    for (const t of targets) {
-      setBulkProgressText(`Pushing ${targets.indexOf(t) + 1}/${targets.length} to Shopify…`);
+    let done = 0;
+    const pushOne = async (t: BulkRow) => {
       try {
         patchRow(t.id, { status: "pushing…" });
         const p = t.proposed!;
@@ -500,15 +524,14 @@ export default function SeoStudio({ shop, onProgress }: { shop: string; onProgre
             shop: shop.trim(),
             productId: t.id,
             markOptimized: true,
+            // Title and handle are deliberately NOT sent (never changed).
             fields: {
               seoTitle: p.seoTitle,
               metaDescription: p.metaDescription,
-              handle: p.handle,
-              title: p.title,
               bodyHtml: p.bodyHtml,
               tags: p.tags,
+              ...(t.imageAltsAdded && t.imageAltsAdded.length ? { imageAlts: t.imageAltsAdded } : {}),
             },
-            oldHandle: t.oldHandle && p.handle !== t.oldHandle ? t.oldHandle : undefined,
           }),
         });
         const json = await resp.json();
@@ -516,8 +539,22 @@ export default function SeoStudio({ shop, onProgress }: { shop: string; onProgre
         patchRow(t.id, { status: "updated", optimizedAt: new Date().toISOString(), selected: false });
       } catch (e: any) {
         patchRow(t.id, { status: `error: ${String(e?.message || "failed").slice(0, 40)}` });
+      } finally {
+        done += 1;
+        setBulkProgressText(`Pushed ${done}/${targets.length} to Shopify…`);
       }
-    }
+    };
+    // Push all approved rows together (lower cap — Shopify GraphQL is rate-limited).
+    const queue = [...targets];
+    const CONCURRENCY = 3;
+    await Promise.all(
+      Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
+        while (queue.length) {
+          const t = queue.shift();
+          if (t) await pushOne(t);
+        }
+      })
+    );
     setBulkWorking(false);
     setBulkProgressText("");
     setStatus("Pushed the selected items to Shopify — they're now highlighted as updated.");
