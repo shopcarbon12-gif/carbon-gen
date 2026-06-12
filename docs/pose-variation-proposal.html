@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pose &amp; Face Variation — Proposal</title>
+<style>
+  :root{
+    --bg:#0b0e14; --panel:#141925; --panel2:#1b2233; --line:#27314a;
+    --fg:#eef2f9; --muted:#9fb0cc; --accent:#4bc99a; --accent2:#6ea8fe; --warn:#f0a73f; --bad:#e5687b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:linear-gradient(180deg,#0b0e14,#0d1220);color:var(--fg);
+    font:15px/1.55 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  .wrap{max-width:1080px;margin:0 auto;padding:32px 22px 80px}
+  h1{font-size:30px;margin:0 0 6px;letter-spacing:-.5px}
+  h2{font-size:21px;margin:38px 0 12px;letter-spacing:-.3px}
+  h3{font-size:16px;margin:0 0 6px}
+  .sub{color:var(--muted);font-size:15px;margin:0 0 8px}
+  .tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+    padding:3px 9px;border-radius:999px;background:rgba(75,201,154,.14);color:var(--accent);border:1px solid rgba(75,201,154,.3)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 18px;margin:14px 0}
+  .grid{display:grid;gap:14px}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g4{grid-template-columns:repeat(4,1fr)}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  @media(max-width:780px){.g3,.g4{grid-template-columns:repeat(2,1fr)}.g2{grid-template-columns:1fr}}
+  .pose{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px;text-align:center}
+  .pose svg{display:block;margin:0 auto 8px;width:88px;height:170px}
+  .pose .nm{font-weight:700;font-size:13px}
+  .pose .ds{color:var(--muted);font-size:12px;margin-top:3px;line-height:1.4}
+  .pill{font-size:11px;color:var(--accent2);border:1px solid rgba(110,168,254,.35);background:rgba(110,168,254,.1);
+    border-radius:999px;padding:1px 7px;display:inline-block;margin-top:6px}
+  .bad{color:var(--bad)} .good{color:var(--accent)} .warn{color:var(--warn)}
+  .muted{color:var(--muted)}
+  ul{margin:8px 0 0;padding-left:20px} li{margin:5px 0}
+  .lever{display:flex;gap:14px;align-items:flex-start;padding:12px 0;border-top:1px solid var(--line)}
+  .lever:first-child{border-top:0}
+  .num{flex:0 0 30px;height:30px;border-radius:8px;background:rgba(110,168,254,.16);color:var(--accent2);
+    display:flex;align-items:center;justify-content:center;font-weight:800}
+  .ba{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:780px){.ba{grid-template-columns:1fr}}
+  .ba .box{border-radius:12px;padding:14px;border:1px solid var(--line)}
+  .before{background:rgba(229,104,123,.07);border-color:rgba(229,104,123,.3)}
+  .after{background:rgba(75,201,154,.07);border-color:rgba(75,201,154,.3)}
+  .face{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:12px;color:var(--muted)}
+  .face svg{width:72px;height:72px}
+  code{background:#0a0e17;border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-size:12.5px;color:#cfe0ff}
+  .note{font-size:13px;color:var(--muted)}
+  .slider{height:8px;border-radius:999px;background:linear-gradient(90deg,#2b3450,#4bc99a);position:relative;margin:10px 0 4px}
+  .knob{position:absolute;top:-4px;left:58%;width:16px;height:16px;border-radius:50%;background:#eef2f9;box-shadow:0 0 0 3px rgba(75,201,154,.3)}
+  .foot{margin-top:30px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:16px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <span class="tag">Proposal · review before build</span>
+  <h1>Make the model look <span class="good">raw, not robotic</span></h1>
+  <p class="sub">Same brief, same model, same panel intent — but every generation feels like a different real frame, not a copy-paste. Pose 1, Pose 7 (panel 4) and Pose 8 are the worst offenders today.</p>
+
+  <h2>1 · Why it looks robotic right now</h2>
+  <div class="card">
+    <p style="margin-top:0">Your pose library (<code>lib/panelPoseLibraries.ts</code>) is genuinely good — it already defines <b>variation options</b> per pose (1A/1B/1C, 7A/7B/7C, 8&nbsp;A–E) and even a rule: <i>"choose ONE variation… do not repeat on back-to-back products."</i> The problem is purely mechanical:</p>
+    <ul>
+      <li><b class="bad">Nothing enforces the variation.</b> The prompt text sent to OpenAI/Gemini is <u>byte-for-byte identical</u> every generation. So the model picks the same default (usually option A) and renders the same stance every time.</li>
+      <li><b class="bad">The face is hard-locked.</b> The identity-lock reference photos pin the exact same face, expression and head angle — correct for brand consistency, but with zero micro-variation it reads as a cloned mannequin across a catalog.</li>
+      <li><b class="bad">No anti-repeat memory.</b> The "don't repeat back-to-back" rule lives in text the model ignores; the system never tracks what it used last.</li>
+    </ul>
+    <p class="note">Net: identical prompt + locked face + no rotation = the AI-robotic feel. The fix is to let the <b>system</b> (not the model's free choice) rotate a controlled set of micro-variations each generation, and to add tiny, on-brand human variation to the face.</p>
+  </div>
+
+  <h2>2 · The approach — 5 levers</h2>
+  <div class="card">
+    <div class="lever"><div class="num">1</div><div><h3>System-driven variation (not model's choice)</h3><p class="muted" style="margin:0">For each generation, <b>the code picks</b> a specific variation (e.g. Pose 1 → <code>1B</code>) and injects its exact micro-pose text into the prompt. Guarantees rotation instead of hoping the model varies.</p></div></div>
+    <div class="lever"><div class="num">2</div><div><h3>Bigger variation pools</h3><p class="muted" style="margin:0">Expand each pose from 3 options to ~8–12 weighted micro-variations (weight shift, arm gap, head angle, gaze direction, toe-out, camera height, hand detail). More pool = less repetition.</p></div></div>
+    <div class="lever"><div class="num">3</div><div><h3>Face &amp; expression micro-variation</h3><p class="muted" style="margin:0">Within the identity lock: vary <b>gaze direction</b>, a subtle expression beat (calm ↔ quiet confidence), and a 2–8° head tilt. Same person — different candid moment, so it stops looking frozen.</p></div></div>
+    <div class="lever"><div class="num">4</div><div><h3>Reference-photo rotation</h3><p class="muted" style="margin:0">Rotate <b>which</b> of the model's reference shots is primary each time, so the face is rendered from a slightly different source angle — kills the "exact same face" clone effect while keeping it the same person.</p></div></div>
+    <div class="lever"><div class="num">5</div><div><h3>Anti-repeat memory + variation strength</h3><p class="muted" style="margin:0">Track the last variation used per pose per model and never repeat back-to-back. One global <b>"Variation strength"</b> knob (Subtle → Natural → Editorial) controls how far it drifts.</p></div></div>
+  </div>
+
+  <div class="ba">
+    <div class="box before"><b class="bad">Today</b><p class="muted" style="margin:6px 0 0">Prompt: <code>POSE 1 base…</code> (same text)<br>→ same stance, same arms, same gaze, same face, every product. 50 items = 50 clones.</p></div>
+    <div class="box after"><b class="good">Proposed</b><p class="muted" style="margin:6px 0 0">Prompt: <code>POSE 1 · variation 1F: weight on left, arms 2", chin 4°, gaze camera-left</code> (rotated)<br>→ same hero pose family, 50 items feel shot in one real session.</p></div>
+  </div>
+
+  <h2>3 · Examples — Pose 1 (Full-Body Hero) variation pool</h2>
+  <p class="sub">Same hero framing every time (full body, white seamless, garment readable) — the system rotates one of these stance/arm/gaze micro-variations per generation. Schematic figures; real output is photoreal with your model.</p>
+  <div class="grid g4">
+    <div class="pose">
+      <svg viewBox="0 0 88 170"><circle cx="44" cy="20" r="11" fill="none" stroke="#eef2f9" stroke-width="2.4"/><line x1="44" y1="31" x2="44" y2="100" stroke="#eef2f9" stroke-width="2.4"/><line x1="44" y1="44" x2="30" y2="92" stroke="#4bc99a" stroke-width="2.4"/><line x1="44" y1="44" x2="58" y2="92" stroke="#4bc99a" stroke-width="2.4"/><line x1="44" y1="100" x2="36" y2="158" stroke="#eef2f9" stroke-width="2.4"/><line x1="44" y1="100" x2="52" y2="158" stroke="#eef2f9" stroke-width="2.4"/></svg>
+      <div class="nm">1A · Arms 1″</div><div class="ds">Tighter silhouette, even weight, gaze to camera.</div><span class="pill">baseline</span>
+    </div>
+    <div class="pose">
+      <svg viewBox="0 0 88 170"><circle cx="44" cy="20" r="11" fill="none" stroke="#eef2f9" stroke-width="2.4"/><line x1="44" y1="31" x2="44" y2="100" stroke="#eef2f9" stroke-width="2.4"/><line x1="44" y1="44" x2="24" y2="94" stroke="#4bc99a" stroke-width="2.4"/><line x1="44" y1="44" x2="64" y2="94" stroke="#4bc99a" stroke-width="2.4"/><line x1="44" y1="100" x2="36" y2="158" stroke="#eef2f9" stroke-width="2.4"/><line x1="44" y1="100" x2="52" y2="158" stroke="#eef2f9" stroke-width="2.4"/></svg>
+      <div class="nm">1B · Arms 2″</div><div class="ds">More shape clarity; shoulders level.</div><span class="pill">rotates in</span>
+    </div>
+    <div class="pose">
+      <svg viewBox="0 0 88 170"><circle cx="46" cy="20" r="11" fill="none" stroke="#eef2f9" stroke-width="2.4"/><line x1="44" y1="31" x2="46" y2="100" stroke="#eef2f9" stroke-width="2.4"/><line x1="45" y1="44" x2="31" y2="92" stroke="#4bc99a" stroke-width="2.4"/><line x1="45" y1="44" x2="59" y2="92" stroke="#4bc99a" stroke-width="2.4"/><line x1="46" y1="100" x2="30" y2="158" stroke="#eef2f9" stroke-width="2.4"/><line x1="46" y1="100" x2="58" y2="156" stroke="#eef2f9" stroke-width="2.4"/></svg>
+      <div class="nm">1C · Toe-out</div><div class="ds">Feet 5–10° out; still clean &amp; symmetric.</div><span class="pill">rotates in</span>
+    </div>
+    <div class="pose">
+      <svg viewBox="0 0 88 170"><circle cx="48" cy="21" r="11" fill="none" stroke="#eef2f9" stroke-width="2.4"/><line x1="46" y1="31" x2="42" y2="100" stroke="#eef2f9" stroke-width="2.4"/><line x1="45" y1="45" x2="30" y2="92" stroke="#4bc99a" stroke-width="2.4"/><line x1="45" y1="45" x2="58" y2="90" stroke="#4bc99a" stroke-width="2.4"/><line x1="42" y1="100" x2="34" y2="158" stroke="#eef2f9" stroke-width="2.4"/><line x1="42" y1="100" x2="50" y2="158" stroke="#eef2f9" stroke-width="2.4"/></svg>
+      <div class="nm">1F · Weight shift ✨</div><div class="ds"><b>New:</b> subtle weight on one leg, chin 4°, gaze camera-left.</div><span class="pill">new variation</span>
+    </div>
+  </div>
+  <p class="note">…plus <b>1D/1E/1G…</b> (gaze camera-right, micro contrapposto, hands relaxed-open vs neutral). The code picks one, never the same twice in a row.</p>
+
+  <h2>3b · Pose 7 (Torso Back, over-the-shoulder) — panel 4</h2>
+  <div class="grid g3">
+    <div class="pose">
+      <svg viewBox="0 0 88 170"><circle cx="40" cy="20" r="11" fill="none" stroke="#6ea8fe" stroke-width="2.4"/><line x1="44" y1="31" x2="44" y2="100" stroke="#eef2f9" stroke-width="2.4"/><line x1="44" y1="46" x2="28" y2="90" stroke="#eef2f9" stroke-width="2.4"/><line x1="44" y1="46" x2="60" y2="90" stroke="#eef2f9" stroke-width="2.4"/><line x1="44" y1="100" x2="38" y2="158" stroke="#eef2f9" stroke-width="2.4"/><line x1="44" y1="100" x2="52" y2="158" stroke="#eef2f9" stroke-width="2.4"/></svg>
+      <div class="nm">7A · Turn ~20°</div><div class="ds">Subtle over-shoulder; body square, no twist.</div>
+    </div>
+    <div class="pose">
+      <svg viewBox="0 0 88 170"><circle cx="34" cy="19" r="11" fill="none" stroke="#6ea8fe" stroke-width="2.4"/><line x1="44" y1="31" x2="44" y2="100" stroke="#eef2f9" stroke-width="2.4"/><line x1="44" y1="46" x2="30" y2="88" stroke="#eef2f9" stroke-width="2.4"/><line x1="44" y1="46" x2="58" y2="92" stroke="#4bc99a" stroke-width="2.4"/><line x1="44" y1="100" x2="38" y2="158" stroke="#eef2f9" stroke-width="2.4"/><line x1="44" y1="100" x2="52" y2="158" stroke="#eef2f9" stroke-width="2.4"/></svg>
+      <div class="nm">7B · Turn ~30°</div><div class="ds">Stronger look-over; fingertips collar-assist.</div>
+    </div>
+    <div class="pose">
+      <svg viewBox="0 0 88 170"><circle cx="54" cy="19" r="11" fill="none" stroke="#6ea8fe" stroke-width="2.4"/><line x1="44" y1="31" x2="44" y2="100" stroke="#eef2f9" stroke-width="2.4"/><line x1="44" y1="46" x2="30" y2="92" stroke="#4bc99a" stroke-width="2.4"/><line x1="44" y1="46" x2="58" y2="88" stroke="#eef2f9" stroke-width="2.4"/><line x1="44" y1="100" x2="38" y2="158" stroke="#eef2f9" stroke-width="2.4"/><line x1="44" y1="100" x2="52" y2="158" stroke="#eef2f9" stroke-width="2.4"/></svg>
+      <div class="nm">7C · Switch side ✨</div><div class="ds"><b>New:</b> occasionally look over the other shoulder + shoulder-tap detail.</div>
+    </div>
+  </div>
+
+  <h2>3c · Pose 8 (Creative, 1 image) — panel 4</h2>
+  <div class="grid g4">
+    <div class="pose">
+      <svg viewBox="0 0 88 170"><circle cx="44" cy="26" r="11" fill="none" stroke="#f0a73f" stroke-width="2.4"/><line x1="44" y1="37" x2="44" y2="92" stroke="#eef2f9" stroke-width="2.4"/><line x1="44" y1="50" x2="30" y2="80" stroke="#eef2f9" stroke-width="2.4"/><line x1="44" y1="50" x2="58" y2="80" stroke="#eef2f9" stroke-width="2.4"/><line x1="44" y1="92" x2="30" y2="92" stroke="#eef2f9" stroke-width="2.4"/><line x1="30" y1="92" x2="30" y2="130" stroke="#eef2f9" stroke-width="2.4"/><line x1="44" y1="92" x2="58" y2="92" stroke="#eef2f9" stroke-width="2.4"/><line x1="58" y1="92" x2="58" y2="130" stroke="#eef2f9" stroke-width="2.4"/></svg>
+      <div class="nm">8A · Seated front</div><div class="ds">Waistband/closure clarity.</div>
+    </div>
+    <div class="pose">
+      <svg viewBox="0 0 88 170"><circle cx="50" cy="26" r="11" fill="none" stroke="#f0a73f" stroke-width="2.4"/><line x1="46" y1="37" x2="42" y2="92" stroke="#eef2f9" stroke-width="2.4"/><line x1="45" y1="50" x2="58" y2="78" stroke="#eef2f9" stroke-width="2.4"/><line x1="45" y1="50" x2="34" y2="82" stroke="#eef2f9" stroke-width="2.4"/><line x1="42" y1="92" x2="32" y2="94" stroke="#eef2f9" stroke-width="2.4"/><line x1="32" y1="94" x2="34" y2="130" stroke="#eef2f9" stroke-width="2.4"/><line x1="42" y1="92" x2="56" y2="92" stroke="#eef2f9" stroke-width="2.4"/><line x1="56" y1="92" x2="60" y2="128" stroke="#eef2f9" stroke-width="2.4"/></svg>
+      <div class="nm">8B · Seated ¾ ✨</div><div class="ds"><b>Default tops.</b> Body 25–35°, forearm on thigh.</div>
+    </div>
+    <div class="pose">
+      <svg viewBox="0 0 88 170"><circle cx="44" cy="20" r="11" fill="none" stroke="#f0a73f" stroke-width="2.4"/><line x1="44" y1="31" x2="44" y2="100" stroke="#eef2f9" stroke-width="2.4"/><line x1="44" y1="46" x2="32" y2="84" stroke="#eef2f9" stroke-width="2.4"/><line x1="44" y1="46" x2="58" y2="78" stroke="#eef2f9" stroke-width="2.4"/><line x1="44" y1="100" x2="26" y2="150" stroke="#eef2f9" stroke-width="2.4"/><line x1="44" y1="100" x2="60" y2="140" stroke="#eef2f9" stroke-width="2.4"/></svg>
+      <div class="nm">8C · Walking</div><div class="ds">Mid-step; drape &amp; movement for outerwear.</div>
+    </div>
+    <div class="pose">
+      <svg viewBox="0 0 88 170"><circle cx="46" cy="22" r="11" fill="none" stroke="#f0a73f" stroke-width="2.4"/><line x1="45" y1="33" x2="48" y2="100" stroke="#eef2f9" stroke-width="2.4"/><line x1="46" y1="48" x2="34" y2="92" stroke="#eef2f9" stroke-width="2.4"/><line x1="46" y1="48" x2="58" y2="92" stroke="#eef2f9" stroke-width="2.4"/><line x1="48" y1="100" x2="40" y2="156" stroke="#eef2f9" stroke-width="2.4"/><line x1="48" y1="100" x2="54" y2="156" stroke="#eef2f9" stroke-width="2.4"/></svg>
+      <div class="nm">8D · Lean look</div><div class="ds">Weight back, ankles crossed; clean attitude.</div>
+    </div>
+  </div>
+  <p class="note">Pose 8 keeps your smart <b>by-product-type defaults</b> (tops→8B, bottoms→8E, outerwear→8C) but rotates the <i>within-option</i> micro-details (gaze, forearm, foot, chin) so two tees don't get the identical creative frame.</p>
+
+  <h2>4 · Face / expression variation (same person, different moment)</h2>
+  <div class="card">
+    <p style="margin-top:0">The biggest "robotic" tell is the frozen identical face. Within the identity lock we add a tiny, rotated beat — never enough to change <i>who</i> it is, just enough to feel candid:</p>
+    <div class="grid g4">
+      <div class="face"><svg viewBox="0 0 72 72"><circle cx="36" cy="34" r="22" fill="none" stroke="#eef2f9" stroke-width="2.4"/><circle cx="29" cy="32" r="2.2" fill="#4bc99a"/><circle cx="43" cy="32" r="2.2" fill="#4bc99a"/><path d="M30 44 q6 4 12 0" fill="none" stroke="#eef2f9" stroke-width="2"/></svg><div>Gaze to camera · calm</div></div>
+      <div class="face"><svg viewBox="0 0 72 72"><circle cx="36" cy="34" r="22" fill="none" stroke="#eef2f9" stroke-width="2.4"/><circle cx="26" cy="32" r="2.2" fill="#6ea8fe"/><circle cx="40" cy="32" r="2.2" fill="#6ea8fe"/><path d="M30 44 q6 3 12 0" fill="none" stroke="#eef2f9" stroke-width="2"/></svg><div>Gaze camera-left</div></div>
+      <div class="face"><svg viewBox="0 0 72 72"><g transform="rotate(-7 36 36)"><circle cx="36" cy="34" r="22" fill="none" stroke="#eef2f9" stroke-width="2.4"/><circle cx="29" cy="32" r="2.2" fill="#4bc99a"/><circle cx="43" cy="32" r="2.2" fill="#4bc99a"/><path d="M30 45 q6 4 12 0" fill="none" stroke="#eef2f9" stroke-width="2"/></g></svg><div>Head tilt 5–8°</div></div>
+      <div class="face"><svg viewBox="0 0 72 72"><circle cx="36" cy="34" r="22" fill="none" stroke="#eef2f9" stroke-width="2.4"/><circle cx="29" cy="31" r="2.2" fill="#f0a73f"/><circle cx="43" cy="31" r="2.2" fill="#f0a73f"/><path d="M29 45 q7 5 14 0" fill="none" stroke="#eef2f9" stroke-width="2.2"/></svg><div>Quiet confidence beat</div></div>
+    </div>
+    <p class="note" style="margin-bottom:0">Combined with <b>reference-photo rotation</b> (use a different one of the model's source shots as primary each time), the same model stops rendering as an identical clone.</p>
+  </div>
+
+  <h2>5 · Face strategy — your call</h2>
+  <div class="ba">
+    <div class="box after"><b class="good">Option A · Recommended</b><p class="muted" style="margin:6px 0 0"><b>Keep your one locked model</b>, add the micro-variation above (gaze/expression/tilt + reference rotation). Stays 100% on-brand; each shot feels like a real session, not a clone. Lowest risk.</p></div>
+    <div class="box"><b class="warn">Option B · Optional</b><p class="muted" style="margin:6px 0 0">Maintain a small <b>pool of 2–4 brand models</b> and rotate per product. More face variety across the catalog, still curated. Bigger change (manage multiple identities), more "raw" variety.</p></div>
+  </div>
+
+  <h2>6 · Variation strength (one global knob)</h2>
+  <div class="card">
+    <div class="slider"><div class="knob"></div></div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted)"><span>Subtle (tight, catalog-safe)</span><span class="good">Natural (recommended)</span><span>Editorial (more drift)</span></div>
+    <p class="note" style="margin-bottom:0">Controls how far stance/gaze/expression can drift from base. "Natural" = clearly the same shoot, never two identical frames. You set it once; per-pose it still respects all your HARD LOCKS (white seamless, garment readable, no covered logos, full-body scale, close-up item lock).</p>
+  </div>
+
+  <h2>7 · What stays locked (so it's still on-brand)</h2>
+  <div class="card">
+    <ul style="margin-top:0">
+      <li><b>Identity</b> — same model (Option A) / curated pool (Option B). Facial geometry + skin tone never drift.</li>
+      <li><b>Pose family</b> — Pose 1 stays the hero, Pose 7 stays back-detail, Pose 8 stays creative. Only the <i>micro</i>-pose rotates.</li>
+      <li><b>All HARD LOCKS</b> — pure white seamless, studio lighting, full-body scale match, garment readability, close-up item-type lock, the panel mapping.</li>
+      <li><b>QA gate</b> — the existing compliance check still runs; variation never violates it.</li>
+    </ul>
+  </div>
+
+  <h2>8 · What I'd build (after you approve)</h2>
+  <div class="card">
+    <ul style="margin-top:0">
+      <li>Add a <code>poseVariations</code> pool (8–12 weighted micro-variations) per pose for male + female in <code>lib/panelPoseLibraries.ts</code>.</li>
+      <li>A <code>pickVariation(pose, modelId, lastUsed, strength)</code> selector — system chooses one, enforces no back-to-back repeat, scales by the strength knob.</li>
+      <li>Inject the chosen variation text + face beat + chosen reference photo into the OpenAI <i>and</i> Gemini generate prompts.</li>
+      <li>A small <b>"Variation strength"</b> control in the generator UI (Subtle / Natural / Editorial), default Natural.</li>
+      <li>(Option B only) a model-pool rotation setting.</li>
+    </ul>
+  </div>
+
+  <div class="foot">
+    Review the approach and the two open choices — <b>(1)</b> Face strategy A (one model + micro-variation) vs B (small model pool), and <b>(2)</b> default Variation strength. Tell me your picks and I'll build it for both generators. Figures here are schematic; real output is photoreal with your model and all locks intact.
+  </div>
+
+</div>
+</body>
+</html>

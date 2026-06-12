@@ -9,6 +9,7 @@ import {
   normalizeRemoteImageUrl,
 } from "@/lib/remoteImage";
 import { downloadStorageObject, tryGetStoragePathFromUrl } from "@/lib/storageProvider";
+import { buildPoseVariationDirective, normalizeStrength } from "@/lib/poseVariation";
 
 const FALLBACK_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAIAAAB7GkOtAAAFx0lEQVR42u3UwQkAIBDAMHX/nc8lBK4jUZBkn2tmdgDg53YHAH4MIAgQCBAECAQIAgQCBAECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIhD8eQ9JCmqo2AAAAAElFTkSuQmCC";
@@ -515,7 +516,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { prompt, size, modelRefs, itemRefs, panelQa } = await req.json();
+    const { prompt, size, modelRefs, itemRefs, panelQa, variationStrength, variationSeed } =
+      await req.json();
+    const resolvedVariationSeed = Number.isFinite(Number(variationSeed))
+      ? Math.floor(Number(variationSeed))
+      : Math.floor(Date.now() / 1000);
     const normalizedPanelQa = normalizePanelQa(panelQa);
 
     if (!prompt || typeof prompt !== "string") {
@@ -555,10 +560,18 @@ export async function POST(req: NextRequest) {
     const imageModel = (process.env.GEMINI_IMAGE_MODEL || "gemini-3-pro-image-preview").trim();
     const swimwearActive = isSwimwearItemType(normalizedPanelQa.itemType);
     const serverIdentityLockPrompt = buildServerIdentityLockPrompt(normalizedPanelQa);
+    const poseVariationDirective = buildPoseVariationDirective({
+      modelGender: normalizedPanelQa.modelGender,
+      poseA: normalizedPanelQa.poseA,
+      poseB: normalizedPanelQa.poseB,
+      strength: normalizeStrength(variationStrength),
+      seed: resolvedVariationSeed,
+    });
     const lockedPrompt = [
       prompt,
       "",
       serverIdentityLockPrompt,
+      ...(poseVariationDirective ? ["", poseVariationDirective] : []),
       ...(swimwearActive
         ? [
             "SWIMWEAR SAFETY LOCK (SERVER):",

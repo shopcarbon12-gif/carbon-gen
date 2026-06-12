@@ -503,6 +503,13 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
   const [modelFiles, setModelFiles] = useState<File[]>([]);
   const [itemFiles, setItemFiles] = useState<File[]>([]);
   const [itemType, setItemType] = useState("");
+  // Pose/face variation: how much natural variation to inject so the model does
+  // not look robotic/stamped. Default "natural". A monotonically increasing seed
+  // rotates the chosen variation each generation (never back-to-back identical).
+  const [variationStrength, setVariationStrength] = useState<
+    "subtle" | "natural" | "editorial"
+  >("natural");
+  const variationSeedRef = useRef(0);
   const [itemBarcode, setItemBarcode] = useState("");
   const [itemBarcodeSaved, setItemBarcodeSaved] = useState("");
   const [barcodeScannerOpen, setBarcodeScannerOpen] = useState(false);
@@ -4527,6 +4534,8 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                     modelGender: selectedModel.gender,
                     itemType: effectiveItemType,
                   },
+                  variationStrength,
+                  variationSeed: (variationSeedRef.current += 1),
                 }),
               },
               1,
@@ -7237,6 +7246,27 @@ export default function StudioWorkspace({ mode = "all" }: StudioWorkspaceProps) 
                 </div>
               );
             })}
+          </div>
+          <div className="row variation-strength-row" style={{ justifyContent: "center", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <span className="muted" style={{ fontWeight: 600 }}>Pose variation</span>
+            {([
+              ["subtle", "Subtle", "Minimal — gaze/weight only"],
+              ["natural", "Natural", "Balanced — gaze, head angle, expression"],
+              ["editorial", "Editorial", "Most variety — candid in-between energy"],
+            ] as const).map(([value, label, title]) => (
+              <button
+                key={value}
+                type="button"
+                title={title}
+                className={`pill ${variationStrength === value ? "active" : ""}`}
+                onClick={() => setVariationStrength(value)}
+              >
+                {label}
+              </button>
+            ))}
+            <span className="muted" style={{ fontSize: 12, opacity: 0.8, flexBasis: "100%", textAlign: "center" }}>
+              Keeps the exact same locked model — varies pose &amp; expression so the set looks natural, not robotic.
+            </span>
           </div>
           <div className="generation-actions-layout">
             <div className="generation-button-stack">
