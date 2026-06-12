@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { deleteStorageObjects, listStorageFiles } from "@/lib/storageProvider";
+import { getProtectedModelStoragePaths } from "@/lib/modelImageProtection";
 
 const PREFIXES = ["models", "items", "final-results"];
 
@@ -18,15 +19,32 @@ function isAuthorized(req: NextRequest) {
 }
 
 async function runCleanup() {
+  // Resolve saved-model paths FIRST. If the DB lookup throws, we let it bubble up
+  // so the whole cleanup aborts instead of deleting saved models' photos.
+  const protectedPaths = await getProtectedModelStoragePaths();
+
   const groups = await Promise.all(PREFIXES.map((p) => listStorageFiles(p)));
   const allPaths = Array.from(new Set(groups.flat().map((f) => f.path)));
 
-  if (!allPaths.length) {
-    return { deleted: 0, prefixes: PREFIXES };
+  const deletable = allPaths.filter((p) => !protectedPaths.has(p));
+  const skippedProtected = allPaths.length - deletable.length;
+
+  if (!deletable.length) {
+    return {
+      deleted: 0,
+      skippedProtected,
+      protectedModelImages: protectedPaths.size,
+      prefixes: PREFIXES,
+    };
   }
 
-  const result = await deleteStorageObjects(allPaths);
-  return { deleted: result.deleted, prefixes: PREFIXES };
+  const result = await deleteStorageObjects(deletable);
+  return {
+    deleted: result.deleted,
+    skippedProtected,
+    protectedModelImages: protectedPaths.size,
+    prefixes: PREFIXES,
+  };
 }
 
 export async function GET(req: NextRequest) {

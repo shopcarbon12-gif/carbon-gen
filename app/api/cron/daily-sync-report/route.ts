@@ -5,6 +5,7 @@ import { normalizeShopDomain } from "@/lib/shopify";
 import { Resend } from "resend";
 import { getMostRecentInstalledShop } from "@/lib/shopifyTokenRepository";
 import { deleteStorageObjects, listStorageFiles } from "@/lib/storageProvider";
+import { getProtectedModelStoragePaths } from "@/lib/modelImageProtection";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -246,8 +247,15 @@ export async function GET(req: NextRequest) {
     try {
       // Guardrail: only clear model uploads during the midnight maintenance window.
       if (shouldRunStorageCleanupNow(now)) {
+        // Saved models reference their photos directly under models/uploads/<user>/...,
+        // so we must skip any upload that belongs to a saved model — otherwise this
+        // sweep deletes saved models' reference images. Resolved before deleting; if
+        // the lookup throws, the outer catch aborts the sweep (fail safe).
+        const protectedPaths = await getProtectedModelStoragePaths();
         const groups = await Promise.all(STORAGE_CLEANUP_PREFIXES.map((prefix) => listStorageFiles(prefix)));
-        const allPaths = Array.from(new Set(groups.flat().map((f) => f.path)));
+        const allPaths = Array.from(new Set(groups.flat().map((f) => f.path))).filter(
+          (p) => !protectedPaths.has(p)
+        );
         if (allPaths.length) {
           const deleted = await deleteStorageObjects(allPaths);
           deletedStorageUploads = deleted.deleted;
