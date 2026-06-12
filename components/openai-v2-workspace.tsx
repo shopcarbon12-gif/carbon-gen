@@ -189,6 +189,7 @@ export default function OpenAiV2Workspace() {
 
   // item references
   const [itemRefs, setItemRefs] = useState<RefImg[]>([]);
+  const [itemDropOver, setItemDropOver] = useState(false);
   const itemFileRef = useRef<HTMLInputElement | null>(null);
 
   // step 2 — generate
@@ -1420,7 +1421,15 @@ export default function OpenAiV2Workspace() {
           <label className="v2-lbl mt">Item reference photos</label>
           <input ref={itemFileRef} type="file" accept="image/*" multiple hidden onChange={(e) => onItemFiles(e.target.files)} />
           <div className="v2-row">
-            <button className="v2-drop" onClick={() => itemFileRef.current?.click()}>Upload item reference photos</button>
+            <button
+              className={`v2-drop ${itemDropOver ? "over" : ""}`}
+              onClick={() => itemFileRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; if (!itemDropOver) setItemDropOver(true); }}
+              onDragLeave={() => setItemDropOver(false)}
+              onDrop={(e) => { e.preventDefault(); setItemDropOver(false); onItemFiles(e.dataTransfer.files); }}
+            >
+              {itemDropOver ? "Drop photos to upload" : "Upload or drop item reference photos here"}
+            </button>
             <button className="v2-btn" title="Capture with camera" onClick={() => { setItemCamError(null); setItemCamChooserOpen(true); void openItemCameraRemote(); }}>📷 Camera</button>
           </div>
           <div className="v2-row" style={{ marginTop: 8 }}>
@@ -1856,6 +1865,7 @@ const V2_CSS = `
 .v2-segbtn.active{background:var(--accent);color:#04261b;font-weight:700}
 .v2-drop{flex:1;min-width:220px;border:2px dashed rgba(255,255,255,.22);border-radius:12px;padding:14px;text-align:center;color:var(--muted);background:rgba(255,255,255,.03);cursor:pointer;font:inherit}
 .v2-drop:hover{border-color:var(--accent);color:var(--fg)}
+.v2-drop.over{border-color:var(--accent2);background:rgba(34,211,238,.1);color:var(--fg)}
 .v2-drop.mt8,.mt8{margin-top:8px}
 .v2-thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 .v2-thumb{position:relative;width:64px;height:84px;border-radius:9px;overflow:hidden;border:1px solid var(--panel-border);background:rgba(255,255,255,.04)}
