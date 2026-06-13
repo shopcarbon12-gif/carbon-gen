@@ -218,6 +218,10 @@ export default function OpenAiV2Workspace() {
   const [seoPublishing, setSeoPublishing] = useState(false);
   const [seoPublished, setSeoPublished] = useState(false);
 
+  // On phones we skip the desktop "scan with another device" QR hand-off and use
+  // the device camera directly.
+  const [isMobile, setIsMobile] = useState(false);
+
   // ---- barcode scanner (local + remote) ----
   const [scanChooserOpen, setScanChooserOpen] = useState(false);
   const [scanLocalOpen, setScanLocalOpen] = useState(false);
@@ -291,6 +295,39 @@ export default function OpenAiV2Workspace() {
     } catch {
       /* ignore */
     }
+  }
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(max-width: 768px)");
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener?.("change", update);
+    return () => mq.removeEventListener?.("change", update);
+  }, []);
+
+  // Background-safe completion alert: a system notification (which the OS sounds +
+  // vibrates) fires even when the tab is backgrounded — plain audio is suspended
+  // there. The chime in playDone() still covers the foreground case.
+  function notifyGenerationDone(count: number) {
+    try {
+      if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+        navigator.vibrate([120, 60, 120]);
+      }
+    } catch {}
+    try {
+      if (
+        typeof Notification !== "undefined" &&
+        Notification.permission === "granted" &&
+        typeof document !== "undefined" &&
+        document.hidden
+      ) {
+        new Notification("Carbon · panels ready", {
+          body: `${count} image${count === 1 ? "" : "s"} generated — tap to review.`,
+          tag: "v2-generation",
+        });
+      }
+    } catch {}
   }
 
   function refreshModels() {
@@ -870,6 +907,12 @@ export default function OpenAiV2Workspace() {
     const runTag = Date.now().toString(36);
     setError(null);
     setGenerating(true);
+    // Ask once so we can alert on completion if the user switches apps mid-run.
+    try {
+      if (typeof Notification !== "undefined" && Notification.permission === "default") {
+        void Notification.requestPermission();
+      }
+    } catch {}
     const startProgress: Record<number, string> = {};
     chosen.forEach((p) => (startProgress[p] = "queued"));
     setPanelProgress(startProgress);
@@ -935,7 +978,10 @@ export default function OpenAiV2Workspace() {
     });
     setResults(isRegen ? [...keptResults, ...ok] : ok);
     setGenerating(false);
-    if (ok.length) playDone(); // chime when panels are ready
+    if (ok.length) {
+      playDone(); // chime when panels are ready (foreground)
+      notifyGenerationDone(ok.length); // system notification + vibrate (background-safe)
+    }
     if (failures.length && ok.length) setStatus(`Some panels failed: ${failures.join(" | ")}`);
     else if (failures.length) {
       setStatus(null);
@@ -1338,7 +1384,7 @@ export default function OpenAiV2Workspace() {
                 ) : null}
               </div>
               <button className="v2-btn" onClick={() => runSearch(barcode.trim())}>Look up</button>
-              <button className="v2-btn" title="Scan with camera" onClick={() => { setScanError(null); setScanChooserOpen(true); void openRemoteBarcodeScan(); }}>📷 Scan</button>
+              <button className="v2-btn" title="Scan with camera" onClick={() => { setScanError(null); if (isMobile) { setScanLocalOpen(true); } else { setScanChooserOpen(true); void openRemoteBarcodeScan(); } }}>📷 Scan</button>
             </div>
           </div>
 
@@ -1434,7 +1480,7 @@ export default function OpenAiV2Workspace() {
             >
               {itemDropOver ? "Drop photos to upload" : "Upload or drop item reference photos here"}
             </button>
-            <button className="v2-btn" title="Capture with camera" onClick={() => { setItemCamError(null); setItemCamChooserOpen(true); void openItemCameraRemote(); }}>📷 Camera</button>
+            <button className="v2-btn" title="Capture with camera" onClick={() => { setItemCamError(null); if (isMobile) { itemFileRef.current?.click(); } else { setItemCamChooserOpen(true); void openItemCameraRemote(); } }}>📷 Camera</button>
           </div>
           <div className="v2-row" style={{ marginTop: 8 }}>
             <button className="v2-btn" disabled={!product} title={product ? "Add all images of this product" : "Match a product first"} onClick={importFromShopify}>⬇ Import from Shopify</button>
@@ -1992,4 +2038,18 @@ const V2_CSS = `
 .v2-scorefields{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .v2-fieldscore{font-size:12px;color:var(--muted);border:1px solid var(--panel-border);border-radius:8px;padding:5px 10px;background:rgba(255,255,255,.03)}
 .v2-fieldscore b{color:var(--fg)}
+/* mobile reflow — same colors/components as desktop, single column */
+@media (max-width:768px){
+  .v2-wrap{padding:8px 2px 96px}
+  .v2-head h1{font-size:20px}
+  .v2-panel{padding:16px 14px}
+  .v2-step{min-width:0;flex:1;padding:9px 8px;gap:6px}
+  .v2-step b{font-size:11.5px}
+  .v2-grow{min-width:0}
+  .v2-drop{min-width:0}
+  .v2-actions .v2-spacer{display:none}
+  .v2-actions .v2-btn{flex:1 1 auto}
+  .v2-modalcard{width:96vw}
+  .v2-qr{width:200px;height:200px}
+}
 `;

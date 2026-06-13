@@ -1,0 +1,538 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Carbon · OpenAI V2 Generator — Mobile (real desktop UI, reflowed)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+/* ============================================================
+   CARBON · OpenAI V2 Generator — MOBILE
+   This mockup uses the LIVE desktop V2_CSS verbatim + the real
+   v2-* markup, reflowed into a phone frame. It is NOT a redesign:
+   same colors, buttons, panels, backgrounds as the desktop app.
+   Mobile-only deltas:
+     • Camera / Scan dialogs open the DEVICE camera directly (no QR)
+     • No API-status side panel (Shopify/Lightspeed/Dropbox/ChatGPT)
+     • Generation completion fires a system notification + vibrate
+       so it alerts even when the app is backgrounded.
+   ============================================================ */
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  font:15px/1.5 "Space Grotesk",system-ui,"Segoe UI",Roboto,Arial,sans-serif;color:#f8fafc;
+  background:
+    radial-gradient(1200px 700px at 12% -5%, #4a1d7a 0%, transparent 55%),
+    radial-gradient(1100px 800px at 110% 10%, #6d1f5e 0%, transparent 50%),
+    radial-gradient(900px 900px at 50% 120%, #0c5a52 0%, transparent 55%),
+    linear-gradient(160deg,#160a26 0%, #0c0a1c 60%, #07131a 100%);
+  background-attachment:fixed;min-height:100vh;-webkit-font-smoothing:antialiased;
+}
+.intro{max-width:1080px;margin:0 auto;padding:26px 20px 4px}
+.intro h1{font-size:20px;margin:0 0 4px}
+.intro p{color:rgba(226,232,240,.72);font-size:13px;margin:0 0 6px;max-width:780px}
+.legend{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 4px}
+.legend .pill{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:999px;padding:6px 11px;color:rgba(226,232,240,.72)}
+.legend .pill b{color:#4bc99a}
+
+/* phone stage */
+.stage{display:flex;flex-wrap:wrap;gap:30px;justify-content:center;align-items:flex-start;max-width:1080px;margin:0 auto;padding:22px 16px 70px}
+.device .cap{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:rgba(226,232,240,.72);text-align:center;margin:0 0 9px}
+.phone{width:404px;max-width:94vw;height:820px;border-radius:46px;padding:13px;
+  background:linear-gradient(160deg,#2a2a33,#0c0c12);
+  box-shadow:0 30px 70px rgba(0,0,0,.55), inset 0 0 0 2px rgba(255,255,255,.05);position:relative}
+.screen{position:relative;width:100%;height:100%;border-radius:34px;overflow:hidden;display:flex;flex-direction:column;
+  background:
+    radial-gradient(700px 380px at 10% -5%, #45206f 0%, transparent 60%),
+    radial-gradient(600px 420px at 115% 8%, #6a1c58 0%, transparent 55%),
+    linear-gradient(160deg,#160a26 0%, #0c0a1c 62%, #07131a 100%)}
+.notch{position:absolute;top:0;left:50%;transform:translateX(-50%);width:148px;height:26px;background:#08080c;border-radius:0 0 16px 16px;z-index:70}
+.topbar{display:flex;align-items:center;gap:10px;padding:34px 16px 6px;flex:none;z-index:30}
+.topbar .ic{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;font-size:17px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12)}
+.topbar .brand{display:flex;align-items:center;gap:8px;font-weight:700;letter-spacing:.06em;font-size:13px}
+.topbar .logo{width:24px;height:24px;border-radius:7px;background:conic-gradient(from 200deg,#4bc99a,#22d3ee,#6d28d9,#4bc99a)}
+.topbar .grow{flex:1}
+.scrollarea{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.scrollarea::-webkit-scrollbar{width:0}
+
+/* note ribbon */
+.mnote{margin:0 12px 4px;font-size:11px;color:#bbf7e3;background:rgba(75,201,154,.1);border:1px dashed rgba(75,201,154,.4);border-radius:10px;padding:7px 10px}
+
+/* ===================================================================
+   >>> BEGIN LIVE DESKTOP V2_CSS (verbatim from openai-v2-workspace.tsx)
+   =================================================================== */
+.v2-wrap{
+  --fg:#f8fafc;--muted:rgba(226,232,240,0.72);
+  --panel-bg:rgba(255,255,255,0.06);--panel-border:rgba(255,255,255,0.12);
+  --control-bg:rgba(12,8,22,0.42);--control-border:rgba(255,255,255,0.28);
+  --accent:#4bc99a;--accent-border:rgba(75,201,154,0.6);--accent2:#22d3ee;
+  max-width:1000px;margin:0 auto;padding:8px 4px 80px;color:var(--fg);
+  font:15px/1.5 "Space Grotesk",system-ui,"Segoe UI",Roboto,Arial,sans-serif}
+.v2-wrap *{box-sizing:border-box}
+/* mirror globals.css button base so buttons match desktop exactly */
+.v2-wrap button{min-height:46px;border-radius:10px;border:1px solid transparent;font:inherit;font-weight:700;cursor:pointer}
+.v2-head h1{font-size:22px;margin:0 0 2px}
+.v2-sub{color:var(--muted);font-size:13px;margin:0 0 14px}
+.v2-shop{margin:0 0 14px}
+.v2-shopval{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.05);border:1px solid var(--panel-border);border-radius:12px;padding:11px 14px;font-size:14px}
+.v2-shopval .muted{color:var(--muted)}
+.v2-dotled{width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,.35);flex:none}
+.v2-dotled.on{background:var(--accent);box-shadow:0 0 0 3px rgba(75,201,154,.2)}
+.v2-shopedit{margin-left:auto;background:none;border:none;color:#7dd3c0;font:inherit;font-size:13px;cursor:pointer;text-decoration:underline;min-height:auto}
+.v2-lbl{display:block;font-size:0.72rem;color:var(--muted);font-weight:700;margin:0 0 6px;letter-spacing:.1em;text-transform:uppercase}
+.v2-lbl.mt,.mt{margin-top:18px}
+.v2-req{color:#fca5a5;font-size:.7rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em}
+.v2-input{width:100%;background:var(--control-bg);border:1px solid var(--control-border);border-radius:12px;color:var(--fg);padding:11px 14px;font:inherit;font-size:14px;min-height:48px}
+.v2-input::placeholder{color:rgba(203,213,225,.62)}
+.v2-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.v2-grow{flex:1;min-width:160px}
+.v2-searchwrap{position:relative}
+.v2-dropdown{position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:20;background:rgba(20,16,30,0.96);border:1px solid var(--panel-border);border-radius:12px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.45);max-height:340px;overflow-y:auto}
+.v2-dd-item{display:flex;align-items:center;gap:10px;width:100%;background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,.06);color:var(--fg);padding:9px 12px;cursor:pointer;text-align:left;font:inherit;min-height:auto}
+.v2-dd-item img{width:38px;height:38px;border-radius:7px;object-fit:cover;flex:none}
+.v2-dd-title{flex:1;font-size:13px}
+.v2-dd-bc{font-size:11px;color:var(--muted)}
+.v2-noimg{width:80px;height:80px;border-radius:8px;background:rgba(255,255,255,.06)}
+.v2-noimg.sm{width:38px;height:38px}
+.v2-stepper{display:flex;gap:8px;margin:0 0 16px;flex-wrap:wrap}
+.v2-step{display:flex;align-items:center;gap:8px;background:var(--panel-bg);border:1px solid var(--panel-border);border-radius:12px;padding:9px 14px;flex:1;min-width:170px;opacity:.6}
+.v2-step.active{opacity:1;border-color:var(--accent-border);box-shadow:0 0 0 1px var(--accent-border) inset}
+.v2-step.done{opacity:1;border-color:rgba(75,201,154,.4)}
+.v2-num{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-weight:800;background:rgba(255,255,255,.1);color:var(--muted);font-size:12px}
+.v2-step.active .v2-num{background:var(--accent);color:#04261b}
+.v2-step.done .v2-num{background:var(--accent);color:#04261b}
+.v2-banner{border-radius:12px;padding:10px 13px;margin:0 0 14px;font-size:13px;font-weight:600}
+.v2-banner.err{background:rgba(248,113,113,.14);border:1px solid rgba(248,113,113,.4);color:#fecaca}
+.v2-banner.ok{background:rgba(75,201,154,.12);border:1px solid rgba(75,201,154,.4);color:#bbf7e3}
+.v2-panel{background:var(--panel-bg);border:1px solid var(--panel-border);border-radius:16px;padding:20px;box-shadow:0 2px 12px rgba(0,0,0,.08)}
+.v2-panel h2{margin:0 0 4px;font-size:18px}
+.v2-lead{color:var(--muted);font-size:13px;margin:0 0 14px}
+.v2-btn{font:inherit;cursor:pointer;border-radius:10px;border:1.5px solid rgba(255,255,255,.22);background:rgba(255,255,255,.1);color:var(--fg);padding:10px 16px;font-weight:600;min-height:42px}
+.v2-btn.primary{background:linear-gradient(180deg,#4bc99a 0%,#3fb88b 50%,#38a87e 100%);border:1px solid rgba(255,255,255,.35);color:#fff;font-weight:700}
+.v2-btn.primary:disabled{opacity:.45;cursor:not-allowed}
+.v2-btn.ghost{background:transparent;border:1px solid rgba(255,255,255,.18);color:rgba(255,255,255,.75)}
+.v2-btn.cyan{background:linear-gradient(180deg,#22d3ee,#0891b2);border:none;color:#04222a;font-weight:700}
+.v2-card{background:rgba(255,255,255,.05);border:1px solid var(--panel-border);border-radius:14px;padding:14px;margin-top:14px}
+.v2-card.good{border-color:rgba(75,201,154,.4)}
+.v2-kv{display:flex;justify-content:flex-start;gap:8px;padding:6px 0;border-bottom:1px dashed rgba(255,255,255,.1);font-size:14px}
+.v2-kv span:first-child::after{content:":"}
+.v2-kv:last-child{border-bottom:none}
+.v2-kv.col{flex-direction:column;align-items:flex-start;gap:8px}
+.v2-kv span:first-child{color:var(--muted)}
+.v2-colors{display:flex;gap:8px;flex-wrap:wrap}
+.v2-color{font-size:13px;border:1px solid var(--control-border);border-radius:9px;padding:7px 13px;background:var(--control-bg);color:var(--fg);cursor:pointer}
+.v2-color.sel{border-color:var(--accent);background:rgba(75,201,154,.18);color:#fff}
+.v2-presets{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.v2-chip{font-size:12px;border:1px solid var(--control-border);border-radius:8px;padding:6px 11px;background:var(--control-bg);color:var(--fg);cursor:pointer;min-height:auto}
+.v2-models{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
+.v2-model{position:relative;border:1px solid var(--panel-border);border-radius:12px;padding:8px;width:96px;text-align:center;cursor:pointer;background:rgba(255,255,255,.04)}
+.v2-model.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.v2-model img{width:80px;height:80px;border-radius:8px;object-fit:cover;display:block}
+.v2-model small{display:block;font-size:11px;margin-top:4px}
+.v2-model small.muted{color:var(--muted)}
+.v2-model .v2-del{position:absolute;top:4px;right:4px;z-index:3;width:22px;height:22px;min-width:22px;min-height:22px;flex:none;aspect-ratio:1/1;box-sizing:border-box;padding:0;border-radius:50%;background:rgba(248,113,113,.9);border:none;display:flex;align-items:center;justify-content:center;font-size:15px;line-height:1;color:#fff;cursor:pointer;opacity:1}
+.v2-model.add{display:grid;place-items:center;color:var(--muted);border-style:dashed;min-height:113px}
+.v2-plus{font-size:24px}
+.v2-addmodel{margin-top:10px;background:rgba(255,255,255,.04);border:1px solid var(--panel-border);border-radius:12px;padding:14px}
+.v2-seg{display:inline-flex;background:rgba(0,0,0,.25);border:1px solid var(--panel-border);border-radius:10px;padding:3px;margin-top:6px}
+.v2-segbtn{background:transparent;border:none;padding:7px 12px;font-size:13px;border-radius:8px;color:var(--muted);cursor:pointer;font:inherit;min-height:auto}
+.v2-segbtn.active{background:var(--accent);color:#04261b;font-weight:700}
+.v2-drop{flex:1;min-width:200px;border:2px dashed rgba(255,255,255,.22);border-radius:12px;padding:14px;text-align:center;color:var(--muted);background:rgba(255,255,255,.03);cursor:pointer;font:inherit}
+.v2-drop.mt8,.mt8{margin-top:8px}
+.v2-thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.v2-thumb{position:relative;width:64px;height:84px;border-radius:9px;overflow:hidden;border:1px solid var(--panel-border);background:rgba(255,255,255,.04)}
+.v2-thumb img{width:100%;height:100%;object-fit:cover;cursor:zoom-in}
+.v2-thumb .x{position:absolute;top:3px;right:3px;background:rgba(0,0,0,.6);border-radius:50%;width:20px;height:20px;min-width:20px;aspect-ratio:1/1;box-sizing:border-box;padding:0;display:flex;align-items:center;justify-content:center;font-size:13px;line-height:1;color:#fff;cursor:pointer}
+.v2-hint{font-size:12px;color:var(--muted);margin-top:10px}
+.v2-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px;align-items:center}
+.v2-spacer{flex:1}
+.v2-genopts{background:rgba(255,255,255,.04);border:1px solid var(--panel-border);border-radius:12px;padding:14px}
+.v2-regen{margin-top:14px}
+.v2-optrow{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.v2-panelpick{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.v2-pp{display:flex;align-items:center;gap:7px;border:1px solid var(--panel-border);border-radius:9px;padding:7px 11px;background:rgba(0,0,0,.2);cursor:pointer;font-size:13px}
+.v2-pp.on{border-color:var(--accent);color:var(--fg)}
+.v2-check{display:flex;align-items:center;gap:9px;margin-top:13px;font-size:14px;cursor:pointer;flex-wrap:wrap}
+.v2-check small{color:var(--muted)}
+.v2-prog{margin-top:14px;background:rgba(255,255,255,.04);border:1px solid var(--panel-border);border-radius:12px;padding:10px 14px}
+.v2-progrow{display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px dashed rgba(255,255,255,.1)}
+.v2-progrow:last-child{border-bottom:none}
+.v2-progstate{color:var(--muted)}
+.v2-progstate.done{color:var(--accent);font-weight:700}
+.v2-results{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-top:16px}
+.v2-res{position:relative;background:rgba(255,255,255,.04);border:1px solid var(--panel-border);border-radius:12px;overflow:hidden;cursor:pointer}
+.v2-res.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.v2-res img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block}
+.v2-meta{padding:7px 9px;font-size:12px;color:var(--muted)}
+.v2-tick{position:absolute;top:7px;left:7px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,.55);display:grid;place-items:center;font-size:13px;border:1px solid var(--panel-border)}
+.v2-res.sel .v2-tick{background:var(--accent);border-color:var(--accent);color:#04261b}
+.v2-qa{position:absolute;top:7px;right:7px;font-size:10px;font-weight:800;padding:2px 7px;border-radius:999px;background:rgba(75,201,154,.2);color:#bbf7e3}
+.v2-zoom{position:absolute;bottom:34px;right:7px;width:26px;height:26px;border-radius:8px;background:rgba(0,0,0,.6);border:1px solid var(--panel-border);display:grid;place-items:center;font-size:13px;cursor:zoom-in;color:#fff;min-height:auto}
+.v2-variants{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+.v2-variant{background:rgba(255,255,255,.04);border:1px solid var(--panel-border);border-radius:12px;padding:12px 14px}
+.v2-vh{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+.v2-vh small{color:var(--muted);font-size:12px}
+.v2-vpics{display:flex;gap:8px;flex-wrap:wrap}
+.v2-vpic{position:relative;width:56px;height:74px;border-radius:8px;overflow:hidden;border:2px solid transparent;cursor:pointer}
+.v2-vpic img{width:100%;height:100%;object-fit:cover;display:block}
+.v2-vpic.main{border-color:var(--accent)}
+.v2-vpic .star{position:absolute;top:2px;left:2px;font-size:11px;background:var(--accent);color:#04261b;border-radius:5px;padding:0 4px;display:none}
+.v2-vpic.main .star{display:block}
+.v2-altlist{margin-top:10px;display:flex;flex-direction:column;gap:8px}
+.v2-altrow{display:flex;gap:10px;align-items:center}
+.v2-altrow img{width:34px;height:45px;border-radius:6px;object-fit:cover;flex:none}
+.v2-altrow .v2-btn{min-height:42px;padding:8px 12px;flex:none}
+.v2-mediagrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;margin-top:10px}
+.v2-mediacard{position:relative;border:1px solid var(--panel-border);border-radius:10px;overflow:hidden;background:rgba(255,255,255,.04);cursor:grab}
+.v2-mediacard img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block;pointer-events:none}
+.v2-mediabar{position:absolute;bottom:4px;left:4px;right:4px;display:flex;align-items:center;justify-content:space-between;gap:4px;background:rgba(0,0,0,.55);border-radius:8px;padding:2px 4px}
+.v2-movebtn{width:24px;height:24px;min-width:24px;min-height:24px;flex:none;box-sizing:border-box;padding:0;border:none;border-radius:6px;background:rgba(255,255,255,.16);color:#fff;font-size:12px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.v2-posnum{font-size:11px;font-weight:800;color:#fff}
+.v2-srcbadge{position:absolute;top:5px;left:5px;font-size:9px;font-weight:800;border-radius:5px;padding:1px 6px;text-transform:uppercase;letter-spacing:.04em}
+.v2-srcbadge.shopify{background:rgba(255,255,255,.85);color:#1f2937}
+.v2-srcbadge.generated{background:rgba(75,201,154,.9);color:#04261b}
+.v2-mediax{position:absolute;top:4px;right:4px;z-index:3;width:22px;height:22px;min-width:22px;min-height:22px;flex:none;aspect-ratio:1/1;box-sizing:border-box;padding:0;border-radius:50%;background:rgba(248,113,113,.9);border:none;color:#fff;font-size:15px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.v2-vmain{margin-bottom:9px}
+.v2-vmain img{width:64px;height:84px;border-radius:8px;object-fit:cover;border:1px solid var(--accent)}
+.v2-vdrop{width:100%;border:2px dashed rgba(255,255,255,.2);border-radius:8px;padding:14px;text-align:center;color:var(--muted);font-size:12px}
+.v2-lb{position:fixed;inset:0;background:rgba(4,3,10,.86);display:grid;place-items:center;z-index:60;padding:24px}
+.v2-lbclose{position:absolute;top:18px;right:22px;font-size:28px;color:#fff;cursor:pointer;background:none;border:none;min-height:auto}
+.v2-frame{max-width:min(92vw,560px);max-height:92vh;display:flex;flex-direction:column;gap:10px;align-items:center}
+.v2-lbmain{position:relative;display:flex;align-items:center;justify-content:center;width:100%}
+.v2-lbmain img{max-width:100%;max-height:74vh;width:auto;height:auto;border-radius:14px;border:1px solid var(--panel-border)}
+.v2-cap{color:#fff;font-weight:700;text-align:center}
+.v2-modal{position:fixed;inset:0;background:rgba(4,3,10,.8);display:grid;place-items:center;z-index:55;padding:20px}
+.v2-modalcard{width:min(94vw,420px);background:rgba(20,16,30,0.97);border:1px solid var(--panel-border);border-radius:16px;padding:18px}
+.v2-modalhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.v2-scanframe{position:relative;border-radius:14px;overflow:hidden;background:#000;aspect-ratio:4/3;display:grid;place-items:center;color:#3a3a3a;font-size:13px}
+.v2-scanguide{position:absolute;inset:18% 12%;border:2px solid rgba(75,201,154,.8);border-radius:10px;pointer-events:none}
+.v2-dbgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px;margin-top:12px;max-height:46vh;overflow-y:auto}
+.v2-dbcell-add{display:flex;flex-direction:column;gap:5px;width:100%;background:rgba(255,255,255,.04);border:1px solid var(--panel-border);border-radius:10px;padding:6px;cursor:pointer;color:var(--fg);font:inherit;min-height:auto}
+.v2-dbcell-add img{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:7px}
+.v2-dbcell-add span{font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v2-seo{margin-top:16px;border-top:1px solid var(--panel-border);padding-top:16px}
+.v2-seohead{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.v2-scorebig{display:flex;align-items:baseline;gap:4px}
+.v2-scorenum{font-size:38px;font-weight:800;color:var(--accent)}
+.v2-scoremax{font-size:15px;color:var(--muted)}
+.v2-grade{margin-left:8px;font-size:14px;font-weight:800;border-radius:8px;padding:2px 9px;background:rgba(75,201,154,.18);color:#bbf7e3}
+.v2-scoremeta{flex:1;min-width:160px}
+.v2-scorelabel{font-size:13px;font-weight:700}
+.v2-scoreprev{font-size:12px;color:var(--muted)}
+.v2-scorewarn{font-size:12px;color:#fcd34d;margin-top:2px}
+.v2-scorefields{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.v2-fieldscore{font-size:12px;color:var(--muted);border:1px solid var(--panel-border);border-radius:8px;padding:5px 10px;background:rgba(255,255,255,.03)}
+.v2-fieldscore b{color:var(--fg)}
+/* === END LIVE DESKTOP V2_CSS === */
+
+/* mobile reflow overrides (what the responsive build adds) */
+.phone .v2-wrap{max-width:none;padding:6px 12px 24px}
+.phone .v2-step{min-width:0;padding:9px 8px;font-size:12px}
+.phone .v2-step b{font-size:11px}
+.phone .v2-modal,.phone .v2-lb{position:absolute}     /* contained inside the phone */
+.phone .v2-qr{display:none}                            /* no QR handoff on mobile */
+textarea.v2-input{min-height:auto;resize:none}
+.foot{max-width:1080px;margin:0 auto;padding:0 20px 60px;color:rgba(226,232,240,.72);font-size:12px}
+.foot code{background:rgba(255,255,255,.08);padding:2px 6px;border-radius:5px;color:#bbf7e3}
+</style>
+</head>
+<body>
+
+<div class="intro">
+  <h1>Carbon · OpenAI&nbsp;V2&nbsp;Generator — Mobile</h1>
+  <p>This is the <b>real desktop UI reflowed to one column</b> — same colors, buttons, panels and background as the live app (the desktop <code>V2_CSS</code> is embedded verbatim). It is not a redesign. Tap the stepper and buttons to walk the whole flow. Mobile-only changes are limited to: the Camera/Scan dialogs open the <b>device camera directly</b> (no QR hand-off), the API-status side panel is hidden, and generation completion fires a <b>system notification + vibration</b> so it alerts even when the app is backgrounded.</p>
+  <div class="legend">
+    <span class="pill"><b>1</b> Identify &amp; set up</span>
+    <span class="pill"><b>2</b> Generate (+ Manual per-panel · regenerate keeps selected)</span>
+    <span class="pill"><b>3</b> Publish → reorder → main per variant → alt → push</span>
+    <span class="pill">Device camera</span><span class="pill">Dropbox</span><span class="pill">Lightbox</span>
+  </div>
+</div>
+
+<div class="stage">
+  <div class="device">
+    <div class="cap">Tap to walk the flow</div>
+    <div class="phone"><div class="screen">
+      <div class="notch"></div>
+
+      <!-- minimal mobile top bar (nav + assistant) — NO status chips -->
+      <div class="topbar">
+        <div class="ic">☰</div>
+        <div class="brand"><span class="logo"></span> CARBON</div>
+        <div class="grow"></div>
+        <div class="ic">✨</div>
+      </div>
+
+      <div class="mnote">🔔 Background beep: when generation finishes while you're in another app, the phone rings + vibrates via a system notification.</div>
+
+      <div class="scrollarea" id="scroll">
+        <!-- ===== THE REAL V2 COMPONENT (reflowed) ===== -->
+        <div class="v2-wrap">
+          <div class="v2-head">
+            <h1>OpenAI V2 Generator</h1>
+            <p class="v2-sub">Identify the product, generate, publish — same models &amp; output as desktop.</p>
+          </div>
+
+          <div class="v2-shop">
+            <label class="v2-lbl">Shopify store</label>
+            <div class="v2-shopval"><span class="v2-dotled on"></span><b>30e7d3.myshopify.com</b><span class="muted">· connected</span><button class="v2-shopedit">change</button></div>
+          </div>
+
+          <div class="v2-stepper">
+            <div class="v2-step active" id="st1" onclick="go(1)"><span class="v2-num">1</span><b>Identify &amp; set up</b></div>
+            <div class="v2-step" id="st2" onclick="go(2)"><span class="v2-num">2</span><b>Generate</b></div>
+            <div class="v2-step" id="st3" onclick="go(3)"><span class="v2-num">3</span><b>Publish</b></div>
+          </div>
+
+          <!-- ===== STEP 1 ===== -->
+          <section class="v2-panel" id="p1">
+            <h2>1 · Identify &amp; set up</h2>
+
+            <label class="v2-lbl">Barcode / SKU</label>
+            <div class="v2-searchwrap">
+              <div class="v2-row">
+                <div class="v2-grow" style="position:relative">
+                  <input class="v2-input" value="122220307" oninput="dd(true)" onfocus="dd(true)" placeholder="Scan or type — live results…" />
+                  <div class="v2-dropdown" id="dd" style="display:none">
+                    <button class="v2-dd-item" onclick="dd(false)"><img data-fig="g" alt=""><span class="v2-dd-title">ELEMENT SHIRT</span><span class="v2-dd-bc">122220307</span></button>
+                    <button class="v2-dd-item" onclick="dd(false)"><img data-fig="g" alt=""><span class="v2-dd-title">UNTIMELY SHIRT</span><span class="v2-dd-bc">122220811</span></button>
+                  </div>
+                </div>
+                <button class="v2-btn">Look up</button>
+                <button class="v2-btn" onclick="modal('scan')">📷 Scan</button>
+              </div>
+            </div>
+
+            <div class="v2-card good">
+              <div class="v2-kv"><span>Matched product</span><b>ELEMENT SHIRT</b></div>
+              <div class="v2-kv"><span>Handle</span><span>/products/element-shirt</span></div>
+              <div class="v2-kv col"><span>Choose color variant <b class="v2-req">required</b></span>
+                <div class="v2-colors"><button class="v2-color sel">Black</button><button class="v2-color">White</button><button class="v2-color">Sand</button></div>
+              </div>
+            </div>
+
+            <label class="v2-lbl mt">Item type</label>
+            <input class="v2-input" value="Shirt" />
+            <div class="v2-presets"><button class="v2-chip">Jeans</button><button class="v2-chip">T-Shirt</button><button class="v2-chip">Shirt</button><button class="v2-chip">Dress</button><button class="v2-chip">Jacket</button><button class="v2-chip">Pants</button><button class="v2-chip">Hoodie</button></div>
+
+            <label class="v2-lbl mt">Item instruction (optional)</label>
+            <input class="v2-input" placeholder="e.g. oversized cut, high-waist…" />
+            <div class="v2-presets"><button class="v2-chip">super skinny fit</button><button class="v2-chip">baggy</button><button class="v2-chip">oversized cut</button><button class="v2-chip">relaxed fit</button></div>
+
+            <label class="v2-lbl mt">Model</label>
+            <div class="v2-models">
+              <div class="v2-model sel"><button class="v2-del">×</button><img data-fig="m1" alt=""><small>Gringo</small><small class="muted">male</small></div>
+              <div class="v2-model"><button class="v2-del">×</button><img data-fig="m2" alt=""><small>Rico</small><small class="muted">male</small></div>
+              <div class="v2-model"><button class="v2-del">×</button><img data-fig="m3" alt=""><small>Victor</small><small class="muted">male</small></div>
+              <div class="v2-model"><button class="v2-del">×</button><img data-fig="m4" alt=""><small>Latina</small><small class="muted">female</small></div>
+              <div class="v2-model add" onclick="document.getElementById('addm').style.display='block'"><div class="v2-plus">＋</div><small>Add model</small></div>
+            </div>
+
+            <div class="v2-addmodel" id="addm" style="display:none">
+              <label class="v2-lbl">New model</label>
+              <input class="v2-input" placeholder="Model name (e.g. Sofia)" />
+              <label class="v2-lbl" style="margin-top:12px">Gender</label>
+              <div class="v2-seg"><button class="v2-segbtn active">Female</button><button class="v2-segbtn">Male</button></div>
+              <button class="v2-drop mt8">Upload model photos (min 3)</button>
+              <div class="v2-thumbs"><div class="v2-thumb"><img data-fig="m4" alt=""><span class="x">×</span></div><div class="v2-thumb"><img data-fig="m4" alt=""><span class="x">×</span></div><div class="v2-thumb"><img data-fig="m4" alt=""><span class="x">×</span></div></div>
+              <div class="v2-row mt8"><button class="v2-btn primary">💾 Save model to server</button><button class="v2-btn ghost" onclick="document.getElementById('addm').style.display='none'">Cancel</button></div>
+            </div>
+            <div class="v2-hint">Models are stored on the server and reused across products. Deleting a model also deletes its photos.</div>
+
+            <label class="v2-lbl mt">Item reference photos</label>
+            <div class="v2-row">
+              <button class="v2-drop" onclick="modal('cam')">Upload or drop item reference photos here</button>
+              <button class="v2-btn" onclick="modal('cam')">📷 Camera</button>
+            </div>
+            <div class="v2-row mt8">
+              <button class="v2-btn">⬇ Import from Shopify</button>
+              <button class="v2-btn" onclick="modal('db')">🗂 Upload from Dropbox</button>
+            </div>
+            <div class="v2-thumbs"><div class="v2-thumb"><img data-fig="i" alt=""><span class="x">×</span></div><div class="v2-thumb"><img data-fig="i" alt=""><span class="x">×</span></div><div class="v2-thumb"><img data-fig="i" alt=""><span class="x">×</span></div></div>
+
+            <div class="v2-actions"><div class="v2-spacer"></div><button class="v2-btn primary" onclick="go(2)">Continue to Generate →</button></div>
+          </section>
+
+          <!-- ===== STEP 2 ===== -->
+          <section class="v2-panel" id="p2" style="display:none">
+            <h2>2 · Generate</h2>
+            <p class="v2-lead">One run does panel generation + 3:4 split. Auto = all panels; Manual = pick specific panels (this is how you regenerate a specific panel).</p>
+
+            <div class="v2-genopts">
+              <div class="v2-optrow">
+                <span class="v2-lbl" style="margin:0">Panels to generate</span>
+                <div class="v2-seg"><button class="v2-segbtn active" onclick="seg(this);pick(0)">Auto · all panels</button><button class="v2-segbtn" onclick="seg(this);pick(1)">Manual · choose</button></div>
+              </div>
+              <div class="v2-panelpick" id="pp" style="display:none">
+                <label class="v2-pp on"><input type="checkbox" checked> Front</label>
+                <label class="v2-pp on"><input type="checkbox" checked> Back</label>
+                <label class="v2-pp"><input type="checkbox"> 3/4 Left</label>
+                <label class="v2-pp"><input type="checkbox"> 3/4 Right</label>
+              </div>
+              <label class="v2-check"><input type="checkbox"><span>Run <b>pose-feasibility</b> check first</span><small>optional — recommended for dresses / sets / swimwear</small></label>
+            </div>
+
+            <div class="v2-regen">
+              <label class="v2-lbl" style="margin-top:0">Regeneration instructions (optional)</label>
+              <textarea class="v2-input" rows="2" placeholder="What to fix on regenerate — e.g. 'fix the back print', 'looser fit', 'face looks off, keep identity'…"></textarea>
+            </div>
+
+            <div class="v2-actions">
+              <button class="v2-btn primary">↻ Regenerate</button>
+              <button class="v2-btn ghost" onclick="go(1)">← Back</button>
+              <div class="v2-spacer"></div>
+              <span class="v2-hint" style="margin:0">3 of 4 selected</span>
+            </div>
+
+            <div class="v2-prog">
+              <div class="v2-progrow"><span>Panel 1 · Front</span><span class="v2-progstate done">done</span></div>
+              <div class="v2-progrow"><span>Panel 2 · Back</span><span class="v2-progstate done">done</span></div>
+            </div>
+
+            <div class="v2-results">
+              <div class="v2-res sel" onclick="this.classList.toggle('sel')"><div class="v2-tick">✓</div><div class="v2-qa">QA ✓</div><button class="v2-zoom" onclick="event.stopPropagation();lb()">⛶</button><img data-fig="r" alt=""><div class="v2-meta">Panel 1 · Pose A</div></div>
+              <div class="v2-res sel" onclick="this.classList.toggle('sel')"><div class="v2-tick">✓</div><div class="v2-qa">QA ✓</div><button class="v2-zoom" onclick="event.stopPropagation();lb()">⛶</button><img data-fig="r" alt=""><div class="v2-meta">Panel 1 · Pose B</div></div>
+              <div class="v2-res" onclick="this.classList.toggle('sel')"><div class="v2-tick">✓</div><div class="v2-qa">QA ✓</div><button class="v2-zoom" onclick="event.stopPropagation();lb()">⛶</button><img data-fig="r" alt=""><div class="v2-meta">Panel 2 · Pose A</div></div>
+              <div class="v2-res sel" onclick="this.classList.toggle('sel')"><div class="v2-tick">✓</div><div class="v2-qa">QA ✓</div><button class="v2-zoom" onclick="event.stopPropagation();lb()">⛶</button><img data-fig="r" alt=""><div class="v2-meta">Panel 2 · Pose B</div></div>
+            </div>
+            <div class="v2-actions"><div class="v2-hint" style="margin:0">Untick anything you don't want. Regenerate keeps the selected ones &amp; appends new splits.</div><div class="v2-spacer"></div><button class="v2-btn primary" onclick="go(3)">Continue to Publish →</button></div>
+          </section>
+
+          <!-- ===== STEP 3 ===== -->
+          <section class="v2-panel" id="p3" style="display:none">
+            <h2>3 · Publish</h2>
+            <p class="v2-lead">Existing Shopify media + your new images. Reorder, set the main image per variant, confirm alt text, then push everything at once.</p>
+
+            <div class="v2-card good">
+              <div class="v2-kv"><span>Publishing to</span><b>ELEMENT SHIRT · Black</b></div>
+              <div class="v2-kv"><span>Total images</span><span>5</span></div>
+            </div>
+
+            <label class="v2-lbl mt">① Product images — drag to reorder · ◀ ▶ to move · × removes from Shopify</label>
+            <div class="v2-mediagrid">
+              <div class="v2-mediacard"><span class="v2-srcbadge shopify">current</span><button class="v2-mediax">×</button><img data-fig="r" alt=""><div class="v2-mediabar"><button class="v2-movebtn">◀</button><span class="v2-posnum">1</span><button class="v2-movebtn">▶</button></div></div>
+              <div class="v2-mediacard"><span class="v2-srcbadge generated">new</span><button class="v2-mediax">×</button><img data-fig="r" alt=""><div class="v2-mediabar"><button class="v2-movebtn">◀</button><span class="v2-posnum">2</span><button class="v2-movebtn">▶</button></div></div>
+              <div class="v2-mediacard"><span class="v2-srcbadge generated">new</span><button class="v2-mediax">×</button><img data-fig="r" alt=""><div class="v2-mediabar"><button class="v2-movebtn">◀</button><span class="v2-posnum">3</span><button class="v2-movebtn">▶</button></div></div>
+            </div>
+
+            <label class="v2-lbl mt">② Main image per variant — tap a thumbnail to set the ★ main</label>
+            <div class="v2-variants">
+              <div class="v2-variant"><div class="v2-vh"><b>Black</b><small>· 3 variant(s)</small></div><div class="v2-vmain"><img data-fig="r" alt=""></div><div class="v2-vpics"><div class="v2-vpic main"><img data-fig="r" alt=""><span class="star">★</span></div><div class="v2-vpic"><img data-fig="r" alt=""><span class="star">★</span></div><div class="v2-vpic"><img data-fig="r" alt=""><span class="star">★</span></div></div></div>
+              <div class="v2-variant"><div class="v2-vh"><b>White</b><small>· 3 variant(s)</small></div><div class="v2-vmain"><div class="v2-vdrop">tap a thumbnail below to set the main image</div></div><div class="v2-vpics"><div class="v2-vpic"><img data-fig="r" alt=""><span class="star">★</span></div><div class="v2-vpic"><img data-fig="r" alt=""><span class="star">★</span></div></div></div>
+            </div>
+
+            <div class="v2-row mt" style="justify-content:space-between">
+              <label class="v2-lbl" style="margin:0">③ Alt text — all images (auto-generated when missing)</label>
+              <button class="v2-btn ghost">Fill missing alt</button>
+            </div>
+            <div class="v2-altlist">
+              <div class="v2-altrow"><img data-fig="r" alt=""><input class="v2-input" value="Model in black Element shirt, front view"><button class="v2-btn ghost">↻</button></div>
+              <div class="v2-altrow"><img data-fig="r" alt=""><input class="v2-input" placeholder="Writing alt…"><button class="v2-btn ghost">↻</button></div>
+            </div>
+
+            <div class="v2-actions">
+              <button class="v2-btn primary">Push everything to Shopify</button>
+              <button class="v2-btn cyan">✨ Optimize SEO</button>
+              <button class="v2-btn ghost" onclick="go(2)">← Back</button>
+            </div>
+
+            <div class="v2-seo">
+              <div class="v2-seohead">
+                <div class="v2-scorebig"><span class="v2-scorenum">86</span><span class="v2-scoremax">/100</span><span class="v2-grade">B</span></div>
+                <div class="v2-scoremeta"><div class="v2-scorelabel">SEO readiness score (Google on-page grader)</div><div class="v2-scoreprev">was 61/100 before</div><div class="v2-scorewarn">Below 98 — click Regenerate to push it higher.</div></div>
+                <button class="v2-btn ghost">↻ Regenerate</button>
+              </div>
+              <div class="v2-scorefields"><span class="v2-fieldscore">SEO title <b>92</b></span><span class="v2-fieldscore">Meta description <b>88</b></span><span class="v2-fieldscore">Body description <b>84</b></span><span class="v2-fieldscore">Tags <b>80</b></span></div>
+              <label class="v2-lbl mt">SEO title</label><input class="v2-input" value="Element Shirt — Black Cotton Button-Up | Carbon">
+              <label class="v2-lbl mt">Meta description</label><textarea class="v2-input" rows="2">Shop the Element Shirt in black — premium cotton, tailored fit. Free shipping at Carbon.</textarea>
+              <label class="v2-lbl mt">Tags</label><input class="v2-input" value="shirt, black, cotton, mens, button-up">
+              <div class="v2-actions"><button class="v2-btn primary">Publish SEO to Shopify</button></div>
+            </div>
+          </section>
+
+          <!-- ===== MOBILE SCAN MODAL — device camera, NO QR ===== -->
+          <div class="v2-modal" id="m-scan" style="display:none">
+            <div class="v2-modalcard">
+              <div class="v2-modalhead"><b>Scan barcode</b><button class="v2-btn ghost" onclick="modal()">Close</button></div>
+              <div class="v2-scanframe">Live camera<div class="v2-scanguide"></div></div>
+              <div class="v2-hint" style="text-align:center">Align the barcode inside the frame. The camera turns off automatically once scanned.</div>
+            </div>
+          </div>
+
+          <!-- ===== MOBILE CAMERA MODAL — device camera/library, NO QR ===== -->
+          <div class="v2-modal" id="m-cam" style="display:none">
+            <div class="v2-modalcard">
+              <div class="v2-modalhead"><b>Add item photos</b><button class="v2-btn ghost" onclick="modal()">Close</button></div>
+              <div class="v2-actions" style="margin-top:0;flex-direction:column;align-items:stretch">
+                <button class="v2-btn primary">📷 Take a photo</button>
+                <button class="v2-btn">🖼 Choose from library</button>
+              </div>
+              <div class="v2-hint" style="text-align:center">Opens your phone camera / gallery directly. Take or pick multiple — each appears as a reference photo.</div>
+            </div>
+          </div>
+
+          <!-- ===== DROPBOX MODAL ===== -->
+          <div class="v2-modal" id="m-db" style="display:none">
+            <div class="v2-modalcard">
+              <div class="v2-modalhead"><b>Dropbox · elior perez</b><button class="v2-btn ghost" onclick="modal()">Close</button></div>
+              <div class="v2-row" style="justify-content:space-between"><span class="v2-hint" style="margin:0">9 image(s) found for "122220307"</span><button class="v2-btn" onclick="modal()">Add all</button></div>
+              <div class="v2-dbgrid">
+                <button class="v2-dbcell-add"><img data-fig="i" alt=""><span>front.png</span></button>
+                <button class="v2-dbcell-add"><img data-fig="i" alt=""><span>back.png</span></button>
+                <button class="v2-dbcell-add"><img data-fig="i" alt=""><span>detail.png</span></button>
+                <button class="v2-dbcell-add"><img data-fig="i" alt=""><span>flat1.png</span></button>
+                <button class="v2-dbcell-add"><img data-fig="i" alt=""><span>flat2.png</span></button>
+                <button class="v2-dbcell-add"><img data-fig="i" alt=""><span>tag.png</span></button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ===== LIGHTBOX ===== -->
+          <div class="v2-lb" id="m-lb" style="display:none" onclick="lbClose()">
+            <button class="v2-lbclose" onclick="lbClose()">×</button>
+            <div class="v2-frame" onclick="event.stopPropagation()">
+              <div class="v2-lbmain"><img data-fig="r" alt=""></div>
+              <div class="v2-cap">Panel 1 · Pose A · 1/4</div>
+            </div>
+          </div>
+
+        </div><!-- /v2-wrap -->
+      </div><!-- /scroll -->
+    </div></div>
+  </div>
+</div>
+
+<div class="foot">
+  <p><b>Fixes folded in (your 7 points):</b> ① Camera/Scan now open the <b>device camera</b> directly (QR removed on mobile). ② No Shopify/Lightspeed/Dropbox status panel. ③ Built from the <b>live desktop <code>V2_CSS</code></b> — identical colors/buttons/panels/background. ④ Background <b>beep via system notification + vibrate</b> on generation done. ⑤ Alt text block (auto-fill + per-image ↻) sits in Publish before Push. ⑥ Per-panel regenerate via <b>Manual mode</b> + Regenerate (keeps selected, appends new splits). ⑦ Publish is ordered ① reorder → ② main image per variant → ③ alt text → push.</p>
+</div>
+
+<script>
+function go(n){
+  for(const i of [1,2,3]) document.getElementById('p'+i).style.display=(i===n?'block':'none');
+  document.getElementById('st1').className='v2-step'+(n===1?' active':n>1?' done':'');
+  document.getElementById('st2').className='v2-step'+(n===2?' active':n>2?' done':'');
+  document.getElementById('st3').className='v2-step'+(n===3?' active':'');
+  document.getElementById('scroll').scrollTop=0;
+}
+function dd(s){ document.getElementById('dd').style.display=s?'block':'none'; }
+function seg(b){ for(const s of b.parentNode.children) s.classList.remove('active'); b.classList.add('active'); }
+function pick(on){ document.getElementById('pp').style.display=on?'flex':'none'; }
+function modal(id){
+  for(const m of ['scan','cam','db']) document.getElementById('m-'+m).style.display='none';
+  if(id) document.getElementById('m-'+id).style.display='grid';
+}
+function lb(){ document.getElementById('m-lb').style.display='grid'; }
+function lbClose(){ document.getElementById('m-lb').style.display='none'; }
+// placeholder imagery (offline-safe gradients) so real <img> sizing applies
+const FIGS={
+  r:['#3a2c5c','#1a2735'], i:['#2a2440','#16202c'], g:['#3b2a5e','#1c2b3a'],
+  m1:['#caa78d','#7c5a44'], m2:['#9c6b4f','#4d2f22'], m3:['#d8b89c','#86614a'], m4:['#e6c3a8','#9a6f54']
+};
+function fig(a,b){ return "data:image/svg+xml,"+encodeURIComponent(
+  "<svg xmlns='http://www.w3.org/2000/svg' width='90' height='120'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='"+a+"'/><stop offset='1' stop-color='"+b+"'/></linearGradient></defs><rect width='90' height='120' fill='url(%23g)'/></svg>"); }
+document.querySelectorAll('img[data-fig]').forEach(im=>{ const c=FIGS[im.getAttribute('data-fig')]||FIGS.r; im.src=fig(c[0],c[1]); });
+</script>
+</body>
+</html>
