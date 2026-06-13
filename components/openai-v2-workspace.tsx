@@ -863,9 +863,13 @@ export default function OpenAiV2Workspace() {
     const chosen = genMode === "manual" ? uniqueSortedPanels(selectedPanels) : [...PANELS];
     if (!chosen.length) return setError("Pick at least one panel to generate.");
     const isRegen = results.length > 0; // the Generate button becomes "Regenerate" after the first run
+    // On regenerate, keep the halves the user selected and append the freshly
+    // generated splits below; only the unselected halves are dropped. The first
+    // run starts from an empty gallery. runTag keeps appended IDs unique across runs.
+    const keptResults = isRegen ? results.filter((r) => r.selected) : [];
+    const runTag = Date.now().toString(36);
     setError(null);
     setGenerating(true);
-    setResults([]);
     const startProgress: Record<number, string> = {};
     chosen.forEach((p) => (startProgress[p] = "queued"));
     setPanelProgress(startProgress);
@@ -914,8 +918,8 @@ export default function OpenAiV2Workspace() {
       const { left, right } = await splitPanelToThreeByFour(b64);
       setPanelProgress((prev) => ({ ...prev, [panel]: "done" }));
       return [
-        { id: `p${panel}-l`, panel, side: "left", label: `Panel ${panel} · Pose ${poseA}`, b64: left, selected: true },
-        { id: `p${panel}-r`, panel, side: "right", label: `Panel ${panel} · Pose ${poseB}`, b64: right, selected: true },
+        { id: `p${panel}-l-${runTag}`, panel, side: "left", label: `Panel ${panel} · Pose ${poseA}`, b64: left, selected: true },
+        { id: `p${panel}-r-${runTag}`, panel, side: "right", label: `Panel ${panel} · Pose ${poseB}`, b64: right, selected: true },
       ];
     };
 
@@ -929,7 +933,7 @@ export default function OpenAiV2Workspace() {
         setPanelProgress((prev) => ({ ...prev, [chosen[i]]: "failed" }));
       }
     });
-    setResults(ok);
+    setResults(isRegen ? [...keptResults, ...ok] : ok);
     setGenerating(false);
     if (ok.length) playDone(); // chime when panels are ready
     if (failures.length && ok.length) setStatus(`Some panels failed: ${failures.join(" | ")}`);
@@ -1855,7 +1859,7 @@ const V2_CSS = `
 .v2-model img{width:80px;height:80px;border-radius:8px;object-fit:cover;display:block}
 .v2-model small{display:block;font-size:11px;margin-top:4px}
 .v2-model small.muted{color:var(--muted)}
-.v2-model .v2-del{position:absolute;top:4px;right:4px;z-index:3;width:22px;height:22px;min-width:22px;flex:none;aspect-ratio:1/1;box-sizing:border-box;padding:0;border-radius:50%;background:rgba(248,113,113,.9);border:none;display:flex;align-items:center;justify-content:center;font-size:15px;line-height:1;color:#fff;cursor:pointer;opacity:1}
+.v2-model .v2-del{position:absolute;top:4px;right:4px;z-index:3;width:22px;height:22px;min-width:22px;min-height:22px;flex:none;aspect-ratio:1/1;box-sizing:border-box;padding:0;border-radius:50%;background:rgba(248,113,113,.9);border:none;display:flex;align-items:center;justify-content:center;font-size:15px;line-height:1;color:#fff;cursor:pointer;opacity:1}
 .v2-model .v2-del:hover{background:#ef4444}
 .v2-model.add{display:grid;place-items:center;color:var(--muted);border-style:dashed;min-height:113px}
 .v2-plus{font-size:24px}
