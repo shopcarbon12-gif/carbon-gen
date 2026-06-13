@@ -1,4 +1,5 @@
 import {
+  CopyObjectCommand,
   DeleteObjectsCommand,
   GetObjectCommand,
   ListObjectsV2Command,
@@ -144,6 +145,31 @@ export async function deleteStorageObjects(paths: string[]) {
     deleted += chunk.length;
   }
   return { deleted };
+}
+
+/**
+ * Server-side copy of one storage object to a new key (no bytes pass through the
+ * app). Used to relocate saved-model photos out of the sweepable models/uploads/
+ * staging area into a permanent prefix. Returns the destination object's path.
+ */
+export async function copyStorageObject(sourcePath: string, destPath: string) {
+  const provider = getActiveStorageProvider();
+  const src = normalizePath(sourcePath);
+  const dest = normalizePath(destPath);
+  if (!src || !dest) throw new Error("copyStorageObject requires source and destination paths.");
+  if (src === dest) return { path: dest };
+
+  const client = getR2Client(provider.r2);
+  // CopySource must be `<bucket>/<key>` with each path segment URL-encoded.
+  const copySource = `${provider.r2.bucket}/${src.split("/").map(encodeURIComponent).join("/")}`;
+  await client.send(
+    new CopyObjectCommand({
+      Bucket: provider.r2.bucket,
+      Key: dest,
+      CopySource: copySource,
+    })
+  );
+  return { path: dest };
 }
 
 export async function listStorageFiles(

@@ -1,8 +1,34 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { uploadBytesToStorage } from "@/lib/storageProvider";
+import {
+  copyStorageObject,
+  getStoragePublicUrl,
+  tryGetStoragePathFromUrl,
+  uploadBytesToStorage,
+} from "@/lib/storageProvider";
 import { insertModelRow, modelNameExistsForUser } from "@/lib/modelsRepository";
-import { getStoragePublicUrl } from "@/lib/storageProvider";
+
+// Saved-model photos are uploaded to the transient models/uploads/<user>/... area.
+// Before persisting the model, relocate each photo to a permanent models/saved/<id>/
+// prefix that no cleanup sweep touches, so saved models never depend on a file living
+// in a sweepable folder. Best-effort: if a copy fails we keep the original uploads URL
+// (still covered by the cleanup allow-list), so a copy hiccup never blocks a save.
+async function relocateSavedModelPhotos(urls: string[], modelId: string): Promise<string[]> {
+  return Promise.all(
+    urls.map(async (url, index) => {
+      try {
+        const srcPath = tryGetStoragePathFromUrl(url);
+        if (!srcPath || !srcPath.startsWith("models/uploads/")) return url;
+        const basename = srcPath.split("/").pop() || `${index}.bin`;
+        const destPath = `models/saved/${modelId}/${index}-${basename}`;
+        await copyStorageObject(srcPath, destPath);
+        return getStoragePublicUrl(destPath);
+      } catch {
+        return url;
+      }
+    })
+  );
+}
 
 const DEFAULT_SESSION_USER_ID = "00000000-0000-0000-0000-000000000001";
 const modelSaveInFlight = new Set<string>();
@@ -330,12 +356,15 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const modelId = crypto.randomUUID();
+    const permanentUrls = await relocateSavedModelPhotos(urls, modelId);
+
     const data = await insertModelRow({
-      model_id: crypto.randomUUID(),
+      model_id: modelId,
       user_id: userId,
       name,
       gender,
-      ref_image_urls: urls,
+      ref_image_urls: permanentUrls,
     });
     return NextResponse.json({ model: data });
   } catch (e: any) {
