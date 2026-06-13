@@ -118,15 +118,6 @@ body:has(.collection-mapping-standalone-route) .app-bg-top-fade {
   display: none !important;
 }
 
-/* OpenAI V2 generator on mobile: hide ONLY the top background strip (the little
-   "patch" layered over the top of the page). The main page background is kept. */
-@media (max-width: 768px) {
-  body:has(.v2-wrap) .app-bg-top-photo,
-  body:has(.v2-wrap) .app-bg-top-fade {
-    display: none !important;
-  }
-}
-
 /* Collection mapping: --shell-content-top-offset chain matches workspace topbar (desktop 70px; mobile = bar height). */
 .collection-mapping-route,
 .collection-mapping-standalone-route {

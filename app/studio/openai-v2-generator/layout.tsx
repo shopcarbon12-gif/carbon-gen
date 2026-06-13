@@ -15,6 +15,20 @@ export default function StudioOpenAiV2Layout({ children }: { children: ReactNode
         .content {
           padding-top: 245px !important;
         }
+        /* Mobile only: remove the top background patch entirely and pull content
+           back to the normal mobile topbar offset (no 245px gap). Desktop keeps
+           the patch. Scoped to this route because the <style> only mounts here. */
+        @media (max-width: 900px) {
+          .app-bg-top-photo,
+          .app-bg-top-fade {
+            display: none !important;
+          }
+          .content {
+            padding-top: calc(
+              var(--shell-mobile-topbar-inner-height) + var(--shell-mobile-topbar-border)
+            ) !important;
+          }
+        }
       `}</style>
       {children}
     </>
