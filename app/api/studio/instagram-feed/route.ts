@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isRequestAuthed } from "@/lib/auth";
 import { fetchInstagramBusinessMedia } from "@/lib/instagram-meta-graph";
+import { readInstagramCredentials } from "@/lib/instagramConnectionRepository";
 import type { InstagramMediaItem } from "@/lib/instagram-feed/types";
 
 export const runtime = "nodejs";
@@ -11,8 +12,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
-  const igUserId = String(process.env.META_INSTAGRAM_BUSINESS_ACCOUNT_ID || "").trim();
-  const accessToken = String(process.env.META_PAGE_ACCESS_TOKEN || "").trim();
+  /* Env vars if pinned, otherwise the connection stored by the Connect flow —
+     the studio preview and the public storefront feed must agree on which
+     account they are showing. */
+  const creds = await readInstagramCredentials();
+  const igUserId = creds?.igUserId ?? "";
+  const accessToken = creds?.accessToken ?? "";
 
   if (!igUserId || !accessToken) {
     const missingEnv: string[] = [];

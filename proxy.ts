@@ -61,6 +61,14 @@ export function proxy(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // Public storefront Instagram feed: shopcarbon.com fetches it cross-origin
+  // with no Carbon session, exactly like the widget script above. Without this
+  // bypass the /api/ gate further down answers 401 and the homepage feed stays
+  // empty. The route returns only post images and permalinks — never the token.
+  if (pathname === "/api/public/instagram-feed") {
+    return NextResponse.next();
+  }
+
   const legacyCollectionMappingPath = "/studio/shopify-collection-mapping";
   const publicCollectionMappingPath = "/shopify-collection-mapping";
 
