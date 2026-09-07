@@ -1,11 +1,12 @@
 {% comment %}
   Homepage Instagram row — the Custom Liquid section under "FOLLOW US ON INSTAGRAM".
 
-  The whole widget (profile header, hero, scrolling tiles, hover state, post
-  popup) is served from Carbon at /instagram/widget, so this section is just a
-  mount point. That keeps the live site and the studio at
-  /studio/instagram-widget rendering from one implementation instead of two
-  copies that drift apart.
+  Deliberately empty of content. The hero, the profile header, the post grid and
+  the popup are all built by the widget Carbon serves at /instagram/widget, and
+  every value it uses — hero image, overlay text, handle, follow button — is
+  edited at app.shopcarbon.com/studio/instagram-widget. Nothing about the
+  section lives in the theme any more, so changing it never means touching
+  Shopify, and the live row cannot drift from what the studio shows.
 
   Posts come from Carbon's own endpoint, which calls Meta at most once every 15
   minutes and serves every shopper from cache — traffic can never exhaust a
@@ -14,17 +15,7 @@
 
   If the feed is ever unavailable the widget renders nothing at all, leaving
   this container empty rather than showing a broken or half-filled section.
-
-  data-hero      the banner image (Shopify Files URL)
-  data-hero-text the overlay text on the banner
-  data-limit     how many posts to load
 {% endcomment %}
 
-<div
-  data-carbon-instagram
-  data-handle="shopcarbon"
-  data-hero="https://cdn.shopify.com/s/files/1/0680/6572/2620/files/DZ__3128.jpg?v=1733764412"
-  data-hero-text="@shopcarbon"
-  data-limit="12"
-></div>
+<div data-carbon-instagram></div>
 <script src="https://app.shopcarbon.com/instagram/widget" defer></script>
