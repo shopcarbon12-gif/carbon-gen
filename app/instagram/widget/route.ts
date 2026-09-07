@@ -38,37 +38,63 @@ const CSS = `
 .cig-root *,.cig-root *::before,.cig-root *::after,
 .cig-pop *,.cig-pop *::before,.cig-pop *::after{box-sizing:border-box}
 
-/* ---------- profile header ---------- */
-.cig-bar{display:flex;align-items:center;justify-content:center;gap:22px;padding:4px 0 18px;flex-wrap:wrap}
-.cig-avatar{width:56px;height:56px;border-radius:50%;padding:2px;flex:0 0 auto;
-  background:linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)}
-.cig-avatar img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;border:2px solid #fff;background:#fff}
-.cig-id{display:flex;flex-direction:column;line-height:1.25}
-.cig-name{font-weight:700;font-size:15px}
-.cig-handle{font-size:14px;color:var(--cig-muted)}
-.cig-stats{display:flex;gap:22px}
-.cig-stat{display:flex;flex-direction:column;align-items:center;line-height:1.25}
-.cig-statv{font-weight:700;font-size:15px}
-.cig-statl{font-size:13px;color:var(--cig-muted)}
-.cig-follow{display:inline-flex;align-items:center;gap:8px;background:var(--cig-blue);color:#fff;
-  font-weight:600;font-size:14px;text-decoration:none;padding:9px 16px;border-radius:8px;line-height:1}
-.cig-follow:hover{filter:brightness(.95)}
-.cig-follow svg{width:16px;height:16px;fill:currentColor}
+/* ---------- profile header ----------
+   Values mirror .profileBar / .followBtn in the studio's CSS module. A grid,
+   not a flex row, so the name, both counts and the button sit on one baseline
+   grid the way the studio lays them out. */
+.cig-bar{display:flex;justify-content:center;width:100%;margin-bottom:22px}
+.cig-barIn{display:grid;align-items:center;justify-content:center;
+  column-gap:clamp(20px,3.5vw,36px);row-gap:14px;
+  grid-template-columns:auto auto auto auto auto;
+  grid-template-areas:"avatar name posts followers btn";max-width:100%}
+/* The avatar asset already carries its gradient ring — a second ring in CSS
+   double-draws it. */
+.cig-avatar{grid-area:avatar;width:60px;height:60px;border-radius:50%;overflow:hidden;
+  justify-self:start;flex-shrink:0}
+.cig-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.cig-id{grid-area:name;text-align:left;min-width:0;justify-self:start}
+.cig-name{font-size:1.125rem;font-weight:700;color:#000;letter-spacing:.04em;text-transform:uppercase}
+.cig-handle{font-size:.9375rem;color:#8e8e8e;margin-top:2px}
+.cig-stats{display:contents}
+.cig-stat{display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:0;justify-self:start}
+.cig-stat[data-k="posts"]{grid-area:posts}
+.cig-stat[data-k="followers"]{grid-area:followers}
+.cig-statv{font-size:1.125rem;font-weight:700;color:#000;line-height:1.15}
+.cig-statl{font-size:.8125rem;font-weight:400;color:#8e8e8e;line-height:1.2}
+.cig-follow{grid-area:btn;justify-self:start;display:inline-flex;align-items:center;gap:8px;
+  padding:10px 20px;border-radius:8px;background:#0095f6;color:#fff;font-size:.9375rem;
+  font-weight:700;text-decoration:none}
+.cig-follow:hover{filter:brightness(1.05)}
+/* Outlined white camera, not the gradient wordmark logo — the studio's glyph. */
+.cig-follow svg{width:18px;height:18px;flex-shrink:0;fill:none;stroke:currentColor;
+  stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.cig-follow svg .cig-dotFill{fill:currentColor;stroke:none}
 
 /* ---------- hero + tiles ---------- */
 .cig-media{display:flex;gap:10px;align-items:stretch}
 .cig-hero{position:relative;flex:1 1 50%;min-width:0;overflow:hidden}
-.cig-hero img,.cig-hero video{width:100%;height:100%;object-fit:cover;display:block}
-.cig-heroLink{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center}
-.cig-heroLink a{color:#fff;font-weight:600;font-size:var(--cig-heroFsD,28px);text-decoration:none;text-shadow:0 1px 6px rgba(0,0,0,.45)}
+/* Slow push-in on hover, same 0.55s / 1.04 as the studio's .banner. */
+.cig-hero img,.cig-hero video{width:100%;height:100%;object-fit:cover;display:block;
+  transition:transform .55s ease}
+.cig-hero:hover img,.cig-hero:hover video{transform:scale(1.04)}
+/* Sits above the image so the hover push-in happens behind it, and matches the
+   studio's .instagramLink: weight 500, underline on hover, no shadow. */
+.cig-heroLink{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);padding:10px 15px;
+  z-index:4;text-align:center;font-size:var(--cig-heroFsD,clamp(1.25rem,3vw,2rem));color:#fff}
+.cig-heroLink a{font-size:inherit;color:#fff;font-weight:500;text-decoration:none}
+.cig-heroLink a:hover{text-decoration:underline}
 .cig-tilesCell{position:relative;flex:1 1 50%;min-width:0}
 .cig-viewport{overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-ms-overflow-style:none;scroll-behavior:smooth}
 .cig-viewport::-webkit-scrollbar{display:none}
 .cig-strip{display:flex;gap:10px}
 .cig-col{display:flex;flex-direction:column;gap:10px;flex:0 0 auto}
 
-.cig-tile{position:relative;display:block;padding:0;border:0;background:#f2f2f2;cursor:pointer;overflow:hidden}
-.cig-tile img{width:100%;height:100%;object-fit:cover;display:block}
+.cig-tile{position:relative;display:block;padding:0;border:0;background:#e5e7eb;cursor:pointer;
+  overflow:hidden;border-radius:2px}
+/* The tiles push in on hover too, matching the hero rather than sitting static
+   next to it. The image scales under the overlay, which does not move. */
+.cig-tile img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .55s ease}
+.cig-tile:hover img,.cig-tile:focus-visible img{transform:scale(1.04)}
 
 /* multi-post marker: only rendered for carousels */
 .cig-badge{position:absolute;top:8px;right:8px;width:18px;height:18px;pointer-events:none;
@@ -90,19 +116,33 @@ const CSS = `
   display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:5}
 @media (max-width:900px){ .cig-hcap{-webkit-line-clamp:3;font-size:11.5px} }
 
-.cig-arrow{position:absolute;top:50%;transform:translateY(-50%);width:34px;height:34px;border-radius:50%;
-  border:0;background:rgba(255,255,255,.94);box-shadow:0 1px 6px rgba(0,0,0,.25);cursor:pointer;
-  display:flex;align-items:center;justify-content:center;z-index:2}
+/* Mirrored semicircles that curve toward the grid with the flat edge outward,
+   matching .scrollBtn in the studio: 30x60, near-black, 0.85 idle opacity
+   rising to 1, and a directional shadow on hover. */
+.cig-arrow{position:absolute;top:50%;transform:translate3d(0,-50%,0) scale(1);transform-origin:50% 50%;
+  z-index:4;width:30px;height:60px;padding:0;display:flex;align-items:center;border:none;
+  background:rgba(0,0,0,.88);opacity:.85;color:#fff;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;box-shadow:0 2px 10px rgba(0,0,0,.28);
+  transition:all .2s ease}
 .cig-arrow[hidden]{display:none}
-.cig-arrow svg{width:15px;height:15px;fill:#333}
-.cig-arrow[data-side="prev"]{left:-14px}
-.cig-arrow[data-side="next"]{right:-14px}
+.cig-arrow:hover{opacity:1;background:rgba(0,0,0,.88);transform:translate3d(0,-50%,0) scale(1)}
+.cig-arrow:active{transform:translate3d(0,-50%,0) scale(.943);opacity:1}
+.cig-arrow:focus-visible{outline:2px solid #0095f6;outline-offset:2px}
+.cig-arrow[data-side="prev"]{left:0;border-radius:0 30px 30px 0;justify-content:flex-start;padding-left:4px}
+.cig-arrow[data-side="next"]{right:0;border-radius:30px 0 0 30px;justify-content:flex-end;padding-right:4px}
+.cig-arrow[data-side="prev"]:hover,.cig-arrow[data-side="prev"]:active{box-shadow:rgba(0,0,0,.3) 2px 0 5px 0}
+.cig-arrow[data-side="next"]:hover,.cig-arrow[data-side="next"]:active{box-shadow:rgba(0,0,0,.3) -2px 0 5px 0}
+.cig-arrow svg{display:block;flex-shrink:0;width:12px;height:12px;fill:currentColor}
 
 @media (max-width:900px){
   .cig-media{flex-direction:column}
   .cig-hero,.cig-tilesCell{flex:1 1 auto}
-  .cig-heroLink a{font-size:var(--cig-heroFsM,22px)}
-  .cig-bar{gap:14px}
+  .cig-heroLink{font-size:var(--cig-heroFsM,clamp(1.1rem,5vw,1.5rem))}
+  /* Five columns will not fit a phone: the avatar and name keep the top row and
+     the counts and button wrap beneath, still left-aligned to the name. */
+  .cig-barIn{grid-template-columns:auto 1fr;grid-template-areas:"avatar name" "posts followers" "btn btn";
+    column-gap:14px;justify-items:start}
+  .cig-follow{justify-self:center}
 }
 
 /* ---------- post popup ---------- */
@@ -150,7 +190,15 @@ const ICONS = {
     '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.7 11.2c0 4.2-3.9 7.6-8.7 7.6-1 0-2-.15-2.9-.42L4 20.9l1.6-4.1C4 15.4 3.3 13.4 3.3 11.2c0-4.2 3.9-7.6 8.7-7.6s8.7 3.4 8.7 7.6z"/></svg>',
   share:
     '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>',
+  /* Follow button glyph: outlined camera in the button's own colour, matching
+     the studio. The gradient wordmark logo reads as a different button. */
   ig:
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="3.25"/><circle class="cig-dotFill" cx="17.25" cy="6.75" r="0.9"/></svg>',
+  /* Filled carets — the hit target's shape comes from .cig-arrow, not these. */
+  caretPrev: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11 3.2L4.8 8 11 12.8 11 3.2z"/></svg>',
+  caretNext: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.2L11.2 8 5 12.8 5 3.2z"/></svg>',
+  /* The post header keeps the recognisable gradient mark. */
+  igMark:
     '<svg viewBox="0 0 24 24" aria-hidden="true"><defs><linearGradient id="cigG" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#f09433"/><stop offset=".5" stop-color="#dc2743"/><stop offset="1" stop-color="#bc1888"/></linearGradient></defs><path fill="url(#cigG)" d="M12 2.2c3.2 0 3.6 0 4.9.07 1.2.06 1.8.25 2.2.42.6.22 1 .48 1.4.9.4.4.7.8.9 1.4.17.4.36 1 .42 2.2.07 1.3.07 1.7.07 4.9s0 3.6-.07 4.9c-.06 1.2-.25 1.8-.42 2.2-.22.6-.5 1-.9 1.4-.4.4-.8.7-1.4.9-.4.17-1 .36-2.2.42-1.3.07-1.7.07-4.9.07s-3.6 0-4.9-.07c-1.2-.06-1.8-.25-2.2-.42-.6-.22-1-.5-1.4-.9-.4-.4-.7-.8-.9-1.4-.17-.4-.36-1-.42-2.2C2.2 15.6 2.2 15.2 2.2 12s0-3.6.07-4.9c.06-1.2.25-1.8.42-2.2.22-.6.5-1 .9-1.4.4-.4.8-.7 1.4-.9.4-.17 1-.36 2.2-.42C8.4 2.2 8.8 2.2 12 2.2zm0 3.2A6.6 6.6 0 1 0 18.6 12 6.6 6.6 0 0 0 12 5.4zm0 10.9A4.3 4.3 0 1 1 16.3 12 4.3 4.3 0 0 1 12 16.3zm6.9-11a1.55 1.55 0 1 1-1.55-1.55A1.55 1.55 0 0 1 18.9 5.3z"/></svg>',
 };
 
@@ -193,27 +241,33 @@ function pick(live, saved, fallback){
 
 function buildHeader(p, handle){
   var bar=el("div","cig-bar");
+  var inner=el("div","cig-barIn");
+  bar.appendChild(inner);
+
   var avatar=pick(p&&p.avatarUrl, CONF.profileAvatarUrl, "");
   if(avatar){
-    var av=el("div","cig-avatar"); var im=new Image(); im.src=avatar; im.alt=""; im.loading="lazy"; av.appendChild(im); bar.appendChild(av);
+    var av=el("div","cig-avatar"); var im=new Image(); im.src=avatar; im.alt=""; im.loading="lazy"; av.appendChild(im); inner.appendChild(av);
   }
   var id=el("div","cig-id");
   id.appendChild(txt(el("div","cig-name"), pick(p&&p.name, CONF.profileBrandName, handle)));
   id.appendChild(txt(el("div","cig-handle"), "@"+handle));
-  bar.appendChild(id);
+  inner.appendChild(id);
 
+  /* .cig-stats is display:contents, so each stat lands in its own grid area
+     rather than nesting — the header stays one row of aligned columns. */
   var stats=el("div","cig-stats");
-  function stat(v,l){var d=el("div","cig-stat");d.appendChild(txt(el("span","cig-statv"),v));d.appendChild(txt(el("span","cig-statl"),l));return d;}
+  function stat(v,l,k){var d=el("div","cig-stat");d.setAttribute("data-k",k);
+    d.appendChild(txt(el("span","cig-statv"),v));d.appendChild(txt(el("span","cig-statl"),l));return d;}
   var posts=pick(p&&p.mediaCount? compact(p.mediaCount):null, CONF.profilePostsCount, "");
   var followers=pick(p&&p.followersCount? compact(p.followersCount):null, CONF.profileFollowersCount, "");
-  if(posts) stats.appendChild(stat(posts,"Posts"));
-  if(followers) stats.appendChild(stat(followers,"Followers"));
-  bar.appendChild(stats);
+  if(posts) stats.appendChild(stat(posts,"Posts","posts"));
+  if(followers) stats.appendChild(stat(followers,"Followers","followers"));
+  inner.appendChild(stats);
 
   var f=el("a","cig-follow",I.ig+"<span>"+esc(pick(null,CONF.profileFollowButtonLabel,"Follow"))+"</span>");
   f.href=pick(null,CONF.profileFollowButtonHref,"https://www.instagram.com/"+handle+"/");
   f.target="_blank"; f.rel="noopener noreferrer";
-  bar.appendChild(f);
+  inner.appendChild(f);
   return bar;
 }
 
@@ -250,7 +304,7 @@ function buildPost(item, p, handle){
   head.appendChild(txt(el("span","cig-postDot"),"·"));
   var fo=el("a","cig-postFollow"); txt(fo,"Follow"); fo.href="https://www.instagram.com/"+handle+"/"; fo.target="_blank"; fo.rel="noopener noreferrer";
   head.appendChild(fo);
-  var ig=el("a","cig-postIg",I.ig); ig.href=item.permalink; ig.target="_blank"; ig.rel="noopener noreferrer";
+  var ig=el("a","cig-postIg",I.igMark); ig.href=item.permalink; ig.target="_blank"; ig.rel="noopener noreferrer";
   head.appendChild(ig);
   post.appendChild(head);
 
@@ -361,9 +415,9 @@ function mount(root){
       }
       vp.appendChild(strip); cell.appendChild(vp);
 
-      var prev=el("button","cig-arrow",'<svg viewBox="0 0 24 24"><path d="M15 4l-8 8 8 8z"/></svg>');
+      var prev=el("button","cig-arrow",I.caretPrev);
       prev.type="button"; prev.setAttribute("data-side","prev"); prev.setAttribute("aria-label","Previous");
-      var next=el("button","cig-arrow",'<svg viewBox="0 0 24 24"><path d="M9 4l8 8-8 8z"/></svg>');
+      var next=el("button","cig-arrow",I.caretNext);
       next.type="button"; next.setAttribute("data-side","next"); next.setAttribute("aria-label","Next");
       cell.appendChild(prev); cell.appendChild(next);
       media.appendChild(cell);
