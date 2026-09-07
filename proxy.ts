@@ -76,6 +76,13 @@ export function proxy(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // Public storefront Instagram settings: same reasoning as the feed above —
+  // fetched cross-origin by shoppers with no Carbon session. It returns only the
+  // section's own display settings, never a token or any account data.
+  if (pathname === "/api/public/instagram-config") {
+    return NextResponse.next();
+  }
+
   const legacyCollectionMappingPath = "/studio/shopify-collection-mapping";
   const publicCollectionMappingPath = "/shopify-collection-mapping";
 

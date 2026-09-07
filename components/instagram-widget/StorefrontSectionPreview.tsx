@@ -224,6 +224,29 @@ function TileTypeBadge({ mediaType }: { mediaType: InstagramMediaType }) {
   );
 }
 
+/**
+ * Like / comment counts shown on tile hover, above the caption. Same glyphs and
+ * counts the storefront widget draws in `.cig-hstats`.
+ */
+function TileHoverStats({ likes, comments }: { likes?: number; comments?: number }) {
+  return (
+    <span className={styles.tileHoverStats}>
+      <span className={styles.tileHoverStat}>
+        <svg viewBox="0 0 24 24" aria-hidden>
+          <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+        </svg>
+        <span>{compactCount(likes ?? 0)}</span>
+      </span>
+      <span className={styles.tileHoverStat}>
+        <svg viewBox="0 0 24 24" aria-hidden>
+          <path d="M12 2C6.48 2 2 6.02 2 11c0 2.8 1.42 5.29 3.64 6.94L5 22l4.4-2.3c.83.2 1.7.3 2.6.3 5.52 0 10-4.02 10-9s-4.48-9-10-9z" />
+        </svg>
+        <span>{compactCount(comments ?? 0)}</span>
+      </span>
+    </span>
+  );
+}
+
 function metaTileHoverCaption(item: InstagramMediaItem): string {
   const t = item.caption?.trim();
   if (t) return t;
@@ -1060,6 +1083,10 @@ export function StorefrontSectionPreview() {
                             />
                             <TileTypeBadge mediaType={item.mediaType} />
                             <span className={styles.tileHover} aria-hidden>
+                              <TileHoverStats
+                                likes={item.likeCount}
+                                comments={item.commentsCount}
+                              />
                               <span className={styles.tileHoverCaption}>
                                 {metaTileHoverCaption(item)}
                               </span>
@@ -1087,6 +1114,7 @@ export function StorefrontSectionPreview() {
                             unoptimized={nextImageUnoptimized(STOREFRONT_INSTAGRAM_HERO_IMAGE)}
                           />
                           <span className={styles.tileHover} aria-hidden>
+                            <TileHoverStats />
                             <span className={styles.tileHoverCaption}>
                               {placeholderTileHoverCaption()}
                             </span>

@@ -394,14 +394,17 @@ button.tile {
   display: block;
 }
 
-/* Hover: dim overlay + centered caption. */
+/* Hover: dim overlay, like/comment counts on top, caption underneath.
+   Mirrors .cig-hover in the storefront widget — the two must not drift. */
 .tileHover {
   position: absolute;
   inset: 0;
   z-index: 2;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 10px;
   padding: 14px 12px;
   box-sizing: border-box;
   background: rgba(0, 0, 0, 0.58);
@@ -410,6 +413,28 @@ button.tile {
   opacity: 0;
   transition: opacity 0.22s ease;
   pointer-events: none;
+}
+
+.tileHoverStats {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  flex: 0 0 auto;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.tileHoverStat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tileHoverStat svg {
+  width: 19px;
+  height: 19px;
+  fill: #fff;
 }
 
 .tile:hover .tileHover,
@@ -433,7 +458,9 @@ button.tile {
   font-family: var(--font-geist-sans, "Inter"), system-ui, sans-serif;
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 6;
+  /* Five, not six: the like/comment row now sits above the caption and needs
+     the line back, or the text runs into it on a short tile. */
+  -webkit-line-clamp: 5;
   overflow: hidden;
   text-overflow: ellipsis;
   word-break: break-word;

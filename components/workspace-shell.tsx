@@ -166,6 +166,8 @@ export function WorkspaceShell({
   const [shopifySubmenuOpen, setShopifySubmenuOpen] = useState(false);
   const [shopifyConfigSubmenuOpen, setShopifyConfigSubmenuOpen] = useState(false);
   const [metaAppConfigured, setMetaAppConfigured] = useState(false);
+  /** Publish Changes: pushes the studio's settings to the live storefront row. */
+  const [publishState, setPublishState] = useState<"idle" | "busy" | "done" | "error">("idle");
   /** Narrow device frame + grey workspace (all /studio/instagram-widget/* pages). */
   const [instagramMobilePreview, setInstagramMobilePreview] = useState(false);
   /** Snapshot of sources toolbar box in desktop mode — fixed overlay in mobile preview (pixel-identical on toggle). */
@@ -547,7 +549,32 @@ export function WorkspaceShell({
                 ) : null}
                 <PublishChangesButton
                   suppressHydrationWarning
-                  onClick={() => navigateTo(`${INSTAGRAM_WIDGET_ROOT}/layout`)}
+                  loading={publishState === "busy"}
+                  label={
+                    publishState === "done"
+                      ? "Published to shopcarbon.com"
+                      : publishState === "error"
+                        ? "Publish failed — retry"
+                        : "Publish Changes"
+                  }
+                  loadingLabel="Publishing..."
+                  title="Push these settings to the live Instagram section on shopcarbon.com"
+                  onClick={async () => {
+                    setPublishState("busy");
+                    try {
+                      const res = await fetch("/api/instagram/publish", {
+                        method: "POST",
+                        credentials: "include",
+                      });
+                      const json = await res.json().catch(() => null);
+                      setPublishState(res.ok && json?.ok ? "done" : "error");
+                    } catch {
+                      setPublishState("error");
+                    }
+                    /* Back to the neutral label, so the next edit does not look
+                       like it is already published. */
+                    setTimeout(() => setPublishState("idle"), 4000);
+                  }}
                 />
               </div>
             ) : null}

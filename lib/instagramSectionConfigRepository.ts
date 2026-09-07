@@ -66,6 +66,8 @@ export type InstagramSectionStoredConfig = {
   feedSliderAnimationSec?: number;
   /** Autoplay interval in seconds; 0 = disabled. */
   feedSliderAutoplaySec?: number;
+  /** ISO timestamp of the last push to the live storefront section. */
+  publishedAt?: string;
 };
 
 function localFilePath() {

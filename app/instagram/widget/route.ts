@@ -75,12 +75,20 @@ const CSS = `
   filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))}
 .cig-badge svg{width:100%;height:100%;display:block;fill:#fff}
 
-/* hover: dimmed image with the like / comment counts, as Instagram shows */
-.cig-hover{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:20px;
-  background:rgba(0,0,0,.35);opacity:0;transition:opacity .18s ease;color:#fff;font-weight:600;font-size:14px}
+/* hover: dimmed image, like/comment counts on top, caption underneath */
+.cig-hover{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:10px;padding:14px 12px;box-sizing:border-box;
+  background:rgba(0,0,0,.58);opacity:0;transition:opacity .18s ease;color:#fff;
+  font-weight:600;font-size:14px;text-align:center}
 .cig-tile:hover .cig-hover,.cig-tile:focus-visible .cig-hover{opacity:1}
+.cig-hstats{display:flex;align-items:center;justify-content:center;gap:20px;flex:0 0 auto}
 .cig-hstat{display:inline-flex;align-items:center;gap:6px}
 .cig-hstat svg{width:19px;height:19px;fill:#fff}
+/* The caption is clamped rather than scrolled: a tile is small, and a partial
+   line reads as "there is more" without stealing the pointer from the click. */
+.cig-hcap{font-weight:400;font-size:12.5px;line-height:1.45;overflow:hidden;
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:5}
+@media (max-width:900px){ .cig-hcap{-webkit-line-clamp:3;font-size:11.5px} }
 
 .cig-arrow{position:absolute;top:50%;transform:translateY(-50%);width:34px;height:34px;border-radius:50%;
   border:0;background:rgba(255,255,255,.94);box-shadow:0 1px 6px rgba(0,0,0,.25);cursor:pointer;
@@ -152,10 +160,10 @@ function widgetJs(origin: string, conf: InstagramSectionStoredConfig) {
 var ORIGIN=${JSON.stringify(origin)};
 var CSS=${JSON.stringify(CSS)};
 var I=${JSON.stringify(ICONS)};
-/* Saved in the studio at /studio/instagram-widget and baked in here rather than
-   fetched: it is already known when this script is built, and a second network
-   round-trip on every storefront page load would only delay the section. The
-   300s cache below is what bounds how long a Save takes to appear. */
+/* Settings saved in the studio. Baked in as the starting value so a config
+   request that fails still renders a correct row, then replaced by the live read
+   in mount() — this script is cached for five minutes, and publishing must not
+   wait for that to expire. */
 var CONF=${JSON.stringify(conf)};
 
 function el(tag,cls,html){var n=document.createElement(tag);if(cls)n.className=cls;if(html!=null)n.innerHTML=html;return n;}
@@ -220,8 +228,12 @@ function buildTile(item, onOpen){
   }
 
   var hov=el("span","cig-hover");
-  hov.appendChild(el("span","cig-hstat", I.heartFill+"<span>"+compact(item.likeCount||0)+"</span>"));
-  hov.appendChild(el("span","cig-hstat", I.commentFill+"<span>"+compact(item.commentsCount||0)+"</span>"));
+  var hs=el("span","cig-hstats");
+  hs.appendChild(el("span","cig-hstat", I.heartFill+"<span>"+compact(item.likeCount||0)+"</span>"));
+  hs.appendChild(el("span","cig-hstat", I.commentFill+"<span>"+compact(item.commentsCount||0)+"</span>"));
+  hov.appendChild(hs);
+  var capText=String(item.caption||"").trim();
+  if(capText) hov.appendChild(txt(el("span","cig-hcap"), capText));
   b.appendChild(hov);
 
   b.addEventListener("click", onOpen);
@@ -277,23 +289,37 @@ function buildPost(item, p, handle){
 }
 
 function mount(root){
-  /* The studio wins over the mount's data-* attributes: those are the theme's
-     starting values, but the studio is where the section is meant to be edited,
-     and an edit there must not need a theme change to take effect. */
-  var handle=pick(null, CONF.profileHandle, root.getAttribute("data-handle")||"shopcarbon").replace(/^@/,"");
-  var heroSrc=pick(null, CONF.heroImageUrl, root.getAttribute("data-hero")||"");
-  var heroText=pick(null, CONF.heroLinkText, root.getAttribute("data-hero-text")||("@"+handle));
-  var heroAlt=pick(null, CONF.heroAlt, "Instagram banner for @"+handle);
-  var heroHref=pick(null, CONF.heroLinkHref, "https://www.instagram.com/"+handle+"/");
   var limit=parseInt(root.getAttribute("data-limit")||"12",10)||12;
-  var arrowsOn=CONF.feedSliderArrowsEnabled!==false;
-  var dragOn=CONF.feedSliderDragEnabled!==false;
-  var animMs=Math.max(0,(Number(CONF.feedSliderAnimationSec)||0)*1000);
-  var autoplayMs=Math.max(0,(Number(CONF.feedSliderAutoplaySec)||0)*1000);
 
-  fetch(ORIGIN+"/api/public/instagram-feed?limit="+limit,{credentials:"omit"})
-    .then(function(r){return r.ok?r.json():null;})
-    .then(function(d){
+  /* Settings and posts together. The settings read is uncached, so pressing
+     "Publish Changes" in the studio reaches shoppers on their next page load
+     instead of waiting out this script's five-minute cache. If it fails, the
+     values baked in above still render the row. */
+  Promise.all([
+    fetch(ORIGIN+"/api/public/instagram-feed?limit="+limit,{credentials:"omit"})
+      .then(function(r){return r.ok?r.json():null;})
+      .catch(function(){return null;}),
+    fetch(ORIGIN+"/api/public/instagram-config",{credentials:"omit",cache:"no-store"})
+      .then(function(r){return r.ok?r.json():null;})
+      .catch(function(){return null;})
+  ])
+    .then(function(res){
+      var d=res[0];
+      if(res[1]&&res[1].ok&&res[1].config) CONF=res[1].config;
+
+      /* The studio wins over the mount's data-* attributes: those are only a
+         theme-side starting point, and an edit in the studio must not need a
+         theme change to take effect. */
+      var handle=pick(null, CONF.profileHandle, root.getAttribute("data-handle")||"shopcarbon").replace(/^@/,"");
+      var heroSrc=pick(null, CONF.heroImageUrl, root.getAttribute("data-hero")||"");
+      var heroText=pick(null, CONF.heroLinkText, root.getAttribute("data-hero-text")||("@"+handle));
+      var heroAlt=pick(null, CONF.heroAlt, "Instagram banner for @"+handle);
+      var heroHref=pick(null, CONF.heroLinkHref, "https://www.instagram.com/"+handle+"/");
+      var arrowsOn=CONF.feedSliderArrowsEnabled!==false;
+      var dragOn=CONF.feedSliderDragEnabled!==false;
+      var animMs=Math.max(0,(Number(CONF.feedSliderAnimationSec)||0)*1000);
+      var autoplayMs=Math.max(0,(Number(CONF.feedSliderAutoplaySec)||0)*1000);
+
       if(!d||!d.ok||!d.items||!d.items.length) return;   /* stays hidden */
       injectCss();
       root.classList.add("cig-root");
