@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { fetchInstagramBusinessMedia } from "@/lib/instagram-meta-graph";
+import { fetchInstagramBusinessMedia, fetchInstagramProfile } from "@/lib/instagram-meta-graph";
 import type { InstagramMediaItem } from "@/lib/instagram-feed/types";
 import { readInstagramCredentials } from "@/lib/instagramConnectionRepository";
 
@@ -41,7 +41,14 @@ const STALE_MS = 24 * 60 * 60 * 1000;
 const MAX_ITEMS = 24;
 const DEFAULT_ITEMS = 12;
 
-type Cached = { at: number; items: InstagramMediaItem[] };
+type Profile = {
+  username: string;
+  name: string;
+  avatarUrl: string;
+  followersCount: number;
+  mediaCount: number;
+};
+type Cached = { at: number; items: InstagramMediaItem[]; profile: Profile | null };
 
 /*
   Module scope: this app runs as a long-lived container, so the cache is shared
@@ -85,17 +92,29 @@ async function refresh(): Promise<Cached | null> {
     const creds = await readInstagramCredentials();
     if (!creds) return null;
 
-    const result = await fetchInstagramBusinessMedia({
-      igUserId: creds.igUserId,
-      accessToken: creds.accessToken,
-      limit: MAX_ITEMS,
-    });
+    /* Media and profile together: the header counts and the tiles come from
+       one refresh, so they can never disagree with each other. */
+    const [result, prof] = await Promise.all([
+      fetchInstagramBusinessMedia({
+        igUserId: creds.igUserId,
+        accessToken: creds.accessToken,
+        limit: MAX_ITEMS,
+      }),
+      fetchInstagramProfile({ igUserId: creds.igUserId, accessToken: creds.accessToken }),
+    ]);
     if (!result.ok) {
       // Logged, never returned: Graph errors name the account and the app.
       console.error("[instagram-feed] Graph error:", result.error);
       return null;
     }
-    const next: Cached = { at: Date.now(), items: result.items };
+    if (!prof.ok) console.error("[instagram-feed] profile error:", prof.error);
+    const next: Cached = {
+      at: Date.now(),
+      items: result.items,
+      /* A failed profile call must not discard good media — the widget falls
+         back to hiding the header rather than showing nothing at all. */
+      profile: prof.ok ? prof.profile : (cache?.profile ?? null),
+    };
     cache = next;
     return next;
   })().finally(() => {
@@ -135,13 +154,18 @@ export async function GET(req: NextRequest) {
     type: i.mediaType,
     image: i.mediaUrl,
     permalink: i.permalink,
-    caption: i.caption ? i.caption.slice(0, 300) : undefined,
+    /* Full caption: the popup shows it in full, the grid truncates for itself. */
+    caption: i.caption,
     timestamp: i.timestamp,
+    children: i.children,
+    likeCount: i.likeCount,
+    commentsCount: i.commentsCount,
   }));
 
   return NextResponse.json(
     {
       ok: true,
+      profile: payload.profile,
       items,
       count: items.length,
       cachedAt: new Date(payload.at).toISOString(),

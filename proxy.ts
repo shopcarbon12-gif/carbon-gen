@@ -61,6 +61,13 @@ export function proxy(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // Public storefront Instagram widget script: loaded cross-site via <script>
+  // by every shopper, none of whom have a Carbon session — same reasoning as
+  // the accessibility widget above.
+  if (pathname === "/instagram/widget") {
+    return NextResponse.next();
+  }
+
   // Public storefront Instagram feed: shopcarbon.com fetches it cross-origin
   // with no Carbon session, exactly like the widget script above. Without this
   // bypass the /api/ gate further down answers 401 and the homepage feed stays

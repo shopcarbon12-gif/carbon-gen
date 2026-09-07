@@ -17,6 +17,14 @@ export type InstagramMediaItem = {
   caption?: string;
   /** ISO 8601 from Graph `timestamp` — used for popup date line */
   timestamp?: string;
+  /**
+   * Every image of a carousel, in order, so the popup can page through a post
+   * instead of showing only its cover. Single-image posts omit this entirely,
+   * which is also what tells the grid whether to draw the multi-post badge.
+   */
+  children?: string[];
+  likeCount?: number;
+  commentsCount?: number;
 };
 
 export type InstagramProfileSummary = {
