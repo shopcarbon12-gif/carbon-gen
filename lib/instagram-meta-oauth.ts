@@ -14,11 +14,23 @@ const GRAPH = `https://graph.facebook.com/${GRAPH_VERSION}`;
  * and then dies quietly, which is the exact failure we are replacing.
  */
 
-export const META_SCOPES = [
+/**
+ * OAuth scopes requested at the login dialog.
+ *
+ * Overridable via META_SCOPES because Meta renames these: the legacy Instagram
+ * Graph API used `instagram_basic` + `pages_read_engagement`, while apps created
+ * under the newer "Manage messaging & content on Instagram" use case only accept
+ * the `instagram_business_*` names and reject the old ones outright ("Invalid
+ * Scopes"). Which set applies depends on how the Meta app was provisioned, and
+ * that cannot be detected from here — so it is configuration, not a constant,
+ * and correcting it never needs a code change.
+ */
+const DEFAULT_SCOPES = [
   "pages_show_list",
-  "instagram_basic",
-  "pages_read_engagement",
+  "instagram_business_basic",
 ].join(",");
+
+export const META_SCOPES = String(process.env.META_SCOPES || "").trim() || DEFAULT_SCOPES;
 
 export function metaAuthorizeUrl(params: {
   appId: string;
