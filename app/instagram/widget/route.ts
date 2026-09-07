@@ -43,12 +43,18 @@ const CSS = `
    not a flex row, so the name, both counts and the button sit on one baseline
    grid the way the studio lays them out. */
 .cig-bar{display:flex;justify-content:center;width:100%;margin-bottom:22px}
-.cig-barIn{display:grid;align-items:center;justify-content:center;
-  column-gap:clamp(20px,3.5vw,36px);row-gap:14px;
+/* Two rows, one column per field: the big values share the top line and the
+   small ones the bottom, so each reads straight across. Baseline alignment is
+   what keeps the bottom row level despite the handle and labels differing in
+   size. Avatar and button span both rows and centre against them. */
+.cig-barIn{display:grid;align-items:baseline;justify-content:center;
+  column-gap:clamp(20px,3.5vw,36px);row-gap:2px;
   grid-template-columns:auto auto auto auto auto;
-  grid-template-areas:"avatar name posts followers btn";max-width:100%}
+  grid-template-rows:auto auto;
+  grid-template-areas:"avatar name posts followers btn"
+                      "avatar handle postsLabel followersLabel btn";max-width:100%}
 .cig-avatar{grid-area:avatar;width:60px;height:60px;border-radius:50%;overflow:hidden;
-  justify-self:start;flex-shrink:0}
+  justify-self:start;align-self:center;flex-shrink:0}
 .cig-avatar img{width:100%;height:100%;object-fit:cover;display:block}
 /* The studio's fallback avatar asset has the gradient ring painted into the
    image; the picture Instagram returns does not. So the ring is drawn here only
@@ -56,16 +62,19 @@ const CSS = `
 .cig-avatar[data-ring="1"]{padding:2px;
   background:linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)}
 .cig-avatar[data-ring="1"] img{border-radius:50%;border:2px solid #fff;background:#fff}
-.cig-id{grid-area:name;text-align:left;min-width:0;justify-self:start}
-.cig-name{font-size:1.125rem;font-weight:700;color:#000;letter-spacing:.04em;text-transform:uppercase}
-.cig-handle{font-size:.9375rem;color:#8e8e8e;margin-top:2px}
-.cig-stats{display:contents}
-.cig-stat{display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:0;justify-self:start}
-.cig-stat[data-k="posts"]{grid-area:posts}
-.cig-stat[data-k="followers"]{grid-area:followers}
-.cig-statv{font-size:1.125rem;font-weight:700;color:#000;line-height:1.15}
-.cig-statl{font-size:.8125rem;font-weight:400;color:#8e8e8e;line-height:1.2}
-.cig-follow{grid-area:btn;justify-self:start;display:inline-flex;align-items:center;gap:8px;
+/* The wrappers dissolve so their children become grid items themselves — that is
+   what puts a value and its label in two different rows of one column. */
+.cig-id,.cig-stats,.cig-stat{display:contents}
+.cig-name{grid-area:name;justify-self:start;font-size:1.125rem;font-weight:700;color:#000;
+  letter-spacing:.04em;text-transform:uppercase}
+.cig-handle{grid-area:handle;justify-self:start;font-size:.9375rem;color:#8e8e8e}
+.cig-statv{justify-self:start;font-size:1.125rem;font-weight:700;color:#000;line-height:1.15}
+.cig-statl{justify-self:start;font-size:.8125rem;font-weight:400;color:#8e8e8e;line-height:1.2}
+.cig-stat[data-k="posts"] .cig-statv{grid-area:posts}
+.cig-stat[data-k="posts"] .cig-statl{grid-area:postsLabel}
+.cig-stat[data-k="followers"] .cig-statv{grid-area:followers}
+.cig-stat[data-k="followers"] .cig-statl{grid-area:followersLabel}
+.cig-follow{grid-area:btn;justify-self:start;align-self:center;display:inline-flex;align-items:center;gap:8px;
   padding:10px 20px;border-radius:8px;background:#0095f6;color:#fff;font-size:.9375rem;
   font-weight:700;text-decoration:none}
 .cig-follow:hover{filter:brightness(1.05)}
@@ -142,11 +151,17 @@ const CSS = `
   .cig-media{flex-direction:column}
   .cig-hero,.cig-tilesCell{flex:1 1 auto}
   .cig-heroLink{font-size:var(--cig-heroFsM,clamp(1.1rem,5vw,1.5rem))}
-  /* Five columns will not fit a phone: the avatar and name keep the top row and
-     the counts and button wrap beneath, still left-aligned to the name. */
-  .cig-barIn{grid-template-columns:auto 1fr;grid-template-areas:"avatar name" "posts followers" "btn btn";
-    column-gap:14px;justify-items:start}
-  .cig-follow{justify-self:center}
+  /* Five columns will not fit a phone. The identity keeps the top pair of rows
+     with the avatar, the two counts keep their own pair below it, and the button
+     spans the width — each pair still reading as two straight lines. */
+  .cig-barIn{grid-template-columns:auto auto auto;
+    grid-template-areas:"avatar name   name"
+                        "avatar handle handle"
+                        ".      posts  followers"
+                        ".      postsLabel followersLabel"
+                        "btn    btn    btn";
+    column-gap:16px;row-gap:2px}
+  .cig-follow{justify-self:center;margin-top:12px}
 }
 
 /* ---------- post popup ---------- */

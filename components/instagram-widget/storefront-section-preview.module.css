@@ -21,14 +21,27 @@
   flex-shrink: 0;
 }
 
+/*
+  Two rows, one column per field. The big values (CARBON, 322, 3.8K) share the
+  top row and the small ones (@shopcarbon, Posts, Followers) share the bottom,
+  so each reads as a single straight line across the header rather than as three
+  separate stacked blocks. `align-items: baseline` is what makes the bottom row
+  line up despite the handle and the labels being different sizes — matching
+  their box tops would leave the text visibly staggered.
+
+  The avatar and the follow button span both rows and centre against them.
+*/
 .profileBarInner {
   display: grid;
-  align-items: center;
+  align-items: baseline;
   justify-content: center;
   column-gap: clamp(20px, 3.5vw, 36px);
-  row-gap: 14px;
+  row-gap: 2px;
   grid-template-columns: auto auto auto auto auto;
-  grid-template-areas: "avatar name posts followers btn";
+  grid-template-rows: auto auto;
+  grid-template-areas:
+    "avatar name   posts      followers      btn"
+    "avatar handle postsLabel followersLabel btn";
   max-width: 100%;
   box-sizing: border-box;
 }
@@ -41,6 +54,8 @@
   border-radius: 50%;
   overflow: hidden;
   justify-self: start;
+  /* Centred against the pair of rows it spans, not baseline-aligned with them. */
+  align-self: center;
   flex-shrink: 0;
 }
 
@@ -51,14 +66,18 @@
   display: block;
 }
 
-.profileText {
-  grid-area: name;
-  text-align: left;
-  min-width: 0;
-  justify-self: start;
+/* The wrappers dissolve so their children become grid items in their own right —
+   that is what lets a value and its label sit in two different rows while
+   staying in one column. */
+.profileText,
+.statCluster,
+.stat {
+  display: contents;
 }
 
 .profileName {
+  grid-area: name;
+  justify-self: start;
   font-size: 1.125rem;
   font-weight: 700;
   color: #000;
@@ -67,34 +86,30 @@
 }
 
 .profileHandle {
+  grid-area: handle;
+  justify-self: start;
   font-size: 0.9375rem;
   color: #8e8e8e;
-  margin-top: 2px;
 }
 
-.stat {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  min-width: 0;
-}
-
-.statCluster {
-  display: contents;
-}
-
-.statPosts {
+.statPosts .statValue {
   grid-area: posts;
-  justify-self: start;
 }
 
-.statFollowers {
+.statPosts .statLabel {
+  grid-area: postsLabel;
+}
+
+.statFollowers .statValue {
   grid-area: followers;
-  justify-self: start;
+}
+
+.statFollowers .statLabel {
+  grid-area: followersLabel;
 }
 
 .statValue {
+  justify-self: start;
   font-size: 1.125rem;
   font-weight: 700;
   color: #000;
@@ -102,6 +117,7 @@
 }
 
 .statLabel {
+  justify-self: start;
   font-size: 0.8125rem;
   font-weight: 400;
   color: #8e8e8e;
@@ -111,6 +127,8 @@
 .followBtn {
   grid-area: btn;
   justify-self: start;
+  /* Centred against the two rows it spans, like the avatar. */
+  align-self: center;
   display: inline-flex;
   align-items: center;
   gap: 8px;
