@@ -491,16 +491,21 @@ ${heroTag}
             Handle
             <input value={cfg.profileHandle || ""} onChange={(e) => patch({ profileHandle: e.target.value })} />
           </label>
+          {/* Instagram reports these itself now, so what is typed here shows only
+              while the feed is loading or if Meta is unreachable. Labelled as
+              fallbacks so nobody edits them expecting the live numbers to move. */}
           <label>
-            Posts count label
+            Posts count fallback
             <input value={cfg.profilePostsCount || ""} onChange={(e) => patch({ profilePostsCount: e.target.value })} />
+            <small>Live count from Instagram is used when available.</small>
           </label>
           <label>
-            Followers label
+            Followers fallback
             <input
               value={cfg.profileFollowersCount || ""}
               onChange={(e) => patch({ profileFollowersCount: e.target.value })}
             />
+            <small>Live count from Instagram is used when available.</small>
           </label>
           <label>
             Follow button label

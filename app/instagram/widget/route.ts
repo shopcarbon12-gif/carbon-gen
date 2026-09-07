@@ -1,5 +1,9 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import {
+  loadInstagramSectionConfig,
+  type InstagramSectionStoredConfig,
+} from "@/lib/instagramSectionConfigRepository";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,7 +60,7 @@ const CSS = `
 .cig-hero{position:relative;flex:1 1 50%;min-width:0;overflow:hidden}
 .cig-hero img,.cig-hero video{width:100%;height:100%;object-fit:cover;display:block}
 .cig-heroLink{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center}
-.cig-heroLink a{color:#fff;font-weight:600;font-size:28px;text-decoration:none;text-shadow:0 1px 6px rgba(0,0,0,.45)}
+.cig-heroLink a{color:#fff;font-weight:600;font-size:var(--cig-heroFsD,28px);text-decoration:none;text-shadow:0 1px 6px rgba(0,0,0,.45)}
 .cig-tilesCell{position:relative;flex:1 1 50%;min-width:0}
 .cig-viewport{overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-ms-overflow-style:none;scroll-behavior:smooth}
 .cig-viewport::-webkit-scrollbar{display:none}
@@ -89,7 +93,7 @@ const CSS = `
 @media (max-width:900px){
   .cig-media{flex-direction:column}
   .cig-hero,.cig-tilesCell{flex:1 1 auto}
-  .cig-heroLink a{font-size:22px}
+  .cig-heroLink a{font-size:var(--cig-heroFsM,22px)}
   .cig-bar{gap:14px}
 }
 
@@ -142,15 +146,25 @@ const ICONS = {
     '<svg viewBox="0 0 24 24" aria-hidden="true"><defs><linearGradient id="cigG" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#f09433"/><stop offset=".5" stop-color="#dc2743"/><stop offset="1" stop-color="#bc1888"/></linearGradient></defs><path fill="url(#cigG)" d="M12 2.2c3.2 0 3.6 0 4.9.07 1.2.06 1.8.25 2.2.42.6.22 1 .48 1.4.9.4.4.7.8.9 1.4.17.4.36 1 .42 2.2.07 1.3.07 1.7.07 4.9s0 3.6-.07 4.9c-.06 1.2-.25 1.8-.42 2.2-.22.6-.5 1-.9 1.4-.4.4-.8.7-1.4.9-.4.17-1 .36-2.2.42-1.3.07-1.7.07-4.9.07s-3.6 0-4.9-.07c-1.2-.06-1.8-.25-2.2-.42-.6-.22-1-.5-1.4-.9-.4-.4-.7-.8-.9-1.4-.17-.4-.36-1-.42-2.2C2.2 15.6 2.2 15.2 2.2 12s0-3.6.07-4.9c.06-1.2.25-1.8.42-2.2.22-.6.5-1 .9-1.4.4-.4.8-.7 1.4-.9.4-.17 1-.36 2.2-.42C8.4 2.2 8.8 2.2 12 2.2zm0 3.2A6.6 6.6 0 1 0 18.6 12 6.6 6.6 0 0 0 12 5.4zm0 10.9A4.3 4.3 0 1 1 16.3 12 4.3 4.3 0 0 1 12 16.3zm6.9-11a1.55 1.55 0 1 1-1.55-1.55A1.55 1.55 0 0 1 18.9 5.3z"/></svg>',
 };
 
-function widgetJs(origin: string) {
+function widgetJs(origin: string, conf: InstagramSectionStoredConfig) {
   return `(function(){
 "use strict";
 var ORIGIN=${JSON.stringify(origin)};
 var CSS=${JSON.stringify(CSS)};
 var I=${JSON.stringify(ICONS)};
+/* Saved in the studio at /studio/instagram-widget and baked in here rather than
+   fetched: it is already known when this script is built, and a second network
+   round-trip on every storefront page load would only delay the section. The
+   300s cache below is what bounds how long a Save takes to appear. */
+var CONF=${JSON.stringify(conf)};
 
 function el(tag,cls,html){var n=document.createElement(tag);if(cls)n.className=cls;if(html!=null)n.innerHTML=html;return n;}
 function txt(n,s){n.textContent=s==null?"":String(s);return n;}
+/* Studio-authored strings are the only values that reach innerHTML here, and
+   they are typed by an admin rather than by a shopper — escaped anyway, because
+   markup arriving through a settings field should render as text, not as HTML. */
+var ESC={"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"};
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return ESC[c];});}
 function compact(n){n=Number(n)||0;
   if(n>=1000000)return (n/1000000).toFixed(n%1000000===0?0:1).replace(/\\.0$/,"")+"M";
   if(n>=1000)return (n/1000).toFixed(n%1000===0?0:1).replace(/\\.0$/,"")+"K";
@@ -160,24 +174,37 @@ function fmtDate(iso){if(!iso)return "";try{return new Date(iso).toLocaleDateStr
 function injectCss(){ if(document.getElementById("cig-style"))return;
   var s=document.createElement("style"); s.id="cig-style"; s.textContent=CSS; document.head.appendChild(s); }
 
+/* Live Instagram first, the studio's saved value next, the written default last.
+   The account's own name and counts are the truth here — the studio fields stand
+   in only while the feed is loading or if Meta is unreachable. */
+function pick(live, saved, fallback){
+  if(live!=null && live!=="" ) return live;
+  if(saved!=null && String(saved).trim()!=="") return String(saved).trim();
+  return fallback;
+}
+
 function buildHeader(p, handle){
   var bar=el("div","cig-bar");
-  if(p&&p.avatarUrl){
-    var av=el("div","cig-avatar"); var im=new Image(); im.src=p.avatarUrl; im.alt=""; im.loading="lazy"; av.appendChild(im); bar.appendChild(av);
+  var avatar=pick(p&&p.avatarUrl, CONF.profileAvatarUrl, "");
+  if(avatar){
+    var av=el("div","cig-avatar"); var im=new Image(); im.src=avatar; im.alt=""; im.loading="lazy"; av.appendChild(im); bar.appendChild(av);
   }
   var id=el("div","cig-id");
-  id.appendChild(txt(el("div","cig-name"), (p&&p.name)||handle));
+  id.appendChild(txt(el("div","cig-name"), pick(p&&p.name, CONF.profileBrandName, handle)));
   id.appendChild(txt(el("div","cig-handle"), "@"+handle));
   bar.appendChild(id);
 
   var stats=el("div","cig-stats");
   function stat(v,l){var d=el("div","cig-stat");d.appendChild(txt(el("span","cig-statv"),v));d.appendChild(txt(el("span","cig-statl"),l));return d;}
-  if(p){ stats.appendChild(stat(compact(p.mediaCount),"Posts"));
-         stats.appendChild(stat(compact(p.followersCount),"Followers")); }
+  var posts=pick(p&&p.mediaCount? compact(p.mediaCount):null, CONF.profilePostsCount, "");
+  var followers=pick(p&&p.followersCount? compact(p.followersCount):null, CONF.profileFollowersCount, "");
+  if(posts) stats.appendChild(stat(posts,"Posts"));
+  if(followers) stats.appendChild(stat(followers,"Followers"));
   bar.appendChild(stats);
 
-  var f=el("a","cig-follow",I.ig+"<span>Follow</span>");
-  f.href="https://www.instagram.com/"+handle+"/"; f.target="_blank"; f.rel="noopener noreferrer";
+  var f=el("a","cig-follow",I.ig+"<span>"+esc(pick(null,CONF.profileFollowButtonLabel,"Follow"))+"</span>");
+  f.href=pick(null,CONF.profileFollowButtonHref,"https://www.instagram.com/"+handle+"/");
+  f.target="_blank"; f.rel="noopener noreferrer";
   bar.appendChild(f);
   return bar;
 }
@@ -250,10 +277,19 @@ function buildPost(item, p, handle){
 }
 
 function mount(root){
-  var handle=root.getAttribute("data-handle")||"shopcarbon";
-  var heroSrc=root.getAttribute("data-hero")||"";
-  var heroText=root.getAttribute("data-hero-text")||("@"+handle);
+  /* The studio wins over the mount's data-* attributes: those are the theme's
+     starting values, but the studio is where the section is meant to be edited,
+     and an edit there must not need a theme change to take effect. */
+  var handle=pick(null, CONF.profileHandle, root.getAttribute("data-handle")||"shopcarbon").replace(/^@/,"");
+  var heroSrc=pick(null, CONF.heroImageUrl, root.getAttribute("data-hero")||"");
+  var heroText=pick(null, CONF.heroLinkText, root.getAttribute("data-hero-text")||("@"+handle));
+  var heroAlt=pick(null, CONF.heroAlt, "Instagram banner for @"+handle);
+  var heroHref=pick(null, CONF.heroLinkHref, "https://www.instagram.com/"+handle+"/");
   var limit=parseInt(root.getAttribute("data-limit")||"12",10)||12;
+  var arrowsOn=CONF.feedSliderArrowsEnabled!==false;
+  var dragOn=CONF.feedSliderDragEnabled!==false;
+  var animMs=Math.max(0,(Number(CONF.feedSliderAnimationSec)||0)*1000);
+  var autoplayMs=Math.max(0,(Number(CONF.feedSliderAutoplaySec)||0)*1000);
 
   fetch(ORIGIN+"/api/public/instagram-feed?limit="+limit,{credentials:"omit"})
     .then(function(r){return r.ok?r.json():null;})
@@ -268,11 +304,18 @@ function mount(root){
       var media=el("div","cig-media");
       if(heroSrc){
         var hero=el("div","cig-hero");
-        var hi=new Image(); hi.src=heroSrc; hi.alt="Instagram banner for @"+handle; hi.loading="lazy";
+        var hi=new Image(); hi.src=heroSrc; hi.alt=heroAlt; hi.loading="lazy";
         hero.appendChild(hi);
         var hl=el("div","cig-heroLink");
-        var ha=document.createElement("a"); ha.href="https://www.instagram.com/"+handle+"/";
+        var ha=document.createElement("a"); ha.href=heroHref;
         ha.target="_blank"; ha.rel="noopener noreferrer"; ha.textContent=heroText;
+        /* Desktop and mobile sizes are separate settings, so they go on the root
+           as variables and the stylesheet's media query picks between them —
+           an inline font-size could only ever carry one of the two. */
+        if(CONF.heroLinkColor) ha.style.color=CONF.heroLinkColor;
+        if(CONF.heroLinkFontWeight) ha.style.fontWeight=String(CONF.heroLinkFontWeight);
+        if(CONF.heroLinkFontSizeDesktopPx) root.style.setProperty("--cig-heroFsD",CONF.heroLinkFontSizeDesktopPx+"px");
+        if(CONF.heroLinkFontSizeMobilePx) root.style.setProperty("--cig-heroFsM",CONF.heroLinkFontSizeMobilePx+"px");
         hl.appendChild(ha); hero.appendChild(hl); media.appendChild(hero);
       }
 
@@ -303,16 +346,56 @@ function mount(root){
       function step(dir){
         var col=strip.querySelector(".cig-col");
         var w=col? col.getBoundingClientRect().width+10 : vp.clientWidth;
+        /* A zero animation time means "jump" — smooth scrolling would ignore it
+           and still glide, so the behaviour is chosen rather than the duration. */
+        vp.style.scrollBehavior = animMs>0 ? "smooth" : "auto";
         vp.scrollLeft+=dir*w;
       }
       prev.addEventListener("click",function(){step(-1);});
       next.addEventListener("click",function(){step(1);});
       function syncArrows(){
+        if(!arrowsOn){ prev.hidden=true; next.hidden=true; return; }
         prev.hidden = vp.scrollLeft<=2;
         next.hidden = vp.scrollLeft >= vp.scrollWidth-vp.clientWidth-2;
       }
       vp.addEventListener("scroll",syncArrows);
       window.addEventListener("resize",syncArrows);
+
+      /* Click-drag to scroll, for pointers that have no touch surface. The
+         threshold is what keeps a drag from also firing the tile's click. */
+      if(dragOn){
+        var down=false,startX=0,startLeft=0,moved=false;
+        vp.addEventListener("pointerdown",function(e){
+          if(e.pointerType==="touch") return;   /* native touch scrolling is better */
+          down=true; moved=false; startX=e.clientX; startLeft=vp.scrollLeft;
+        });
+        vp.addEventListener("pointermove",function(e){
+          if(!down) return;
+          var dx=e.clientX-startX;
+          if(Math.abs(dx)>4){ moved=true; vp.style.scrollBehavior="auto"; vp.scrollLeft=startLeft-dx; }
+        });
+        function endDrag(){ down=false; }
+        vp.addEventListener("pointerup",endDrag);
+        vp.addEventListener("pointercancel",endDrag);
+        vp.addEventListener("pointerleave",endDrag);
+        vp.addEventListener("click",function(e){ if(moved){ e.preventDefault(); e.stopPropagation(); moved=false; } },true);
+      }
+
+      /* Autoplay wraps to the start once the last column is reached, and stops
+         while a pointer is over the strip so it cannot scroll out from under a
+         shopper mid-look. */
+      if(autoplayMs>0){
+        var timer=null, paused=false;
+        function tick(){
+          if(paused) return;
+          if(vp.scrollLeft >= vp.scrollWidth-vp.clientWidth-2){ vp.style.scrollBehavior="smooth"; vp.scrollLeft=0; }
+          else step(1);
+        }
+        vp.addEventListener("pointerenter",function(){paused=true;});
+        vp.addEventListener("pointerleave",function(){paused=false;});
+        timer=setInterval(tick,autoplayMs);
+        window.addEventListener("pagehide",function(){ if(timer) clearInterval(timer); });
+      }
 
       /* Square tiles: three columns visible, matching the hero height. */
       function sizeTiles(){
@@ -368,7 +451,16 @@ export async function GET(req: NextRequest) {
     : host;
   const origin = `${proto}://${safeHost}`;
 
-  return new NextResponse(widgetJs(origin), {
+  /* A studio that cannot be read must not blank the section, so a failure here
+     falls back to an empty config and the widget's own written defaults. */
+  let conf: InstagramSectionStoredConfig = {};
+  try {
+    conf = (await loadInstagramSectionConfig("default")) || {};
+  } catch {
+    conf = {};
+  }
+
+  return new NextResponse(widgetJs(origin, conf), {
     status: 200,
     headers: {
       "Content-Type": "application/javascript; charset=utf-8",
