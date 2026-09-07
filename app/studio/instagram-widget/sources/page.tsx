@@ -11,20 +11,38 @@ export const dynamic = "force-dynamic";
  * differently-authenticated view of what is actually connected.
  */
 
-const muted = "rgba(226, 232, 240, 0.78)";
+/*
+  The app paints a light photo behind every page (body background-image in
+  globals.css) while the shared tokens assume a dark backdrop — a translucent
+  panel over that photo leaves near-white text on a pale image, which is
+  unreadable. So this page carries its own solid surface rather than relying on
+  --panel-bg, and every colour here is chosen against that surface.
+*/
+const surface = "rgba(14, 12, 22, 0.94)";
+const fg = "#f8fafc";
+const muted = "rgba(226, 232, 240, 0.82)";
+
+const card: React.CSSProperties = {
+  background: surface,
+  border: "1px solid rgba(255, 255, 255, 0.14)",
+  borderRadius: 14,
+  padding: 20,
+  boxShadow: "0 8px 32px rgba(0, 0, 0, 0.35)",
+};
+
 const panel: React.CSSProperties = {
-  border: "1px solid rgba(148, 163, 184, 0.25)",
+  border: "1px solid rgba(255, 255, 255, 0.14)",
   borderRadius: 10,
   padding: 16,
   marginTop: 16,
-  background: "rgba(15, 23, 42, 0.45)",
+  background: "rgba(255, 255, 255, 0.04)",
 };
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ display: "flex", gap: 12, padding: "6px 0", fontSize: 14 }}>
       <span style={{ color: muted, minWidth: 150 }}>{label}</span>
-      <span style={{ color: "#f8fafc" }}>{value}</span>
+      <span style={{ color: fg }}>{value}</span>
     </div>
   );
 }
@@ -48,13 +66,14 @@ export default async function InstagramWidgetSourcesPage({
   const canConnect = hasAppId && hasAppSecret;
 
   return (
-    <main style={{ padding: "22px 16px", color: "#f8fafc", maxWidth: 720 }}>
+    <main style={{ padding: "22px 16px", maxWidth: 760 }}>
+      <div style={{ ...card, color: fg }}>
       <p style={{ marginBottom: 12 }}>
-        <Link href="/studio/instagram-widget/layout" style={{ color: "rgba(148, 163, 184, 0.95)" }}>
+        <Link href="/studio/instagram-widget/layout" style={{ color: "rgba(165, 180, 252, 0.95)" }}>
           ← Layout (hero &amp; preview)
         </Link>
       </p>
-      <h1 style={{ fontSize: "1.2rem", marginBottom: 8 }}>Sources</h1>
+      <h1 style={{ fontSize: "1.35rem", marginBottom: 8, color: fg }}>Sources</h1>
       <p style={{ color: muted, lineHeight: 1.5 }}>
         The account the storefront Instagram feed reads from. Carbon calls Meta at most once every
         15 minutes and serves every shopper from cache, so traffic can never exhaust a quota.
@@ -74,7 +93,7 @@ export default async function InstagramWidgetSourcesPage({
       ) : null}
 
       <section style={panel}>
-        <h2 style={{ fontSize: "1rem", margin: "0 0 10px" }}>Connection</h2>
+        <h2 style={{ fontSize: "1rem", margin: "0 0 10px", color: fg }}>Connection</h2>
 
         {envPinned ? (
           <p style={{ color: muted, lineHeight: 1.5, margin: 0 }}>
@@ -107,7 +126,7 @@ export default async function InstagramWidgetSourcesPage({
 
       {!envPinned ? (
         <section style={panel}>
-          <h2 style={{ fontSize: "1rem", margin: "0 0 10px" }}>
+          <h2 style={{ fontSize: "1rem", margin: "0 0 10px", color: fg }}>
             {connection ? "Reconnect" : "Connect"}
           </h2>
 
@@ -143,6 +162,7 @@ export default async function InstagramWidgetSourcesPage({
           )}
         </section>
       ) : null}
+      </div>
     </main>
   );
 }
