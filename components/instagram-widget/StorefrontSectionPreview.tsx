@@ -669,11 +669,12 @@ export function StorefrontSectionPreview() {
         startScroll: el.scrollLeft,
         dragging: false,
       };
-      try {
-        el.setPointerCapture(e.pointerId);
-      } catch {
-        /* ignore */
-      }
+      /* Deliberately NOT capturing the pointer here. Capture retargets the rest
+         of the sequence to this element, and the browser then dispatches `click`
+         to the nearest common ancestor of the down/up targets — the scroll
+         container, never the tile. That silently swallowed every tile click and
+         the post popup could not be opened with a mouse at all. Capture starts
+         in the move handler instead, once a drag is real. */
     },
     [feedSlider.feedSliderDragEnabled],
   );
@@ -688,6 +689,14 @@ export function StorefrontSectionPreview() {
       if (!d.dragging) {
         d.dragging = true;
         setIsPointerDragging(true);
+        /* Now that this is a drag rather than a click, take the pointer so the
+           gesture survives leaving the strip. Suppressing the trailing click is
+           handled separately in endViewportPointer. */
+        try {
+          el.setPointerCapture(e.pointerId);
+        } catch {
+          /* ignore */
+        }
       }
       e.preventDefault();
       el.scrollLeft = d.startScroll - dx;
