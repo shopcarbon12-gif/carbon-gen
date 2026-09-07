@@ -1,87 +1,55 @@
 {% comment %}
-  Replace the entire contents of your "Custom Liquid" section on the homepage
-  (the one under "FOLLOW US ON INSTAGRAM") with this file.
+  Homepage Instagram row — the Custom Liquid section under "FOLLOW US ON INSTAGRAM".
 
-  Section title "FOLLOW US ON INSTAGRAM" lives in this theme section.
-  Hero image + overlay: Carbon app → /studio/instagram-widget/layout (copy snippet).
-  Overlay typeface: Neuzeit Grotesk W01 Regular — add @font-face in theme pointing to the same OTF
-  (see public/fonts/neuzeit-grotesk-regular.otf in the repo, or upload that file to Shopify Files).
+  Paste this as the entire contents of that Custom Liquid section
+  (Online Store → Themes → Customize → Home page → the Custom Liquid block
+  holding the Instagram banner). The section supplies its own row/column
+  wrapper, so this starts at .banner_row — do not add an outer .row here.
 
-  Steps in Shopify:
-  1. Online Store → Themes → Customize → Home page
-  2. Click the Custom Liquid section that contains the Instagram banner + feed
-  3. Remove any third-party Instagram app block (e.g. old embed widgets) if it duplicates this section
-  4. Paste this code into that section and Save
-
-  The right column loads live posts from Carbon's own endpoint:
+  Left column: the hero banner, unchanged.
+  Right column: live posts from Carbon's own endpoint,
       https://app.shopcarbon.com/api/public/instagram-feed
-  Carbon calls Meta at most once every 15 minutes and serves everyone from that
-  cache, so shopper traffic can never exhaust a quota — which is exactly what
-  took the old third-party widget offline. No third-party script loads here.
+  Carbon calls Meta at most once every 15 minutes and serves every shopper from
+  that cache, so shopper traffic can never exhaust a quota — which is exactly
+  what took the previous third-party widget offline. No third-party script runs
+  here, and the access token never reaches the browser.
 
   If the feed is ever unavailable the grid does not render an empty box: the
-  column is removed and the hero image takes the full row, so the homepage can
-  never show the blank half-width gap the old widget left behind.
+  column is removed and the hero takes the full row, so the homepage can never
+  show the blank half-width gap the old widget left behind.
 {% endcomment %}
 
-<div class="row full-width-row-full">
-  <div class="small-12 columns">
-    <div class="banner_row" data-ca-ig-row>
-      <div class="column">
-        <div class="banner relative">
-          <img
-            style="width: 100%; object-fit: cover;"
-            alt="Instagram banner for @shopcarbon"
-            loading="lazy"
-            class="bl"
-            src="https://cdn.shopify.com/s/files/1/0680/6572/2620/files/DZ__3128.jpg?v=1733764412"
-            width="2000"
-            height="1200"
-          >
-          <div class="instagram-link test">
-            <a class="color-wh lbold" href="https://www.instagram.com/shopcarbon/" target="_blank" rel="noopener noreferrer">@shopcarbon</a>
-          </div>
-        </div>
-      </div>
-      <div class="column ca-carbon-instagram-feed-col">
-        <div class="ca-ig-grid" data-ca-ig-grid aria-label="Latest posts from @shopcarbon"></div>
+<div class="banner_row" data-ca-ig-row>
+  <div class="column">
+    <div class="banner relative">
+      <img style="width: 100%; object-fit: cover;" alt="Instagram banner for @shopcarbon" loading="lazy" class="bl" src="https://cdn.shopify.com/s/files/1/0680/6572/2620/files/DZ__3128.jpg?v=1733764412">
+      <div class="instagram-link test">
+        <a class="color-wh lbold" href="https://www.instagram.com/shopcarbon/" target="_blank">@shopcarbon</a>
       </div>
     </div>
+  </div>
+  <div class="column ca-carbon-instagram-feed-col">
+    <div class="ca-ig-grid" data-ca-ig-grid aria-label="Latest posts from @shopcarbon"></div>
   </div>
 </div>
 
 <style>
-  .ca-ig-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-  }
+  .ca-ig-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
   /* Squares reserved up front so loading images cannot shift the page. */
   .ca-ig-cell {
-    position: relative;
-    display: block;
-    aspect-ratio: 1 / 1;
-    overflow: hidden;
-    background: #f2f2f2;
+    position: relative; display: block; aspect-ratio: 1 / 1;
+    overflow: hidden; background: #f2f2f2;
   }
   .ca-ig-cell img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
+    width: 100%; height: 100%; object-fit: cover; display: block;
     transition: transform .35s ease;
   }
   .ca-ig-cell:hover img { transform: scale(1.04); }
 
   /* Carousel / video marker, mirroring Instagram's own affordance. */
   .ca-ig-badge {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    width: 18px;
-    height: 18px;
-    pointer-events: none;
-    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .45));
+    position: absolute; top: 8px; right: 8px; width: 18px; height: 18px;
+    pointer-events: none; filter: drop-shadow(0 1px 2px rgba(0,0,0,.45));
   }
   .ca-ig-badge svg { width: 100%; height: 100%; display: block; fill: #fff; }
 
@@ -89,14 +57,10 @@
      than leaving the empty half-width gap the old widget left behind. */
   .banner_row.ca-ig-empty .ca-carbon-instagram-feed-col { display: none !important; }
   .banner_row.ca-ig-empty > .column:first-child {
-    width: 100% !important;
-    max-width: 100% !important;
-    flex: 1 1 100% !important;
+    width: 100% !important; max-width: 100% !important; flex: 1 1 100% !important;
   }
 
-  @media (max-width: 767px) {
-    .ca-ig-grid { gap: 6px; }
-  }
+  @media (max-width: 767px) { .ca-ig-grid { gap: 6px; } }
   @media (prefers-reduced-motion: reduce) {
     .ca-ig-cell img { transition: none; }
     .ca-ig-cell:hover img { transform: none; }
@@ -106,7 +70,6 @@
 <script>
 (function () {
   var ENDPOINT = "https://app.shopcarbon.com/api/public/instagram-feed?limit=6";
-
   var row  = document.querySelector("[data-ca-ig-row]");
   var grid = document.querySelector("[data-ca-ig-grid]");
   if (!row || !grid) return;
@@ -116,18 +79,14 @@
   row.classList.add("ca-ig-empty");
 
   var BADGE = {
-    CAROUSEL_ALBUM:
-      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 3H9a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zM5 7H3v12a2 2 0 0 0 2 2h12v-2H5V7z"/></svg>',
-    VIDEO:
-      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>',
+    CAROUSEL_ALBUM: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 3H9a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zM5 7H3v12a2 2 0 0 0 2 2h12v-2H5V7z"/></svg>',
+    VIDEO: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>'
   };
 
   function render(items) {
     var frag = document.createDocumentFragment();
-
     items.forEach(function (item) {
       if (!item || !item.image || !item.permalink) return;
-
       var a = document.createElement("a");
       a.className = "ca-ig-cell";
       a.href = item.permalink;
@@ -138,11 +97,8 @@
       img.src = item.image;
       img.loading = "lazy";
       img.decoding = "async";
-      /* Captions are shopper-authored text from Instagram: set as an attribute
-         value, never as markup. */
-      img.alt = item.caption
-        ? String(item.caption).slice(0, 120)
-        : "Instagram post by @shopcarbon";
+      /* Captions come from Instagram: set as an attribute value, never markup. */
+      img.alt = item.caption ? String(item.caption).slice(0, 120) : "Instagram post by @shopcarbon";
       a.appendChild(img);
 
       var badge = BADGE[item.type];
@@ -152,7 +108,6 @@
         span.innerHTML = badge;   /* fixed markup from the map above, not feed data */
         a.appendChild(span);
       }
-
       frag.appendChild(a);
     });
 
@@ -164,11 +119,7 @@
 
   fetch(ENDPOINT, { credentials: "omit" })
     .then(function (r) { return r.ok ? r.json() : null; })
-    .then(function (data) {
-      if (data && data.ok && Array.isArray(data.items) && data.items.length) render(data.items);
-    })
-    .catch(function () {
-      /* Offline or endpoint down — the column stays collapsed. */
-    });
+    .then(function (d) { if (d && d.ok && Array.isArray(d.items) && d.items.length) render(d.items); })
+    .catch(function () { /* offline or endpoint down — the column stays collapsed */ });
 })();
 </script>
