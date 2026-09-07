@@ -47,11 +47,15 @@ const CSS = `
   column-gap:clamp(20px,3.5vw,36px);row-gap:14px;
   grid-template-columns:auto auto auto auto auto;
   grid-template-areas:"avatar name posts followers btn";max-width:100%}
-/* The avatar asset already carries its gradient ring — a second ring in CSS
-   double-draws it. */
 .cig-avatar{grid-area:avatar;width:60px;height:60px;border-radius:50%;overflow:hidden;
   justify-self:start;flex-shrink:0}
 .cig-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+/* The studio's fallback avatar asset has the gradient ring painted into the
+   image; the picture Instagram returns does not. So the ring is drawn here only
+   for the live one — otherwise it renders twice on the fallback. */
+.cig-avatar[data-ring="1"]{padding:2px;
+  background:linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)}
+.cig-avatar[data-ring="1"] img{border-radius:50%;border:2px solid #fff;background:#fff}
 .cig-id{grid-area:name;text-align:left;min-width:0;justify-self:start}
 .cig-name{font-size:1.125rem;font-weight:700;color:#000;letter-spacing:.04em;text-transform:uppercase}
 .cig-handle{font-size:.9375rem;color:#8e8e8e;margin-top:2px}
@@ -244,9 +248,12 @@ function buildHeader(p, handle){
   var inner=el("div","cig-barIn");
   bar.appendChild(inner);
 
-  var avatar=pick(p&&p.avatarUrl, CONF.profileAvatarUrl, "");
+  var liveAvatar=p&&p.avatarUrl? String(p.avatarUrl):"";
+  var avatar=pick(liveAvatar, CONF.profileAvatarUrl, "");
   if(avatar){
-    var av=el("div","cig-avatar"); var im=new Image(); im.src=avatar; im.alt=""; im.loading="lazy"; av.appendChild(im); inner.appendChild(av);
+    var av=el("div","cig-avatar");
+    if(avatar===liveAvatar) av.setAttribute("data-ring","1");
+    var im=new Image(); im.src=avatar; im.alt=""; im.loading="lazy"; av.appendChild(im); inner.appendChild(av);
   }
   var id=el("div","cig-id");
   id.appendChild(txt(el("div","cig-name"), pick(p&&p.name, CONF.profileBrandName, handle)));
