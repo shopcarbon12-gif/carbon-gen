@@ -7,7 +7,11 @@ export const STOREFRONT_INSTAGRAM_HERO_IMAGE =
 export const STOREFRONT_INSTAGRAM_HANDLE = "shopcarbon";
 export const STOREFRONT_INSTAGRAM_URL = "https://www.instagram.com/shopcarbon/";
 
-/** Profile bar (until Meta Graph API supplies live counts). */
+/**
+ * Profile bar fallbacks. The live values come from the Graph API now; these are
+ * only what the header shows before that response lands, or if it fails — which
+ * is why they are stale numbers rather than zeros or blanks.
+ */
 export const STOREFRONT_INSTAGRAM_DISPLAY_NAME = "CARBON";
 export const STOREFRONT_INSTAGRAM_POSTS_COUNT_LABEL = "322";
 export const STOREFRONT_INSTAGRAM_FOLLOWERS_COUNT_LABEL = "3.8K";

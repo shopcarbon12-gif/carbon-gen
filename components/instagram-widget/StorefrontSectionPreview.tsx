@@ -122,6 +122,27 @@ function chunkItemsToColumns(items: InstagramMediaItem[]): TileCell[][] {
   return cols;
 }
 
+/** The account header the studio and the storefront both show. */
+type LiveProfile = {
+  username?: string;
+  name?: string;
+  avatarUrl?: string;
+  followersCount?: number;
+  mediaCount?: number;
+};
+
+/**
+ * 3658 → "3.7K". Instagram abbreviates its own counts, and the storefront widget
+ * uses this identical rule — the two headers have to read the same or the studio
+ * stops being a preview of what shoppers see.
+ */
+function compactCount(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "0";
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1).replace(/\.0$/, "")}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(n % 1_000 === 0 ? 0 : 1).replace(/\.0$/, "")}K`;
+  return String(Math.round(n));
+}
+
 /** Avoid global `next.config` allowlist for Shopify CDN URLs used only in this preview. */
 function nextImageUnoptimized(src: string) {
   return /^https?:\/\//i.test(src);
@@ -178,40 +199,26 @@ function ElfsightSliderArrowNext() {
   );
 }
 
-/** Top-right type chip (Elfsight Instagram feed preview). */
+/**
+ * Top-right type chip — the stacked-squares mark for a carousel, a play mark for
+ * a video, and nothing at all for a single image. Same rule and same glyphs as
+ * the storefront widget serves, so a tile is marked identically in both places.
+ */
 function TileTypeBadge({ mediaType }: { mediaType: InstagramMediaType }) {
   if (mediaType === "IMAGE") return null;
   if (mediaType === "VIDEO") {
     return (
       <span className={styles.tileBadge} aria-hidden>
-        <svg
-          className={styles.tileBadgeSvg}
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={2}
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        >
-          <rect x="2" y="6" width="14" height="12" rx="2" />
-          <polygon points="16 10 22 7 22 17 16 14 16 10" fill="currentColor" stroke="none" />
+        <svg className={styles.tileBadgeSvg} viewBox="0 0 24 24" fill="currentColor" stroke="none">
+          <path d="M8 5v14l11-7z" />
         </svg>
       </span>
     );
   }
   return (
     <span className={styles.tileBadge} aria-hidden>
-      <svg
-        className={styles.tileBadgeSvg}
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={2}
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      >
-        <rect x="3" y="7" width="10" height="10" rx="1.5" />
-        <rect x="9" y="4" width="10" height="10" rx="1.5" />
+      <svg className={styles.tileBadgeSvg} viewBox="0 0 24 24" fill="currentColor" stroke="none">
+        <path d="M19 3H9a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zM5 7H3v12a2 2 0 0 0 2 2h12v-2H5V7z" />
       </svg>
     </span>
   );
@@ -380,6 +387,7 @@ export function StorefrontSectionPreview() {
   const [canGoRight, setCanGoRight] = useState(false);
   const [columns, setColumns] = useState<TileCell[][]>(() => buildPlaceholderColumns());
   const [feedHeroUrl, setFeedHeroUrl] = useState("");
+  const [liveProfile, setLiveProfile] = useState<LiveProfile | null>(null);
   const [sectionConfig, setSectionConfig] = useState<InstagramSectionStoredConfig | null>(null);
   const [popupOpen, setPopupOpen] = useState(false);
   const [popupIndex, setPopupIndex] = useState(0);
@@ -505,6 +513,7 @@ export function StorefrontSectionPreview() {
           ok?: boolean;
           source?: string;
           items?: InstagramMediaItem[];
+          profile?: LiveProfile | null;
           feedStatus?: string;
           missingEnv?: string[];
           graphError?: string;
@@ -512,6 +521,10 @@ export function StorefrontSectionPreview() {
         };
 
         if (cancelled) return;
+
+        /* Header counts follow the account even when the tiles fall back to
+           placeholders, so a partial Graph response still shows real numbers. */
+        setLiveProfile(json?.profile ?? null);
 
         if (!res.ok) {
           setFeedHeroUrl("");
@@ -741,29 +754,44 @@ export function StorefrontSectionPreview() {
     [feedSlider.feedSliderAnimationSec, updateScrollArrows],
   );
 
+  /* Live values where Instagram gave them, written defaults otherwise — the bar
+     never shows a blank or a zero while the feed is still loading. */
+  const profileName = liveProfile?.name?.trim() || STOREFRONT_INSTAGRAM_DISPLAY_NAME;
+  const profileHandle = liveProfile?.username?.trim() || STOREFRONT_INSTAGRAM_HANDLE;
+  const profileAvatar = liveProfile?.avatarUrl?.trim() || STOREFRONT_INSTAGRAM_AVATAR_SRC;
+  const postsLabel =
+    typeof liveProfile?.mediaCount === "number" && liveProfile.mediaCount > 0
+      ? compactCount(liveProfile.mediaCount)
+      : STOREFRONT_INSTAGRAM_POSTS_COUNT_LABEL;
+  const followersLabel =
+    typeof liveProfile?.followersCount === "number" && liveProfile.followersCount > 0
+      ? compactCount(liveProfile.followersCount)
+      : STOREFRONT_INSTAGRAM_FOLLOWERS_COUNT_LABEL;
+
   const profileBar = (
     <div className={styles.profileBar}>
       <div className={styles.profileBarInner}>
         <div className={styles.avatarCircle} aria-hidden>
           <Image
-            src={STOREFRONT_INSTAGRAM_AVATAR_SRC}
+            src={profileAvatar}
             alt=""
             width={120}
             height={120}
             className={styles.avatarImg}
+            unoptimized={nextImageUnoptimized(profileAvatar)}
           />
         </div>
         <div className={styles.profileText}>
-          <div className={styles.profileName}>{STOREFRONT_INSTAGRAM_DISPLAY_NAME}</div>
-          <div className={styles.profileHandle}>@{STOREFRONT_INSTAGRAM_HANDLE}</div>
+          <div className={styles.profileName}>{profileName}</div>
+          <div className={styles.profileHandle}>@{profileHandle}</div>
         </div>
         <div className={styles.statCluster}>
           <div className={`${styles.stat} ${styles.statPosts}`}>
-            <span className={styles.statValue}>{STOREFRONT_INSTAGRAM_POSTS_COUNT_LABEL}</span>
+            <span className={styles.statValue}>{postsLabel}</span>
             <span className={styles.statLabel}>Posts</span>
           </div>
           <div className={`${styles.stat} ${styles.statFollowers}`}>
-            <span className={styles.statValue}>{STOREFRONT_INSTAGRAM_FOLLOWERS_COUNT_LABEL}</span>
+            <span className={styles.statValue}>{followersLabel}</span>
             <span className={styles.statLabel}>Followers</span>
           </div>
         </div>

@@ -1,125 +1,30 @@
 {% comment %}
   Homepage Instagram row — the Custom Liquid section under "FOLLOW US ON INSTAGRAM".
 
-  Paste this as the entire contents of that Custom Liquid section
-  (Online Store → Themes → Customize → Home page → the Custom Liquid block
-  holding the Instagram banner). The section supplies its own row/column
-  wrapper, so this starts at .banner_row — do not add an outer .row here.
+  The whole widget (profile header, hero, scrolling tiles, hover state, post
+  popup) is served from Carbon at /instagram/widget, so this section is just a
+  mount point. That keeps the live site and the studio at
+  /studio/instagram-widget rendering from one implementation instead of two
+  copies that drift apart.
 
-  Left column: the hero banner, unchanged.
-  Right column: live posts from Carbon's own endpoint,
-      https://app.shopcarbon.com/api/public/instagram-feed
-  Carbon calls Meta at most once every 15 minutes and serves every shopper from
-  that cache, so shopper traffic can never exhaust a quota — which is exactly
-  what took the previous third-party widget offline. No third-party script runs
-  here, and the access token never reaches the browser.
+  Posts come from Carbon's own endpoint, which calls Meta at most once every 15
+  minutes and serves every shopper from cache — traffic can never exhaust a
+  quota, which is what took the previous third-party widget offline. The access
+  token stays on the server and never reaches the browser.
 
-  If the feed is ever unavailable the grid does not render an empty box: the
-  column is removed and the hero takes the full row, so the homepage can never
-  show the blank half-width gap the old widget left behind.
+  If the feed is ever unavailable the widget renders nothing at all, leaving
+  this container empty rather than showing a broken or half-filled section.
+
+  data-hero      the banner image (Shopify Files URL)
+  data-hero-text the overlay text on the banner
+  data-limit     how many posts to load
 {% endcomment %}
 
-<div class="banner_row" data-ca-ig-row>
-  <div class="column">
-    <div class="banner relative">
-      <img style="width: 100%; object-fit: cover;" alt="Instagram banner for @shopcarbon" loading="lazy" class="bl" src="https://cdn.shopify.com/s/files/1/0680/6572/2620/files/DZ__3128.jpg?v=1733764412">
-      <div class="instagram-link test">
-        <a class="color-wh lbold" href="https://www.instagram.com/shopcarbon/" target="_blank">@shopcarbon</a>
-      </div>
-    </div>
-  </div>
-  <div class="column ca-carbon-instagram-feed-col">
-    <div class="ca-ig-grid" data-ca-ig-grid aria-label="Latest posts from @shopcarbon"></div>
-  </div>
-</div>
-
-<style>
-  .ca-ig-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-  /* Squares reserved up front so loading images cannot shift the page. */
-  .ca-ig-cell {
-    position: relative; display: block; aspect-ratio: 1 / 1;
-    overflow: hidden; background: #f2f2f2;
-  }
-  .ca-ig-cell img {
-    width: 100%; height: 100%; object-fit: cover; display: block;
-    transition: transform .35s ease;
-  }
-  .ca-ig-cell:hover img { transform: scale(1.04); }
-
-  /* Carousel / video marker, mirroring Instagram's own affordance. */
-  .ca-ig-badge {
-    position: absolute; top: 8px; right: 8px; width: 18px; height: 18px;
-    pointer-events: none; filter: drop-shadow(0 1px 2px rgba(0,0,0,.45));
-  }
-  .ca-ig-badge svg { width: 100%; height: 100%; display: block; fill: #fff; }
-
-  /* Feed unavailable: drop the column and let the hero fill the row, rather
-     than leaving the empty half-width gap the old widget left behind. */
-  .banner_row.ca-ig-empty .ca-carbon-instagram-feed-col { display: none !important; }
-  .banner_row.ca-ig-empty > .column:first-child {
-    width: 100% !important; max-width: 100% !important; flex: 1 1 100% !important;
-  }
-
-  @media (max-width: 767px) { .ca-ig-grid { gap: 6px; } }
-  @media (prefers-reduced-motion: reduce) {
-    .ca-ig-cell img { transition: none; }
-    .ca-ig-cell:hover img { transform: none; }
-  }
-</style>
-
-<script>
-(function () {
-  var ENDPOINT = "https://app.shopcarbon.com/api/public/instagram-feed?limit=6";
-  var row  = document.querySelector("[data-ca-ig-row]");
-  var grid = document.querySelector("[data-ca-ig-grid]");
-  if (!row || !grid) return;
-
-  /* Start collapsed. The column is revealed only once real posts exist, so a
-     failed or slow request never leaves an empty box on the page. */
-  row.classList.add("ca-ig-empty");
-
-  var BADGE = {
-    CAROUSEL_ALBUM: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 3H9a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zM5 7H3v12a2 2 0 0 0 2 2h12v-2H5V7z"/></svg>',
-    VIDEO: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>'
-  };
-
-  function render(items) {
-    var frag = document.createDocumentFragment();
-    items.forEach(function (item) {
-      if (!item || !item.image || !item.permalink) return;
-      var a = document.createElement("a");
-      a.className = "ca-ig-cell";
-      a.href = item.permalink;
-      a.target = "_blank";
-      a.rel = "noopener noreferrer";
-
-      var img = document.createElement("img");
-      img.src = item.image;
-      img.loading = "lazy";
-      img.decoding = "async";
-      /* Captions come from Instagram: set as an attribute value, never markup. */
-      img.alt = item.caption ? String(item.caption).slice(0, 120) : "Instagram post by @shopcarbon";
-      a.appendChild(img);
-
-      var badge = BADGE[item.type];
-      if (badge) {
-        var span = document.createElement("span");
-        span.className = "ca-ig-badge";
-        span.innerHTML = badge;   /* fixed markup from the map above, not feed data */
-        a.appendChild(span);
-      }
-      frag.appendChild(a);
-    });
-
-    if (!frag.childNodes.length) return;
-    grid.innerHTML = "";
-    grid.appendChild(frag);
-    row.classList.remove("ca-ig-empty");
-  }
-
-  fetch(ENDPOINT, { credentials: "omit" })
-    .then(function (r) { return r.ok ? r.json() : null; })
-    .then(function (d) { if (d && d.ok && Array.isArray(d.items) && d.items.length) render(d.items); })
-    .catch(function () { /* offline or endpoint down — the column stays collapsed */ });
-})();
-</script>
+<div
+  data-carbon-instagram
+  data-handle="shopcarbon"
+  data-hero="https://cdn.shopify.com/s/files/1/0680/6572/2620/files/DZ__3128.jpg?v=1733764412"
+  data-hero-text="@shopcarbon"
+  data-limit="12"
+></div>
+<script src="https://app.shopcarbon.com/instagram/widget" defer></script>

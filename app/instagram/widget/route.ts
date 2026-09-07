@@ -25,9 +25,14 @@ export const dynamic = "force-dynamic";
  */
 
 const CSS = `
-.cig-root{--cig-fg:#111;--cig-muted:#8e8e8e;--cig-line:#dbdbdb;--cig-blue:#0095f6;
+/* The popup is appended to <body>, not inside .cig-root — it has to escape the
+   section's overflow and stacking context to cover the page. So it needs its own
+   copy of these variables: inheritance cannot reach it from .cig-root, and
+   without them the post icons draw with no stroke and vanish. */
+.cig-root,.cig-pop{--cig-fg:#111;--cig-muted:#8e8e8e;--cig-line:#dbdbdb;--cig-blue:#0095f6;
   font-family:inherit;color:var(--cig-fg);box-sizing:border-box}
-.cig-root *,.cig-root *::before,.cig-root *::after{box-sizing:border-box}
+.cig-root *,.cig-root *::before,.cig-root *::after,
+.cig-pop *,.cig-pop *::before,.cig-pop *::after{box-sizing:border-box}
 
 /* ---------- profile header ---------- */
 .cig-bar{display:flex;align-items:center;justify-content:center;gap:22px;padding:4px 0 18px;flex-wrap:wrap}
@@ -89,7 +94,10 @@ const CSS = `
 }
 
 /* ---------- post popup ---------- */
-.cig-pop{position:fixed;inset:0;z-index:2147483000;background:rgba(0,0,0,.72);
+/* Top of the stack on purpose. The storefront's own floating controls (the
+   accessibility widget sits at 2147483646) would otherwise punch through the
+   dimmed backdrop and sit on top of the open post. */
+.cig-pop{position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.72);
   display:flex;justify-content:center;overflow-y:auto;overscroll-behavior:contain;padding:28px 16px}
 .cig-pop[hidden]{display:none}
 .cig-popClose{position:fixed;top:12px;right:18px;background:none;border:0;color:#fff;font-size:34px;

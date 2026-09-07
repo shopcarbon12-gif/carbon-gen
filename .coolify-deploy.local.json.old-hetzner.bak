@@ -1,0 +1,6 @@
+{
+  "hookUrl": "http://178.156.136.112:8000/api/v1/deploy?uuid=aw4800s4wsgok0wck480goco&force=true",
+  "deployApiToken": "5|8wdBlenqMhYLSPCfuqtCr46QQR11JfTrxT3MKJ1d954cb258",
+  "watchApiToken": "5|8wdBlenqMhYLSPCfuqtCr46QQR11JfTrxT3MKJ1d954cb258",
+  "apiToken": "5|8wdBlenqMhYLSPCfuqtCr46QQR11JfTrxT3MKJ1d954cb258"
+}

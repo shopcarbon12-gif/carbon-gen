@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isRequestAuthed } from "@/lib/auth";
-import { fetchInstagramBusinessMedia } from "@/lib/instagram-meta-graph";
+import { fetchInstagramBusinessMedia, fetchInstagramProfile } from "@/lib/instagram-meta-graph";
 import { readInstagramCredentials } from "@/lib/instagramConnectionRepository";
 import type { InstagramMediaItem } from "@/lib/instagram-feed/types";
 
@@ -32,7 +32,16 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const result = await fetchInstagramBusinessMedia({ igUserId, accessToken });
+  /* Posts and profile in parallel: the header counts and the tiles come from one
+     render, so fetching them in sequence would only delay the preview. The
+     profile is optional — a failure there leaves the header on its written
+     defaults rather than blanking a feed that loaded fine. */
+  const [result, profileResult] = await Promise.all([
+    fetchInstagramBusinessMedia({ igUserId, accessToken }),
+    fetchInstagramProfile({ igUserId, accessToken }),
+  ]);
+  const profile = profileResult.ok ? profileResult.profile : null;
+
   if (!result.ok) {
     return NextResponse.json({
       ok: true,
@@ -67,6 +76,7 @@ export async function GET(req: NextRequest) {
     ok: true,
     source: "meta" as const,
     items: result.items,
+    profile,
     feedStatus: "ok" as const,
     mediaCount: result.items.length,
   });
