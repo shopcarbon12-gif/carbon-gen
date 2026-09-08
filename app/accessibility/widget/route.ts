@@ -4165,6 +4165,30 @@ function createWidget(){
       setTimeout(function(){try{root.style.transition='';}catch(_e2){}},360);
     }catch(_e){}
   }
+  /*
+   * The launcher's bottom-right corner, in viewport pixels, as it sits when the
+   * panel is closed.
+   *
+   * Opening the panel shrinks the launcher (52 -> 44) and re-docks it, and
+   * closing re-docks it at full size again. Both used the same corner maths but
+   * with different sizes, so the button visibly jumped on every open and landed
+   * somewhere slightly different on every close. Holding one corner fixed makes
+   * the size change happen in place.
+   */
+  var fabAnchorBR=null;
+  function rememberFabAnchor(){
+    try{
+      var r=wrap.getBoundingClientRect();
+      if(r&&r.width&&r.height){fabAnchorBR={right:r.right,bottom:r.bottom};}
+    }catch(_fa){}
+  }
+  function applyFabAnchoredSize(sz){
+    if(!fabAnchorBR){return false;}
+    var c=clampFab(Math.round(fabAnchorBR.right-sz),Math.round(fabAnchorBR.bottom-sz),sz);
+    wrap.style.paddingBottom='';
+    applyFabFreePosition(c.left,c.top);
+    return true;
+  }
   function applyFabAutoCorner(dockRight,openSz){
     var targetLeft,targetTop;
     if(dockRight){
@@ -4192,6 +4216,12 @@ function createWidget(){
   }
   function rememberManualFab(left,top){
     sessionManualFab={left:left,top:top};
+    /* A drag is the user choosing a new home for the button, so it becomes the
+       anchor that open/close return to. */
+    try{
+      var sz=fabSize();
+      fabAnchorBR={right:left+sz,bottom:top+sz};
+    }catch(_rm){}
   }
   function placeFabInitial(){
     try{localStorage.removeItem(launcherPosKey);}catch(_e){}
@@ -4677,7 +4707,9 @@ function createWidget(){
         var stackBottom=bottomInset+miniSz+fabGapOpen;
         panel.style.bottom=stackBottom+'px';
         panel.style.maxHeight=Math.max(260,Math.round(vh-topReserve-stackBottom-12))+'px';
-        applyFabAutoCorner(dockOpenRight,miniSz);
+        /* Shrink in place rather than re-docking, so the button does not jump
+           out from under the pointer that just pressed it. */
+        if(!applyFabAnchoredSize(miniSz)){applyFabAutoCorner(dockOpenRight,miniSz);}
       }else{
         try{
           trigger.style.visibility='';
@@ -4704,7 +4736,12 @@ function createWidget(){
         trigger.style.height=closedSz+'px';
         trigger.style.setProperty('--ca-launcher-size',closedSz+'px');
         syncFabShellSize(shell,closedSz);
-        applyFabScreenCorner(dockOpenRight,closedSz);
+        /* Back to exactly where it was before the panel opened. Falls through to
+           the usual corner logic the first time, when there is no anchor yet. */
+        if(!applyFabAnchoredSize(closedSz)){
+          applyFabScreenCorner(dockOpenRight,closedSz);
+          rememberFabAnchor();
+        }
       }
       syncLauncherGlyphMetrics();
     }catch(_e){}
