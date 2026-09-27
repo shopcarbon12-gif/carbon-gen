@@ -14,7 +14,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const DEFAULT_LS_TOKEN_URL = "https://cloud.merchantos.com/oauth/access_token.php";
-const DEFAULT_SHOPIFY_API_VERSION = "2025-01";
+const DEFAULT_SHOPIFY_API_VERSION = "2026-07";
 
 const lightspeedAccessTokenCache: { token: string; expiresAt: number } = {
   token: "",

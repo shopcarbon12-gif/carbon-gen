@@ -12,7 +12,7 @@ import {
 import { getShopifyAccessToken } from "@/lib/shopifyTokenRepository";
 import { resolvePublicAppOrigin } from "@/lib/resolvePublicAppOrigin";
 
-const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
+const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2026-07";
 const MAX_SHOPIFY_PUSH_JSON_BYTES = Number.parseInt(
   process.env.SHOPIFY_PUSH_MAX_BODY_BYTES || "",
   10

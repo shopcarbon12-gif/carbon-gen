@@ -19,7 +19,7 @@ else dotenv.config();
 
 const shop = (process.env.SHOPIFY_SHOP_DOMAIN || "").trim();
 const token = (process.env.SHOPIFY_ADMIN_ACCESS_TOKEN || "").trim();
-const API = (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
+const API = (process.env.SHOPIFY_API_VERSION || "").trim() || "2026-07";
 const DRY = process.argv.includes("--dry-run");
 const MAX_ALT = 120;
 const BATCH = 15;

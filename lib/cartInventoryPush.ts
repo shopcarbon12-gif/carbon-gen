@@ -8,6 +8,7 @@ import {
   runShopifyGraphql,
 } from "@/lib/shopify";
 import { getShopifyAccessToken } from "@/lib/shopifyTokenRepository";
+import { randomUUID } from "node:crypto";
 import {
   listCartCatalogParents,
   updateCartCatalogStatus,
@@ -198,7 +199,7 @@ export async function runCartPushAll(
   }
 
   const API_VERSION =
-    (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
+    (process.env.SHOPIFY_API_VERSION || "").trim() || "2026-07";
 
   const locRes = await runShopifyGraphql<{
     location?: { id: string };
@@ -1653,8 +1654,13 @@ export async function runCartPushAll(
       }>({
         shop,
         token,
-        query: `mutation($input: InventorySetQuantitiesInput!) {
-          inventorySetQuantities(input: $input) {
+        // Cart Inventory is the source of truth here, so we skip Shopify's
+        // compare-and-swap. As of API 2026-04 that is `changeFromQuantity: null`
+        // per line — `ignoreCompareQuantity` and `compareQuantity` were removed
+        // — and the `@idempotent` key became mandatory on this mutation.
+        // (`q.compareQuantity` was always null, so no behaviour changes.)
+        query: `mutation($input: InventorySetQuantitiesInput!, $idempotencyKey: String!) {
+          inventorySetQuantities(input: $input) @idempotent(key: $idempotencyKey) {
             userErrors { message }
           }
         }`,
@@ -1662,14 +1668,14 @@ export async function runCartPushAll(
           input: {
             name: "available",
             reason: "correction",
-            ignoreCompareQuantity: true,
             quantities: batch.map((q) => ({
               inventoryItemId: q.inventoryItemId,
               locationId: q.locationId,
               quantity: q.quantity,
-              compareQuantity: q.compareQuantity,
+              changeFromQuantity: null,
             })),
           },
+          idempotencyKey: randomUUID(),
         },
         apiVersion: API_VERSION,
       });
@@ -2034,7 +2040,7 @@ export async function runActivateArchivedInCart(shop: string): Promise<ActivateA
     return { ok: true, activated: 0 };
   }
 
-  const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
+  const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2026-07";
   let activated = 0;
   let shopifyCursor: string | null = null;
   const PRODUCTS_PER_PAGE = 50;

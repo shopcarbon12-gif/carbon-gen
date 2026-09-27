@@ -85,7 +85,7 @@ type OrdersCountResult = { count: number; ordersError?: string };
 
 async function getOrdersCount(shop: string, token: string): Promise<OrdersCountResult> {
   try {
-    const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
+    const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2026-07";
     const fromDate = new Date();
     fromDate.setFullYear(fromDate.getFullYear() - 1);
     const queryFilter = `created_at:>=${fromDate.toISOString().slice(0, 10)} status:any`;

@@ -10,7 +10,7 @@
  *   SHOPIFY_SHOP_DOMAIN=shopcarbon1.myshopify.com
  *   SHOPIFY_ADMIN_ACCESS_TOKEN=shpat_...  (read_content, write_content)
  *
- * Optional: SHOPIFY_API_VERSION=2025-01
+ * Optional: SHOPIFY_API_VERSION=2026-07
  *           SHOPIFY_STOREFRONT_BASE_URL=https://shopcarbon.com
  *           SHOPIFY_HTML_SITEMAP_USE_LOCAL=1 — read body from tmp-sitemap-clean/html-sitemap-*.html
  *             (skips storefront fetch; use when files are already carbon-clean)
@@ -26,7 +26,7 @@ config({ path: path.join(root, ".env") });
 
 const shop = (process.env.SHOPIFY_SHOP_DOMAIN || "").trim().toLowerCase();
 const token = (process.env.SHOPIFY_ADMIN_ACCESS_TOKEN || "").trim();
-const apiVersion = (process.env.SHOPIFY_API_VERSION || "2025-01").trim();
+const apiVersion = (process.env.SHOPIFY_API_VERSION || "2026-07").trim();
 const BASE = (
   process.env.SHOPIFY_STOREFRONT_BASE_URL || "https://shopcarbon.com"
 ).replace(/\/$/, "");

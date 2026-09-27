@@ -36,7 +36,7 @@ export function getShopifyConfig(baseUrl: string) {
     scopes: Array.from(mergedScopes).join(","),
     redirectUri:
       (process.env.SHOPIFY_REDIRECT_URI || "").trim() || `${baseUrl}/api/shopify/callback`,
-    apiVersion: (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01",
+    apiVersion: (process.env.SHOPIFY_API_VERSION || "").trim() || "2026-07",
   };
 }
 

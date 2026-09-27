@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
-const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
+const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2026-07";
 
 async function getToken(shop: string): Promise<string | null> {
   const dbToken = await getShopifyAccessToken(shop);

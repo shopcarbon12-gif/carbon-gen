@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
-const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
+const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2026-07";
 const MAX_AUDIT_FETCH_PAGES = Number.parseInt(process.env.SHOPIFY_AUDIT_MAX_PAGES || "", 10) || 60;
 const MAX_AUDIT_MISMATCHES = Number.parseInt(
   process.env.SHOPIFY_AUDIT_MAX_MISMATCHES || "",

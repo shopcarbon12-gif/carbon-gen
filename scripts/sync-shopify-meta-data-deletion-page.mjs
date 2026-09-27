@@ -6,7 +6,7 @@
  *   SHOPIFY_ADMIN_ACCESS_TOKEN=shpat_...  (read_content, write_content)
  *
  * Optional:
- *   SHOPIFY_API_VERSION=2025-01
+ *   SHOPIFY_API_VERSION=2026-07
  *
  * Source HTML: shopify/meta-data-deletion-shopify-admin.html (single `.page-width.rte` root div).
  */
@@ -21,7 +21,7 @@ config({ path: path.join(root, ".env") });
 
 const shop = (process.env.SHOPIFY_SHOP_DOMAIN || "").trim().toLowerCase();
 const token = (process.env.SHOPIFY_ADMIN_ACCESS_TOKEN || "").trim();
-const apiVersion = (process.env.SHOPIFY_API_VERSION || "2025-01").trim();
+const apiVersion = (process.env.SHOPIFY_API_VERSION || "2026-07").trim();
 const HANDLE = "facebook-data-deletion";
 
 if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(shop)) {

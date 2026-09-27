@@ -383,7 +383,7 @@ async function getShopifyToken(shop: string): Promise<string | null> {
   return getShopifyAdminToken(shop) || null;
 }
 
-const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
+const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2026-07";
 
 async function archiveShopifyProduct(shop: string, token: string, productGid: string): Promise<boolean> {
   const res = await runShopifyGraphql<{

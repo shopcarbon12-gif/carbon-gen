@@ -12,7 +12,7 @@
  *   SHOPIFY_ADMIN_ACCESS_TOKEN=shpat_...
  *   SHOPIFY_STOREFRONT_BASE_URL=https://shopcarbon.com   (canonical links in HTML)
  * Optional:
- *   SHOPIFY_API_VERSION=2025-01
+ *   SHOPIFY_API_VERSION=2026-07
  *   SHOPIFY_ADMIN_STORE_SLUG=shopcarbon1   (for admin.shopify.com URLs; else derived from shop domain)
  *
  * Scopes: read_products, read_content, write_content
@@ -34,7 +34,7 @@ config({ path: path.join(root, ".env") });
 
 const shop = (process.env.SHOPIFY_SHOP_DOMAIN || "").trim().toLowerCase();
 const token = (process.env.SHOPIFY_ADMIN_ACCESS_TOKEN || "").trim();
-const apiVersion = (process.env.SHOPIFY_API_VERSION || "2025-01").trim();
+const apiVersion = (process.env.SHOPIFY_API_VERSION || "2026-07").trim();
 let BASE = (
   process.env.SHOPIFY_STOREFRONT_BASE_URL || "https://shopcarbon.com"
 ).replace(/\/$/, "");

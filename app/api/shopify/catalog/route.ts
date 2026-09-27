@@ -4,7 +4,7 @@ import { getShopifyAdminToken, normalizeShopDomain } from "@/lib/shopify";
 import { getShopifyAccessToken } from "@/lib/shopifyTokenRepository";
 
 const API_VERSION =
-  (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
+  (process.env.SHOPIFY_API_VERSION || "").trim() || "2026-07";
 
 type CatalogProduct = {
   id: string;

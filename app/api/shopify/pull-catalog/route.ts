@@ -21,7 +21,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 const API_VERSION =
-  (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
+  (process.env.SHOPIFY_API_VERSION || "").trim() || "2026-07";
 const MAX_PAGES = 120;
 const PAGE_SIZE = 100;
 

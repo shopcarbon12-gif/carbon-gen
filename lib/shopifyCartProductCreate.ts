@@ -3,10 +3,11 @@
  * Uses Cart Configuration (newProductMapping, newProductRules) for field mapping.
  */
 import { runShopifyGraphql } from "@/lib/shopify";
+import { randomUUID } from "node:crypto";
 import type { StagingParent, StagingVariant } from "@/lib/shopifyCartStaging";
 import { sortSizes } from "@/lib/cartInventoryPush";
 
-const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
+const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2026-07";
 
 type CartConfig = {
   newProductMapping?: {
@@ -506,8 +507,12 @@ export async function createShopifyProductFromCart(
       await runShopifyGraphql({
         shop,
         token,
-        query: `mutation($input: InventorySetQuantitiesInput!) {
-          inventorySetQuantities(input: $input) {
+        // Newly created products: we are setting the opening quantity, so there
+        // is nothing to compare against. As of API 2026-04 the opt-out is
+        // `changeFromQuantity: null` per line (`ignoreCompareQuantity` and
+        // `compareQuantity` were removed) and `@idempotent` is mandatory here.
+        query: `mutation($input: InventorySetQuantitiesInput!, $idempotencyKey: String!) {
+          inventorySetQuantities(input: $input) @idempotent(key: $idempotencyKey) {
             userErrors { message }
           }
         }`,
@@ -515,14 +520,14 @@ export async function createShopifyProductFromCart(
           input: {
             name: "available",
             reason: "correction",
-            ignoreCompareQuantity: true,
             quantities: batch.map((q) => ({
               inventoryItemId: q.inventoryItemId,
               locationId: q.locationId,
               quantity: q.quantity,
-              compareQuantity: null,
+              changeFromQuantity: null,
             })),
           },
+          idempotencyKey: randomUUID(),
         },
         apiVersion: API_VERSION,
       });

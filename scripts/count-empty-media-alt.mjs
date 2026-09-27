@@ -10,7 +10,7 @@ else dotenv.config();
 
 const shop = (process.env.SHOPIFY_SHOP_DOMAIN || "").trim();
 const token = (process.env.SHOPIFY_ADMIN_ACCESS_TOKEN || "").trim();
-const API = (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
+const API = (process.env.SHOPIFY_API_VERSION || "").trim() || "2026-07";
 
 const Q = `
   query P($first: Int!, $after: String) {

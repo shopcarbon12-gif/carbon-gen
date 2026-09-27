@@ -17,7 +17,7 @@ config({ path: path.join(rootDir, ".env") });
 
 const shop = (process.env.SHOPIFY_SHOP_DOMAIN || "").trim().toLowerCase();
 const token = (process.env.SHOPIFY_ADMIN_ACCESS_TOKEN || "").trim();
-const apiVersion = (process.env.SHOPIFY_API_VERSION || "2025-01").trim();
+const apiVersion = (process.env.SHOPIFY_API_VERSION || "2026-07").trim();
 const storefrontBase = (
   process.env.SHOPIFY_STOREFRONT_BASE_URL || "https://shopcarbon.com"
 ).replace(/\/$/, "");

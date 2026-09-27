@@ -3,7 +3,7 @@
  *
  * Env: .env.local — SHOPIFY_SHOP_DOMAIN, SHOPIFY_ADMIN_ACCESS_TOKEN
  * Optional: SHOPIFY_THEME_ID (numeric) to target a non-main theme
- * Optional: SHOPIFY_API_VERSION (default 2025-01)
+ * Optional: SHOPIFY_API_VERSION (default 2026-07)
  *
  * Requires token scope: read_themes, write_themes (or legacy theme asset access).
  *
@@ -23,7 +23,7 @@ else dotenv.config();
 
 const shop = (process.env.SHOPIFY_SHOP_DOMAIN || "").trim().toLowerCase();
 const token = (process.env.SHOPIFY_ADMIN_ACCESS_TOKEN || "").trim();
-const apiVersion = (process.env.SHOPIFY_API_VERSION || "2025-01").trim();
+const apiVersion = (process.env.SHOPIFY_API_VERSION || "2026-07").trim();
 const dryRun = process.argv.includes("--dry-run");
 
 if (!shop || !token) {

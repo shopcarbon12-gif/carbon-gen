@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
   const token = await getTokenForShop(shop);
   if (!token) return NextResponse.json({ error: "No Shopify token" }, { status: 400 });
 
-  const apiVersion = normalizeText(process.env.SHOPIFY_API_VERSION) || "2025-01";
+  const apiVersion = normalizeText(process.env.SHOPIFY_API_VERSION) || "2026-07";
 
   const ordersResult = await runShopifyGraphql<{
     orders: {

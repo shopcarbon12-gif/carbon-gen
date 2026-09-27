@@ -27,7 +27,7 @@ if (!shop || !token) {
   process.exit(1);
 }
 
-const api = `https://${shop}/admin/api/2025-01`;
+const api = `https://${shop}/admin/api/2026-07`;
 const headers = {
   "X-Shopify-Access-Token": token,
   "Content-Type": "application/json",

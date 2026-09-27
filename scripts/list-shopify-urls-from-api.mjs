@@ -29,7 +29,7 @@ if (!shop || !token) {
   process.exit(1);
 }
 
-const apiBase = `https://${shop}/admin/api/2025-01`;
+const apiBase = `https://${shop}/admin/api/2026-07`;
 const headers = { Accept: "application/json", "X-Shopify-Access-Token": token };
 
 async function fetchAll(endpoint, key) {

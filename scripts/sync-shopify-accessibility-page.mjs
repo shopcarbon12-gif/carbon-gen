@@ -7,7 +7,7 @@
  *
  * Optional:
  *   SHOPIFY_ACCESSIBILITY_PAGE_ID=129944682748
- *   SHOPIFY_API_VERSION=2025-01
+ *   SHOPIFY_API_VERSION=2026-07
  */
 
 import fs from "node:fs";
@@ -21,7 +21,7 @@ config({ path: path.join(root, ".env") });
 const shop = (process.env.SHOPIFY_SHOP_DOMAIN || "").trim().toLowerCase();
 const token = (process.env.SHOPIFY_ADMIN_ACCESS_TOKEN || "").trim();
 const pageId = (process.env.SHOPIFY_ACCESSIBILITY_PAGE_ID || "129944682748").trim();
-const apiVersion = (process.env.SHOPIFY_API_VERSION || "2025-01").trim();
+const apiVersion = (process.env.SHOPIFY_API_VERSION || "2026-07").trim();
 
 if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(shop)) {
   console.error(

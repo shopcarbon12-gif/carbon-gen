@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No Shopify token found" }, { status: 400 });
     }
 
-    const apiVersion = normalizeText(process.env.SHOPIFY_API_VERSION) || "2025-01";
+    const apiVersion = normalizeText(process.env.SHOPIFY_API_VERSION) || "2026-07";
     const baseUrlRaw = normalizeText(body?.baseUrl || process.env.NEXT_PUBLIC_BASE_URL || process.env.VERCEL_URL);
     const baseUrl = baseUrlRaw || "https://app.shopcarbon.com";
     const protocol = baseUrl.startsWith("localhost") ? "http" : "https";

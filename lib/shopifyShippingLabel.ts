@@ -59,7 +59,7 @@ export async function getCarrierLabelPdfUrlForOrder(params: {
   const token = await getTokenForShop(shop);
   if (!token) return { labelPdfUrl: "", trackingNumber: "" };
 
-  const apiVersion = normalizeText(process.env.SHOPIFY_API_VERSION) || "2025-01";
+  const apiVersion = normalizeText(process.env.SHOPIFY_API_VERSION) || "2026-07";
   const url = `https://${shop}/admin/api/${apiVersion}/orders/${encodeURIComponent(orderId)}/fulfillments.json`;
 
   try {

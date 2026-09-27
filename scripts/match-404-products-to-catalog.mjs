@@ -194,7 +194,7 @@ function enrichMatchedWithShopifyRedirects(report, shopifyMap) {
 }
 
 async function fetchAllProducts() {
-  const apiBase = `https://${shop}/admin/api/2025-01`;
+  const apiBase = `https://${shop}/admin/api/2026-07`;
   const headers = { Accept: "application/json", "X-Shopify-Access-Token": token };
   const out = [];
   let url = `${apiBase}/products.json?limit=250&status=active`;

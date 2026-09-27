@@ -18,7 +18,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
-const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
+const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2026-07";
 const SHOPIFY_PRODUCTS_PER_PAGE = 100;
 // Coolify/Node: no Workers subrequest cap. Optional override via env.
 const MAX_SHOPIFY_SCAN_PAGES =

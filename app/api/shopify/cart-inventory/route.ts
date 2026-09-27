@@ -166,7 +166,7 @@ async function loadShopifySkuSet(
     return { skuSet: null, warning: "Strict SKU coverage unavailable: missing installed Shopify token for this shop." };
   }
 
-  const apiVersion = normalizeText(process.env.SHOPIFY_API_VERSION) || "2025-01";
+  const apiVersion = normalizeText(process.env.SHOPIFY_API_VERSION) || "2026-07";
   const skuSet = new Set<string>();
   let after: string | null = null;
 
@@ -1040,7 +1040,7 @@ export async function POST(req: NextRequest) {
       if (removeProductGids.length > 0) {
         const token =
           (await getTokenForShop(shop)) || getShopifyAdminToken(shop);
-        const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
+        const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2026-07";
         if (token) {
           for (const productGid of removeProductGids) {
             const updRes = await runShopifyGraphql<ProductUpdateResponse>({
@@ -1265,7 +1265,7 @@ export async function POST(req: NextRequest) {
       if (!token) {
         return NextResponse.json({ error: "No Shopify token." }, { status: 401 });
       }
-      const apiVer = (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
+      const apiVer = (process.env.SHOPIFY_API_VERSION || "").trim() || "2026-07";
       let archived = 0;
       for (const gid of gids) {
         const res = await runShopifyGraphql<ProductUpdateResponse>({
@@ -1290,7 +1290,7 @@ export async function POST(req: NextRequest) {
       if (!token) {
         return NextResponse.json({ error: "No Shopify token." }, { status: 401 });
       }
-      const apiVer = (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
+      const apiVer = (process.env.SHOPIFY_API_VERSION || "").trim() || "2026-07";
       let activated = 0;
       for (const gid of gids) {
         const res = await runShopifyGraphql<ProductUpdateResponse>({
@@ -1313,7 +1313,7 @@ export async function POST(req: NextRequest) {
       }
       const token = await getTokenForShop(shop);
       if (!token) return NextResponse.json({ error: "No Shopify token." }, { status: 401 });
-      const apiVer = (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
+      const apiVer = (process.env.SHOPIFY_API_VERSION || "").trim() || "2026-07";
 
       const goodGids = pairs.map((p) => {
         const id = String(p.goodProductId).trim();

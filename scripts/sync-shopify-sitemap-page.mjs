@@ -11,7 +11,7 @@
  *   SHOPIFY_SITEMAP_PAGE_ID=123456789       (skip lookup by handle)
  *   SHOPIFY_SITEMAP_PAGE_HANDLE=sitemap     (default)
  *   SHOPIFY_CREATE_SITEMAP_PAGE=true        (create page if missing)
- *   SHOPIFY_API_VERSION=2025-01
+ *   SHOPIFY_API_VERSION=2026-07
  *   SHOPIFY_STOREFRONT_BASE_URL=https://www.shopcarbon.com   (printed at end only)
  */
 
@@ -26,7 +26,7 @@ config({ path: path.join(rootDir, ".env") });
 
 const shop = (process.env.SHOPIFY_SHOP_DOMAIN || "").trim().toLowerCase();
 const token = (process.env.SHOPIFY_ADMIN_ACCESS_TOKEN || "").trim();
-const apiVersion = (process.env.SHOPIFY_API_VERSION || "2025-01").trim();
+const apiVersion = (process.env.SHOPIFY_API_VERSION || "2026-07").trim();
 const pageHandle = (process.env.SHOPIFY_SITEMAP_PAGE_HANDLE || "sitemap").trim().toLowerCase();
 const explicitId = (process.env.SHOPIFY_SITEMAP_PAGE_ID || "").trim();
 const createIfMissing =

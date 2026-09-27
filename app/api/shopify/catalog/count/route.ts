@@ -5,7 +5,7 @@ import { getShopifyAccessToken } from "@/lib/shopifyTokenRepository";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
+const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2026-07";
 const BASE_FILTER = "status:active";
 
 type CountResult = number | { count?: number } | null;

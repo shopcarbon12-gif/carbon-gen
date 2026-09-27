@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
+    const API_VERSION = (process.env.SHOPIFY_API_VERSION || "").trim() || "2026-07";
     const now = new Date();
     const currentStart = new Date(now);
     currentStart.setDate(currentStart.getDate() - days);

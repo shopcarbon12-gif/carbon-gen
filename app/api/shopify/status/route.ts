@@ -7,7 +7,7 @@ import {
 } from "@/lib/shopifyTokenRepository";
 
 const API_VERSION =
-  (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
+  (process.env.SHOPIFY_API_VERSION || "").trim() || "2026-07";
 
 async function probeShopToken(shop: string, token: string) {
   const query = `

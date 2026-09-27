@@ -20,7 +20,7 @@ config({ path: path.join(root, ".env") });
 
 const shop = (process.env.SHOPIFY_SHOP_DOMAIN || "").trim().toLowerCase();
 const token = (process.env.SHOPIFY_ADMIN_ACCESS_TOKEN || "").trim();
-const API_VERSION = (process.env.SHOPIFY_API_VERSION || "2025-01").trim();
+const API_VERSION = (process.env.SHOPIFY_API_VERSION || "2026-07").trim();
 
 const BASE_CATALOG_FILTER = "status:active -status:unlisted published_status:published";
 

@@ -28,7 +28,7 @@ if (!fs.existsSync(csvPath)) {
   process.exit(1);
 }
 
-const apiBase = `https://${shop}/admin/api/2025-01`;
+const apiBase = `https://${shop}/admin/api/2026-07`;
 const headers = {
   "Content-Type": "application/json",
   Accept: "application/json",

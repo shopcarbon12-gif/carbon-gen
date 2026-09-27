@@ -15,7 +15,7 @@ else dotenv.config();
 const shop = process.env.SHOPIFY_SHOP_DOMAIN || "30e7d3.myshopify.com";
 const token = process.env.SHOPIFY_ADMIN_ACCESS_TOKEN;
 const THEME_ID = "146033770748";
-const API_VER = "2025-01";
+const API_VER = "2026-07";
 const SNIPPET_KEY = "snippets/carbon-accessibility-widget.liquid";
 
 if (!token) {
