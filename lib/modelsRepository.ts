@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { Pool } from "pg";
+import { normalizeModelSlots, type ModelSlots } from "@/lib/modelSlots";
 
 export type ModelRecord = {
   model_id: string;
@@ -7,6 +8,8 @@ export type ModelRecord = {
   name: string;
   gender: string;
   ref_image_urls: string[];
+  /** Which photo plays which role. Empty for models saved before slots existed. */
+  ref_slots: ModelSlots;
   created_at: string | null;
 };
 
@@ -91,6 +94,9 @@ async function ensurePgReady() {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_models_user_created ON models(user_id, created_at DESC)`);
+  // Named reference-photo roles. Additive and nullable: every model saved
+  // before this column existed keeps working, it simply has no slots yet.
+  await pool.query(`ALTER TABLE models ADD COLUMN IF NOT EXISTS ref_slots JSONB`);
   pgReady = true;
 }
 
@@ -101,6 +107,7 @@ function toModelRecord(row: any): ModelRecord {
     name: String(row?.name || ""),
     gender: String(row?.gender || ""),
     ref_image_urls: Array.isArray(row?.ref_image_urls) ? row.ref_image_urls.map((v: unknown) => String(v || "")) : [],
+    ref_slots: normalizeModelSlots(row?.ref_slots),
     created_at: row?.created_at ? String(row.created_at) : null,
   };
 }
@@ -114,7 +121,7 @@ export async function listModelsForUser(userId: string) {
   await ensurePgReady();
   const pool = getPgPool();
   const { rows } = await pool.query(
-    `SELECT model_id, user_id, name, gender, ref_image_urls, created_at
+    `SELECT model_id, user_id, name, gender, ref_image_urls, ref_slots, created_at
      FROM models
      WHERE user_id = $1
      ORDER BY created_at DESC`,
@@ -150,7 +157,7 @@ export async function listAllModelsAsc() {
   await ensurePgReady();
   const pool = getPgPool();
   const { rows } = await pool.query(
-    `SELECT model_id, user_id, name, gender, ref_image_urls, created_at
+    `SELECT model_id, user_id, name, gender, ref_image_urls, ref_slots, created_at
      FROM models
      ORDER BY created_at ASC`
   );
@@ -163,16 +170,57 @@ export async function insertModelRow(params: {
   name: string;
   gender: string;
   ref_image_urls: string[];
+  ref_slots?: ModelSlots | null;
 }) {
   resolveMode();
   await ensurePgReady();
   const pool = getPgPool();
+  const slots = normalizeModelSlots(params.ref_slots);
+  const hasSlots = Object.keys(slots).length > 0;
   const { rows } = await pool.query(
-    `INSERT INTO models (model_id, user_id, name, gender, ref_image_urls)
-     VALUES ($1, $2, $3, $4, $5::jsonb)
-     RETURNING model_id, user_id, name, gender, ref_image_urls, created_at`,
-    [params.model_id, params.user_id, params.name, params.gender, JSON.stringify(params.ref_image_urls)]
+    `INSERT INTO models (model_id, user_id, name, gender, ref_image_urls, ref_slots)
+     VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
+     RETURNING model_id, user_id, name, gender, ref_image_urls, ref_slots, created_at`,
+    [
+      params.model_id,
+      params.user_id,
+      params.name,
+      params.gender,
+      JSON.stringify(params.ref_image_urls),
+      hasSlots ? JSON.stringify(slots) : null,
+    ]
   );
+  return rows[0] ? toModelRecord(rows[0]) : null;
+}
+
+/**
+ * Assign roles to an existing model's photos and rewrite `ref_image_urls` in
+ * slot order, so the generator receives them in a known sequence instead of
+ * whatever order they were uploaded in. Returns the updated row.
+ */
+export async function updateModelSlots(params: {
+  modelId: string;
+  userId?: string | null;
+  slots: ModelSlots;
+  refImageUrls: string[];
+}) {
+  const modelId = String(params.modelId || "").trim();
+  if (!modelId) return null;
+  const slots = normalizeModelSlots(params.slots);
+  const refImageUrls = (Array.isArray(params.refImageUrls) ? params.refImageUrls : [])
+    .map((v) => String(v || "").trim())
+    .filter(Boolean);
+
+  resolveMode();
+  await ensurePgReady();
+  const pool = getPgPool();
+  const sql = `UPDATE models
+                  SET ref_slots = $1::jsonb, ref_image_urls = $2::jsonb
+                WHERE model_id = $3${params.userId ? " AND user_id = $4" : ""}
+            RETURNING model_id, user_id, name, gender, ref_image_urls, ref_slots, created_at`;
+  const args: unknown[] = [JSON.stringify(slots), JSON.stringify(refImageUrls), modelId];
+  if (params.userId) args.push(String(params.userId));
+  const { rows } = await pool.query(sql, args);
   return rows[0] ? toModelRecord(rows[0]) : null;
 }
 

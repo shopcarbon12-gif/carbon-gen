@@ -7,6 +7,8 @@ import {
   uploadBytesToStorage,
 } from "@/lib/storageProvider";
 import { insertModelRow, modelNameExistsForUser } from "@/lib/modelsRepository";
+import { isModelSlotKey, type ModelSlots } from "@/lib/modelSlots";
+import { pushModelToWms } from "@/lib/wmsModelSync";
 
 // Saved-model photos are uploaded to the transient models/uploads/<user>/... area.
 // Before persisting the model, relocate each photo to a permanent models/saved/<id>/
@@ -182,6 +184,10 @@ export async function POST(req: NextRequest) {
     let name = "";
     let gender = "";
     let urls: string[] = [];
+    // Role names parallel to `urls` — slotRoles[i] names what urls[i] is for.
+    // Sent as a parallel array rather than a map so it survives the relocation
+    // below, which rewrites every URL but preserves order.
+    let slotRoles: string[] = [];
 
     let alreadyCheckedDuplicate = false;
     if (isJson || !isMultipart) {
@@ -206,7 +212,15 @@ export async function POST(req: NextRequest) {
             )
             .filter((v: string) => v.length > 0)
         : [];
+      slotRoles = Array.isArray(body?.slotRoles)
+        ? body.slotRoles.map((v: unknown) => String(v || "").trim())
+        : [];
+      const beforeDedupe = urls.length;
       urls = Array.from(new Set(urls));
+      // Dedupe can shorten `urls` and break the positional pairing. Rather than
+      // mis-label a photo, drop the roles entirely — the model still saves, it
+      // just has no slots, and the operator can assign them afterwards.
+      if (urls.length !== beforeDedupe) slotRoles = [];
       if (urls.length > MAX_MODEL_REFERENCE_URLS) {
         return NextResponse.json(
           {
@@ -359,14 +373,28 @@ export async function POST(req: NextRequest) {
     const modelId = crypto.randomUUID();
     const permanentUrls = await relocateSavedModelPhotos(urls, modelId);
 
+    // Map roles onto the RELOCATED urls: relocateSavedModelPhotos rewrites each
+    // entry but keeps the array order, so index i still names the same photo.
+    let refSlots: ModelSlots | null = null;
+    if (slotRoles.length === permanentUrls.length) {
+      const mapped: ModelSlots = {};
+      slotRoles.forEach((role, i) => {
+        if (isModelSlotKey(role) && permanentUrls[i]) mapped[role] = permanentUrls[i];
+      });
+      if (Object.keys(mapped).length) refSlots = mapped;
+    }
+
     const data = await insertModelRow({
       model_id: modelId,
       user_id: userId,
       name,
       gender,
       ref_image_urls: permanentUrls,
+      ref_slots: refSlots,
     });
-    return NextResponse.json({ model: data });
+    // Mirror into the WMS. Best-effort: never let a WMS hiccup fail the save.
+    const synced = await pushModelToWms(data);
+    return NextResponse.json({ model: data, wmsSynced: synced.ok, wmsSyncError: synced.ok ? undefined : synced.error });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Model upload failed" }, { status: 500 });
   } finally {

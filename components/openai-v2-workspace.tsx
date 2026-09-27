@@ -57,6 +57,16 @@ const INSTRUCTION_PRESETS = [
   "flare",
 ];
 
+import {
+  MODEL_SLOT_ORDER,
+  MODEL_SLOT_LABELS,
+  guessSlotsFromLegacyUrls,
+  missingModelSlots,
+  slotsToOrderedUrls,
+  type ModelSlotKey,
+  type ModelSlots,
+} from "@/lib/modelSlots";
+
 type CatalogProduct = {
   id: string;
   title: string;
@@ -70,6 +80,8 @@ type ModelRow = {
   name: string;
   gender: string;
   ref_image_urls: string[];
+  /** Which photo plays which role. Absent on models saved before slots existed. */
+  ref_slots?: ModelSlots;
   created_at?: string;
 };
 
@@ -184,6 +196,12 @@ export default function OpenAiV2Workspace() {
   const [mName, setMName] = useState("");
   const [mGender, setMGender] = useState<"female" | "male">("female");
   const [mRefs, setMRefs] = useState<RefImg[]>([]);
+  // New-model form: one photo per named role, instead of an unordered pile.
+  const [mSlots, setMSlots] = useState<Partial<Record<ModelSlotKey, RefImg>>>({});
+  // Slot editor for a model that already exists (the six saved before slots).
+  const [slotEditor, setSlotEditor] = useState<{ model: ModelRow; slots: ModelSlots } | null>(null);
+  const [slotEditorActive, setSlotEditorActive] = useState<ModelSlotKey>("face_front");
+  const [slotEditorBusy, setSlotEditorBusy] = useState(false);
   const [mBusy, setMBusy] = useState(false);
   const modelFileRef = useRef<HTMLInputElement | null>(null);
 
@@ -546,19 +564,104 @@ export default function OpenAiV2Workspace() {
     if (arr.length) addFilesToRefs(arr, setMRefs);
   }
 
+  /** Put ONE photo into ONE named slot, replacing whatever was there. */
+  function onSlotFile(slot: ModelSlotKey, files: FileList | null) {
+    const file = [...(files || [])].find((f) => f.type.startsWith("image/"));
+    if (!file) return;
+    const entry: RefImg = {
+      id: `slot-${slot}-${Date.now()}-${Math.round(performance.now())}`,
+      preview: URL.createObjectURL(file),
+      url: null,
+      uploading: true,
+    };
+    setMSlots((prev) => ({ ...prev, [slot]: entry }));
+    uploadOne(file)
+      .then(({ url }) =>
+        setMSlots((prev) => (prev[slot]?.id === entry.id ? { ...prev, [slot]: { ...entry, url, uploading: false } } : prev))
+      )
+      .catch((e: any) => {
+        setError(e?.message || "Upload failed.");
+        setMSlots((prev) => {
+          if (prev[slot]?.id !== entry.id) return prev;
+          const next = { ...prev };
+          delete next[slot];
+          return next;
+        });
+      });
+  }
+
+  /** Upload a NEW photo straight into a slot of an already-saved model. */
+  function onSlotEditorFile(slot: ModelSlotKey, files: FileList | null) {
+    const file = [...(files || [])].find((f) => f.type.startsWith("image/"));
+    if (!file) return;
+    setSlotEditorBusy(true);
+    uploadOne(file)
+      .then(({ url }) => setSlotEditor((prev) => (prev ? { ...prev, slots: { ...prev.slots, [slot]: url } } : prev)))
+      .catch((e: any) => setError(e?.message || "Upload failed."))
+      .finally(() => setSlotEditorBusy(false));
+  }
+
+  function openSlotEditor(model: ModelRow) {
+    const existing = model.ref_slots && Object.keys(model.ref_slots).length
+      ? model.ref_slots
+      : guessSlotsFromLegacyUrls(model.ref_image_urls);
+    setSlotEditor({ model, slots: existing });
+    setSlotEditorActive("face_front");
+  }
+
+  async function saveSlotEditor() {
+    if (!slotEditor) return;
+    const missing = missingModelSlots(slotEditor.slots);
+    if (missing.length) {
+      setError(`Fill every slot first. Missing: ${missing.map((k) => MODEL_SLOT_LABELS[k].title).join(", ")}.`);
+      return;
+    }
+    setSlotEditorBusy(true);
+    setError(null);
+    try {
+      const resp = await fetch("/api/models/slots", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model_id: slotEditor.model.model_id, slots: slotEditor.slots }),
+      });
+      const json = await parseJson(resp);
+      if (!resp.ok) throw new Error(json?.error || "Failed to save slots.");
+      const saved = json?.model as ModelRow | undefined;
+      if (saved?.model_id) {
+        setModels((prev) => prev.map((m) => (m.model_id === saved.model_id ? saved : m)));
+      }
+      setStatus(`Saved photo slots for "${slotEditor.model.name}".`);
+      setSlotEditor(null);
+    } catch (e: any) {
+      setError(e?.message || "Failed to save slots.");
+    } finally {
+      setSlotEditorBusy(false);
+    }
+  }
+
   async function saveModel() {
     const name = mName.trim();
     if (!name) return setError("Give the model a name.");
-    const urls = mRefs.filter((r) => r.url).map((r) => r.url as string);
-    if (mRefs.some((r) => r.uploading)) return setError("Wait for model photos to finish uploading.");
-    if (urls.length < 3) return setError("Upload at least 3 model photos.");
+    if (MODEL_SLOT_ORDER.some((k) => mSlots[k]?.uploading)) {
+      return setError("Wait for model photos to finish uploading.");
+    }
+    // Four named photos, sent in slot order with a parallel list of roles so
+    // the server can record which is which. Every slot is required: the point
+    // of the set is that each one carries information the others cannot.
+    const filled = MODEL_SLOT_ORDER.filter((k) => mSlots[k]?.url);
+    const missing = MODEL_SLOT_ORDER.filter((k) => !mSlots[k]?.url);
+    if (missing.length) {
+      return setError(`Fill every slot. Missing: ${missing.map((k) => MODEL_SLOT_LABELS[k].title).join(", ")}.`);
+    }
+    const urls = filled.map((k) => mSlots[k]!.url as string);
+    const slotRoles = filled.slice();
     setMBusy(true);
     setError(null);
     try {
       const resp = await fetch("/api/models", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, gender: mGender, urls }),
+        body: JSON.stringify({ name, gender: mGender, urls, slotRoles }),
       });
       const json = await parseJson(resp);
       if (!resp.ok) throw new Error(json?.error || "Failed to save model.");
@@ -566,6 +669,7 @@ export default function OpenAiV2Workspace() {
       setAddModelOpen(false);
       setMName("");
       setMRefs([]);
+      setMSlots({});
       // Optimistic: the /api/models/list endpoint has an 8s server cache, so a refetch
       // here would return stale data (without the new model). Update local state instead.
       if (saved?.model_id) {
@@ -1431,6 +1535,17 @@ export default function OpenAiV2Workspace() {
                   : <div className="v2-noimg" />}
                 <small>{m.name}</small>
                 <small className="muted">{m.gender}</small>
+                <button
+                  className={`v2-slotbtn ${m.ref_slots && Object.keys(m.ref_slots).length === MODEL_SLOT_ORDER.length ? "ok" : "warn"}`}
+                  title={
+                    m.ref_slots && Object.keys(m.ref_slots).length === MODEL_SLOT_ORDER.length
+                      ? "Photo slots are set — click to review"
+                      : "No photo slots set. The generator gets these photos in upload order."
+                  }
+                  onClick={(e) => { e.stopPropagation(); openSlotEditor(m); }}
+                >
+                  {m.ref_slots && Object.keys(m.ref_slots).length === MODEL_SLOT_ORDER.length ? "Slots ✓" : "Set slots"}
+                </button>
               </div>
             ))}
             <div className="v2-model add" onClick={() => setAddModelOpen((v) => !v)}>
@@ -1449,20 +1564,112 @@ export default function OpenAiV2Workspace() {
                   <button key={g} className={`v2-segbtn ${mGender === g ? "active" : ""}`} onClick={() => setMGender(g)}>{g === "female" ? "Female" : "Male"}</button>
                 ))}
               </div>
-              <input ref={modelFileRef} type="file" accept="image/*" multiple hidden onChange={(e) => onModelFiles(e.target.files)} />
-              <button className="v2-drop mt8" onClick={() => modelFileRef.current?.click()}>{mBusy ? "Saving…" : "Upload model photos (min 3)"}</button>
-              <div className="v2-thumbs">
-                {mRefs.map((r) => (
-                  <div key={r.id} className="v2-thumb">
-                    <img src={r.preview} alt="" onClick={() => openPreview(r.preview)} />
-                    {r.uploading ? <span className="v2-uploading">…</span> : null}
-                    <span className="x" onClick={() => setMRefs((p) => p.filter((x) => x.id !== r.id))}>×</span>
-                  </div>
-                ))}
+              <label className="v2-lbl" style={{ marginTop: 12 }}>Reference photos — one per slot</label>
+              <div className="v2-slots">
+                {MODEL_SLOT_ORDER.map((key) => {
+                  const entry = mSlots[key];
+                  return (
+                    <div key={key} className={`v2-slot ${entry ? "filled" : ""}`}>
+                      <div className="v2-slot-head">{MODEL_SLOT_LABELS[key].title}</div>
+                      <label className="v2-slot-drop">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          hidden
+                          onChange={(e) => { onSlotFile(key, e.target.files); e.currentTarget.value = ""; }}
+                        />
+                        {entry ? (
+                          <>
+                            <img src={entry.preview} alt="" />
+                            {entry.uploading ? <span className="v2-uploading">…</span> : null}
+                          </>
+                        ) : (
+                          <span className="v2-slot-plus">＋</span>
+                        )}
+                      </label>
+                      {entry ? (
+                        <button
+                          className="v2-slot-clear"
+                          onClick={() => setMSlots((prev) => { const n = { ...prev }; delete n[key]; return n; })}
+                        >
+                          Remove
+                        </button>
+                      ) : null}
+                      <div className="v2-slot-hint">{MODEL_SLOT_LABELS[key].hint}</div>
+                    </div>
+                  );
+                })}
               </div>
               <div className="v2-row mt8">
                 <button className="v2-btn primary" disabled={mBusy} onClick={saveModel}>💾 Save model to server</button>
                 <button className="v2-btn ghost" onClick={() => setAddModelOpen(false)}>Cancel</button>
+              </div>
+            </div>
+          ) : null}
+          {slotEditor ? (
+            <div className="v2-addmodel">
+              <label className="v2-lbl">Photo slots — {slotEditor.model.name}</label>
+              <div className="v2-hint" style={{ marginTop: 0 }}>
+                Click a slot, then click one of the model&apos;s photos below to assign it — or upload a new
+                one. Saving replaces this model&apos;s reference list with these four, in this order.
+              </div>
+              <div className="v2-slots">
+                {MODEL_SLOT_ORDER.map((key) => {
+                  const url = slotEditor.slots[key];
+                  return (
+                    <div
+                      key={key}
+                      className={`v2-slot ${url ? "filled" : ""} ${slotEditorActive === key ? "active" : ""}`}
+                      onClick={() => setSlotEditorActive(key)}
+                    >
+                      <div className="v2-slot-head">{MODEL_SLOT_LABELS[key].title}</div>
+                      <div className="v2-slot-drop">
+                        {url ? <img src={storagePreview(url)} alt="" /> : <span className="v2-slot-plus">＋</span>}
+                      </div>
+                      <label className="v2-slot-clear" style={{ cursor: "pointer" }}>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          hidden
+                          onChange={(e) => { onSlotEditorFile(key, e.target.files); e.currentTarget.value = ""; }}
+                        />
+                        Upload new
+                      </label>
+                      <div className="v2-slot-hint">{MODEL_SLOT_LABELS[key].hint}</div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <label className="v2-lbl" style={{ marginTop: 12 }}>
+                This model&apos;s photos — click one to put it in &ldquo;{MODEL_SLOT_LABELS[slotEditorActive].title}&rdquo;
+              </label>
+              <div className="v2-thumbs">
+                {slotEditor.model.ref_image_urls.map((u, i) => {
+                  const used = MODEL_SLOT_ORDER.find((k) => slotEditor.slots[k] === u);
+                  return (
+                    <div
+                      key={`${u}-${i}`}
+                      className={`v2-thumb pick ${used ? "used" : ""}`}
+                      title={used ? `Currently: ${MODEL_SLOT_LABELS[used].title}` : "Click to assign to the selected slot"}
+                      onClick={() =>
+                        setSlotEditor((prev) =>
+                          prev ? { ...prev, slots: { ...prev.slots, [slotEditorActive]: u } } : prev
+                        )
+                      }
+                    >
+                      <img src={storagePreview(u)} alt="" />
+                      {used ? <span className="v2-usedtag">{used.startsWith("face") ? "face" : "body"}</span> : null}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="v2-row mt8">
+                <button className="v2-btn primary" disabled={slotEditorBusy} onClick={saveSlotEditor}>
+                  {slotEditorBusy ? "Saving…" : "💾 Save slots"}
+                </button>
+                <button className="v2-btn ghost" disabled={slotEditorBusy} onClick={() => setSlotEditor(null)}>Cancel</button>
               </div>
             </div>
           ) : null}
@@ -1832,6 +2039,26 @@ export default function OpenAiV2Workspace() {
 }
 
 const V2_CSS = `
+/* ---- model reference photo slots ---- */
+.v2-slots{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:8px}
+@media (max-width:820px){.v2-slots{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.v2-slot{border:1px solid rgba(255,255,255,.14);border-radius:10px;padding:8px;background:rgba(255,255,255,.03);display:flex;flex-direction:column;gap:6px}
+.v2-slot.filled{border-color:rgba(80,200,140,.45)}
+.v2-slot.active{border-color:#4aa3ff;box-shadow:0 0 0 2px rgba(74,163,255,.25)}
+.v2-slot-head{font-size:11px;font-weight:600;letter-spacing:.02em;opacity:.9}
+.v2-slot-drop{position:relative;display:flex;align-items:center;justify-content:center;aspect-ratio:3/4;border:1px dashed rgba(255,255,255,.22);border-radius:8px;overflow:hidden;cursor:pointer;background:rgba(0,0,0,.18)}
+.v2-slot-drop img{width:100%;height:100%;object-fit:cover;display:block}
+.v2-slot-plus{font-size:22px;opacity:.5}
+.v2-slot-clear{background:none;border:0;color:inherit;opacity:.7;font-size:11px;text-align:left;padding:0;cursor:pointer;text-decoration:underline}
+.v2-slot-clear:hover{opacity:1}
+.v2-slot-hint{font-size:10px;line-height:1.35;opacity:.55}
+.v2-slotbtn{margin-top:4px;width:100%;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.05);color:inherit;border-radius:6px;font-size:10px;padding:2px 4px;cursor:pointer}
+.v2-slotbtn.ok{border-color:rgba(80,200,140,.5);color:#79d6a6}
+.v2-slotbtn.warn{border-color:rgba(240,180,80,.5);color:#f0b450}
+.v2-thumb.pick{cursor:pointer}
+.v2-thumb.pick.used{outline:2px solid rgba(80,200,140,.6);outline-offset:1px}
+.v2-usedtag{position:absolute;left:2px;bottom:2px;font-size:9px;background:rgba(0,0,0,.7);border-radius:3px;padding:0 3px}
+
 .v2-wrap{
   --fg:#f8fafc;--muted:rgba(226,232,240,0.72);
   --panel-bg:rgba(255,255,255,0.06);--panel-border:rgba(255,255,255,0.12);
