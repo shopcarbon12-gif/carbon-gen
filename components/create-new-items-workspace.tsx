@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { orlandoStamp } from "@/lib/orlando-time";
 
 type BuilderRow = {
   id: string;
@@ -631,7 +632,7 @@ export default function CreateNewItemsWorkspace() {
   function exportPurchaseOrderCsv() {
     if (!purchaseRows.length) return;
     downloadCsv(
-      `purchase-order-simplified-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.csv`,
+      `purchase-order-simplified-${orlandoStamp()}.csv`,
       [
         "Code Number",
         "Style Number",
@@ -660,7 +661,7 @@ export default function CreateNewItemsWorkspace() {
   function exportEpcCsv() {
     if (!epcRows.length) return;
     downloadCsv(
-      `epc-sheet-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.csv`,
+      `epc-sheet-${orlandoStamp()}.csv`,
       [
         "CODE NUMBER",
         "BARCODE NUMBER",

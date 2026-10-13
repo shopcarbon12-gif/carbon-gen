@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { orlandoStamp } from "@/lib/orlando-time";
 
 type CatalogRow = {
   id: string;
@@ -130,7 +131,7 @@ function getLocationQty(row: CatalogRow, locationName: string) {
 }
 
 function buildTimestampSlug() {
-  return new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+  return orlandoStamp();
 }
 
 function buildCatalogCsv(

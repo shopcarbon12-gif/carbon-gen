@@ -12,6 +12,7 @@ import styles from "./page.module.css";
 import { formatAppDateTime } from "@/lib/formatAppDateTime";
 import { CARBON_A11Y_WIDGET_WREV } from "@/lib/carbon-a11y-widget-rev";
 import { hasFullAppAccess } from "@/lib/authRoleConstants";
+import { orlandoDate } from "@/lib/orlando-time";
 
 type WidgetPosition = "left" | "right";
 
@@ -1050,7 +1051,7 @@ export default function AccessibilityPage() {
       const objectUrl = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = objectUrl;
-      anchor.download = `accessibility-log-history-${(settingsScope || "default").toLowerCase()}-${new Date().toISOString().slice(0, 10)}.csv`;
+      anchor.download = `accessibility-log-history-${(settingsScope || "default").toLowerCase()}-${orlandoDate()}.csv`;
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();

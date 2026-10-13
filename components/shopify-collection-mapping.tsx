@@ -14,6 +14,7 @@ import {
   type ShopifyCollectionMappingRowWorkflow,
   type ShopifyCollectionMappingStatusBadgeTone,
 } from "@/lib/shopifyCollectionMappingKpi";
+import { orlandoDate } from "@/lib/orlando-time";
 
 function useMatchMediaMaxWidth(maxWidthPx: number): boolean {
   const query = `(max-width: ${maxWidthPx}px)`;
@@ -2978,7 +2979,7 @@ export default function ShopifyCollectionMapping() {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `collection-mapping-audit-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.download = `collection-mapping-audit-${orlandoDate()}.csv`;
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
@@ -4406,7 +4407,7 @@ export default function ShopifyCollectionMapping() {
       `total_additions,${summary.totalAdditions}`,
       `total_removals,${summary.totalRemovals}`,
     ];
-    downloadCsvFile(`push-summary-${new Date().toISOString().slice(0, 10)}.csv`, lines);
+    downloadCsvFile(`push-summary-${orlandoDate()}.csv`, lines);
   }
 
   function exportPushFailureReport() {
@@ -4416,7 +4417,7 @@ export default function ShopifyCollectionMapping() {
       lines.push(`"${row.title.replace(/"/g, '""')}",${row.plannerStatus},"${row.skippedReason.replace(/"/g, '""')}"`);
     }
     if (lines.length < 2) lines.push('"No failed planning rows",failedPlanning,"-"');
-    downloadCsvFile(`push-failure-${new Date().toISOString().slice(0, 10)}.csv`, lines);
+    downloadCsvFile(`push-failure-${orlandoDate()}.csv`, lines);
   }
 
   function exportSkippedReviewReport() {
@@ -4426,7 +4427,7 @@ export default function ShopifyCollectionMapping() {
       lines.push(`"${row.title.replace(/"/g, '""')}",${row.plannerStatus},"${row.skippedReason.replace(/"/g, '""')}"`);
     }
     if (lines.length < 2) lines.push('"No skipped review rows",skippedReview,"-"');
-    downloadCsvFile(`skipped-review-${new Date().toISOString().slice(0, 10)}.csv`, lines);
+    downloadCsvFile(`skipped-review-${orlandoDate()}.csv`, lines);
   }
 
   function exportCollectionDeltaReport() {
@@ -4438,7 +4439,7 @@ export default function ShopifyCollectionMapping() {
         `"${row.title.replace(/"/g, '""')}",${row.plannerStatus},"${adds.replace(/"/g, '""')}","${removals.replace(/"/g, '""')}"`
       );
     }
-    downloadCsvFile(`collection-delta-${new Date().toISOString().slice(0, 10)}.csv`, lines);
+    downloadCsvFile(`collection-delta-${orlandoDate()}.csv`, lines);
   }
 
   async function executePushPreviewScaffold() {

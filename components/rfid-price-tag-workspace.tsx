@@ -5,7 +5,7 @@ import type { CatalogItem, LabelMapping, RfidSettings } from "@/lib/rfid";
 import { DEFAULT_RFID_SETTINGS } from "@/lib/rfid";
 import StudioStatusBar from "@/components/studio-status-bar";
 import { formatAppDateTime } from "@/lib/formatAppDateTime";
-import { STORE_TZ } from "@/lib/orlando-time";
+import { STORE_TZ, orlandoStamp } from "@/lib/orlando-time";
 import { hasFullAppAccess } from "@/lib/authRoleConstants";
 
 type SessionMeResponse = {
@@ -901,7 +901,7 @@ export default function RfidPriceTagWorkspace() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `rfid-logs-selected-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.csv`;
+    a.download = `rfid-logs-selected-${orlandoStamp()}.csv`;
     document.body.appendChild(a);
     a.click();
     a.remove();
