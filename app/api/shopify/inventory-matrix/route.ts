@@ -1079,16 +1079,17 @@ function parentMatchesFilters(parent: MatrixParentRow, filters: FilterState) {
   const productCreatedFrom = normalizeText(filters.productCreatedFrom);
   const productCreatedTo = normalizeText(filters.productCreatedTo);
   if (productCreatedFrom || productCreatedTo) {
+    // Whole Orlando days (server runs TZ=America/New_York), not UTC days.
     const parentCreateTime = normalizeText(parent.createTime);
     if (!parentCreateTime) return false;
     const parentDate = new Date(parentCreateTime);
     if (Number.isNaN(parentDate.getTime())) return false;
     if (productCreatedFrom) {
-      const fromDate = new Date(productCreatedFrom + "T00:00:00Z");
+      const fromDate = new Date(productCreatedFrom + "T00:00:00");
       if (parentDate < fromDate) return false;
     }
     if (productCreatedTo) {
-      const toDate = new Date(productCreatedTo + "T23:59:59.999Z");
+      const toDate = new Date(productCreatedTo + "T23:59:59.999");
       if (parentDate > toDate) return false;
     }
   }

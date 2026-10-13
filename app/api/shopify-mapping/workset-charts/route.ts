@@ -9,6 +9,7 @@ import {
   runShopifyGraphql,
 } from "@/lib/shopify";
 import { listShopifyTokenRecords } from "@/lib/shopifyTokenRepository";
+import { orlandoDate } from "@/lib/orlando-time";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,8 +37,11 @@ async function getShopAndToken(): Promise<{ shop: string; token: string } | null
   return null;
 }
 
+/** Orlando calendar day "YYYY-MM-DD" for a timestamp (not the UTC day). */
 function toDateKey(iso: string): string {
-  return iso.slice(0, 10);
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
+  return orlandoDate(d);
 }
 
 export async function GET(req: NextRequest) {

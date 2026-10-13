@@ -15,6 +15,7 @@ import {
   MALE_POSE_LIBRARY,
   getPoseLibraryForGender,
 } from "@/lib/panelPoseLibraries";
+import { STORE_TZ, orlandoDate } from "@/lib/orlando-time";
 
 const panels = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }];
 
@@ -366,10 +367,8 @@ function isValidBarcode(value: string) {
 }
 
 function getLocalDayKey(dateLike: Date) {
-  const year = dateLike.getFullYear();
-  const month = `${dateLike.getMonth() + 1}`.padStart(2, "0");
-  const day = `${dateLike.getDate()}`.padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  // Orlando calendar day, whatever the viewer's computer time zone.
+  return orlandoDate(dateLike);
 }
 
 function isTimestampInCurrentLocalDay(value: string | null) {
@@ -1265,7 +1264,10 @@ export default function GeminiWorkspace({ mode = "all" }: GeminiWorkspaceProps) 
     const maybeRunDailyUploadCleanup = async () => {
       if (dailyModelUploadCleanupInFlightRef.current) return;
       const now = new Date();
-      if (now.getHours() !== 0) return;
+      const orlandoHour = Number(
+        new Intl.DateTimeFormat("en-US", { timeZone: STORE_TZ, hour: "numeric", hourCycle: "h23" }).format(now)
+      );
+      if (orlandoHour !== 0) return;
       const todayKey = getLocalDayKey(now);
       const lastCleanupKey = String(window.localStorage.getItem(DAILY_MODEL_UPLOAD_CLEANUP_STORAGE_KEY) || "");
       if (lastCleanupKey === todayKey) return;

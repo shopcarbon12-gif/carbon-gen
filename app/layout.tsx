@@ -2,7 +2,12 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import AutoCapitalizeFirstLetter from "@/components/auto-capitalize-first-letter";
+import { ORLANDO_TIME_PATCH } from "@/lib/orlando-time";
 import "./globals.css";
+
+// Orlando is the default display time zone on the server too.
+// eslint-disable-next-line no-new-func
+new Function(ORLANDO_TIME_PATCH)();
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -37,6 +42,8 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        {/* Must run first: every date/time shows in Orlando time, whatever the viewer's zone. */}
+        <script dangerouslySetInnerHTML={{ __html: ORLANDO_TIME_PATCH }} />
         <link
           rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css"

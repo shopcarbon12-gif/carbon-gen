@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { orlandoDate } from "@/lib/orlando-time";
 import {
   LineChart,
   Line,
@@ -71,11 +72,13 @@ function formatCount(value: number | null | undefined) {
 }
 
 function formatDateShort(iso: string) {
+  // A plain "YYYY-MM-DD" day key is already an Orlando calendar day; read it as-is.
+  const plain = /^\d{4}-(\d{2})-(\d{2})$/.exec(iso);
+  if (plain) return `${plain[1]}-${plain[2]}`;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  const m = d.getMonth() + 1;
-  const day = d.getDate();
-  return `${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  const [, m, day] = orlandoDate(d).split("-");
+  return `${m}-${day}`;
 }
 
 export default function ShopifyMappingWorkset() {
@@ -160,7 +163,7 @@ export default function ShopifyMappingWorkset() {
   }, [chartData?.topRevenue]);
 
   const topRevenueRows = chartData?.topRevenue || [];
-  const currentYear = new Date().getFullYear();
+  const currentYear = Number(orlandoDate().slice(0, 4));
   const prevYear = currentYear - 1;
 
   return (

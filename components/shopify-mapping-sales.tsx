@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { STORE_TZ } from "@/lib/orlando-time";
 
 type SalesFilters = {
   orderNo: string;
@@ -65,12 +66,26 @@ function formatDateTime(value: string) {
   if (!text) return "--";
   const d = new Date(text);
   if (Number.isNaN(d.getTime())) return text;
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  const y = d.getFullYear();
-  const h = d.getHours();
-  const min = d.getMinutes();
-  const sec = d.getSeconds();
+  // Orlando wall-clock parts, whatever the viewer's computer time zone.
+  const parts: Record<string, string> = {};
+  for (const p of new Intl.DateTimeFormat("en-US", {
+    timeZone: STORE_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(d)) {
+    parts[p.type] = p.value;
+  }
+  const m = parts.month;
+  const day = parts.day;
+  const y = parts.year;
+  const h = Number(parts.hour);
+  const min = Number(parts.minute);
+  const sec = Number(parts.second);
   const ampm = h >= 12 ? "PM" : "AM";
   const h12 = h % 12 || 12;
   return `${m}/${day}/${y} ${String(h12).padStart(2, "0")}:${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")} ${ampm}`;

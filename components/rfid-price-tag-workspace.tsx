@@ -5,6 +5,7 @@ import type { CatalogItem, LabelMapping, RfidSettings } from "@/lib/rfid";
 import { DEFAULT_RFID_SETTINGS } from "@/lib/rfid";
 import StudioStatusBar from "@/components/studio-status-bar";
 import { formatAppDateTime } from "@/lib/formatAppDateTime";
+import { STORE_TZ } from "@/lib/orlando-time";
 import { hasFullAppAccess } from "@/lib/authRoleConstants";
 
 type SessionMeResponse = {
@@ -165,9 +166,44 @@ function formatElapsed(ms: number) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
+/** Offset (ms) of Orlando wall-clock time from UTC at instant `t`. */
+function orlandoOffsetMs(t: number) {
+  const parts: Record<string, string> = {};
+  for (const p of new Intl.DateTimeFormat("en-US", {
+    timeZone: STORE_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(t))) {
+    parts[p.type] = p.value;
+  }
+  const wall = Date.UTC(
+    Number(parts.year),
+    Number(parts.month) - 1,
+    Number(parts.day),
+    Number(parts.hour),
+    Number(parts.minute),
+    Number(parts.second)
+  );
+  return wall - Math.floor(t / 1000) * 1000;
+}
+
 function toIsoIfValid(value: string) {
   const trimmed = String(value || "").trim();
   if (!trimmed) return "";
+  // "From"/"To" pickers have no zone: read them as Orlando time, not the viewer's.
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(trimmed)) {
+    const asUtc = Date.parse(`${trimmed}Z`);
+    if (Number.isFinite(asUtc)) {
+      let t = asUtc - orlandoOffsetMs(asUtc);
+      t = asUtc - orlandoOffsetMs(t);
+      return new Date(t).toISOString();
+    }
+  }
   const t = Date.parse(trimmed);
   if (!Number.isFinite(t)) return "";
   return new Date(t).toISOString();
