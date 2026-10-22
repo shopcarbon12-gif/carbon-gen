@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { uploadBytesToStorage } from "@/lib/storageProvider";
+import { normalizeRemoteImageUrl, fetchRemoteImageBytes } from "@/lib/remoteImage";
 
 const MAX_ITEM_UPLOAD_FILES = Number.parseInt(process.env.ITEM_UPLOAD_MAX_FILES || "", 10) || 60;
 const MAX_ITEM_UPLOAD_FILE_BYTES = Number.parseInt(
@@ -61,16 +62,6 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
-async function fetchWithTimeout(url: string, timeoutMs: number) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, { signal: controller.signal });
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
 export async function POST(req: NextRequest) {
   try {
     const isAuthed =
@@ -113,34 +104,19 @@ export async function POST(req: NextRequest) {
           inputUrls,
           importConcurrency,
           async (sourceUrl, i) => {
-          const remote = await fetchWithTimeout(sourceUrl, ITEM_IMPORT_FETCH_TIMEOUT_MS);
-          if (!remote.ok) {
-            throw new Error(`Failed to fetch catalog image (${remote.status})`);
-          }
-
-          const remoteContentType = remote.headers.get("content-type") || "application/octet-stream";
+          // Validate scheme/host and block private, loopback and link-local
+          // targets before fetching, then fetch with a hard size cap. This is
+          // the SSRF guard (shared with the generate/alt flows); the import
+          // previously fetched arbitrary user-supplied URLs server-side.
+          const safeUrl = normalizeRemoteImageUrl(sourceUrl);
+          const { bytes, contentType: remoteContentType } = await fetchRemoteImageBytes(safeUrl, {
+            timeoutMs: ITEM_IMPORT_FETCH_TIMEOUT_MS,
+            maxBytes: MAX_ITEM_UPLOAD_FILE_BYTES,
+          });
           if (!String(remoteContentType).toLowerCase().startsWith("image/")) {
             throw new Error("Source URL is not an image.");
           }
-          const remoteLengthRaw = remote.headers.get("content-length");
-          const remoteLength = remoteLengthRaw ? Number.parseInt(remoteLengthRaw, 10) : 0;
-          if (remoteLength > MAX_ITEM_UPLOAD_FILE_BYTES) {
-            throw new Error(
-              `Source image is too large. Max size is ${Math.floor(
-                MAX_ITEM_UPLOAD_FILE_BYTES / (1024 * 1024)
-              )}MB.`
-            );
-          }
-          const arrayBuffer = await remote.arrayBuffer();
-          const bytes = new Uint8Array(arrayBuffer);
-          if (bytes.byteLength > MAX_ITEM_UPLOAD_FILE_BYTES) {
-            throw new Error(
-              `Source image is too large. Max size is ${Math.floor(
-                MAX_ITEM_UPLOAD_FILE_BYTES / (1024 * 1024)
-              )}MB.`
-            );
-          }
-          const safeName = guessFileNameFromUrl(sourceUrl, i);
+          const safeName = guessFileNameFromUrl(safeUrl, i);
           const path = `${folderPrefix}/${batchId}/${Date.now()}-${crypto.randomUUID()}-${safeName}`;
 
           const uploaded = await uploadBytesToStorage({

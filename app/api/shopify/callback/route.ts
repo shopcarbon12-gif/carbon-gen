@@ -87,8 +87,11 @@ export async function GET(req: NextRequest) {
     if (!state) {
       return redirectToSettings(req, { shop, error: "Missing OAuth state." });
     }
-    // If state cookie exists, enforce exact match; if cookie is absent, rely on HMAC verification.
-    if (cookieState && cookieState !== state) {
+    // Require the state cookie set by /api/shopify/auth and enforce an exact
+    // match (CSRF protection). Previously the check was skipped when the cookie
+    // was absent, which let an attacker replay a validly signed callback for a
+    // shop they control and have it stored as the connected shop.
+    if (!cookieState || cookieState !== state) {
       return redirectToSettings(req, { shop, error: "Invalid OAuth state." });
     }
 
