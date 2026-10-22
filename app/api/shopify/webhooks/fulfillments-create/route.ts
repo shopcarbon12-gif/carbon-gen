@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
   const topic = normalizeText(req.headers.get("x-shopify-topic"));
   const webhookId = normalizeText(req.headers.get("x-shopify-webhook-id"));
 
-  if (hasShopifyWebhookSecretConfigured() && !verifyShopifyWebhookHmac(rawBody, hmacHeader)) {
+  if (!hasShopifyWebhookSecretConfigured() || !verifyShopifyWebhookHmac(rawBody, hmacHeader)) {
     console.error("[webhook/fulfillments-create] HMAC verification failed");
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

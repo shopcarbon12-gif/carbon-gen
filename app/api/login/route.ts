@@ -16,6 +16,36 @@ import { makeSessionSignature, SIG_COOKIE } from "@/lib/authSignature";
 const DEFAULT_SESSION_USER_ID = "00000000-0000-0000-0000-000000000001";
 const AUTH_BYPASS_PAUSED_COOKIE = "carbon_gen_auth_bypass_paused";
 
+// In-memory brute-force throttle (the Upstash limiter in lib/ratelimit.ts
+// no-ops without Redis, which this app doesn't run). Keyed by client IP +
+// username; per-instance, resets on restart.
+const LOGIN_MAX_ATTEMPTS = 10;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const loginAttempts = new Map<string, { count: number; resetAt: number }>();
+
+function loginClientIp(req: Request): string {
+  const xff = req.headers.get("x-forwarded-for");
+  if (xff) {
+    const hops = xff.split(",").map((s) => s.trim()).filter(Boolean);
+    if (hops.length) return hops[hops.length - 1]; // trusted last hop (Traefik)
+  }
+  return req.headers.get("x-real-ip")?.trim() || "unknown";
+}
+
+function loginTooManyAttempts(key: string): boolean {
+  const now = Date.now();
+  const rec = loginAttempts.get(key);
+  if (!rec || now > rec.resetAt) {
+    loginAttempts.set(key, { count: 1, resetAt: now + LOGIN_WINDOW_MS });
+    if (loginAttempts.size > 5000) {
+      for (const [k, v] of loginAttempts) if (now > v.resetAt) loginAttempts.delete(k);
+    }
+    return false;
+  }
+  rec.count += 1;
+  return rec.count > LOGIN_MAX_ATTEMPTS;
+}
+
 function normalizeText(value: unknown) {
   return String(value ?? "").trim();
 }
@@ -156,6 +186,14 @@ export async function POST(req: Request) {
     }
     if (!password || typeof password !== "string") {
       return NextResponse.json({ error: "Password required" }, { status: 400 });
+    }
+
+    const rlKey = `${loginClientIp(req)}:${username}`;
+    if (loginTooManyAttempts(rlKey)) {
+      return NextResponse.json(
+        { error: "Too many sign-in attempts. Wait a few minutes and try again." },
+        { status: 429 },
+      );
     }
 
     const adminUsername =
