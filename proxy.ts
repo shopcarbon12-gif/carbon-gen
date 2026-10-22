@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { META_REVIEW_ROLE, SUPER_ADMIN_ROLE, parseRole } from "@/lib/authRoleConstants";
+import { signedSessionRequired, hasValidSessionSignature } from "@/lib/authSignature";
 
 const AUTH_BYPASS_PAUSED_COOKIE = "carbon_gen_auth_bypass_paused";
 
@@ -45,7 +46,7 @@ function shouldBlockShopifyLiveUpdates(): boolean {
   return !isTruthy(process.env.SHOPIFY_LIVE_UPDATES_ON_COOLIFY);
 }
 
-export function proxy(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const method = req.method.toUpperCase();
 
@@ -156,6 +157,31 @@ export function proxy(req: NextRequest) {
       return NextResponse.redirect(studioUrl);
     }
     return res;
+  }
+
+  // Forgery guard (flag-gated). Once CARBON_GEN_REQUIRE_SIGNED_SESSION is on,
+  // any request presenting carbon_gen_auth_v1 must also carry a valid HMAC
+  // signature binding its username/role/uid — otherwise the plaintext cookies
+  // (incl. user_role=superadmin) are forgeable. Public routes (Shopify
+  // webhooks, cron, storefront widgets) never send the cookie, so they pass
+  // untouched; auth endpoints are exempt so a stale cookie can't block logout.
+  const isAuthEndpoint =
+    pathname === "/login" ||
+    pathname === "/logout" ||
+    pathname.startsWith("/api/login") ||
+    pathname.startsWith("/api/logout");
+  if (
+    !isAuthEndpoint &&
+    signedSessionRequired() &&
+    req.cookies.get("carbon_gen_auth_v1")?.value === "true" &&
+    !(await hasValidSessionSignature(req.cookies))
+  ) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const loginUrl = req.nextUrl.clone();
+    loginUrl.pathname = "/login";
+    return NextResponse.redirect(loginUrl);
   }
 
   const sessionRole = parseRole(req.cookies.get("carbon_gen_user_role")?.value || "");

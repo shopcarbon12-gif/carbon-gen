@@ -11,6 +11,7 @@ import {
 } from "@/lib/authRoleConstants";
 import { runMetaReviewSeedIfConfigured } from "@/lib/runMetaReviewSeedIfConfigured";
 import { authenticateUser, getUserByUsername } from "@/lib/userAuth";
+import { makeSessionSignature, SIG_COOKIE } from "@/lib/authSignature";
 
 const DEFAULT_SESSION_USER_ID = "00000000-0000-0000-0000-000000000001";
 const AUTH_BYPASS_PAUSED_COOKIE = "carbon_gen_auth_bypass_paused";
@@ -41,13 +42,16 @@ function readPlainPasswordCandidates() {
   ].filter(Boolean);
 }
 
-function setSessionCookies(
+async function setSessionCookies(
   req: Request,
   res: NextResponse,
   user: { id: string; username: string; role: string }
 ) {
   const username = normalizeUsername(user.username);
   const role = String(user.role || "user").trim().toLowerCase();
+  const finalUsername = username || "admin";
+  const finalRole = role || "user";
+  const finalUid = String(user.id || DEFAULT_SESSION_USER_ID);
 
   const proto = req.headers.get("x-forwarded-proto") || req.headers.get("x-forwarded-protocol") || "";
   const isSecure =
@@ -86,7 +90,19 @@ function setSessionCookies(
 
   res.cookies.set({
     name: "carbon_gen_user_id",
-    value: String(user.id || DEFAULT_SESSION_USER_ID),
+    value: finalUid,
+    httpOnly: true,
+    sameSite: "lax",
+    secure: isSecure,
+    path: "/",
+    maxAge: 60 * 60 * 24 * 7,
+  });
+
+  // HMAC signature binding username/role/uid, verified by proxy.ts when
+  // CARBON_GEN_REQUIRE_SIGNED_SESSION is on. No-op until the secret is set.
+  res.cookies.set({
+    name: SIG_COOKIE,
+    value: await makeSessionSignature(finalUsername, finalRole, finalUid),
     httpOnly: true,
     sameSite: "lax",
     secure: isSecure,
@@ -172,7 +188,7 @@ export async function POST(req: Request) {
         ? { success: true as const, next: "/studio/instagram-widget" as const }
         : { success: true as const };
       const res = NextResponse.json(payload);
-      setSessionCookies(req, res, {
+      await setSessionCookies(req, res, {
         id: appUser.id,
         username: appUser.username,
         role: effectiveRole,
@@ -231,7 +247,7 @@ export async function POST(req: Request) {
     }
 
     const res = NextResponse.json({ success: true });
-    setSessionCookies(req, res, {
+    await setSessionCookies(req, res, {
       id: DEFAULT_SESSION_USER_ID,
       username: username || adminUsername,
       role: SUPER_ADMIN_ROLE,

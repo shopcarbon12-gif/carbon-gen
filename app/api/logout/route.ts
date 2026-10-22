@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { SIG_COOKIE } from "@/lib/authSignature";
 
 export const dynamic = "force-dynamic";
 const AUTH_BYPASS_PAUSED_COOKIE = "carbon_gen_auth_bypass_paused";
@@ -7,6 +8,16 @@ const AUTH_BYPASS_PAUSED_COOKIE = "carbon_gen_auth_bypass_paused";
 function clearCookies(res: NextResponse) {
   res.cookies.set({
     name: "carbon_gen_auth_v1",
+    value: "",
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 0,
+  });
+
+  res.cookies.set({
+    name: SIG_COOKIE,
     value: "",
     httpOnly: true,
     sameSite: "lax",
